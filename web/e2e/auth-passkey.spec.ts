@@ -58,9 +58,10 @@ test("login with passkey", async ({ page }) => {
   await expect(page.getByText("Passkey ещё не настроен")).toBeVisible();
   await expect(page.getByRole("button", { name: "Войти с passkey" })).toHaveCount(0);
 
-  await addVirtualAuthenticator(page);
+  const authenticator = await addVirtualAuthenticator(page);
   await registerPasskey(page, "MacBook");
   await page.context().clearCookies();
+  await authenticator.setUserPresence(false);
 
   // Без сессии proxy отправляет на /login?next=…, после входа — обратно на исходный путь.
   await page.goto("/settings?tab=passkeys");
@@ -70,13 +71,28 @@ test("login with passkey", async ({ page }) => {
   ).toBeVisible();
   await expectNoA11yViolations(page);
   await page.getByRole("button", { name: "Войти с passkey" }).click();
+  await expect(page.getByRole("button", { name: "Ожидаем подтверждение…" })).toBeDisabled();
+  await authenticator.setUserPresence(true);
   await expect(page).toHaveURL("/settings?tab=passkeys");
   expect(await sessionCookie(page)).toBeDefined();
 
   // Без next — в портфель.
   await page.context().clearCookies();
+  await authenticator.setUserPresence(false);
   await page.goto("/login");
   await page.getByRole("button", { name: "Войти с passkey" }).click();
+  await authenticator.setUserPresence(true);
   await expect(page).toHaveURL("/");
+  expect(await sessionCookie(page)).toBeDefined();
+});
+
+test("login with passkey autofill", async ({ page }) => {
+  await addVirtualAuthenticator(page);
+  await registerPasskey(page, "MacBook");
+  await page.context().clearCookies();
+
+  // Conditional UI стартует при загрузке /login; виртуальный аутентификатор подтверждает его без клика.
+  await page.goto("/login?next=%2Fapps%2Fnew");
+  await expect(page).toHaveURL("/apps/new");
   expect(await sessionCookie(page)).toBeDefined();
 });

@@ -35,9 +35,10 @@ func newMux(t *testing.T, env config.Env) *http.ServeMux {
 	return mux
 }
 
-func serve(mux http.Handler, method, path string) *httptest.ResponseRecorder {
+func serve(t *testing.T, mux http.Handler, method, path string) *httptest.ResponseRecorder {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 	return rec
 }
 
@@ -49,7 +50,7 @@ func TestE2ERoutes_DisabledOutsideE2E(t *testing.T) {
 			mux := newMux(t, env)
 			for _, path := range e2eRoutes {
 				for _, method := range []string{http.MethodPost, http.MethodGet} {
-					require.Equal(t, http.StatusNotFound, serve(mux, method, path).Code, "%s %s", method, path)
+					require.Equal(t, http.StatusNotFound, serve(t, mux, method, path).Code, "%s %s", method, path)
 				}
 			}
 		})
@@ -59,7 +60,7 @@ func TestE2ERoutes_DisabledOutsideE2E(t *testing.T) {
 	t.Run("e2e", func(t *testing.T) {
 		mux := newMux(t, config.Env("e2e"))
 		for _, path := range e2eRoutes {
-			rec := serve(mux, http.MethodGet, path)
+			rec := serve(t, mux, http.MethodGet, path)
 			require.Equal(t, http.StatusMethodNotAllowed, rec.Code, path)
 			require.Equal(t, http.MethodPost, rec.Header().Get("Allow"), path)
 		}

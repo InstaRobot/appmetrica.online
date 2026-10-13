@@ -1,8 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E против production-сборки web (`pnpm build`), локальных ingest (:8081) и api (:8080).
+// E2E против production-сборки web (`pnpm build`), локальных ingest (:8081) и api (:8080) с APP_ENV=e2e.
 // Аутентификация: e2e/global-setup.ts регистрирует passkey через виртуальный аутентификатор CDP
-// по ссылке из `appmetrica admin passkey-link` и сохраняет storageState в e2e/.auth/owner.json.
+// по ссылке из служебного POST /internal/e2e/passkey-link и сохраняет storageState в e2e/.auth/owner.json.
+// E2E_PORT — порт web, если 3000 занят (тогда PUBLIC_BASE_URL и WEBAUTHN_RP_ORIGINS api — тот же origin),
+// E2E_API_URL — адрес api для служебных маршрутов (e2e/helpers/seed.ts).
+const port = Number(process.env.E2E_PORT ?? 3000);
+const baseURL = `http://localhost:${port}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -12,7 +17,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   globalSetup: "./e2e/global-setup.ts",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     storageState: "e2e/.auth/owner.json",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -26,8 +31,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm start",
-    url: "http://localhost:3000/api/health",
+    command: `pnpm exec next start --port ${port}`,
+    url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

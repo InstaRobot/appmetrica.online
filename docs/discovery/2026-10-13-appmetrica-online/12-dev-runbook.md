@@ -301,13 +301,17 @@ cd web && pnpm test:coverage   # пороги web: lines/statements/functions 70
 ```bash
 cd web && pnpm exec playwright install chromium   # один раз
 make dev-infra migrate-up geo-db                  # инфраструктура
-make run-ingest & make run-api &                  # backend в фоне (или в отдельных терминалах)
-make e2e                                          # pnpm build && pnpm e2e (webServer поднимает pnpm start)
+make run-ingest & make run-api-e2e &              # backend в фоне (или в отдельных терминалах); api с APP_ENV=e2e
+make e2e                                          # pnpm build && pnpm e2e (webServer поднимает next start)
 cd web && pnpm e2e:ui                             # интерактивный режим
 ```
-`e2e/global-setup.ts` выполняет `go run ./cmd/appmetrica admin passkey-link`, открывает ссылку, регистрирует passkey через
+`e2e/global-setup.ts` сбрасывает auth-базу (`POST /internal/e2e/reset-auth`), получает ссылку из
+`POST /internal/e2e/passkey-link` (оба маршрута есть только при `APP_ENV=e2e`), регистрирует passkey через
 виртуальный аутентификатор Chrome DevTools Protocol (`WebAuthn.addVirtualAuthenticator`, `ctap2`, `internal`,
-`hasResidentKey`, `isUserVerified`) и сохраняет `e2e/.auth/owner.json`.
+`hasResidentKey`, `isUserVerified`) и сохраняет `e2e/.auth/owner.json`. Сброс удаляет владельца и passkey в базе
+`POSTGRES_URL` api: чтобы не терять локального владельца, запускай E2E на отдельной базе. Если порты 3000/8080 заняты,
+укажи `E2E_PORT` (порт web; тот же origin — в `PUBLIC_BASE_URL` и `WEBAUTHN_RP_ORIGINS` api), `E2E_API_URL` и
+`API_INTERNAL_URL` (адрес api для сборки и для `next start`).
 
 ### 7.3. Type check
 ```bash

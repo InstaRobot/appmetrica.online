@@ -308,10 +308,10 @@ func (r *reader) common(defaultCHUser string) Common {
 		},
 	}
 	switch env := Env(r.str("APP_ENV", string(EnvProduction))); env {
-	case EnvProduction, EnvDevelopment:
+	case EnvProduction, EnvDevelopment, EnvE2E:
 		c.AppEnv = env
 	default:
-		r.fail(errors.New("APP_ENV: must be production or development"))
+		r.fail(errors.New("APP_ENV: must be production, development or e2e"))
 	}
 	switch lvl := r.str("LOG_LEVEL", "info"); lvl {
 	case "debug", "info", "warn", "error":

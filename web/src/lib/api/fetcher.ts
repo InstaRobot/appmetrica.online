@@ -5,7 +5,6 @@
 // - `X-Requested-With: appmetrica-web` на мутациях (CSRF-защита admin API).
 // - Успех возвращается в форме, которую ждут сгенерированные функции: `{ data, status, headers }`.
 // - Ошибка — исключение ApiError с полями конверта Error; 401 отправляет на `/login`.
-import type { Route } from "next";
 import type { ErrorErrorDetails } from "@/lib/api/gen/model";
 
 export class ApiError extends Error {
@@ -47,8 +46,7 @@ async function redirectToLogin(): Promise<void> {
     return;
   }
   const { redirect } = await import("next/navigation");
-  // Страница входа S-01 появляется в T-019; до этого typedRoutes не знает маршрут.
-  redirect("/login" as Route);
+  redirect("/login");
 }
 
 async function toApiError(res: Response): Promise<ApiError> {

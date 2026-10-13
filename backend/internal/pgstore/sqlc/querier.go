@@ -26,10 +26,16 @@ type Querier interface {
 	CreateSetupToken(ctx context.Context, arg CreateSetupTokenParams) error
 	CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) (WriteKey, error)
 	DeleteApp(ctx context.Context, id uuid.UUID) (int64, error)
+	// Только для стека E2E (auth.ResetForE2E).
+	DeleteCeremonies(ctx context.Context) error
 	DeleteExpiredCeremonies(ctx context.Context, now time.Time) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error)
 	DeleteOldJobRuns(ctx context.Context, before time.Time) (int64, error)
+	// Только для стека E2E (auth.ResetForE2E): каскадно удаляет passkey и сессии.
+	DeleteOwner(ctx context.Context) error
 	DeletePasskey(ctx context.Context, id uuid.UUID) (int64, error)
+	// Только для стека E2E (auth.ResetForE2E): каскадно удаляет церемонии setup-ссылок.
+	DeleteSetupTokens(ctx context.Context) error
 	DeleteSpentSetupTokens(ctx context.Context, now time.Time) (int64, error)
 	FailDeletionRequest(ctx context.Context, arg FailDeletionRequestParams) error
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) error

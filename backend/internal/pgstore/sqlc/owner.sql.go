@@ -12,6 +12,16 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteOwner = `-- name: DeleteOwner :exec
+DELETE FROM owner
+`
+
+// Только для стека E2E (auth.ResetForE2E): каскадно удаляет passkey и сессии.
+func (q *Queries) DeleteOwner(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteOwner)
+	return err
+}
+
 const getOrCreateOwner = `-- name: GetOrCreateOwner :one
 INSERT INTO owner (webauthn_user_handle) VALUES ($1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = EXCLUDED.singleton

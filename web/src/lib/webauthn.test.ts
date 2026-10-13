@@ -120,6 +120,23 @@ describe("loginWithPasskey", () => {
     expect(finishBody).toEqual({ ceremony_id: CEREMONY, credential: assertion });
   });
 
+  it("does not start the authenticator when aborted while beginLogin is in flight", async () => {
+    const controller = new AbortController();
+    server.use(
+      http.post("*/api/admin/v1/auth/login/begin", () => {
+        controller.abort();
+        return HttpResponse.json({ ceremony_id: CEREMONY, options: { publicKey: requestOptions } });
+      }),
+    );
+
+    await expect(
+      loginWithPasskey({ autofill: true, signal: controller.signal }),
+    ).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(startAuthentication).not.toHaveBeenCalled();
+  });
+
   it("rejects options without publicKey and does not call the authenticator", async () => {
     server.use(
       http.post("*/api/admin/v1/auth/login/begin", () =>

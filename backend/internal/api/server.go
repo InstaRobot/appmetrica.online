@@ -22,6 +22,7 @@ type Server struct {
 
 	auth          *auth.Service
 	logger        *slog.Logger
+	appEnv        config.Env
 	publicBaseURL string
 	secureCookies bool
 	sessionTTL    time.Duration
@@ -31,6 +32,7 @@ func NewServer(authSvc *auth.Service, logger *slog.Logger, cfg config.API) *Serv
 	return &Server{
 		auth:          authSvc,
 		logger:        logger,
+		appEnv:        cfg.AppEnv,
 		publicBaseURL: cfg.PublicBaseURL,
 		secureCookies: strings.HasPrefix(cfg.PublicBaseURL, "https://"),
 		sessionTTL:    cfg.SessionTTL,
@@ -65,6 +67,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	owner("POST /admin/v1/passkeys/register/finish", w.FinishPasskeyRegistration)
 	owner("PATCH /admin/v1/passkeys/{passkey_id}", w.RenamePasskey)
 	owner("DELETE /admin/v1/passkeys/{passkey_id}", w.DeletePasskey)
+
+	if s.appEnv == config.EnvE2E {
+		s.registerE2E(mux)
+	}
 }
 
 // writeError — auth.ErrorWriter поверх конверта ошибки httpx.

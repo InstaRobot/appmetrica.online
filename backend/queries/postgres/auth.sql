@@ -45,3 +45,11 @@ UPDATE auth_sessions SET revoked_at = sqlc.arg(now) WHERE token_hash = sqlc.arg(
 SELECT token_hash, expires_at, used_at FROM passkey_setup_tokens
 WHERE token_hash = sqlc.arg(token_hash)
 FOR UPDATE;
+
+-- name: DeleteSetupTokens :exec
+-- Только для стека E2E (auth.ResetForE2E): каскадно удаляет церемонии setup-ссылок.
+DELETE FROM passkey_setup_tokens;
+
+-- name: DeleteCeremonies :exec
+-- Только для стека E2E (auth.ResetForE2E).
+DELETE FROM webauthn_ceremonies;

@@ -54,11 +54,12 @@ func (s *Service) LimitAttempts(writeError ErrorWriter) func(http.Handler) http.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			now := s.clock.Now()
-			if s.attempts.AllowN(now, 1) {
+			attempts := s.attempts.Load()
+			if attempts.AllowN(now, 1) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			wait := (1 - s.attempts.TokensAt(now)) / float64(s.attempts.Limit())
+			wait := (1 - attempts.TokensAt(now)) / float64(attempts.Limit())
 			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait)))))
 			writeError(w, r, http.StatusTooManyRequests, "rate_limited", "Слишком много попыток, подождите минуту")
 		})

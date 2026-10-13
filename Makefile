@@ -65,6 +65,10 @@ run-ingest-perf: ## ingest для make perf-ingest: лимит приложен�
 run-api: ## Запустить api на :8080 (метрики :9092), пользователь ClickHouse appmetrica_ro
 	cd $(BACKEND) && METRICS_LISTEN_ADDR=:9092 MIGRATE_ON_START=false CLICKHOUSE_USER=appmetrica_ro CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RO_PASSWORD) go run ./cmd/appmetrica api
 
+.PHONY: run-api-e2e
+run-api-e2e: ## api для make e2e: APP_ENV=e2e открывает /internal/e2e/* (сбрасывает владельца и passkey в базе POSTGRES_URL!)
+	$(MAKE) --no-print-directory run-api APP_ENV=e2e
+
 .PHONY: run-worker
 run-worker: ## Запустить worker на :8082 (метрики :9093)
 	cd $(BACKEND) && METRICS_LISTEN_ADDR=:9093 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RW_PASSWORD) go run ./cmd/appmetrica worker
@@ -193,7 +197,7 @@ test-web: ## Unit-тесты web (Vitest)
 	cd $(WEB) && pnpm test
 
 .PHONY: e2e
-e2e: ## E2E Playwright (требует запущенных ingest и api: `make dev-infra migrate-up` + run-ingest/run-api)
+e2e: ## E2E Playwright (требует запущенных ingest и api с APP_ENV=e2e: `make dev-infra migrate-up` + run-ingest/run-api-e2e)
 	cd $(WEB) && pnpm build && pnpm e2e
 
 .PHONY: lint

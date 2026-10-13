@@ -129,3 +129,20 @@ func TestE2ERoutes_ResetAuthEmptiesOwnerState(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode, string(body))
 	require.Equal(t, 1, s.count(t, "passkeys"))
 }
+
+// Лимит попыток входа общий на процесс: без сброса повторный прогон Playwright в ту же минуту получал бы 429.
+func TestE2ERoutes_ResetAuthRefillsAttemptLimit(t *testing.T) {
+	s := newE2EServer(t)
+
+	for range 20 {
+		resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	}
+	resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+	requireError(t, resp, body, http.StatusTooManyRequests, "rate_limited")
+
+	resp, _ = s.do(t, http.MethodPost, "/internal/e2e/reset-auth", nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	resp, body = s.do(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+}

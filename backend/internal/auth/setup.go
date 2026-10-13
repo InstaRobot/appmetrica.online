@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -63,7 +64,8 @@ type Service struct {
 	// sessionIdleTTL — простой сессии (SESSION_IDLE_TTL), пишется в auth_sessions.idle_timeout.
 	sessionIdleTTL time.Duration
 	// attempts — общий лимит попыток входа и регистрации по setup-ссылке на процесс (LimitAttempts).
-	attempts *rate.Limiter
+	// Указатель атомарный: ResetForE2E подменяет лимитер на полный.
+	attempts atomic.Pointer[rate.Limiter]
 }
 
 func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg config.API) (*Service, error) {
@@ -71,7 +73,7 @@ func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg co
 	if err != nil {
 		return nil, err
 	}
-	return &Service{
+	s := &Service{
 		store:          store,
 		clock:          c,
 		logger:         logger,
@@ -79,8 +81,13 @@ func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg co
 		baseURL:        strings.TrimSuffix(cfg.PublicBaseURL, "/"),
 		sessionTTL:     cfg.SessionTTL,
 		sessionIdleTTL: cfg.SessionIdleTTL,
-		attempts:       rate.NewLimiter(rate.Every(time.Minute/authAttemptsPerMinute), authAttemptsPerMinute),
-	}, nil
+	}
+	s.attempts.Store(newAttemptsLimiter())
+	return s, nil
+}
+
+func newAttemptsLimiter() *rate.Limiter {
+	return rate.NewLimiter(rate.Every(time.Minute/authAttemptsPerMinute), authAttemptsPerMinute)
 }
 
 // Ceremony — начатая церемония WebAuthn: id для finish и опции для браузера

@@ -83,6 +83,26 @@ func (q *Queries) CreateSetupToken(ctx context.Context, arg CreateSetupTokenPara
 	return err
 }
 
+const deleteCeremonies = `-- name: DeleteCeremonies :exec
+DELETE FROM webauthn_ceremonies
+`
+
+// Только для стека E2E (auth.ResetForE2E).
+func (q *Queries) DeleteCeremonies(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteCeremonies)
+	return err
+}
+
+const deleteSetupTokens = `-- name: DeleteSetupTokens :exec
+DELETE FROM passkey_setup_tokens
+`
+
+// Только для стека E2E (auth.ResetForE2E): каскадно удаляет церемонии setup-ссылок.
+func (q *Queries) DeleteSetupTokens(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteSetupTokens)
+	return err
+}
+
 const getActiveSession = `-- name: GetActiveSession :one
 SELECT token_hash, owner_id, created_at, last_seen_at, expires_at
 FROM auth_sessions
