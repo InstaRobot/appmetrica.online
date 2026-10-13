@@ -16,6 +16,9 @@ type Metrics struct {
 	KeyCacheRefreshErrors prometheus.Counter
 	// KeyCacheLastRefresh — ingest_key_cache_last_refresh_timestamp_seconds: время последней успешной загрузки.
 	KeyCacheLastRefresh prometheus.Gauge
+	// RateLimited — ingest_rate_limited_total{scope}: батчи с 429 (scope=app) и события с
+	// install_rate_limited (scope=install).
+	RateLimited *prometheus.CounterVec
 }
 
 // NewMetrics создаёт метрики и регистрирует их в reg; повторная регистрация возвращает ошибку.
@@ -37,8 +40,12 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 			Name: "ingest_key_cache_last_refresh_timestamp_seconds",
 			Help: "Unix-время последней успешной загрузки кэша write-ключей.",
 		}),
+		RateLimited: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "ingest_rate_limited_total",
+			Help: "Отказы по лимитам: батчи с 429 app_rate_limited (scope=app), события с install_rate_limited (scope=install).",
+		}, []string{"scope"}),
 	}
-	for _, c := range []prometheus.Collector{m.Requests, m.KeyCacheSize, m.KeyCacheRefreshErrors, m.KeyCacheLastRefresh} {
+	for _, c := range []prometheus.Collector{m.Requests, m.KeyCacheSize, m.KeyCacheRefreshErrors, m.KeyCacheLastRefresh, m.RateLimited} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("ingest: register metrics: %w", err)
 		}

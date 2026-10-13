@@ -219,7 +219,7 @@ func TestInstallLimiter_Concurrent(t *testing.T) {
 					pass++
 					mu.Unlock()
 				}
-				_ = allowed(l, installKey(g*1000+i), 1)
+				_ = allowed(l, installKey(10_000+g*1000+i), 1)
 				if i%50 == 0 {
 					l.Sweep()
 				}
