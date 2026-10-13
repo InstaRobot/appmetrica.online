@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Тесты CI-гейтов T-008: scripts/coverage-gate.sh и scripts/check-tdd-order.sh.
-# Запуск из любой директории: bash scripts/test-ci-gates.sh (нужны только bash, awk и git).
+# Тесты CI-скриптов: scripts/coverage-gate.sh и scripts/check-tdd-order.sh (T-008), scripts/perf-compare.sh (T-015).
+# Запуск из любой директории: bash scripts/test-ci-gates.sh (нужны только bash, awk, git и jq).
 # Совместим с bash 3.2 (macOS) — без ассоциативных массивов.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GATE="$ROOT/scripts/coverage-gate.sh"
 TDD="$ROOT/scripts/check-tdd-order.sh"
+PERF="$ROOT/scripts/perf-compare.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -191,6 +192,72 @@ expect_code "пустой диапазон → exit 0" 0
 new_repo nobase
 tdd origin/main
 expect_code "базовая ветка не найдена → exit 2" 2
+
+echo "perf-compare.sh"
+
+# k6_report <file> <p95> <p99> — отчёт `k6 run --summary-export` (метрики трендов лежат прямо в объекте метрики).
+k6_report() {
+  cat >"$1" <<EOF
+{"metrics":{"http_req_duration":{"avg":40.1,"min":3.2,"med":35,"max":900,"p(90)":60,"p(95)":$2,"p(99)":$3},
+ "http_reqs":{"count":300000,"rate":500}}}
+EOF
+}
+k6_report "$TMP/old.json" 80 200
+k6_report "$TMP/faster.json" 70 150
+k6_report "$TMP/plus10.json" 90 220
+k6_report "$TMP/plus20.json" 100 240
+k6_report "$TMP/plus25.json" 85 250
+
+run bash "$PERF" "$TMP/old.json" "$TMP/plus10.json"
+expect_code "AC-015.2: p99 +10 % → exit 0" 0
+expect_out "AC-015.2: печатает разницу p95" "p95: 80.00 ms → 90.00 ms (+12.5%)"
+expect_out "AC-015.2: печатает разницу p99" "p99: 200.00 ms → 220.00 ms (+10.0%)"
+
+run bash "$PERF" "$TMP/old.json" "$TMP/plus25.json"
+expect_code "AC-015.2: p99 +25 % → exit 1" 1
+expect_out "AC-015.2: регрессия названа" "регрессия: p99 вырос на 25.0% (> 20%)"
+
+run bash "$PERF" "$TMP/old.json" "$TMP/plus20.json"
+expect_code "p99 ровно +20 % — ещё не регрессия" 0
+expect_no_out "p99 +20 %: без строки регрессии" "регрессия"
+
+run bash "$PERF" "$TMP/old.json" "$TMP/faster.json"
+expect_code "p99 уменьшился → exit 0" 0
+expect_out "уменьшение со знаком минус" "p99: 200.00 ms → 150.00 ms (-25.0%)"
+
+run env PERF_MAX_P99_GROWTH=5 bash "$PERF" "$TMP/old.json" "$TMP/plus10.json"
+expect_code "PERF_MAX_P99_GROWTH=5: p99 +10 % → exit 1" 1
+expect_out "порог подставляется в вывод" "(> 5%)"
+
+# Формат handleSummary / --new-machine-readable-summary: значения во вложенном объекте values.
+cat >"$TMP/values.json" <<EOF
+{"metrics":{"http_req_duration":{"type":"trend","contains":"time","values":{"p(95)":88,"p(99)":230}}}}
+EOF
+run bash "$PERF" "$TMP/old.json" "$TMP/values.json"
+expect_code "формат с values читается" 0
+expect_out "формат с values: p99" "p99: 200.00 ms → 230.00 ms (+15.0%)"
+
+# Без p(99) (прогон без --summary-trend-stats) сравнивать нечего — ошибка использования, а не «зелёный».
+cat >"$TMP/nop99.json" <<EOF
+{"metrics":{"http_req_duration":{"avg":40,"p(90)":60,"p(95)":80}}}
+EOF
+run bash "$PERF" "$TMP/old.json" "$TMP/nop99.json"
+expect_code "нет p(99) → exit 2" 2
+expect_out "нет p(99): указан файл" "nop99.json"
+
+printf 'not json\n' >"$TMP/bad.json"
+run bash "$PERF" "$TMP/old.json" "$TMP/bad.json"
+expect_code "не JSON → exit 2" 2
+
+k6_report "$TMP/zero.json" 0 0
+run bash "$PERF" "$TMP/zero.json" "$TMP/old.json"
+expect_code "нулевой p99 в старом отчёте → exit 2" 2
+
+run bash "$PERF" "$TMP/old.json" "$TMP/missing.json"
+expect_code "нет файла → exit 2" 2
+
+run bash "$PERF" "$TMP/old.json"
+expect_code "один аргумент → exit 2" 2
 
 echo
 if [ "$failures" -gt 0 ]; then
