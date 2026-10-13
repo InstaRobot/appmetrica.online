@@ -3,7 +3,6 @@
 package reports
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -339,7 +338,7 @@ func TestTimeseries_DSTTransition(t *testing.T) {
 
 		require.Len(t, got.ComparePoints, 24, "2026-10-31 — обычные сутки")
 		require.Equal(t, "2026-10-31T00:00:00-04:00", got.ComparePoints[0].TS.Format(time.RFC3339))
-		require.Equal(t, 1.0, *got.ComparePoints[8].Value, "08:00 EDT 31.10")
+		require.Equal(t, f64(1), got.ComparePoints[8].Value, "08:00 EDT 31.10")
 	}
 
 	p.Period = Period{From: date(t, "2026-03-08"), To: date(t, "2026-03-08")}
@@ -610,6 +609,6 @@ func TestAudience_Unsupported(t *testing.T) {
 	} {
 		_, err := svc.AudienceBreakdown(t.Context(), p, q)
 		require.ErrorIs(t, err, ErrUnsupported, q.Dimension)
-		require.False(t, strings.Contains(err.Error(), "DROP"), "значение не цитируется")
+		require.NotContains(t, err.Error(), "DROP", "значение не цитируется")
 	}
 }

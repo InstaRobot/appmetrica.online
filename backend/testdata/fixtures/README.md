@@ -9,6 +9,7 @@ NDJSON-фикстуры событий для тестов backend: одна с�
 | `smoke.ndjson` | Дымовая фикстура харнесса (T-006): одно приложение, две установки, 4 события |
 | `scenario.ndjson` | Сценарий golden-тестов отчётов (T-026): портфель, аудитория, retention, Read API, close_day |
 | `portfolio.golden.json` | Портфель сценария на 2026-10-12 для unit=persons и unit=installs, сейчас 2026-10-13 12:00 UTC (T-028, `reports.TestPortfolio_Golden`) |
+| `audience.golden.json` | Аудитория сценария за 2026-10-01…2026-10-12 по приложениям: summary (persons с compare, installs), ряды day по 4 метрикам с compare, week/month active, rolling-active, разбивки по 9 измерениям (T-029, `reports.TestAudience_Golden`) |
 
 ## scenario.ndjson
 

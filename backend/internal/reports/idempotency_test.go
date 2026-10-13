@@ -20,6 +20,13 @@ func TestAudience_DuplicateBatchesDoNotInflate(t *testing.T) {
 		// Слияния остановлены: дубли остаются видимыми, как в окне между вставкой и merge.
 		require.NoError(t, env.CH.Conn().Exec(t.Context(), "SYSTEM STOP MERGES events"))
 		rows := env.LoadNDJSON(t, testutil.ScenarioPath())
+		stored := func() uint64 {
+			var n uint64
+			require.NoError(t, env.CH.Conn().QueryRow(t.Context(), "SELECT count() FROM events").Scan(&n))
+			return n
+		}
+		// Дубли внутри одного INSERT схлопываются при записи части (optimize_on_insert), между вставками — нет.
+		once := stored()
 		// Повторы приходят в другом порядке и другими батчами.
 		reversed := slices.Clone(rows)
 		slices.Reverse(reversed)
@@ -28,9 +35,7 @@ func TestAudience_DuplicateBatchesDoNotInflate(t *testing.T) {
 				require.NoError(t, env.CH.InsertEvents(t.Context(), chunk))
 			}
 		}
-		var stored uint64
-		require.NoError(t, env.CH.Conn().QueryRow(t.Context(), "SELECT count() FROM events").Scan(&stored))
-		require.Equal(t, uint64(loads*len(rows)), stored, "дубли не схлопнуты до отчёта")
+		require.Equal(t, uint64(loads)*once, stored(), "дубли видны отчётам")
 
 		svc := newService(env)
 		out := map[string]audienceSnapshot{}

@@ -1,0 +1,2295 @@
+{
+  "msk": {
+    "breakdown": {
+      "app_version/active": {
+        "dimension": "app_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 10,
+            "share": 1,
+            "value": "3.4.0"
+          }
+        ],
+        "total": 10
+      },
+      "app_version/new": {
+        "dimension": "app_version",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 9,
+            "share": 1,
+            "value": "3.4.0"
+          }
+        ],
+        "total": 9
+      },
+      "app_version/sessions": {
+        "dimension": "app_version",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 66,
+            "share": 1,
+            "value": "3.4.0"
+          }
+        ],
+        "total": 66
+      },
+      "city/active": {
+        "dimension": "city",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 0.5,
+            "value": "Moscow, RU"
+          },
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": ""
+          },
+          {
+            "count": 2,
+            "share": 0.2,
+            "value": "Saint Petersburg, RU"
+          }
+        ],
+        "total": 10
+      },
+      "country/active": {
+        "dimension": "country",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 7,
+            "share": 0.7,
+            "value": "RU"
+          },
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": ""
+          }
+        ],
+        "total": 10
+      },
+      "country/new": {
+        "dimension": "country",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 6,
+            "share": 0.6667,
+            "value": "RU"
+          },
+          {
+            "count": 4,
+            "share": 0.4444,
+            "value": ""
+          }
+        ],
+        "total": 9
+      },
+      "country/sessions": {
+        "dimension": "country",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 42,
+            "share": 0.6364,
+            "value": "RU"
+          },
+          {
+            "count": 24,
+            "share": 0.3636,
+            "value": ""
+          }
+        ],
+        "total": 66
+      },
+      "device_model/active": {
+        "dimension": "device_model",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": "iPad14,1"
+          },
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": "iPhone17,1"
+          },
+          {
+            "count": 3,
+            "share": 0.3,
+            "value": "iPhone16,2"
+          }
+        ],
+        "total": 10
+      },
+      "device_type/active": {
+        "dimension": "device_type",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 7,
+            "share": 0.7,
+            "value": "phone"
+          },
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": "tablet"
+          }
+        ],
+        "total": 10
+      },
+      "locale/active": {
+        "dimension": "locale",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 10,
+            "share": 1,
+            "value": "ru-RU"
+          }
+        ],
+        "total": 10
+      },
+      "os_name/active": {
+        "dimension": "os_name",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 10,
+            "share": 1,
+            "value": "iOS"
+          }
+        ],
+        "total": 10
+      },
+      "os_version/active": {
+        "dimension": "os_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": "iOS 26.0"
+          },
+          {
+            "count": 4,
+            "share": 0.4,
+            "value": "iOS 26.1"
+          },
+          {
+            "count": 3,
+            "share": 0.3,
+            "value": "iOS 18.6"
+          }
+        ],
+        "total": 10
+      },
+      "platform/active": {
+        "dimension": "platform",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 10,
+            "share": 1,
+            "value": "ios"
+          }
+        ],
+        "total": 10
+      }
+    },
+    "rolling": {
+      "points": [
+        {
+          "dau": 1,
+          "day": "2026-10-01",
+          "mau": 2,
+          "wau": 2
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-02",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-03",
+          "mau": 4,
+          "wau": 4
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-04",
+          "mau": 4,
+          "wau": 4
+        },
+        {
+          "dau": 5,
+          "day": "2026-10-05",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-06",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-07",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 5,
+          "day": "2026-10-08",
+          "mau": 7,
+          "wau": 7
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-09",
+          "mau": 7,
+          "wau": 7
+        },
+        {
+          "dau": 5,
+          "day": "2026-10-10",
+          "mau": 7,
+          "wau": 7
+        },
+        {
+          "dau": 5,
+          "day": "2026-10-11",
+          "mau": 7,
+          "wau": 7
+        },
+        {
+          "dau": 8,
+          "day": "2026-10-12",
+          "mau": 10,
+          "wau": 9
+        }
+      ]
+    },
+    "summary": {
+      "active": 10,
+      "avg_duration_ms": 782664,
+      "compare": {
+        "active": 1,
+        "avg_duration_ms": null,
+        "delta_pct": {
+          "active": 900,
+          "avg_duration_ms": null,
+          "median_duration_ms": null,
+          "new": 800,
+          "sessions": 3200
+        },
+        "from": "2026-09-19",
+        "median_duration_ms": null,
+        "new": 1,
+        "sessions": 2,
+        "to": "2026-09-30"
+      },
+      "from": "2026-10-01",
+      "median_duration_ms": 735940,
+      "new": 9,
+      "sessions": 66,
+      "to": "2026-10-12"
+    },
+    "summary_installs": {
+      "active": 10,
+      "avg_duration_ms": 782664,
+      "from": "2026-10-01",
+      "median_duration_ms": 735940,
+      "new": 9,
+      "sessions": 66,
+      "to": "2026-10-12"
+    },
+    "timeseries": {
+      "day/active": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00+03:00",
+            "value": 1
+          }
+        ],
+        "granularity": "day",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-03T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-04T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-05T00:00:00+03:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-06T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-07T00:00:00+03:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-08T00:00:00+03:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-09T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-10T00:00:00+03:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-11T00:00:00+03:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-12T00:00:00+03:00",
+            "value": 8
+          }
+        ]
+      },
+      "day/avg_duration_ms": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-20T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-21T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-22T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-23T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-24T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-25T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-26T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-27T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-28T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-29T00:00:00+03:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-30T00:00:00+03:00",
+            "value": null
+          }
+        ],
+        "granularity": "day",
+        "metric": "avg_duration_ms",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+03:00",
+            "value": 1133072
+          },
+          {
+            "ts": "2026-10-02T00:00:00+03:00",
+            "value": 839110
+          },
+          {
+            "ts": "2026-10-03T00:00:00+03:00",
+            "value": 491094
+          },
+          {
+            "ts": "2026-10-04T00:00:00+03:00",
+            "value": 764293
+          },
+          {
+            "ts": "2026-10-05T00:00:00+03:00",
+            "value": 945257
+          },
+          {
+            "ts": "2026-10-06T00:00:00+03:00",
+            "value": 893412
+          },
+          {
+            "ts": "2026-10-07T00:00:00+03:00",
+            "value": 611868
+          },
+          {
+            "ts": "2026-10-08T00:00:00+03:00",
+            "value": 692146
+          },
+          {
+            "ts": "2026-10-09T00:00:00+03:00",
+            "value": 495547
+          },
+          {
+            "ts": "2026-10-10T00:00:00+03:00",
+            "value": 577052
+          },
+          {
+            "ts": "2026-10-11T00:00:00+03:00",
+            "value": 1000908
+          },
+          {
+            "ts": "2026-10-12T00:00:00+03:00",
+            "value": 854820
+          }
+        ]
+      },
+      "day/new": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00+03:00",
+            "value": 1
+          }
+        ],
+        "granularity": "day",
+        "metric": "new",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-03T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-04T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-05T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-06T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-07T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-08T00:00:00+03:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-09T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-10T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-11T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-12T00:00:00+03:00",
+            "value": 3
+          }
+        ]
+      },
+      "day/sessions": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+03:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00+03:00",
+            "value": 2
+          }
+        ],
+        "granularity": "day",
+        "metric": "sessions",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+03:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00+03:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-03T00:00:00+03:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-04T00:00:00+03:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-05T00:00:00+03:00",
+            "value": 9
+          },
+          {
+            "ts": "2026-10-06T00:00:00+03:00",
+            "value": 6
+          },
+          {
+            "ts": "2026-10-07T00:00:00+03:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-08T00:00:00+03:00",
+            "value": 7
+          },
+          {
+            "ts": "2026-10-09T00:00:00+03:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-10T00:00:00+03:00",
+            "value": 7
+          },
+          {
+            "ts": "2026-10-11T00:00:00+03:00",
+            "value": 8
+          },
+          {
+            "ts": "2026-10-12T00:00:00+03:00",
+            "value": 10
+          }
+        ]
+      },
+      "month/active": {
+        "granularity": "month",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+03:00",
+            "value": 10
+          }
+        ]
+      },
+      "week/active": {
+        "granularity": "week",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-09-28T00:00:00+03:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-05T00:00:00+03:00",
+            "value": 7
+          },
+          {
+            "ts": "2026-10-12T00:00:00+03:00",
+            "value": 8
+          }
+        ]
+      }
+    }
+  },
+  "nyc": {
+    "breakdown": {
+      "app_version/active": {
+        "dimension": "app_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "2.1.0"
+          }
+        ],
+        "total": 5
+      },
+      "app_version/new": {
+        "dimension": "app_version",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 4,
+            "share": 1,
+            "value": "2.1.0"
+          }
+        ],
+        "total": 4
+      },
+      "app_version/sessions": {
+        "dimension": "app_version",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 40,
+            "share": 1,
+            "value": "2.1.0"
+          }
+        ],
+        "total": 40
+      },
+      "city/active": {
+        "dimension": "city",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 4,
+            "share": 0.8,
+            "value": "Toronto, CA"
+          },
+          {
+            "count": 1,
+            "share": 0.2,
+            "value": "New York, US"
+          }
+        ],
+        "total": 5
+      },
+      "country/active": {
+        "dimension": "country",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 4,
+            "share": 0.8,
+            "value": "CA"
+          },
+          {
+            "count": 1,
+            "share": 0.2,
+            "value": "US"
+          }
+        ],
+        "total": 5
+      },
+      "country/new": {
+        "dimension": "country",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.75,
+            "value": "CA"
+          },
+          {
+            "count": 1,
+            "share": 0.25,
+            "value": "US"
+          }
+        ],
+        "total": 4
+      },
+      "country/sessions": {
+        "dimension": "country",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 38,
+            "share": 0.95,
+            "value": "CA"
+          },
+          {
+            "count": 2,
+            "share": 0.05,
+            "value": "US"
+          }
+        ],
+        "total": 40
+      },
+      "device_model/active": {
+        "dimension": "device_model",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.6,
+            "value": "Pixel 9"
+          },
+          {
+            "count": 2,
+            "share": 0.4,
+            "value": "SM-X710"
+          }
+        ],
+        "total": 5
+      },
+      "device_type/active": {
+        "dimension": "device_type",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.6,
+            "value": "phone"
+          },
+          {
+            "count": 2,
+            "share": 0.4,
+            "value": "tablet"
+          }
+        ],
+        "total": 5
+      },
+      "locale/active": {
+        "dimension": "locale",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "en-US"
+          }
+        ],
+        "total": 5
+      },
+      "os_name/active": {
+        "dimension": "os_name",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "Android"
+          }
+        ],
+        "total": 5
+      },
+      "os_version/active": {
+        "dimension": "os_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "Android 16"
+          }
+        ],
+        "total": 5
+      },
+      "platform/active": {
+        "dimension": "platform",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "android"
+          }
+        ],
+        "total": 5
+      }
+    },
+    "rolling": {
+      "points": [
+        {
+          "dau": 1,
+          "day": "2026-10-01",
+          "mau": 1,
+          "wau": 1
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-02",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-03",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-04",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 0,
+          "day": "2026-10-05",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-06",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-07",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-08",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-09",
+          "mau": 4,
+          "wau": 4
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-10",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 4,
+          "day": "2026-10-11",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-12",
+          "mau": 5,
+          "wau": 5
+        }
+      ]
+    },
+    "summary": {
+      "active": 5,
+      "avg_duration_ms": 793571,
+      "compare": {
+        "active": 1,
+        "avg_duration_ms": 599000,
+        "delta_pct": {
+          "active": 400,
+          "avg_duration_ms": 32.48,
+          "median_duration_ms": 44.1,
+          "new": 300,
+          "sessions": 1233.33
+        },
+        "from": "2026-09-19",
+        "median_duration_ms": 599000,
+        "new": 1,
+        "sessions": 3,
+        "to": "2026-09-30"
+      },
+      "from": "2026-10-01",
+      "median_duration_ms": 863136,
+      "new": 4,
+      "sessions": 40,
+      "to": "2026-10-12"
+    },
+    "summary_installs": {
+      "active": 5,
+      "avg_duration_ms": 793571,
+      "from": "2026-10-01",
+      "median_duration_ms": 863136,
+      "new": 4,
+      "sessions": 40,
+      "to": "2026-10-12"
+    },
+    "timeseries": {
+      "day/active": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-29T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00-04:00",
+            "value": 1
+          }
+        ],
+        "granularity": "day",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-03T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-04T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-05T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-06T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-07T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-08T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-09T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-10T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-11T00:00:00-04:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-12T00:00:00-04:00",
+            "value": 2
+          }
+        ]
+      },
+      "day/avg_duration_ms": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-20T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-21T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-22T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-23T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-24T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-25T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-26T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-27T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-28T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-29T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-30T00:00:00-04:00",
+            "value": 599000
+          }
+        ],
+        "granularity": "day",
+        "metric": "avg_duration_ms",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-10-02T00:00:00-04:00",
+            "value": 612234
+          },
+          {
+            "ts": "2026-10-03T00:00:00-04:00",
+            "value": 1135931
+          },
+          {
+            "ts": "2026-10-04T00:00:00-04:00",
+            "value": 507294
+          },
+          {
+            "ts": "2026-10-05T00:00:00-04:00",
+            "value": null
+          },
+          {
+            "ts": "2026-10-06T00:00:00-04:00",
+            "value": 581168
+          },
+          {
+            "ts": "2026-10-07T00:00:00-04:00",
+            "value": 878798
+          },
+          {
+            "ts": "2026-10-08T00:00:00-04:00",
+            "value": 799884
+          },
+          {
+            "ts": "2026-10-09T00:00:00-04:00",
+            "value": 883723
+          },
+          {
+            "ts": "2026-10-10T00:00:00-04:00",
+            "value": 1156012
+          },
+          {
+            "ts": "2026-10-11T00:00:00-04:00",
+            "value": 819655
+          },
+          {
+            "ts": "2026-10-12T00:00:00-04:00",
+            "value": 779467
+          }
+        ]
+      },
+      "day/new": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-29T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00-04:00",
+            "value": 0
+          }
+        ],
+        "granularity": "day",
+        "metric": "new",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-02T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-03T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-04T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-05T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-06T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-07T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-08T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-09T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-10T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-11T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-12T00:00:00-04:00",
+            "value": 0
+          }
+        ]
+      },
+      "day/sessions": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-29T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-30T00:00:00-04:00",
+            "value": 2
+          }
+        ],
+        "granularity": "day",
+        "metric": "sessions",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00-04:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00-04:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-03T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-04T00:00:00-04:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-05T00:00:00-04:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-06T00:00:00-04:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-07T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-08T00:00:00-04:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-09T00:00:00-04:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-10T00:00:00-04:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-11T00:00:00-04:00",
+            "value": 7
+          },
+          {
+            "ts": "2026-10-12T00:00:00-04:00",
+            "value": 3
+          }
+        ]
+      },
+      "month/active": {
+        "granularity": "month",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00-04:00",
+            "value": 5
+          }
+        ]
+      },
+      "week/active": {
+        "granularity": "week",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-09-28T00:00:00-04:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-05T00:00:00-04:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-12T00:00:00-04:00",
+            "value": 2
+          }
+        ]
+      }
+    }
+  },
+  "tyo": {
+    "breakdown": {
+      "app_version/active": {
+        "dimension": "app_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 6,
+            "share": 1,
+            "value": "2026.10.1"
+          },
+          {
+            "count": 1,
+            "share": 0.1667,
+            "value": "2026.10.2"
+          }
+        ],
+        "total": 6
+      },
+      "app_version/new": {
+        "dimension": "app_version",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 5,
+            "share": 1,
+            "value": "2026.10.1"
+          },
+          {
+            "count": 1,
+            "share": 0.2,
+            "value": "2026.10.2"
+          }
+        ],
+        "total": 5
+      },
+      "app_version/sessions": {
+        "dimension": "app_version",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 33,
+            "share": 0.8919,
+            "value": "2026.10.1"
+          },
+          {
+            "count": 4,
+            "share": 0.1081,
+            "value": "2026.10.2"
+          }
+        ],
+        "total": 37
+      },
+      "city/active": {
+        "dimension": "city",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.5,
+            "value": "Seoul, KR"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "Osaka, JP"
+          },
+          {
+            "count": 1,
+            "share": 0.1667,
+            "value": "Tokyo, JP"
+          }
+        ],
+        "total": 6
+      },
+      "country/active": {
+        "dimension": "country",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.5,
+            "value": "JP"
+          },
+          {
+            "count": 3,
+            "share": 0.5,
+            "value": "KR"
+          }
+        ],
+        "total": 6
+      },
+      "country/new": {
+        "dimension": "country",
+        "metric": "new",
+        "rows": [
+          {
+            "count": 3,
+            "share": 0.6,
+            "value": "JP"
+          },
+          {
+            "count": 2,
+            "share": 0.4,
+            "value": "KR"
+          }
+        ],
+        "total": 5
+      },
+      "country/sessions": {
+        "dimension": "country",
+        "metric": "sessions",
+        "rows": [
+          {
+            "count": 29,
+            "share": 0.7838,
+            "value": "KR"
+          },
+          {
+            "count": 8,
+            "share": 0.2162,
+            "value": "JP"
+          }
+        ],
+        "total": 37
+      },
+      "device_model/active": {
+        "dimension": "device_model",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 6,
+            "share": 1,
+            "value": ""
+          }
+        ],
+        "total": 6
+      },
+      "device_type/active": {
+        "dimension": "device_type",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 4,
+            "share": 0.6667,
+            "value": "phone"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "desktop"
+          }
+        ],
+        "total": 6
+      },
+      "locale/active": {
+        "dimension": "locale",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 6,
+            "share": 1,
+            "value": "ja-JP"
+          }
+        ],
+        "total": 6
+      },
+      "os_name/active": {
+        "dimension": "os_name",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "Android"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "Windows"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "iOS"
+          }
+        ],
+        "total": 6
+      },
+      "os_version/active": {
+        "dimension": "os_version",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "Android 16"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "Windows 11"
+          },
+          {
+            "count": 2,
+            "share": 0.3333,
+            "value": "iOS 26.1"
+          }
+        ],
+        "total": 6
+      },
+      "platform/active": {
+        "dimension": "platform",
+        "metric": "active",
+        "rows": [
+          {
+            "count": 6,
+            "share": 1,
+            "value": "web"
+          }
+        ],
+        "total": 6
+      }
+    },
+    "rolling": {
+      "points": [
+        {
+          "dau": 1,
+          "day": "2026-10-01",
+          "mau": 1,
+          "wau": 1
+        },
+        {
+          "dau": 0,
+          "day": "2026-10-02",
+          "mau": 1,
+          "wau": 1
+        },
+        {
+          "dau": 1,
+          "day": "2026-10-03",
+          "mau": 1,
+          "wau": 1
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-04",
+          "mau": 2,
+          "wau": 2
+        },
+        {
+          "dau": 1,
+          "day": "2026-10-05",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-06",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 2,
+          "day": "2026-10-07",
+          "mau": 3,
+          "wau": 3
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-08",
+          "mau": 4,
+          "wau": 4
+        },
+        {
+          "dau": 5,
+          "day": "2026-10-09",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 4,
+          "day": "2026-10-10",
+          "mau": 5,
+          "wau": 5
+        },
+        {
+          "dau": 3,
+          "day": "2026-10-11",
+          "mau": 6,
+          "wau": 6
+        },
+        {
+          "dau": 1,
+          "day": "2026-10-12",
+          "mau": 6,
+          "wau": 6
+        }
+      ]
+    },
+    "summary": {
+      "active": 6,
+      "avg_duration_ms": 734754,
+      "compare": {
+        "active": 1,
+        "avg_duration_ms": 1023552,
+        "delta_pct": {
+          "active": 500,
+          "avg_duration_ms": -28.22,
+          "median_duration_ms": -35.15,
+          "new": 400,
+          "sessions": 1750
+        },
+        "from": "2026-09-19",
+        "median_duration_ms": 1023552,
+        "new": 1,
+        "sessions": 2,
+        "to": "2026-09-30"
+      },
+      "from": "2026-10-01",
+      "median_duration_ms": 663754,
+      "new": 5,
+      "sessions": 37,
+      "to": "2026-10-12"
+    },
+    "summary_installs": {
+      "active": 6,
+      "avg_duration_ms": 734754,
+      "from": "2026-10-01",
+      "median_duration_ms": 663754,
+      "new": 5,
+      "sessions": 37,
+      "to": "2026-10-12"
+    },
+    "timeseries": {
+      "day/active": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-30T00:00:00+09:00",
+            "value": 1
+          }
+        ],
+        "granularity": "day",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-02T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-03T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-04T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-05T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-06T00:00:00+09:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-07T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-08T00:00:00+09:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-09T00:00:00+09:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-10T00:00:00+09:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-11T00:00:00+09:00",
+            "value": 3
+          },
+          {
+            "ts": "2026-10-12T00:00:00+09:00",
+            "value": 1
+          }
+        ]
+      },
+      "day/avg_duration_ms": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-20T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-21T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-22T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-23T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-24T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-25T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-26T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-27T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-28T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-09-29T00:00:00+09:00",
+            "value": 806002
+          },
+          {
+            "ts": "2026-09-30T00:00:00+09:00",
+            "value": 1241102
+          }
+        ],
+        "granularity": "day",
+        "metric": "avg_duration_ms",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+09:00",
+            "value": 795909
+          },
+          {
+            "ts": "2026-10-02T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-10-03T00:00:00+09:00",
+            "value": 1204565
+          },
+          {
+            "ts": "2026-10-04T00:00:00+09:00",
+            "value": 575828
+          },
+          {
+            "ts": "2026-10-05T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-10-06T00:00:00+09:00",
+            "value": 822952
+          },
+          {
+            "ts": "2026-10-07T00:00:00+09:00",
+            "value": null
+          },
+          {
+            "ts": "2026-10-08T00:00:00+09:00",
+            "value": 586860
+          },
+          {
+            "ts": "2026-10-09T00:00:00+09:00",
+            "value": 775936
+          },
+          {
+            "ts": "2026-10-10T00:00:00+09:00",
+            "value": 520839
+          },
+          {
+            "ts": "2026-10-11T00:00:00+09:00",
+            "value": 977857
+          },
+          {
+            "ts": "2026-10-12T00:00:00+09:00",
+            "value": null
+          }
+        ]
+      },
+      "day/new": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-30T00:00:00+09:00",
+            "value": 0
+          }
+        ],
+        "granularity": "day",
+        "metric": "new",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-02T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-03T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-04T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-05T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-06T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-07T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-08T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-09T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-10T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-11T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-12T00:00:00+09:00",
+            "value": 0
+          }
+        ]
+      },
+      "day/sessions": {
+        "compare_points": [
+          {
+            "ts": "2026-09-19T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-20T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-21T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-22T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-23T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-24T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-25T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-26T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-27T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-28T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-09-29T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-09-30T00:00:00+09:00",
+            "value": 1
+          }
+        ],
+        "granularity": "day",
+        "metric": "sessions",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-02T00:00:00+09:00",
+            "value": 0
+          },
+          {
+            "ts": "2026-10-03T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-04T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-05T00:00:00+09:00",
+            "value": 1
+          },
+          {
+            "ts": "2026-10-06T00:00:00+09:00",
+            "value": 6
+          },
+          {
+            "ts": "2026-10-07T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-08T00:00:00+09:00",
+            "value": 5
+          },
+          {
+            "ts": "2026-10-09T00:00:00+09:00",
+            "value": 7
+          },
+          {
+            "ts": "2026-10-10T00:00:00+09:00",
+            "value": 6
+          },
+          {
+            "ts": "2026-10-11T00:00:00+09:00",
+            "value": 4
+          },
+          {
+            "ts": "2026-10-12T00:00:00+09:00",
+            "value": 1
+          }
+        ]
+      },
+      "month/active": {
+        "granularity": "month",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-10-01T00:00:00+09:00",
+            "value": 6
+          }
+        ]
+      },
+      "week/active": {
+        "granularity": "week",
+        "metric": "active",
+        "points": [
+          {
+            "ts": "2026-09-28T00:00:00+09:00",
+            "value": 2
+          },
+          {
+            "ts": "2026-10-05T00:00:00+09:00",
+            "value": 6
+          },
+          {
+            "ts": "2026-10-12T00:00:00+09:00",
+            "value": 1
+          }
+        ]
+      }
+    }
+  }
+}

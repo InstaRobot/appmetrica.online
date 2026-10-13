@@ -153,8 +153,9 @@ func TestGetAudience_HTTP(t *testing.T) {
 	})
 }
 
-// Тест-векторы 06-api-contracts.md §2.4.4: hour_range, range_366, from_after_to, bad_dimension и проверки
-// остальных параметров — 400 с details.field, присланное значение не цитируется.
+// Тест-векторы 06-api-contracts.md §2.4.4: hour_range, range_366 (400 даёт 367-й день: 366 дней включительно
+// допустимы, OQ-042), from_after_to, bad_dimension и проверки остальных параметров — 400 с details.field,
+// присланное значение не цитируется.
 func TestGetAudience_InvalidParams(t *testing.T) {
 	e := newPortfolioEnv(t)
 	msk := testutil.ScenarioApps[0]
@@ -164,8 +165,8 @@ func TestGetAudience_InvalidParams(t *testing.T) {
 		code, field         string
 		maxDays             float64
 	}{
-		{"range_366", "summary", "from=2025-10-12&to=2026-10-12", "range_too_large", "to", 366},
-		{"rolling_range", "rolling-active", "from=2025-10-12&to=2026-10-12", "range_too_large", "to", 366},
+		{"range_367", "summary", "from=2025-10-11&to=2026-10-12", "range_too_large", "to", 366},
+		{"rolling_range", "rolling-active", "from=2025-10-11&to=2026-10-12", "range_too_large", "to", 366},
 		{"hour_range", "timeseries", "from=2026-10-01&to=2026-10-08&granularity=hour", "range_too_large", "to", 7},
 		{"from_after_to", "summary", "from=2026-10-12&to=2026-10-06", "invalid_request", "from", 0},
 		{"from_after_to_breakdown", "breakdown", "from=2026-10-12&to=2026-10-06&dimension=country", "invalid_request", "from", 0},

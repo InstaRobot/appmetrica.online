@@ -84,6 +84,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	reader("GET /v1/apps/{app_id}", w.GetApp)
 	if s.reports != nil {
 		reader("GET /v1/portfolio", w.GetPortfolio)
+		reader("GET /v1/apps/{app_id}/audience/summary", w.GetAudienceSummary)
+		reader("GET /v1/apps/{app_id}/audience/timeseries", w.GetAudienceTimeseries)
+		reader("GET /v1/apps/{app_id}/audience/rolling-active", w.GetRollingActive)
+		reader("GET /v1/apps/{app_id}/audience/breakdown", w.GetAudienceBreakdown)
 	}
 
 	owner("POST /admin/v1/apps", w.CreateApp)

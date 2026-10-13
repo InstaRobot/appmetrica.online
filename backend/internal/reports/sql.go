@@ -79,8 +79,8 @@ func civil(t time.Time) time.Time {
 type Params struct {
 	AppID    uuid.UUID
 	Location *time.Location // TZ приложения (apps.timezone); nil — UTC
-	Env      string         // EnvProduction | EnvDevelopment
-	Unit     identity.Unit
+	Env      string         // EnvProduction | EnvDevelopment; "" — production
+	Unit     identity.Unit  // "" — persons
 	Period   Period
 	Filters  Filters
 }
@@ -91,10 +91,17 @@ func (p Params) location() *time.Location { return orUTC(p.Location) }
 func (p Params) Parameters() clickhouse.Parameters {
 	loc := p.location()
 	start, end := p.Period.Bounds(loc)
+	env, unit := p.Env, p.Unit
+	if env == "" {
+		env = EnvProduction
+	}
+	if unit == "" {
+		unit = identity.Persons
+	}
 	out := clickhouse.Parameters{
 		"app_id":    p.AppID.String(),
-		"env":       p.Env,
-		"unit":      string(p.Unit),
+		"env":       env,
+		"unit":      string(unit),
 		"tz":        loc.String(),
 		"start_utc": start.Format(paramDateTime),
 		"end_utc":   end.Format(paramDateTime),
