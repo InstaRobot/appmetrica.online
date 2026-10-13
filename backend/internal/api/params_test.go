@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -376,5 +377,29 @@ func TestParseRetentionParams(t *testing.T) {
 			require.NotContains(t, perr.message, "month")
 			require.NotContains(t, perr.message, "people")
 		})
+	}
+}
+
+// AC-033.3 (AC-5.6.4): hours — 1..168, по умолчанию 24; вне диапазона — 400 invalid_request с field=hours.
+func TestParseIntegrationParams(t *testing.T) {
+	hours, perr := parseIntegrationParams(gen.GetIntegrationHealthParams{})
+	require.Nil(t, perr)
+	require.Equal(t, reports.DefaultIntegrationHours, hours)
+
+	for _, h := range []int{1, 24, 167, reports.MaxIntegrationHours} {
+		hours, perr := parseIntegrationParams(gen.GetIntegrationHealthParams{Hours: ptr(h)})
+		require.Nil(t, perr, "hours=%d", h)
+		require.Equal(t, h, hours)
+	}
+
+	for _, h := range []int{0, 169, -1, -24, 1_000_000} {
+		_, perr := parseIntegrationParams(gen.GetIntegrationHealthParams{Hours: ptr(h)})
+		require.NotNil(t, perr, "hours=%d", h)
+		require.Equal(t, "invalid_request", perr.code)
+		require.Equal(t, "hours", perr.field)
+		require.Contains(t, perr.message, "168")
+		if h != 1_000_000 {
+			require.NotContains(t, perr.message, fmt.Sprint(h), "присланное значение не цитируется")
+		}
 	}
 }
