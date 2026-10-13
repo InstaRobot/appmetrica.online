@@ -10,6 +10,8 @@ NDJSON-фикстуры событий для тестов backend: одна с�
 | `scenario.ndjson` | Сценарий golden-тестов отчётов (T-026): портфель, аудитория, retention, Read API, close_day |
 | `portfolio.golden.json` | Портфель сценария на 2026-10-12 для unit=persons и unit=installs, сейчас 2026-10-13 12:00 UTC (T-028, `reports.TestPortfolio_Golden`) |
 | `audience.golden.json` | Аудитория сценария за 2026-10-01…2026-10-12 по приложениям: summary (persons с compare, installs), ряды day по 4 метрикам с compare, week/month active, rolling-active, разбивки по 9 измерениям (T-029, `reports.TestAudience_Golden`) |
+| `retention.golden.json` | Retention сценария по дневным когортам 2026-09-28…2026-10-12, periods=30, для unit=persons и unit=installs, сейчас 2026-11-03 12:00 UTC (T-030, `reports.TestRetention_DayGolden`) |
+| `retention_week.golden.json` | Retention сценария по ISO-неделям 2026-10-01…2026-11-02 (когорты с понедельников 09-28…11-02), periods=12, для unit=persons и unit=installs, сейчас 2026-11-03 12:00 UTC (T-030, `reports.TestRetention_WeekGolden`) |
 
 ## scenario.ndjson
 

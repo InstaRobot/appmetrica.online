@@ -321,8 +321,8 @@ func TestParseRetentionParams(t *testing.T) {
 	t.Run("explicit", func(t *testing.T) {
 		in := base(t)
 		in.Periods = ptr(90)
-		in.Environment = ptr(gen.EnvironmentQ(gen.EnvironmentDevelopment))
-		in.Unit = ptr(gen.UnitQ(gen.UnitInstalls))
+		in.Environment = ptr(gen.EnvironmentDevelopment)
+		in.Unit = ptr(gen.UnitInstalls)
 		in.Platform = &[]gen.Platform{gen.PlatformAndroid}
 		in.Country = &[]string{"RU", "DE"}
 		p, q, perr := parseRetentionParams(in, paramsApp, msk)
@@ -359,7 +359,7 @@ func TestParseRetentionParams(t *testing.T) {
 		{name: "negative", granularity: ptr(gen.CohortGranularityWeek), periods: ptr(-1), code: "invalid_request", field: "periods"},
 		{name: "granularity_month", granularity: ptr(gen.CohortGranularity("month")), code: "invalid_request", field: "cohort_granularity"},
 		{name: "granularity_empty", granularity: ptr(gen.CohortGranularity("")), code: "invalid_request", field: "cohort_granularity"},
-		{name: "unit", mutate: func(p *gen.GetRetentionParams) { p.Unit = ptr(gen.UnitQ("people")) }, code: "invalid_request", field: "unit"},
+		{name: "unit", mutate: func(p *gen.GetRetentionParams) { p.Unit = ptr(gen.Unit("people")) }, code: "invalid_request", field: "unit"},
 		{name: "from_after_to", mutate: func(p *gen.GetRetentionParams) { p.From = day(t, "2026-10-13") }, code: "invalid_request", field: "from"},
 		{name: "range_367", mutate: func(p *gen.GetRetentionParams) { p.From = day(t, "2025-10-11") }, code: "range_too_large", field: "to"},
 	} {
