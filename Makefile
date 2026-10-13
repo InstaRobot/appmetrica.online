@@ -143,7 +143,7 @@ gen-check: gen ## Проверить, что сгенерированный ко
 # ---------------------------------------------------------------------------
 
 .PHONY: test
-test: test-go test-web ## Unit-тесты Go и web
+test: test-go test-web test-scripts ## Unit-тесты Go, web и CI-скриптов
 
 .PHONY: test-go
 test-go: ## Unit-тесты Go (без Docker)
@@ -154,13 +154,17 @@ test-integration: ## Интеграционные тесты Go с testcontainer
 	cd $(BACKEND) && go test -race -count=1 -tags=integration ./...
 
 .PHONY: coverage
-coverage: ## Покрытие Go (unit + integration) и проверка порога 80% для ключевых пакетов
-	@cd $(BACKEND) && for p in $(COVER_PKGS); do \
-	  go test -count=1 -tags=integration -covermode=atomic -coverprofile=/tmp/appmetrica-cover-$$p.out ./internal/$$p/... >/dev/null; \
-	  pct=$$(go tool cover -func=/tmp/appmetrica-cover-$$p.out | awk '/^total:/ {gsub("%","",$$3); print $$3}'); \
-	  printf "internal/%-10s %6s%%\n" $$p $$pct; \
-	  awk -v v=$$pct -v min=$(COVER_MIN) 'BEGIN { if (v+0 < min) { print "  покрытие ниже " min "%"; exit 1 } }'; \
-	done
+coverage: ## Покрытие Go (unit + integration, -race) и гейт scripts/coverage-gate.sh (≥80% для ключевых пакетов)
+	cd $(BACKEND) && go test -race -count=1 -tags=integration -covermode=atomic -coverpkg=./internal/... -coverprofile=coverage.out ./...
+	COVER_PKGS="$(COVER_PKGS)" COVER_MIN=$(COVER_MIN) bash $(ROOT)/scripts/coverage-gate.sh $(BACKEND)/coverage.out
+
+.PHONY: test-scripts
+test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order)
+	bash $(ROOT)/scripts/test-ci-gates.sh
+
+.PHONY: tdd-order
+tdd-order: ## Проверить порядок коммитов TDD относительно BASE (по умолчанию origin/main)
+	bash $(ROOT)/scripts/check-tdd-order.sh $(or $(BASE),origin/main)
 
 .PHONY: test-web
 test-web: ## Unit-тесты web (Vitest)

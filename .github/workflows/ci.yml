@@ -1,9 +1,14 @@
 name: CI
 
+# Гейты 22-test-strategy.md §5 (T-008). Все jobs, кроме images, обязательны в branch protection для main.
+# Jobs backend, web, gen-check, tdd-order и e2e идут параллельно, чтобы весь прогон укладывался в ~10 минут.
+
 on:
   push:
     branches: [main]
   pull_request:
+    # labeled/unlabeled — чтобы метка tdd-exception сразу пересчитывала job tdd-order.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -15,10 +20,63 @@ concurrency:
 env:
   NODE_VERSION: "24.21.0"
   GOLANGCI_LINT_VERSION: "v2.14.0"
+  GOVULNCHECK_VERSION: "v1.9.0"
 
 jobs:
+  gen-check:
+    name: gen-check (oapi-codegen, sqlc, orval)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+
+      - name: Generated code is committed and up to date
+        run: make gen-check
+
+  tdd-order:
+    name: tdd-order (test commit before implementation)
+    # Метку tdd-exception ставит только владелец (hotfix, 22-test-strategy.md §8.1); с ней job пропускается.
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'tdd-exception')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check TDD commit order against the PR base
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          if ! out="$(bash scripts/check-tdd-order.sh "$BASE_REF")"; then
+            printf '%s\n' "$out"
+            { echo '### TDD order violations'; echo '```'; printf '%s\n' "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=TDD order::Тест пакета закоммичен позже реализации. Разделите коммиты или запросите метку tdd-exception."
+            exit 1
+          fi
+          printf '%s\n' "$out"
+
   backend:
-    name: backend (lint, generated code, tests, coverage)
+    name: backend (lint, tests, coverage, govulncheck)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -32,27 +90,26 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: Generated Go code is up to date (oapi-codegen + sqlc)
-        run: |
-          go tool oapi-codegen -config oapi-ingest.cfg.yaml ../contracts/openapi/ingest.yaml
-          go tool oapi-codegen -config oapi-api.cfg.yaml ../contracts/openapi/api.yaml
-          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/src -w /src sqlc/sqlc:1.31.1 generate
-          git diff --exit-code -- internal/gen internal/pgstore/sqlc
+      - name: CI gate scripts (coverage-gate, check-tdd-order)
+        working-directory: .
+        run: bash scripts/test-ci-gates.sh
 
       - uses: golangci/golangci-lint-action@v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: backend
 
-      - name: Unit tests (race)
-        run: go test -race -count=1 ./...
-
-      - name: Integration tests + coverage gate (testcontainers, ≥80% for ingest/reports/auth/identity/deletion)
+      # -tags=integration включает и unit-тесты: один прогон с -race даёт и результат, и профиль покрытия.
+      - name: Unit + integration tests (race, testcontainers) and coverage gate (≥80% ingest/reports/auth/identity/deletion)
         working-directory: .
-        run: make coverage
+        shell: bash # явный shell включает pipefail: падение make не теряется за tee
+        run: make coverage | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...
 
   web:
-    name: web (biome, types, unit tests, build)
+    name: web (biome, types, unit tests, audit, build)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -73,14 +130,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Generated TS client is up to date (orval)
-        run: |
-          pnpm gen:api
-          git diff --exit-code -- src/lib/api/gen
-
       - run: pnpm biome ci .
       - run: pnpm typecheck
+      # Пороги покрытия (lines/statements/functions ≥ 70 %, branches ≥ 60 %) — в vitest.config.ts.
       - run: pnpm test:coverage
+      - name: Dependency audit (high and critical)
+        run: pnpm audit --prod --audit-level high
 
       - name: Production build
         env:
@@ -93,7 +148,6 @@ jobs:
     name: e2e (Playwright against real ingest + api + ClickHouse + Postgres)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [backend, web]
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -166,7 +220,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    needs: [backend, web, e2e]
+    needs: [gen-check, backend, web, e2e]
     permissions:
       contents: read
       packages: write

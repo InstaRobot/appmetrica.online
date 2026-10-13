@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Еженедельные PR обновлений (понедельник, UTC); patch — автомерж после зелёного CI (T-008, 04-tech-stack.md).",
+  "extends": ["config:recommended", ":semanticCommitTypeAll(chore)", ":semanticCommitScope(deps)"],
+  "enabledManagers": ["gomod", "npm", "dockerfile", "docker-compose", "github-actions"],
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 10,
+  "rangeStrategy": "pin",
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "packageRules": [
+    {
+      "description": "Patch-обновления мержатся автоматически, если все обязательные проверки CI зелёные",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Major-обновления — только после одобрения владельца в Dependency Dashboard",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "ClickHouse остаётся на LTS 26.8 (05-data-model.md, 04-tech-stack.md)",
+      "matchDepNames": ["clickhouse/clickhouse-server"],
+      "allowedVersions": "/^26\\.8\\./"
+    },
+    {
+      "description": "Postgres остаётся на 18.x",
+      "matchDepNames": ["postgres"],
+      "allowedVersions": "/^18\\./"
+    },
+    {
+      "description": "Генерируемый код зависит от версий генераторов — обновления только вместе с make gen",
+      "matchDepNames": ["github.com/oapi-codegen/oapi-codegen/v2", "orval", "sqlc/sqlc"],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "schedule": ["at any time"]
+  }
+}

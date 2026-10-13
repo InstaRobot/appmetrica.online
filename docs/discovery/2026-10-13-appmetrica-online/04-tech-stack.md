@@ -363,7 +363,7 @@ require (
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 ```
 
-Инструменты вне `go.mod`: sqlc 1.31.1 (Docker-образ `sqlc/sqlc:1.31.1`), golangci-lint 2.14.0 (бинарь в CI, `golangci/golangci-lint-action`), `govulncheck` (через `go run golang.org/x/vuln/cmd/govulncheck@latest` только в CI-задаче аудита).
+Инструменты вне `go.mod`: sqlc 1.31.1 (Docker-образ `sqlc/sqlc:1.31.1`), golangci-lint 2.14.0 (бинарь в CI, `golangci/golangci-lint-action`), `govulncheck` v1.9.0 (через `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` в job `backend` CI).
 `oapi-codegen` добавляется командой `go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0`.
 
 ### web/package.json
