@@ -165,7 +165,7 @@ func TestLogout_RevokesSession(t *testing.T) {
 	sess, err := h.setup(t, h.newToken(t), newAuthenticator(t), "MacBook")
 	require.NoError(t, err)
 	mux := http.NewServeMux()
-	api.NewServer(h.svc, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
+	api.NewServer(h.svc, nil, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
 
 	logout := func(token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/v1/auth/logout", nil)

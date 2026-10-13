@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
 	"appmetrica.online/backend/internal/config"
 	gen "appmetrica.online/backend/internal/gen/api"
@@ -21,6 +22,7 @@ type Server struct {
 	gen.StrictServerInterface
 
 	auth          *auth.Service
+	apps          *apps.Service
 	logger        *slog.Logger
 	appEnv        config.Env
 	publicBaseURL string
@@ -28,9 +30,10 @@ type Server struct {
 	sessionTTL    time.Duration
 }
 
-func NewServer(authSvc *auth.Service, logger *slog.Logger, cfg config.API) *Server {
+func NewServer(authSvc *auth.Service, appsSvc *apps.Service, logger *slog.Logger, cfg config.API) *Server {
 	return &Server{
 		auth:          authSvc,
+		apps:          appsSvc,
 		logger:        logger,
 		appEnv:        cfg.AppEnv,
 		publicBaseURL: cfg.PublicBaseURL,

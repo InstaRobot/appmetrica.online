@@ -34,7 +34,7 @@ func (h *harness) ownerAPI(t *testing.T) (*passkeysAPI, *testutil.Authenticator)
 	sess, err := h.setup(t, h.newToken(t), a, "MacBook")
 	require.NoError(t, err)
 	mux := http.NewServeMux()
-	api.NewServer(h.svc, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
+	api.NewServer(h.svc, nil, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
 	return &passkeysAPI{mux: mux, token: sess.Token}, a
 }
 

@@ -31,7 +31,7 @@ func newMux(t *testing.T, env config.Env) *http.ServeMux {
 	svc, err := auth.NewService(nil, clock.NewFixed(time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)), logger, cfg)
 	require.NoError(t, err)
 	mux := http.NewServeMux()
-	api.NewServer(svc, logger, cfg).Register(mux)
+	api.NewServer(svc, nil, logger, cfg).Register(mux)
 	return mux
 }
 

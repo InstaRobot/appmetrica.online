@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"appmetrica.online/backend/internal/api"
+	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
@@ -38,6 +39,6 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	h := newRouter(logger, c, api.NewServer(authSvc, logger, cfg).Register)
+	h := newRouter(logger, c, api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).Register)
 	return serveHTTP(ctx, logger, cfg.ListenAddr, h)
 }

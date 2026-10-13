@@ -247,7 +247,7 @@ func patchResponse(t *testing.T, credential []byte, field string, patch func(str
 func TestAuthEndpoints_GlobalRateLimit(t *testing.T) {
 	h := newHarness(t)
 	mux := http.NewServeMux()
-	api.NewServer(h.svc, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
+	api.NewServer(h.svc, nil, slog.New(slog.DiscardHandler), testConfig()).Register(mux)
 
 	post := func(path string) *httptest.ResponseRecorder {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(`{}`))

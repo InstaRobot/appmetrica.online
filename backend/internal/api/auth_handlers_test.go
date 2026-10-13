@@ -56,7 +56,7 @@ func newAuthServer(t *testing.T, baseURL, rpID string) *authServer {
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	api.NewServer(svc, logger, cfg).Register(mux)
+	api.NewServer(svc, nil, logger, cfg).Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &authServer{srv: srv, svc: svc, cfg: cfg, pg: pg, rpID: rpID}
