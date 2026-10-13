@@ -105,6 +105,10 @@ jobs:
         shell: bash # явный shell включает pipefail: падение make не теряется за tee
         run: make coverage | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Fuzz PII guard (30s)
+        working-directory: .
+        run: make fuzz
+
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }} ./...
 

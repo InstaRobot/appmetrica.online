@@ -303,6 +303,7 @@
 | OQ-020 | Heartbeat для длительности | Deferred | владелец | 2026-12-27 |
 | OQ-021 | Мобильная вёрстка | Deferred | владелец | 2027-02-27 |
 | OQ-030 | Неизвестные поля верхнего уровня `EventBatch` (в ingest.yaml `additionalProperties: false`): транспорт T-009 их игнорирует, а не отвечает `400 invalid_batch` — новые поля клиентов не ломают приём старым сервером | Default: игнорировать | владелец | 2026-10-30 |
+| OQ-031 | Поэлементная валидация T-010: (1) неизвестные поля `Event` игнорируются так же, как в OQ-030; (2) `Rejection.insert_id` = null, если insert_id отсутствует или не канонический UUID (8-4-4-4-12, nil запрещён) — клиент сопоставляет по `index`; (3) событие не JSON-объект → `invalid_field` с `field="events[i]"`; (4) `duration_ms` вне 0..86400000 или не целое → `invalid_field` и для session_start; (5) длина `user_id` считается в символах после TrimSpace | Default: как описано | владелец | 2026-10-30 |
 | RQ-001 | Object lock + ротация бэкапов | In research (E9b) | владелец | 2026-11-24 |
 | RQ-002 | Conditional UI passkey | In research (E2) | владелец | 2026-10-30 |
 | RQ-003 | Lightweight DELETE + bloom filter | In research (E6) | владелец | 2026-11-18 |

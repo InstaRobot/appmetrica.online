@@ -158,6 +158,10 @@ coverage: ## Покрытие Go (unit + integration, -race) и гейт scripts
 	cd $(BACKEND) && go test -race -count=1 -tags=integration -covermode=atomic -coverpkg=./internal/... -coverprofile=coverage.out ./...
 	COVER_PKGS="$(COVER_PKGS)" COVER_MIN=$(COVER_MIN) bash $(ROOT)/scripts/coverage-gate.sh $(BACKEND)/coverage.out
 
+.PHONY: fuzz
+fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLooksLikePII
+	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzLooksLikePII$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
+
 .PHONY: test-scripts
 test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order)
 	bash $(ROOT)/scripts/test-ci-gates.sh
