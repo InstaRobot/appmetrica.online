@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -132,9 +133,36 @@ func metaFrom(ctx context.Context) requestMeta {
 }
 
 // invalidRequest — тело или параметры не разобрались по схеме. Текст ошибки разбора не возвращается:
-// он может процитировать присланные значения.
-func invalidRequest(w http.ResponseWriter, r *http.Request, _ error) {
+// он может процитировать присланные значения; для параметра в details.field — его имя.
+func invalidRequest(w http.ResponseWriter, r *http.Request, err error) {
+	if name := paramName(err); name != "" {
+		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Некорректный параметр "+name+".",
+			map[string]any{"field": name})
+		return
+	}
 	httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Некорректный запрос", nil)
+}
+
+// paramName — имя параметра из ошибки разбора обёртки oapi-codegen; "" — ошибка не про параметр.
+func paramName(err error) string {
+	var (
+		format   *gen.InvalidParamFormatError
+		required *gen.RequiredParamError
+		many     *gen.TooManyValuesForParamError
+		unmarsh  *gen.UnmarshalingParamError
+	)
+	switch {
+	case errors.As(err, &format):
+		return format.ParamName
+	case errors.As(err, &required):
+		return required.ParamName
+	case errors.As(err, &many):
+		return many.ParamName
+	case errors.As(err, &unmarsh):
+		return unmarsh.ParamName
+	default:
+		return ""
+	}
 }
 
 // internalError — обработчик вернул ошибку вместо ответа из контракта.

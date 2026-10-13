@@ -8,6 +8,7 @@ package reports
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -84,12 +85,7 @@ type Params struct {
 	Filters  Filters
 }
 
-func (p Params) location() *time.Location {
-	if p.Location == nil {
-		return time.UTC
-	}
-	return p.Location
-}
+func (p Params) location() *time.Location { return orUTC(p.Location) }
 
 // Parameters — значения {app_id}, {env}, {unit}, {tz}, {start_utc}, {end_utc}, {d_lo}, {d_hi} и {f_*}.
 func (p Params) Parameters() clickhouse.Parameters {
@@ -112,8 +108,15 @@ func (p Params) Parameters() clickhouse.Parameters {
 // Bind — контекст запроса с параметрами отчёта. session_timezone=UTC: значения {*_utc:DateTime64(3)}
 // без пояса читаются как UTC независимо от пояса сервера.
 func (p Params) Bind(ctx context.Context) context.Context {
+	return p.bindWith(ctx, nil)
+}
+
+// bindWith — Bind с дополнительными параметрами запроса (например, {date:Date} портфеля).
+func (p Params) bindWith(ctx context.Context, extra clickhouse.Parameters) context.Context {
+	params := p.Parameters()
+	maps.Copy(params, extra)
 	return clickhouse.Context(ctx,
-		clickhouse.WithParameters(p.Parameters()),
+		clickhouse.WithParameters(params),
 		clickhouse.WithSettings(clickhouse.Settings{"session_timezone": "UTC"}),
 	)
 }

@@ -81,19 +81,12 @@ func parseCommonParams(in commonParams, appID uuid.UUID, loc *time.Location) (re
 		Granularity: gen.GranularityDay,
 	}
 
-	if in.Unit != nil {
-		// Пустой unit= — ошибка: значение по умолчанию действует, только если параметра нет.
-		u, err := identity.ParseUnit(string(*in.Unit))
-		if *in.Unit == "" || err != nil {
-			return reportParams{}, invalidParam("unit", "unit: допустимо persons или installs.")
-		}
-		out.Unit = u
+	var perr *paramError
+	if out.Unit, perr = parseUnit(in.Unit); perr != nil {
+		return reportParams{}, perr
 	}
-	if in.Environment != nil {
-		if !in.Environment.Valid() {
-			return reportParams{}, invalidParam("environment", "environment: допустимо production или development.")
-		}
-		out.Env = string(*in.Environment)
+	if out.Env, perr = parseEnvironment(in.Environment); perr != nil {
+		return reportParams{}, perr
 	}
 	if in.Granularity != nil {
 		if !in.Granularity.Valid() {
@@ -102,7 +95,6 @@ func parseCommonParams(in commonParams, appID uuid.UUID, loc *time.Location) (re
 		out.Granularity = *in.Granularity
 	}
 
-	var perr *paramError
 	if out.Filters, perr = parseFilters(in); perr != nil {
 		return reportParams{}, perr
 	}
@@ -125,6 +117,30 @@ func parseCommonParams(in commonParams, appID uuid.UUID, loc *time.Location) (re
 		}
 	}
 	return out, nil
+}
+
+// parseUnit — unit отчёта; без параметра — persons. Пустой unit= — ошибка: значение по умолчанию действует,
+// только если параметра нет.
+func parseUnit(in *gen.Unit) (identity.Unit, *paramError) {
+	if in == nil {
+		return identity.Persons, nil
+	}
+	u, err := identity.ParseUnit(string(*in))
+	if *in == "" || err != nil {
+		return "", invalidParam("unit", "unit: допустимо persons или installs.")
+	}
+	return u, nil
+}
+
+// parseEnvironment — environment отчёта; без параметра — production.
+func parseEnvironment(in *gen.Environment) (string, *paramError) {
+	if in == nil {
+		return reports.EnvProduction, nil
+	}
+	if !in.Valid() {
+		return "", invalidParam("environment", "environment: допустимо production или development.")
+	}
+	return string(*in), nil
 }
 
 // parseFilters проверяет значения фильтров по схемам api.yaml (enum Platform, maxLength, pattern страны).

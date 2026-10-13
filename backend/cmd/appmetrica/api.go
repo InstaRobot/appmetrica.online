@@ -13,9 +13,11 @@ import (
 	"appmetrica.online/backend/internal/api"
 	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
+	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/pgstore"
+	"appmetrica.online/backend/internal/reports"
 )
 
 // runAPI — `appmetrica api`: Read API и admin API на API_LISTEN_ADDR, метрики на METRICS_LISTEN_ADDR.
@@ -37,6 +39,12 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer pg.Close()
+	ch, err := chstore.Open(ctx, chstore.Options(cfg.ClickHouse))
+	if err != nil {
+		logger.Error("clickhouse unavailable", slog.Any("error", err))
+		return 1
+	}
+	defer func() { _ = ch.Close() }()
 	authSvc, err := auth.NewService(pg, c, logger, cfg)
 	if err != nil {
 		logger.Error("auth init failed", slog.Any("error", err))
@@ -50,7 +58,9 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	h := newRouter(logger, c, api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).Register)
+	srv := api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).
+		WithReports(reports.NewService(ch.Conn(), c), pg.Queries())
+	h := newRouter(logger, c, srv.Register)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var wg sync.WaitGroup

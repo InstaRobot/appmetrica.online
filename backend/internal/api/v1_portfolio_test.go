@@ -40,16 +40,14 @@ func newPortfolioEnv(t *testing.T) *portfolioEnv {
 	env := testutil.Start(t)
 	env.LoadNDJSON(t, testutil.ScenarioPath())
 	for _, app := range testutil.ScenarioApps {
-		status := "active"
-		if app.Code == "tyo" {
-			status = "archived"
-		}
 		_, err := env.PG.Pool().Exec(t.Context(),
-			`INSERT INTO apps (id, name, platform, timezone, status, archived_at)
-			 VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 = 'archived' THEN now() END)`,
-			app.ID, app.Name, app.Platform, app.Timezone, status)
+			`INSERT INTO apps (id, name, platform, timezone) VALUES ($1, $2, $3, $4)`,
+			app.ID, app.Name, app.Platform, app.Timezone)
 		require.NoError(t, err)
 	}
+	_, err := env.PG.Pool().Exec(t.Context(),
+		`UPDATE apps SET status = 'archived', archived_at = now() WHERE id = $1`, testutil.ScenarioApps[2].ID)
+	require.NoError(t, err)
 
 	cfg := config.API{
 		PublicBaseURL:       "http://localhost:3000",
