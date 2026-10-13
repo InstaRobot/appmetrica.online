@@ -28,6 +28,7 @@ type Batch struct {
 	Context    json.RawMessage
 	Events     []json.RawMessage
 	ReceivedAt time.Time
+	Key        KeyInfo
 }
 
 // rawBatch — верхний уровень EventBatch; неизвестные поля игнорируются.
