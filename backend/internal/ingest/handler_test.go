@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
@@ -147,6 +148,8 @@ func newHarness(t *testing.T) *harness {
 }
 
 type request struct {
+	method      string // "" — POST
+	headers     map[string]string
 	contentType string
 	encoding    string
 	header      string // X-App-Key
@@ -160,7 +163,14 @@ func (h *harness) do(t *testing.T, r request) *httptest.ResponseRecorder {
 	if r.query != "" {
 		target += "?" + r.query
 	}
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, target, bytes.NewReader(r.body))
+	method := r.method
+	if method == "" {
+		method = http.MethodPost
+	}
+	req := httptest.NewRequestWithContext(t.Context(), method, target, bytes.NewReader(r.body))
+	for k, v := range r.headers {
+		req.Header.Set(k, v)
+	}
 	if r.contentType != "" {
 		req.Header.Set("Content-Type", r.contentType)
 	}
@@ -580,4 +590,172 @@ func mustField(t *testing.T, raw json.RawMessage, name string) string {
 	v, ok := obj[name]
 	require.True(t, ok, "нет поля %q", name)
 	return string(v)
+}
+
+// TestIngestHandler_PartialSuccess — AC-014.2: событие с PII отклоняется, остальные записываются, отказ
+// уходит в rejected_events (I-38).
+func TestIngestHandler_PartialSuccess(t *testing.T) {
+	h := newPipelineHarness(t)
+	body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"app_version": "3.4.0", "platform": "ios"},
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "user_id": "ivan@example.com"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "name": "session_end", "duration_ms": 4000}),
+	)
+	res := decodeResult(t, h.postBody(t, body))
+	require.Equal(t, 2, res.Accepted)
+	require.Len(t, res.Rejected, 1)
+	rej := res.Rejected[0]
+	require.Equal(t, 1, rej.Index)
+	require.Equal(t, ingestapi.RejectionCodeUserIdLooksLikePii, rej.Code)
+	require.False(t, rej.Retryable)
+	require.Equal(t, numberedInsertID(1), rej.InsertId.MustGet())
+	require.Empty(t, res.Warnings)
+
+	rows := h.writer.written()
+	require.Len(t, rows, 2)
+	require.Equal(t, numberedInsertID(0), rows[0].InsertID.String())
+	require.Equal(t, numberedInsertID(2), rows[1].InsertID.String())
+
+	logged := h.sink.logged()
+	require.Len(t, logged, 1, "в rejected_events одна строка")
+	r := logged[0]
+	require.Equal(t, appA, r.AppID)
+	require.Equal(t, testKey[:11], r.KeyPrefix)
+	require.Equal(t, "user_id_looks_like_pii", r.Code)
+	require.Equal(t, "events[1].user_id", r.Field)
+	require.Equal(t, rej.Message, r.Message)
+	require.Equal(t, "session_start", r.EventName)
+	require.Equal(t, "3.4.0", r.AppVersion)
+	require.Equal(t, "ios", r.Platform)
+	require.Equal(t, receivedAt, r.ReceivedAt)
+	require.NotContains(t, r.PayloadSample, "ivan@example.com")
+	require.NotContains(t, h.logs.String(), "ivan@example.com", "user_id не логируется")
+}
+
+// TestIngestHandler_DuplicateInBatch — AC-014.3 (I-12): второй insert_id пропускается с warning без rejection.
+func TestIngestHandler_DuplicateInBatch(t *testing.T) {
+	h := newPipelineHarness(t)
+	body := batchBody(t, "2026-10-13T09:15:02.000Z", nil, eventJSON(t, nil), eventJSON(t, nil))
+	res := decodeResult(t, h.postBody(t, body))
+	require.Equal(t, 1, res.Accepted)
+	require.Empty(t, res.Rejected)
+	require.Len(t, res.Warnings, 1)
+	require.Equal(t, 1, res.Warnings[0].Index)
+	require.Equal(t, ingestapi.WarningCodeDuplicateInsertIdInBatch, res.Warnings[0].Code)
+	require.Len(t, h.writer.written(), 1)
+	require.Empty(t, h.sink.logged())
+
+	t.Run("duplicate of a rejected event is processed", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		body := batchBody(t, "2026-10-13T09:15:02.000Z", nil,
+			eventJSON(t, map[string]any{"user_id": "ivan@example.com"}), eventJSON(t, nil))
+		res := decodeResult(t, h.postBody(t, body))
+		require.Equal(t, 1, res.Accepted)
+		require.Len(t, res.Rejected, 1)
+		require.Empty(t, res.Warnings)
+	})
+
+	t.Run("duplicates do not spend the install budget", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		// 500 событий с одним insert_id: лимит установки списывает только первое.
+		events := make([]json.RawMessage, 500)
+		for i := range events {
+			events[i] = eventJSON(t, nil)
+		}
+		res := decodeResult(t, h.postBody(t, batchBody(t, "2026-10-13T09:15:02.000Z", nil, events...)))
+		require.Equal(t, 1, res.Accepted)
+		require.Len(t, res.Warnings, 499)
+		ok, _ := h.limits.Installs.Allow(installKey(appA, validInstallID), 999)
+		require.True(t, ok, "в бакете установки осталось 999 токенов")
+	})
+}
+
+// TestIngestHandler_StorageUnavailable — AC-014.4 (I-35): ошибка или таймаут вставки — 503 с Retry-After: 5,
+// 200 не отправляется, отказы не пишутся (клиент повторит весь батч).
+func TestIngestHandler_StorageUnavailable(t *testing.T) {
+	t.Run("insert error", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		h.writer.fail(errStorageDown)
+		body := batchBody(t, "2026-10-13T09:15:02.000Z", nil,
+			eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
+			eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "user_id": "ivan@example.com"}))
+		rec := h.postBody(t, body)
+		env := requireError(t, rec, http.StatusServiceUnavailable, "storage_unavailable")
+		require.Equal(t, "5", rec.Header().Get("Retry-After"))
+		require.NotContains(t, env.Error.Message, "dial tcp", "внутренние детали не уходят клиенту")
+		require.Empty(t, h.sink.logged(), "отказы не пишутся, пока батч не принят")
+		require.InDelta(t, 1.0, metricValue(t, h.reg, "ingest_clickhouse_insert_errors_total"), 0)
+		require.Equal(t, map[string]float64{"503": 1}, requestCounts(t, h.reg))
+		require.Empty(t, labelCounts(t, h.reg, "ingest_events_accepted_total", "app_id"))
+
+		logs := h.logs.String()
+		require.Contains(t, logs, "connection refused")
+		require.Contains(t, logs, rec.Header().Get("X-Request-Id"))
+		require.Contains(t, logs, appA.String())
+		require.NotContains(t, logs, testKey)
+	})
+
+	t.Run("insert timeout", func(t *testing.T) {
+		h := newPipelineHarness(t, func(c *ingest.PipelineConfig) { c.InsertTimeout = 20 * time.Millisecond })
+		h.writer.mu.Lock()
+		h.writer.block = true
+		h.writer.mu.Unlock()
+		rec := h.postBody(t, []byte(batchI01))
+		requireError(t, rec, http.StatusServiceUnavailable, "storage_unavailable")
+		require.Equal(t, "5", rec.Header().Get("Retry-After"))
+	})
+
+	t.Run("recovers when ClickHouse is back", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		h.writer.fail(errStorageDown)
+		requireError(t, h.postBody(t, []byte(batchI01)), http.StatusServiceUnavailable, "storage_unavailable")
+		h.writer.fail(nil)
+		requireAccepted(t, h.postBody(t, []byte(batchI01)), 2)
+	})
+
+	t.Run("all events rejected — no insert", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		h.writer.fail(errStorageDown)
+		res := decodeResult(t, h.postBody(t, oneEvent(t, map[string]any{"name": "purchase"})))
+		require.Zero(t, res.Accepted)
+		require.Zero(t, h.writer.insertCalls(), "пустой батч в ClickHouse не отправляется")
+		require.Len(t, h.sink.logged(), 1)
+	})
+}
+
+// TestIngestHandler_MixedInstalls — лимит установки считается по каждому install_id отдельно.
+func TestIngestHandler_MixedInstalls(t *testing.T) {
+	h := newPipelineHarness(t)
+	ok, _ := h.limits.Installs.Allow(installKey(appA, validInstallID), 1000)
+	require.True(t, ok, "бакет первой установки исчерпан")
+	other := "9b2e4c61-0f3a-4d8b-9e71-5c2a6d8f0b13"
+	body := batchBody(t, "2026-10-13T09:15:02.000Z", nil,
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "install_id": other}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "install_id": other}),
+	)
+	res := decodeResult(t, h.postBody(t, body))
+	require.Equal(t, 2, res.Accepted)
+	require.Len(t, res.Rejected, 1)
+	require.Equal(t, 0, res.Rejected[0].Index)
+	require.Equal(t, ingestapi.RejectionCodeInstallRateLimited, res.Rejected[0].Code)
+	require.True(t, res.Rejected[0].Retryable)
+	for _, r := range h.writer.written() {
+		require.Equal(t, other, r.InstallID.String())
+	}
+	require.Equal(t, map[string]float64{"install": 1}, labelCounts(t, h.reg, "ingest_rate_limited_total", "scope"))
+}
+
+// TestIngestHandler_UnknownFieldsIgnored — неизвестные поля батча, события и context не мешают приёму.
+func TestIngestHandler_UnknownFieldsIgnored(t *testing.T) {
+	h := newPipelineHarness(t)
+	body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"platform": "ios", "screen": "1170x2532"},
+		eventJSON(t, map[string]any{"foo": 1, "context": map[string]any{"bar": true}}))
+	body = bytes.Replace(body, []byte(`{`), []byte(`{"sdk_version":"x",`), 1)
+	requireAccepted(t, h.postBody(t, body), 1)
+	require.Len(t, h.writer.written(), 1)
+}
+
+func installKey(app uuid.UUID, installID string) ratelimit.InstallKey {
+	return ratelimit.InstallKey{AppID: app, InstallID: uuid.MustParse(installID)}
 }

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/gen/ingestapi"
@@ -28,6 +29,13 @@ type HandlerConfig struct {
 	Clock     clock.Clock
 	Logger    *slog.Logger
 	Metrics   *Metrics
+	// BatchErrors — журнал batch-ошибок в rejected_events; nil — не пишутся.
+	BatchErrors BatchErrorLogger
+}
+
+// BatchErrorLogger пишет batch-ошибку известного приложения в rejected_events.
+type BatchErrorLogger interface {
+	LogBatchError(appKey string, receivedAt time.Time, body []byte, e *Error)
 }
 
 type handler struct {
