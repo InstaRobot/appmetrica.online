@@ -22,6 +22,7 @@ type Server struct {
 
 	auth          *auth.Service
 	logger        *slog.Logger
+	publicBaseURL string
 	secureCookies bool
 	sessionTTL    time.Duration
 }
@@ -30,25 +31,37 @@ func NewServer(authSvc *auth.Service, logger *slog.Logger, cfg config.API) *Serv
 	return &Server{
 		auth:          authSvc,
 		logger:        logger,
+		publicBaseURL: cfg.PublicBaseURL,
 		secureCookies: strings.HasPrefix(cfg.PublicBaseURL, "https://"),
 		sessionTTL:    cfg.SessionTTL,
 	}
 }
 
 // Register подключает реализованные операции к mux. Пути и методы — как в api.yaml.
+// CSRF стоит перед разбором параметров: запрос без X-Requested-With получает 403 csrf_check_failed, а не 400.
 func (s *Server) Register(mux *http.ServeMux) {
 	si := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{withRequestMeta}, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  invalidRequest,
 		ResponseErrorHandlerFunc: s.internalError,
 	})
 	w := &gen.ServerInterfaceWrapper{Handler: si, ErrorHandlerFunc: invalidRequest}
+	csrf := auth.CSRF(s.publicBaseURL, writeError)
+	limit := s.auth.LimitAttempts(writeError)
 
-	mux.HandleFunc("GET /admin/v1/auth/state", w.GetAuthState)
-	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/begin", w.BeginSetup)
-	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/finish", w.FinishSetup)
-	mux.HandleFunc("POST /admin/v1/auth/login/begin", w.BeginLogin)
-	mux.HandleFunc("POST /admin/v1/auth/login/finish", w.FinishLogin)
-	mux.HandleFunc("POST /admin/v1/auth/logout", w.Logout)
+	public := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(h)) }
+	attempt := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(limit(h))) }
+
+	public("GET /admin/v1/auth/state", w.GetAuthState)
+	attempt("POST /admin/v1/auth/login/begin", w.BeginLogin)
+	attempt("POST /admin/v1/auth/login/finish", w.FinishLogin)
+	attempt("POST /admin/v1/auth/setup/{token}/begin", w.BeginSetup)
+	attempt("POST /admin/v1/auth/setup/{token}/finish", w.FinishSetup)
+	public("POST /admin/v1/auth/logout", w.Logout)
+}
+
+// writeError — auth.ErrorWriter поверх конверта ошибки httpx.
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	httpx.WriteError(w, r, status, code, message, nil)
 }
 
 // requestMeta — данные запроса, которых нет в RequestObject strict-сервера.

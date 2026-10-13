@@ -220,25 +220,31 @@ func (q *Queries) RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (R
 	return i, err
 }
 
-const updatePasskeyAfterLogin = `-- name: UpdatePasskeyAfterLogin :exec
+const updatePasskeyAfterLogin = `-- name: UpdatePasskeyAfterLogin :execrows
 UPDATE passkeys
 SET sign_count = $1, backup_state = $2, last_used_at = $3
-WHERE credential_id = $4
+WHERE id = $4
+  AND (sign_count < $1 OR (sign_count = 0 AND $1 = 0))
 `
 
 type UpdatePasskeyAfterLoginParams struct {
-	SignCount    int64
-	BackupState  bool
-	Now          *time.Time
-	CredentialID []byte
+	SignCount   int64
+	BackupState bool
+	Now         *time.Time
+	ID          uuid.UUID
 }
 
-func (q *Queries) UpdatePasskeyAfterLogin(ctx context.Context, arg UpdatePasskeyAfterLoginParams) error {
-	_, err := q.db.Exec(ctx, updatePasskeyAfterLogin,
+// Счётчик только растёт (0 → 0 — synced passkey без счётчика): параллельный вход со старым значением
+// не откатывает sign_count и получает 0 строк.
+func (q *Queries) UpdatePasskeyAfterLogin(ctx context.Context, arg UpdatePasskeyAfterLoginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePasskeyAfterLogin,
 		arg.SignCount,
 		arg.BackupState,
 		arg.Now,
-		arg.CredentialID,
+		arg.ID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

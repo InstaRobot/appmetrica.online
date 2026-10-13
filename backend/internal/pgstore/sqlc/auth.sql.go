@@ -41,16 +41,18 @@ func (q *Queries) CreateCeremony(ctx context.Context, arg CreateCeremonyParams) 
 }
 
 const createSession = `-- name: CreateSession :exec
-INSERT INTO auth_sessions (token_hash, owner_id, created_at, last_seen_at, expires_at, user_agent)
-VALUES ($1, $2, $3, $3, $4, $5)
+INSERT INTO auth_sessions (token_hash, owner_id, created_at, last_seen_at, expires_at, idle_timeout, user_agent)
+VALUES ($1, $2, $3, $3, $4,
+        make_interval(secs => $5::float8), $6)
 `
 
 type CreateSessionParams struct {
-	TokenHash []byte
-	OwnerID   uuid.UUID
-	Now       time.Time
-	ExpiresAt time.Time
-	UserAgent string
+	TokenHash          []byte
+	OwnerID            uuid.UUID
+	Now                time.Time
+	ExpiresAt          time.Time
+	IdleTimeoutSeconds float64
+	UserAgent          string
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
@@ -59,6 +61,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.OwnerID,
 		arg.Now,
 		arg.ExpiresAt,
+		arg.IdleTimeoutSeconds,
 		arg.UserAgent,
 	)
 	return err

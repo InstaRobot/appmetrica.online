@@ -73,7 +73,9 @@ type Querier interface {
 	TouchWriteKeysLastUsed(ctx context.Context, arg TouchWriteKeysLastUsedParams) error
 	UnarchiveApp(ctx context.Context, arg UnarchiveAppParams) (App, error)
 	UpdateApp(ctx context.Context, arg UpdateAppParams) (App, error)
-	UpdatePasskeyAfterLogin(ctx context.Context, arg UpdatePasskeyAfterLoginParams) error
+	// Счётчик только растёт (0 → 0 — synced passkey без счётчика): параллельный вход со старым значением
+	// не откатывает sign_count и получает 0 строк.
+	UpdatePasskeyAfterLogin(ctx context.Context, arg UpdatePasskeyAfterLoginParams) (int64, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (UpdateSettingsRow, error)
 	UpsertAlertState(ctx context.Context, arg UpsertAlertStateParams) (AlertState, error)
 }

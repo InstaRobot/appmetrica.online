@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/time/rate"
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
@@ -59,6 +60,10 @@ type Service struct {
 	wa         *webauthn.WebAuthn
 	baseURL    string
 	sessionTTL time.Duration
+	// sessionIdleTTL — простой сессии (SESSION_IDLE_TTL), пишется в auth_sessions.idle_timeout.
+	sessionIdleTTL time.Duration
+	// attempts — общий лимит попыток входа и регистрации по setup-ссылке на процесс (LimitAttempts).
+	attempts *rate.Limiter
 }
 
 func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg config.API) (*Service, error) {
@@ -67,12 +72,14 @@ func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg co
 		return nil, err
 	}
 	return &Service{
-		store:      store,
-		clock:      c,
-		logger:     logger,
-		wa:         wa,
-		baseURL:    strings.TrimSuffix(cfg.PublicBaseURL, "/"),
-		sessionTTL: cfg.SessionTTL,
+		store:          store,
+		clock:          c,
+		logger:         logger,
+		wa:             wa,
+		baseURL:        strings.TrimSuffix(cfg.PublicBaseURL, "/"),
+		sessionTTL:     cfg.SessionTTL,
+		sessionIdleTTL: cfg.SessionIdleTTL,
+		attempts:       rate.NewLimiter(rate.Every(time.Minute/authAttemptsPerMinute), authAttemptsPerMinute),
 	}, nil
 }
 
@@ -141,7 +148,7 @@ func (s *Service) BeginSetup(ctx context.Context, token string) (Ceremony, error
 		if err != nil {
 			return fmt.Errorf("auth: begin registration: %w", err)
 		}
-		c, err = saveCeremony(ctx, q, creation, session, hash, now)
+		c, err = saveCeremony(ctx, q, sqlc.CeremonyKindRegistration, creation, session, hash, now)
 		return err
 	})
 	if err != nil {
@@ -251,20 +258,21 @@ func loadOwner(ctx context.Context, q *sqlc.Queries, id uuid.UUID, handle []byte
 	return newOwner(id, handle, name, rows), nil
 }
 
-// saveCeremony сохраняет SessionData go-webauthn в webauthn_ceremonies и возвращает опции для браузера.
-func saveCeremony(ctx context.Context, q *sqlc.Queries, creation *protocol.CredentialCreation,
+// saveCeremony сохраняет SessionData go-webauthn в webauthn_ceremonies и возвращает опции для браузера
+// (CredentialCreation или CredentialAssertion). setupTokenHash — только у регистрации по setup-ссылке.
+func saveCeremony(ctx context.Context, q *sqlc.Queries, kind sqlc.CeremonyKind, browserOptions any,
 	session *webauthn.SessionData, setupTokenHash []byte, now time.Time,
 ) (Ceremony, error) {
 	sessionJSON, err := json.Marshal(session)
 	if err != nil {
 		return Ceremony{}, fmt.Errorf("auth: encode ceremony session: %w", err)
 	}
-	options, err := json.Marshal(creation)
+	options, err := json.Marshal(browserOptions)
 	if err != nil {
-		return Ceremony{}, fmt.Errorf("auth: encode creation options: %w", err)
+		return Ceremony{}, fmt.Errorf("auth: encode ceremony options: %w", err)
 	}
 	id, err := q.CreateCeremony(ctx, sqlc.CreateCeremonyParams{
-		Kind:           sqlc.CeremonyKindRegistration,
+		Kind:           kind,
 		SessionData:    sessionJSON,
 		SetupTokenHash: setupTokenHash,
 		Now:            now,

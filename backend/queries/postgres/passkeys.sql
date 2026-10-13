@@ -21,10 +21,13 @@ VALUES (sqlc.arg(owner_id), sqlc.arg(credential_id), sqlc.arg(public_key), sqlc.
         sqlc.arg(sign_count), sqlc.arg(transports), sqlc.arg(backup_eligible), sqlc.arg(backup_state), sqlc.arg(name))
 RETURNING id, name, created_at;
 
--- name: UpdatePasskeyAfterLogin :exec
+-- Счётчик только растёт (0 → 0 — synced passkey без счётчика): параллельный вход со старым значением
+-- не откатывает sign_count и получает 0 строк.
+-- name: UpdatePasskeyAfterLogin :execrows
 UPDATE passkeys
 SET sign_count = sqlc.arg(sign_count), backup_state = sqlc.arg(backup_state), last_used_at = sqlc.arg(now)
-WHERE credential_id = sqlc.arg(credential_id);
+WHERE id = sqlc.arg(id)
+  AND (sign_count < sqlc.arg(sign_count) OR (sign_count = 0 AND sqlc.arg(sign_count) = 0));
 
 -- name: RenamePasskey :one
 UPDATE passkeys SET name = sqlc.arg(name) WHERE id = sqlc.arg(id) RETURNING id, name;

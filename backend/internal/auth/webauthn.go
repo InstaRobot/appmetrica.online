@@ -53,11 +53,17 @@ type owner struct {
 	handle      []byte
 	name        string
 	credentials []webauthn.Credential
+	passkeyIDs  []uuid.UUID // passkeys.id в порядке credentials
 }
 
 func newOwner(id uuid.UUID, handle []byte, name string, rows []sqlc.ListPasskeyCredentialsRow) *owner {
-	o := &owner{id: id, handle: handle, name: name, credentials: make([]webauthn.Credential, 0, len(rows))}
+	o := &owner{
+		id: id, handle: handle, name: name,
+		credentials: make([]webauthn.Credential, 0, len(rows)),
+		passkeyIDs:  make([]uuid.UUID, 0, len(rows)),
+	}
 	for _, r := range rows {
+		o.passkeyIDs = append(o.passkeyIDs, r.ID)
 		transports := make([]protocol.AuthenticatorTransport, 0, len(r.Transports))
 		for _, t := range r.Transports {
 			transports = append(transports, protocol.AuthenticatorTransport(t))
@@ -88,10 +94,15 @@ func (o *owner) WebAuthnDisplayName() string                { return o.name }
 func (o *owner) WebAuthnCredentials() []webauthn.Credential { return o.credentials }
 
 func (o *owner) hasCredential(id []byte) bool {
-	for _, c := range o.credentials {
-		if bytes.Equal(c.ID, id) {
-			return true
+	return o.passkeyID(id) != uuid.Nil
+}
+
+// passkeyID — passkeys.id по credential id; uuid.Nil, если такого passkey у owner нет.
+func (o *owner) passkeyID(credentialID []byte) uuid.UUID {
+	for i, c := range o.credentials {
+		if bytes.Equal(c.ID, credentialID) {
+			return o.passkeyIDs[i]
 		}
 	}
-	return false
+	return uuid.Nil
 }

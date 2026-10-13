@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	msgSetupLinkUnknown = "Ссылка установки passkey не найдена"
-	msgSetupLinkExpired = "Ссылка недействительна или устарела. Выполните appmetrica admin passkey-link ещё раз"
-	msgWebAuthnFailed   = "Не удалось подтвердить passkey. Попробуйте ещё раз"
+	msgSetupLinkUnknown  = "Ссылка установки passkey не найдена"
+	msgSetupLinkExpired  = "Ссылка недействительна или устарела. Выполните appmetrica admin passkey-link ещё раз"
+	msgWebAuthnFailed    = "Не удалось подтвердить passkey. Попробуйте ещё раз"
+	msgLoginFailed       = "Не удалось подтвердить passkey. Попробуйте ещё раз или используйте другой ключ"
+	msgLoginCeremonyGone = "Попытка входа устарела. Попробуйте ещё раз"
 )
 
 func (s *Server) GetAuthState(ctx context.Context, _ gen.GetAuthStateRequestObject) (gen.GetAuthStateResponseObject, error) {
@@ -23,6 +25,55 @@ func (s *Server) GetAuthState(ctx context.Context, _ gen.GetAuthStateRequestObje
 		return nil, err
 	}
 	return gen.GetAuthState200JSONResponse{Authenticated: st.Authenticated, SetupRequired: st.SetupRequired}, nil
+}
+
+func (s *Server) BeginLogin(ctx context.Context, _ gen.BeginLoginRequestObject) (gen.BeginLoginResponseObject, error) {
+	c, err := s.auth.BeginLogin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	options, err := ceremonyOptions(c)
+	if err != nil {
+		return nil, err
+	}
+	return gen.BeginLogin200JSONResponse{CeremonyId: c.ID, Options: options}, nil
+}
+
+func (s *Server) FinishLogin(ctx context.Context, req gen.FinishLoginRequestObject) (gen.FinishLoginResponseObject, error) {
+	if req.Body == nil {
+		return gen.FinishLogin400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(
+			apiError(ctx, "invalid_request", "Некорректный запрос", nil))}, nil
+	}
+	credential, err := json.Marshal(req.Body.Credential)
+	if err != nil {
+		return nil, fmt.Errorf("encode credential: %w", err)
+	}
+	sess, err := s.auth.FinishLogin(ctx, auth.FinishLoginInput{
+		CeremonyID: req.Body.CeremonyId,
+		Credential: credential,
+		UserAgent:  metaFrom(ctx).userAgent,
+	})
+	switch {
+	case errors.Is(err, auth.ErrNotFound):
+		return gen.FinishLogin404JSONResponse{NotFoundJSONResponse: gen.NotFoundJSONResponse(
+			apiError(ctx, "not_found", msgLoginCeremonyGone, nil))}, nil
+	case errors.Is(err, auth.ErrVerificationFailed):
+		return gen.FinishLogin422JSONResponse{WebAuthnFailedJSONResponse: gen.WebAuthnFailedJSONResponse(
+			apiError(ctx, "webauthn_verification_failed", msgLoginFailed, nil))}, nil
+	case err != nil:
+		return nil, err
+	}
+	cookie := s.sessionCookie(sess)
+	return gen.FinishLogin204Response{Headers: gen.FinishLogin204ResponseHeaders{SetCookie: &cookie}}, nil
+}
+
+// Logout отзывает сессию cookie и очищает её; без cookie или с недействительной — тоже 204.
+func (s *Server) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
+	if err := s.auth.Logout(ctx, metaFrom(ctx).sessionToken); err != nil {
+		return nil, err
+	}
+	cookie := s.clearSessionCookie()
+	return gen.Logout204Response{Headers: gen.Logout204ResponseHeaders{SetCookie: &cookie}}, nil
 }
 
 func (s *Server) BeginSetup(ctx context.Context, req gen.BeginSetupRequestObject) (gen.BeginSetupResponseObject, error) {
@@ -83,11 +134,20 @@ func (s *Server) FinishSetup(ctx context.Context, req gen.FinishSetupRequestObje
 
 // sessionCookie — am_session=<token>; Path=/; Max-Age=SESSION_TTL; HttpOnly; Secure (https); SameSite=Lax.
 func (s *Server) sessionCookie(sess auth.Session) string {
+	return s.cookie(sess.Token, int(s.sessionTTL.Seconds()))
+}
+
+// clearSessionCookie — am_session=; Path=/; Max-Age=0; HttpOnly; Secure (https); SameSite=Lax.
+func (s *Server) clearSessionCookie() string {
+	return s.cookie("", -1) // MaxAge < 0 — net/http пишет Max-Age=0
+}
+
+func (s *Server) cookie(value string, maxAge int) string {
 	c := &http.Cookie{ //nolint:gosec // G124: Secure только для https PUBLIC_BASE_URL, в разработке — http://localhost
 		Name:     auth.SessionCookie,
-		Value:    sess.Token,
+		Value:    value,
 		Path:     "/",
-		MaxAge:   int(s.sessionTTL.Seconds()),
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
@@ -106,16 +166,4 @@ func ceremonyOptions(c auth.Ceremony) (map[string]any, error) {
 
 func fieldDetails(e *auth.ValidationError) map[string]any {
 	return map[string]any{"fields": map[string]any{e.Field: e.Message}}
-}
-
-func (s *Server) BeginLogin(context.Context, gen.BeginLoginRequestObject) (gen.BeginLoginResponseObject, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s *Server) FinishLogin(context.Context, gen.FinishLoginRequestObject) (gen.FinishLoginResponseObject, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s *Server) Logout(context.Context, gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	return nil, errors.New("not implemented")
 }

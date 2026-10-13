@@ -22,8 +22,9 @@ WHERE id = sqlc.arg(id) AND kind = sqlc.arg(kind) AND expires_at > sqlc.arg(now)
 RETURNING session_data, setup_token_hash;
 
 -- name: CreateSession :exec
-INSERT INTO auth_sessions (token_hash, owner_id, created_at, last_seen_at, expires_at, user_agent)
-VALUES (sqlc.arg(token_hash), sqlc.arg(owner_id), sqlc.arg(now), sqlc.arg(now), sqlc.arg(expires_at), sqlc.arg(user_agent));
+INSERT INTO auth_sessions (token_hash, owner_id, created_at, last_seen_at, expires_at, idle_timeout, user_agent)
+VALUES (sqlc.arg(token_hash), sqlc.arg(owner_id), sqlc.arg(now), sqlc.arg(now), sqlc.arg(expires_at),
+        make_interval(secs => sqlc.arg(idle_timeout_seconds)::float8), sqlc.arg(user_agent));
 
 -- name: GetActiveSession :one
 SELECT token_hash, owner_id, created_at, last_seen_at, expires_at
