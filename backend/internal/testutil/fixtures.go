@@ -138,6 +138,44 @@ func parseEvent(b []byte) (chstore.EventRow, error) {
 	}, nil
 }
 
+// WriteNDJSON пишет строки events в формате NDJSON-фикстуры (все поля явно, время в UTC); ParseNDJSON
+// читает результат обратно без потерь.
+func WriteNDJSON(w io.Writer, rows []chstore.EventRow) error {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	for _, r := range rows {
+		if err := enc.Encode(fixtureEvent{
+			AppID:       r.AppID,
+			EventTime:   r.EventTime.UTC(),
+			ClientTime:  r.ClientTime.UTC(),
+			SentAt:      r.SentAt.UTC(),
+			ReceivedAt:  r.ReceivedAt.UTC(),
+			InsertID:    r.InsertID,
+			Name:        r.Name,
+			InstallID:   r.InstallID,
+			UserID:      r.UserID,
+			SessionID:   r.SessionID,
+			DurationMs:  r.DurationMs,
+			Environment: r.Environment,
+			Platform:    r.Platform,
+			OSName:      r.OSName,
+			OSVersion:   r.OSVersion,
+			AppVersion:  r.AppVersion,
+			AppBuild:    r.AppBuild,
+			DeviceModel: r.DeviceModel,
+			DeviceType:  r.DeviceType,
+			Locale:      r.Locale,
+			Country:     r.Country,
+			Region:      r.Region,
+			City:        r.City,
+			WriteKeyID:  r.WriteKeyID,
+		}); err != nil {
+			return fmt.Errorf("testutil: NDJSON: %w", err)
+		}
+	}
+	return nil
+}
+
 // LoadNDJSON читает фикстуру (путь относительно backend/ или абсолютный), вставляет события в events
 // тестовой базы ClickHouse с ожиданием ack и возвращает вставленные строки.
 func (e *Env) LoadNDJSON(t testing.TB, path string) []chstore.EventRow {
