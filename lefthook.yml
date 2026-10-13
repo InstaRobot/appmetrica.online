@@ -1,0 +1,45 @@
+# lefthook 2.2.2 — git hooks. Установка: `brew install lefthook && lefthook install`.
+# Хуки — быстрая локальная страховка; полная проверка — `make check` и CI.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: go-fmt-lint
+      root: backend/
+      glob: "*.go"
+      run: golangci-lint fmt {staged_files} && golangci-lint run --new-from-rev=HEAD ./...
+      stage_fixed: true
+
+    - name: web-biome
+      root: web/
+      glob: "*.{ts,tsx,js,mjs,json,jsonc,css}"
+      run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+    - name: no-generated-edits
+      glob: "{backend/internal/gen/**,backend/internal/pgstore/sqlc/**,web/src/lib/api/gen/**}"
+      run: |
+        echo "Изменён сгенерированный код. Убедись, что он получен через 'make gen', а не правкой руками."
+        make gen-check
+
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      run: |
+        msg="$(head -n1 {1})"
+        if ! printf '%s' "$msg" | grep -qE '^(feat|fix|refactor|test|docs|chore|ci|build|perf|revert)(\([a-z0-9._/-]+\))?!?: .{1,100}$'; then
+          echo "Сообщение коммита должно следовать Conventional Commits: <type>(<scope>): <subject>"
+          echo "Получено: $msg"
+          exit 1
+        fi
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: go-unit-tests
+      root: backend/
+      run: go test -count=1 ./...
+
+    - name: web-typecheck-tests
+      root: web/
+      run: pnpm typecheck && pnpm test

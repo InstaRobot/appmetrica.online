@@ -1,0 +1,6 @@
+.geo/
+bin/
+coverage.out
+*.test
+testdata/
+**/*_test.go

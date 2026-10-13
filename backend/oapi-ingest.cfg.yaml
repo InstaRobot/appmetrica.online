@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+# Ingest: генерируются только модели и встроенная спека. HTTP-хендлер POST /v1/events пишется руками
+# (internal/ingest): он декодирует каждое событие отдельно (json.RawMessage), чтобы невалидное событие
+# давало rejection с индексом, а не 400 на весь батч, и поддерживает gzip + text/plain (sendBeacon).
+package: ingestapi
+output: internal/gen/ingestapi/ingestapi.gen.go
+generate:
+  models: true
+  embedded-spec: true
+output-options:
+  nullable-type: true

@@ -1,0 +1,45 @@
+# Altinity clickhouse-backup 2.8.1. Секреты и параметры окружения перекрывают значения ниже
+# (S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_ENDPOINT, S3_REGION, CLICKHOUSE_USERNAME,
+# CLICKHOUSE_PASSWORD, BACKUPS_TO_KEEP_REMOTE, WATCH_INTERVAL, FULL_INTERVAL, API_LISTEN).
+general:
+  remote_storage: s3
+  # После загрузки в S3 локальная копия удаляется (экономия диска; восстановление идёт из S3)
+  backups_to_keep_local: -1
+  # 35 бэкапов ≈ 5 недель: ежедневные инкременты + еженедельный полный
+  backups_to_keep_remote: 35
+  log_level: info
+  allow_empty_backups: false
+  upload_concurrency: 4
+  download_concurrency: 4
+  watch_interval: 24h
+  full_interval: 168h
+  watch_backup_name_template: "appmetrica-{type}-{time:20060102150405}"
+
+clickhouse:
+  host: clickhouse
+  port: 9000
+  username: appmetrica_admin
+  timeout: 30m
+  skip_tables:
+    - system.*
+    - INFORMATION_SCHEMA.*
+    - information_schema.*
+    - _temporary_and_external_tables.*
+
+s3:
+  bucket: appmetrica-ch-backup
+  endpoint: https://fsn1.your-objectstorage.com
+  region: fsn1
+  path: clickhouse
+  acl: private
+  force_path_style: false
+  disable_ssl: false
+  compression_format: zstd
+  compression_level: 3
+  max_parts_count: 4000
+
+api:
+  listen: 0.0.0.0:7171
+  enable_metrics: true
+  create_integration_tables: false
+  allow_parallel: false

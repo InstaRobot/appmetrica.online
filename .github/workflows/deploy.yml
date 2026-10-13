@@ -1,0 +1,130 @@
+name: Deploy
+
+# Деплой в Dokploy (Hetzner AX102-1) через Tailscale и Dokploy API.
+# Порядок: api (выполняет миграции при старте) → ingest → worker → web.
+# Откат: Actions → Deploy → Run workflow → backend_tag/web_tag = предыдущий git sha.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: "Тег образа appmetrica-backend (git sha или <sha>-geo-YYYYMM)"
+        required: true
+      web_tag:
+        description: "Тег образа appmetrica-web (git sha); пусто — web не деплоится"
+        required: false
+        default: ""
+      services:
+        description: "Список сервисов через запятую: api,ingest,worker,web"
+        required: true
+        default: "api,ingest,worker,web"
+  workflow_call:
+    inputs:
+      backend_tag:
+        type: string
+        required: true
+      web_tag:
+        type: string
+        required: false
+        default: ""
+      services:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    env:
+      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+      DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+      GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
+      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+    steps:
+      - name: Resolve tags and services
+        id: plan
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            backend_tag="${{ github.event.workflow_run.head_sha }}"
+            web_tag="${{ github.event.workflow_run.head_sha }}"
+            services="api,ingest,worker,web"
+          else
+            backend_tag="${{ inputs.backend_tag }}"
+            web_tag="${{ inputs.web_tag }}"
+            services="${{ inputs.services }}"
+          fi
+          {
+            echo "backend_image=ghcr.io/${owner}/appmetrica-backend:${backend_tag}"
+            echo "web_image=ghcr.io/${owner}/appmetrica-web:${web_tag}"
+            echo "web_tag=${web_tag}"
+            echo "services=${services}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Connect to tailnet (Dokploy panel is reachable only via Tailscale)
+        uses: tailscale/github-action@v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy services
+        env:
+          BACKEND_IMAGE: ${{ steps.plan.outputs.backend_image }}
+          WEB_IMAGE: ${{ steps.plan.outputs.web_image }}
+          WEB_TAG: ${{ steps.plan.outputs.web_tag }}
+          SERVICES: ${{ steps.plan.outputs.services }}
+          APP_ID_API: ${{ secrets.DOKPLOY_APP_ID_API }}
+          APP_ID_INGEST: ${{ secrets.DOKPLOY_APP_ID_INGEST }}
+          APP_ID_WORKER: ${{ secrets.DOKPLOY_APP_ID_WORKER }}
+          APP_ID_WEB: ${{ secrets.DOKPLOY_APP_ID_WEB }}
+        run: |
+          set -euo pipefail
+
+          dokploy() {
+            local endpoint="$1" body="$2"
+            curl -fsS --retry 3 --retry-delay 5 -X POST "${DOKPLOY_URL}/api/${endpoint}" \
+              -H "x-api-key: ${DOKPLOY_API_KEY}" -H "Content-Type: application/json" -d "${body}"
+            echo
+          }
+
+          deploy_app() {
+            local app_id="$1" image="$2"
+            echo "::group::deploy ${image} → ${app_id}"
+            dokploy application.saveDockerProvider "$(jq -n --arg id "$app_id" --arg img "$image" \
+              --arg u "$GHCR_PULL_USER" --arg p "$GHCR_PULL_TOKEN" \
+              '{applicationId:$id, dockerImage:$img, username:$u, password:$p, registryUrl:"ghcr.io"}')"
+            dokploy application.deploy "$(jq -n --arg id "$app_id" --arg t "deploy ${image##*:}" \
+              '{applicationId:$id, title:$t}')"
+            echo "::endgroup::"
+          }
+
+          wait_ready() {
+            local url="$1"
+            sleep 45
+            for i in $(seq 1 36); do
+              if curl -fsS "$url" >/dev/null; then echo "ready: $url"; return 0; fi
+              sleep 5
+            done
+            echo "not ready after deploy: $url"; return 1
+          }
+
+          has() { [[ ",${SERVICES}," == *",$1,"* ]]; }
+
+          if has api; then deploy_app "$APP_ID_API" "$BACKEND_IMAGE"; wait_ready "https://api.appmetrica.online/ready"; fi
+          if has ingest; then deploy_app "$APP_ID_INGEST" "$BACKEND_IMAGE"; wait_ready "https://i.appmetrica.online/ready"; fi
+          if has worker; then deploy_app "$APP_ID_WORKER" "$BACKEND_IMAGE"; fi
+          if has web && [ -n "$WEB_TAG" ]; then deploy_app "$APP_ID_WEB" "$WEB_IMAGE"; wait_ready "https://appmetrica.online/api/health"; fi

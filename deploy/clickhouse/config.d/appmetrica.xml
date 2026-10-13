@@ -1,0 +1,46 @@
+<!--
+  Серверные настройки ClickHouse 26.8 для appmetrica.online (dev и production).
+  В ClickHouse никогда не попадает IP конечного пользователя: ingest выбрасывает его после гео-поиска.
+  В system.query_log виден только адрес контейнера-клиента внутри Docker-сети.
+-->
+<clickhouse>
+    <logger>
+        <level>warning</level>
+        <console>1</console>
+        <size>100M</size>
+        <count>5</count>
+    </logger>
+
+    <listen_host>0.0.0.0</listen_host>
+
+    <!-- Сервер делит хост (128 ГБ RAM) с Postgres, Go-сервисами и Next.js -->
+    <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
+
+    <!-- Пул потоков для асинхронных вставок ingest (async_insert + wait_for_async_insert) -->
+    <async_insert_threads>16</async_insert_threads>
+
+    <!-- Системные логи ограничены по сроку, чтобы не съедать диск -->
+    <query_log>
+        <ttl>event_date + INTERVAL 14 DAY DELETE</ttl>
+    </query_log>
+    <part_log>
+        <ttl>event_date + INTERVAL 14 DAY DELETE</ttl>
+    </part_log>
+    <query_thread_log remove="1"/>
+    <trace_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </trace_log>
+    <text_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </text_log>
+    <metric_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </metric_log>
+    <asynchronous_metric_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </asynchronous_metric_log>
+
+    <!-- Защита от случайного DROP больших таблиц (50 ГБ); снимается файлом force_drop_table -->
+    <max_table_size_to_drop>53687091200</max_table_size_to_drop>
+    <max_partition_size_to_drop>53687091200</max_partition_size_to_drop>
+</clickhouse>

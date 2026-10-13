@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+# Read API (/v1) + admin API (/admin/v1): strict-server поверх stdlib net/http ServeMux (Go 1.22+ паттерны).
+package: api
+output: internal/gen/api/api.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  nullable-type: true

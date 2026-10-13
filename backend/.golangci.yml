@@ -1,0 +1,91 @@
+# golangci-lint v2.14.0
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - testifylint
+    - unconvert
+    - unparam
+    - usestdlibvars
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^fmt\.Print.*$
+          msg: "используйте log/slog"
+        - pattern: ^http\.Request\.RemoteAddr$
+          msg: "IP клиента читается только в internal/httpx/clientip.go и никогда не сохраняется"
+        - pattern: ^time\.Now$
+          msg: "используйте internal/clock.Clock (детерминированное время в тестах)"
+    gosec:
+      excludes:
+        - G104
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+        - name: error-return
+        - name: error-strings
+        - name: receiver-naming
+        - name: context-as-argument
+        - name: unused-parameter
+  exclusions:
+    generated: strict
+    paths:
+      - internal/gen
+      - internal/pgstore/sqlc
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+          - forbidigo
+      - path: internal/httpx/clientip\.go
+        linters:
+          - forbidigo
+      - path: internal/clock/
+        linters:
+          - forbidigo
+      - path: cmd/
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - appmetrica.online/backend
+  exclusions:
+    generated: strict
+    paths:
+      - internal/gen
+      - internal/pgstore/sqlc

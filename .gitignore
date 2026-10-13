@@ -1,4 +1,39 @@
+# Окружение и секреты
+.env
+.env.*
+!.env.example
+
+# Go
+backend/bin/
+backend/.geo/
+backend/coverage.out
+*.test
+*.out
+
+# Гео-база (скачивается при сборке/`make geo-db`)
+*.mmdb
+*.mmdb.gz
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/.source/
+web/out/
+web/next-env.d.ts
+web/coverage/
+web/playwright-report/
+web/test-results/
+web/blob-report/
+web/e2e/.auth/
+web/tsconfig.tsbuildinfo
+web/.pnpm-store/
+
+# Инструменты и ОС
 .DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
 
 # Скиллы Claude Code — симлинки на локальную библиотеку, в репо не храним
 .claude/skills/
