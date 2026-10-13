@@ -380,7 +380,7 @@ gh pr checks --watch
 > environment событий. (# Deviation от baseline «preview deployments на каждый PR».)
 
 ### 9.2. Production deploy
-**Trigger**: push в `main` → workflow `CI` (backend → web → e2e → images) → по успеху workflow `Deploy`:
+**Trigger**: push в `main` → workflow `CI` (gen-check, backend, web, e2e) → по успеху workflow `Deploy` (сборка образов `<sha>` в GHCR, затем деплой; ручные шаги — `deploy/dokploy/README.md`):
 1. Подключение к tailnet (`tailscale/github-action@v4.2.0`, тег `tag:ci`).
 2. Для каждого сервиса: `POST $DOKPLOY_URL/api/application.saveDockerProvider` (новый образ) → `POST $DOKPLOY_URL/api/application.deploy`.
 3. Порядок: `api` (выполняет миграции при старте, ожидание `https://api.appmetrica.online/ready`) → `ingest`
@@ -389,7 +389,8 @@ gh pr checks --watch
 
 **Manual deploy** конкретного тега:
 ```bash
-gh workflow run Deploy -f backend_tag=<sha> -f web_tag=<sha> -f services=api,ingest,worker,web
+gh workflow run deploy.yml -f ref=<sha>                              # собрать образы из ref и выкатить
+gh workflow run deploy.yml -f tag=<sha> -f services=api,ingest      # выкатить готовые образы без сборки
 gh run watch
 ```
 
@@ -404,7 +405,7 @@ gh run watch
 **Option 2 (GitHub Actions по тегу)**:
 ```bash
 git log --oneline -5                       # найти предыдущий рабочий sha
-gh workflow run Deploy -f backend_tag=<prev_sha> -f web_tag=<prev_sha> -f services=api,ingest,worker,web
+gh workflow run deploy.yml -f tag=<prev_sha>   # образ должен быть среди 10 последних версий в GHCR
 ```
 
 **Option 3 (git revert)**: `git revert <sha> && git push` → обычный CI/Deploy.
@@ -556,7 +557,7 @@ passkey (телефон + ноутбук) в S-12 → Passkeys; удалить �
 
 ## 14. First deploy checklist
 
-- [ ] CI зелёный на `main` (backend, web, e2e, images); образы `appmetrica-backend:<sha>` и `appmetrica-web:<sha>` в GHCR
+- [ ] CI зелёный на `main` (gen-check, backend, web, e2e), Deploy собрал образы `appmetrica-backend:<sha>` и `appmetrica-web:<sha>` в GHCR
 - [ ] Сервер AX102-1: RAID 1 (`cat /proc/mdstat` → `[UU]`), Tailscale подключён, порт 22 и 3000 снаружи закрыты (`nc -zv <IP> 22` → timeout)
 - [ ] Dokploy ≥ v0.30.8, 2FA включена, автообновление выключено, Telegram-уведомления настроены
 - [ ] Postgres (managed) работает, бэкап в `appmetrica-pg-backup` выполнен вручную один раз (Backups → Run)

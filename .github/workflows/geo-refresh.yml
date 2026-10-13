@@ -1,7 +1,8 @@
 name: Geo DB refresh
 
-# Ежемесячно (2-го числа, 06:00 UTC) пересобирает образ backend со свежей базой DB-IP City Lite
-# и деплоит только ingest (api и worker гео-базу не используют).
+# Ежемесячно (2-го числа, 06:00 UTC) пересобирает образ backend с базой DB-IP City Lite текущего месяца
+# и деплоит только ingest (api и worker гео-базу не используют). Тег образа — <sha main>-geo-YYYYMM,
+# чтобы не перезаписывать <sha> обычного деплоя. Ручной запуск: gh workflow run geo-refresh.yml.
 
 on:
   schedule:
@@ -13,28 +14,33 @@ permissions:
 
 jobs:
   build:
+    name: build backend with fresh DB-IP
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: write
     outputs:
-      backend_tag: ${{ steps.meta.outputs.tag }}
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           ref: main
 
-      - name: Resolve tag and DB-IP month
+      # Только текущий месяц: если DB-IP ещё не опубликовал файл, запуск падает (без тихого отката на старую базу).
+      - name: Resolve DB-IP month (dbip-city-lite-YYYY-MM.mmdb.gz)
+        id: geo
+        run: GEO_STRICT=1 bash scripts/geo-month.sh >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
         id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+          GEO_MONTH: ${{ steps.geo.outputs.geo_month }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          month="$(date -u +%Y-%m)"
-          curl -fsSI "https://download.db-ip.com/free/dbip-city-lite-${month}.mmdb.gz" >/dev/null
           {
-            echo "owner=${owner}"
-            echo "geo_month=${month}"
-            echo "tag=$(git rev-parse HEAD)-geo-${month//-/}"
+            echo "owner=${OWNER,,}"
+            echo "tag=$(git rev-parse HEAD)-geo-${GEO_MONTH//-/}"
           } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4.4.1
@@ -49,8 +55,9 @@ jobs:
         with:
           context: backend
           push: true
+          provenance: false
           build-args: |
-            GEO_MONTH=${{ steps.meta.outputs.geo_month }}
+            GEO_MONTH=${{ steps.geo.outputs.geo_month }}
             VERSION=${{ steps.meta.outputs.tag }}
           tags: ghcr.io/${{ steps.meta.outputs.owner }}/appmetrica-backend:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=backend
@@ -58,9 +65,11 @@ jobs:
 
   deploy:
     needs: build
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/deploy.yml
     with:
-      backend_tag: ${{ needs.build.outputs.backend_tag }}
-      web_tag: ""
+      tag: ${{ needs.build.outputs.tag }}
       services: "ingest"
     secrets: inherit

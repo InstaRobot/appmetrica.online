@@ -1,8 +1,13 @@
 name: Deploy
 
-# Деплой в Dokploy (Hetzner AX102-1) через Tailscale и Dokploy API.
-# Порядок: api (выполняет миграции при старте) → ingest → worker → web.
-# Откат: Actions → Deploy → Run workflow → backend_tag/web_tag = предыдущий git sha.
+# Сборка образов и деплой в Dokploy (Hetzner AX102-1) через Tailscale и Dokploy API (T-024, 12-dev-runbook.md §9).
+# Порядок: api (выполняет миграции при старте) → ingest → worker → web; первая ошибка останавливает выкатку.
+# Запуск:
+#   - автоматически после зелёного CI на main — сборка <sha> и деплой всех сервисов;
+#   - gh workflow run deploy.yml -f ref=<sha|ветка>   — собрать образы из ref и выкатить;
+#   - gh workflow run deploy.yml -f tag=<prev-sha>    — откат: выкатить готовые образы без сборки;
+#   - -f services=api,ingest — только часть сервисов (по умолчанию все).
+# Ручные шаги в Dokploy, Tailscale и секреты GitHub — deploy/dokploy/README.md.
 
 on:
   workflow_run:
@@ -11,29 +16,32 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      backend_tag:
-        description: "Тег образа appmetrica-backend (git sha или <sha>-geo-YYYYMM)"
-        required: true
-      web_tag:
-        description: "Тег образа appmetrica-web (git sha); пусто — web не деплоится"
+      ref:
+        description: "Git ref или sha: собрать образы и выкатить (взаимоисключающе с tag)"
+        required: false
+        default: ""
+      tag:
+        description: "Готовый тег образов в GHCR (<sha> или <sha>-geo-YYYYMM): выкатить без сборки, откат"
         required: false
         default: ""
       services:
-        description: "Список сервисов через запятую: api,ingest,worker,web"
-        required: true
+        description: "Сервисы через запятую: api,ingest,worker,web"
+        required: false
         default: "api,ingest,worker,web"
   workflow_call:
     inputs:
-      backend_tag:
+      ref:
         type: string
-        required: true
-      web_tag:
+        required: false
+        default: ""
+      tag:
         type: string
         required: false
         default: ""
       services:
         type: string
-        required: true
+        required: false
+        default: "api,ingest,worker,web"
 
 permissions:
   contents: read
@@ -43,36 +51,138 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+  plan:
+    name: plan (ref/tag → образы и сервисы)
+    # Автодеплой — только зелёный CI по push в main (PR из форка с веткой main тоже приходит как workflow_run).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment: production
-    env:
-      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-      DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-      GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
-      GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      build_backend: ${{ steps.plan.outputs.build_backend }}
+      build_web: ${{ steps.plan.outputs.build_web }}
+      sha: ${{ steps.plan.outputs.sha }}
+      tag: ${{ steps.plan.outputs.tag }}
+      tag_main: ${{ steps.plan.outputs.tag_main }}
+      services: ${{ steps.plan.outputs.services }}
+      backend_image: ${{ steps.plan.outputs.backend_image }}
+      web_image: ${{ steps.plan.outputs.web_image }}
+      backend_main_image: ${{ steps.plan.outputs.backend_main_image }}
+      web_main_image: ${{ steps.plan.outputs.web_main_image }}
     steps:
-      - name: Resolve tags and services
+      # Скрипты деплоя всегда берутся из ветки по умолчанию, ref нужен только для git rev-parse.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve build, tag and services
         id: plan
+        env:
+          OWNER: ${{ github.repository_owner }}
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REF: ${{ inputs.ref }}
+          TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+        run: bash scripts/deploy-plan.sh | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    name: build & push images (GHCR)
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          path: src
+
+      # Текущий месяц DB-IP City Lite, если файл уже опубликован, иначе предыдущий; имя файла — в логе шага.
+      - name: Resolve DB-IP month (GEO_MONTH)
+        id: geo
+        run: bash scripts/geo-month.sh >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # provenance: false — одна версия пакета GHCR на образ, ретеншн job prune считает версии как теги.
+      - name: Backend image (ingest / api / worker)
+        if: needs.plan.outputs.build_backend == 'true'
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: src/backend
+          push: true
+          provenance: false
+          build-args: |
+            GEO_MONTH=${{ steps.geo.outputs.geo_month }}
+            VERSION=${{ needs.plan.outputs.sha }}
+          tags: |
+            ${{ needs.plan.outputs.backend_image }}
+            ${{ needs.plan.outputs.backend_main_image }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Web image
+        if: needs.plan.outputs.build_web == 'true'
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: src/web
+          push: true
+          provenance: false
+          build-args: |
+            API_INTERNAL_URL=http://appmetrica-api:8080
+            NEXT_PUBLIC_INGEST_URL=https://i.appmetrica.online
+            NEXT_PUBLIC_API_URL=https://api.appmetrica.online
+          tags: |
+            ${{ needs.plan.outputs.web_image }}
+            ${{ needs.plan.outputs.web_main_image }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    name: deploy (Dokploy via Tailscale)
+    needs: [plan, build]
+    # build пропускается при откате по tag — тогда деплой идёт сразу после plan.
+    if: >-
+      !cancelled() && needs.plan.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    env:
+      SERVICES: ${{ needs.plan.outputs.services }}
+      BACKEND_IMAGE: ${{ needs.plan.outputs.backend_image }}
+      WEB_IMAGE: ${{ needs.plan.outputs.web_image }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Откат на тег, которого уже нет в GHCR (ретеншн 10 версий), падает здесь, а не посреди выкатки.
+      - name: Check images exist in GHCR
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            backend_tag="${{ github.event.workflow_run.head_sha }}"
-            web_tag="${{ github.event.workflow_run.head_sha }}"
-            services="api,ingest,worker,web"
-          else
-            backend_tag="${{ inputs.backend_tag }}"
-            web_tag="${{ inputs.web_tag }}"
-            services="${{ inputs.services }}"
-          fi
-          {
-            echo "backend_image=ghcr.io/${owner}/appmetrica-backend:${backend_tag}"
-            echo "web_image=ghcr.io/${owner}/appmetrica-web:${web_tag}"
-            echo "web_tag=${web_tag}"
-            echo "services=${services}"
-          } >> "$GITHUB_OUTPUT"
+          if [[ ",$SERVICES," =~ ,(api|ingest|worker), ]]; then docker buildx imagetools inspect "$BACKEND_IMAGE" >/dev/null && echo "есть: $BACKEND_IMAGE"; fi
+          if [[ ",$SERVICES," == *,web,* ]]; then docker buildx imagetools inspect "$WEB_IMAGE" >/dev/null && echo "есть: $WEB_IMAGE"; fi
 
       - name: Connect to tailnet (Dokploy panel is reachable only via Tailscale)
         uses: tailscale/github-action@v4.2.0
@@ -81,50 +191,45 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - name: Deploy services
+      - name: Deploy services (api → ingest → worker → web)
         env:
-          BACKEND_IMAGE: ${{ steps.plan.outputs.backend_image }}
-          WEB_IMAGE: ${{ steps.plan.outputs.web_image }}
-          WEB_TAG: ${{ steps.plan.outputs.web_tag }}
-          SERVICES: ${{ steps.plan.outputs.services }}
-          APP_ID_API: ${{ secrets.DOKPLOY_APP_ID_API }}
-          APP_ID_INGEST: ${{ secrets.DOKPLOY_APP_ID_INGEST }}
-          APP_ID_WORKER: ${{ secrets.DOKPLOY_APP_ID_WORKER }}
-          APP_ID_WEB: ${{ secrets.DOKPLOY_APP_ID_WEB }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_APP_ID_API: ${{ secrets.DOKPLOY_APP_ID_API }}
+          DOKPLOY_APP_ID_INGEST: ${{ secrets.DOKPLOY_APP_ID_INGEST }}
+          DOKPLOY_APP_ID_WORKER: ${{ secrets.DOKPLOY_APP_ID_WORKER }}
+          DOKPLOY_APP_ID_WEB: ${{ secrets.DOKPLOY_APP_ID_WEB }}
+          GHCR_PULL_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          DEPLOY_TITLE: deploy ${{ needs.plan.outputs.tag }} run ${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash scripts/dokploy-deploy.sh
+
+      - name: Smoke (/health ingest и api, web)
         run: |
-          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors https://i.appmetrica.online/health && echo
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors https://api.appmetrica.online/health && echo
+          if [[ ",$SERVICES," == *,web,* ]]; then
+            code=$(curl -sS -o /dev/null -w '%{http_code}' https://appmetrica.online/)
+            echo "web: GET / → $code"
+            [[ "$code" == 200 || "$code" == 307 ]]
+          fi
 
-          dokploy() {
-            local endpoint="$1" body="$2"
-            curl -fsS --retry 3 --retry-delay 5 -X POST "${DOKPLOY_URL}/api/${endpoint}" \
-              -H "x-api-key: ${DOKPLOY_API_KEY}" -H "Content-Type: application/json" -d "${body}"
-            echo
-          }
+  prune:
+    name: prune GHCR (10 последних версий)
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/delete-package-versions@v5.0.0
+        with:
+          package-name: appmetrica-backend
+          package-type: container
+          min-versions-to-keep: 10
 
-          deploy_app() {
-            local app_id="$1" image="$2"
-            echo "::group::deploy ${image} → ${app_id}"
-            dokploy application.saveDockerProvider "$(jq -n --arg id "$app_id" --arg img "$image" \
-              --arg u "$GHCR_PULL_USER" --arg p "$GHCR_PULL_TOKEN" \
-              '{applicationId:$id, dockerImage:$img, username:$u, password:$p, registryUrl:"ghcr.io"}')"
-            dokploy application.deploy "$(jq -n --arg id "$app_id" --arg t "deploy ${image##*:}" \
-              '{applicationId:$id, title:$t}')"
-            echo "::endgroup::"
-          }
-
-          wait_ready() {
-            local url="$1"
-            sleep 45
-            for i in $(seq 1 36); do
-              if curl -fsS "$url" >/dev/null; then echo "ready: $url"; return 0; fi
-              sleep 5
-            done
-            echo "not ready after deploy: $url"; return 1
-          }
-
-          has() { [[ ",${SERVICES}," == *",$1,"* ]]; }
-
-          if has api; then deploy_app "$APP_ID_API" "$BACKEND_IMAGE"; wait_ready "https://api.appmetrica.online/ready"; fi
-          if has ingest; then deploy_app "$APP_ID_INGEST" "$BACKEND_IMAGE"; wait_ready "https://i.appmetrica.online/ready"; fi
-          if has worker; then deploy_app "$APP_ID_WORKER" "$BACKEND_IMAGE"; fi
-          if has web && [ -n "$WEB_TAG" ]; then deploy_app "$APP_ID_WEB" "$WEB_IMAGE"; wait_ready "https://appmetrica.online/api/health"; fi
+      - uses: actions/delete-package-versions@v5.0.0
+        with:
+          package-name: appmetrica-web
+          package-type: container
+          min-versions-to-keep: 10

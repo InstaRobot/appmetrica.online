@@ -173,8 +173,9 @@ fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLoo
 	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzLooksLikePII$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
 
 .PHONY: test-scripts
-test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare)
+test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare) и деплоя (deploy-plan, dokploy-deploy, geo-month)
 	bash $(ROOT)/scripts/test-ci-gates.sh
+	bash $(ROOT)/scripts/test-deploy.sh
 
 .PHONY: tdd-order
 tdd-order: ## Проверить порядок коммитов TDD относительно BASE (по умолчанию origin/main)

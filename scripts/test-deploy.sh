@@ -50,6 +50,8 @@ expect_out "workflow_run: все сервисы в порядке api → ingest
 expect_out "образ backend в GHCR владельца (нижний регистр)" "backend_image=ghcr.io/onlyapps/appmetrica-backend:$SHA"
 expect_out "образ web" "web_image=ghcr.io/onlyapps/appmetrica-web:$SHA"
 expect_out "workflow_run: двигается тег main" "tag_main=true"
+expect_out "workflow_run: тег main у backend" "backend_main_image=ghcr.io/onlyapps/appmetrica-backend:main"
+expect_out "workflow_run: тег main у web" "web_main_image=ghcr.io/onlyapps/appmetrica-web:main"
 expect_out "workflow_run: собираются оба образа" "build_backend=true"
 expect_out "workflow_run: собирается web" "build_web=true"
 
@@ -80,6 +82,7 @@ expect_out "AC-024.1: ref=<sha> собирает образы" "build=true"
 expect_out "AC-024.1: ref=<sha> → тег = sha" "tag=$main_sha"
 expect_out "ref: sha для checkout" "sha=$main_sha"
 expect_out "ручной деплой не двигает тег main" "tag_main=false"
+expect_eq "ручной деплой: без образов :main" "$(grep -cxE '(backend|web)_main_image=' <<<"$out")" "2"
 
 planr EVENT=workflow_dispatch REF="${main_sha:0:7}"
 expect_out "короткий sha раскрывается до полного" "tag=$main_sha"
@@ -196,7 +199,7 @@ deploy() {
   run env PATH="$TMP/bin:$PATH" STUB_DIR="$TMP/stub" \
     DOKPLOY_URL=http://appmetrica-prod:3000 DOKPLOY_API_KEY=dk-secret-api-key \
     GHCR_PULL_USER=puller GHCR_PULL_TOKEN=ghp-secret-pull-token \
-    DOKPLOY_APP_ID_API=app-api DOKPLOY_APP_ID_INGEST=app-ingest DOKPLOY_APP_ID_WORKER=app-worker DOKPLOY_APP_ID_WEB=app-web \
+    DOKPLOY_APP_ID_API=app_api DOKPLOY_APP_ID_INGEST=app_ingest DOKPLOY_APP_ID_WORKER=app_worker DOKPLOY_APP_ID_WEB=app_web \
     BACKEND_IMAGE=ghcr.io/onlyapps/appmetrica-backend:$SHA WEB_IMAGE=ghcr.io/onlyapps/appmetrica-web:$SHA \
     SERVICES=api,ingest,worker,web DEPLOY_TITLE="deploy $SHA run 7" \
     POLL_INTERVAL=0 READY_INTERVAL=0 "$@" bash "$DEPLOY"
@@ -218,7 +221,7 @@ echo "dokploy-deploy.sh"
 deploy
 expect_code "AC-024.1: деплой всех сервисов → exit 0" 0
 expect_eq "AC-024.1: порядок api → ingest → worker → web, ожидание /ready после api, ingest и web" "$(order)" \
-  "save:app-api deploy:app-api ready:https://api.appmetrica.online/ready save:app-ingest deploy:app-ingest ready:https://i.appmetrica.online/ready save:app-worker deploy:app-worker save:app-web deploy:app-web ready:https://appmetrica.online/api/health"
+  "save:app_api deploy:app_api ready:https://api.appmetrica.online/ready save:app_ingest deploy:app_ingest ready:https://i.appmetrica.online/ready save:app_worker deploy:app_worker save:app_web deploy:app_web ready:https://appmetrica.online/api/health"
 save_api=$(grep -m1 'saveDockerProvider' <<<"$calls" | cut -d' ' -f3-)
 expect_eq "saveDockerProvider: новый образ" "$(jq -r .dockerImage <<<"$save_api")" "ghcr.io/onlyapps/appmetrica-backend:$SHA"
 expect_eq "saveDockerProvider: реестр ghcr.io" "$(jq -r .registryUrl <<<"$save_api")" "ghcr.io"
@@ -234,36 +237,36 @@ expect_out "итог перечисляет выкаченные сервисы"
 
 deploy SERVICES=ingest BACKEND_IMAGE="ghcr.io/onlyapps/appmetrica-backend:$PREV-geo-202611"
 expect_code "geo-refresh: только ingest → exit 0" 0
-expect_eq "geo-refresh: трогается только ingest" "$(order)" "save:app-ingest deploy:app-ingest ready:https://i.appmetrica.online/ready"
+expect_eq "geo-refresh: трогается только ingest" "$(order)" "save:app_ingest deploy:app_ingest ready:https://i.appmetrica.online/ready"
 
 deploy SERVICES=worker,api
 expect_eq "порядок не зависит от порядка во входе" "$(order)" \
-  "save:app-api deploy:app-api ready:https://api.appmetrica.online/ready save:app-worker deploy:app-worker"
+  "save:app_api deploy:app_api ready:https://api.appmetrica.online/ready save:app_worker deploy:app_worker"
 
-deploy STUB_STATUS_app-api=running,running,done
+deploy STUB_STATUS_app_api=running,running,done
 expect_code "деплой в процессе → ждём done" 0
-expect_eq "опрос до статуса done" "$(cat "$TMP/stub/polls-app-api")" "3"
+expect_eq "опрос до статуса done" "$(cat "$TMP/stub/polls-app_api")" "3"
 
-deploy STUB_STATUS_app-ingest=running,error
+deploy STUB_STATUS_app_ingest=running,error
 expect_code "Dokploy: статус error → exit 1" 1
 expect_out "ошибка называет сервис и статус" "ingest"
 expect_out "ошибка называет статус error" "error"
 expect_eq "после ошибки ingest worker и web не трогаются" "$(order)" \
-  "save:app-api deploy:app-api ready:https://api.appmetrica.online/ready save:app-ingest deploy:app-ingest"
+  "save:app_api deploy:app_api ready:https://api.appmetrica.online/ready save:app_ingest deploy:app_ingest"
 
-deploy STUB_STATUS_app-api=running POLL_ATTEMPTS=3
+deploy STUB_STATUS_app_api=running POLL_ATTEMPTS=3
 expect_code "деплой не завершился за POLL_ATTEMPTS → exit 1" 1
-expect_eq "после таймаута api остальные не трогаются" "$(order)" "save:app-api deploy:app-api"
+expect_eq "после таймаута api остальные не трогаются" "$(order)" "save:app_api deploy:app_api"
 
 deploy STUB_FAIL_MATCH=saveDockerProvider
 expect_code "saveDockerProvider 500 → exit 1" 1
 out="$calls"
 expect_no_out "после ошибки saveDockerProvider deploy не вызывается" "application.deploy"
 
-deploy STUB_FAIL_MATCH=i.appmetrica.online/ready READY_ATTEMPTS=2
+deploy STUB_FAIL_MATCH=//i.appmetrica.online/ready READY_ATTEMPTS=2
 expect_code "ingest не стал ready → exit 1" 1
 expect_out "ошибка готовности называет URL" "https://i.appmetrica.online/ready"
-expect_eq "ready опрашивается READY_ATTEMPTS раз" "$(grep -c 'i.appmetrica.online/ready' <<<"$calls")" "2"
+expect_eq "ready опрашивается READY_ATTEMPTS раз" "$(grep -c '//i.appmetrica.online/ready' <<<"$calls")" "2"
 
 deploy DOKPLOY_APP_ID_WEB=
 expect_code "нет DOKPLOY_APP_ID_WEB при деплое web → exit 1" 1
@@ -338,6 +341,7 @@ jqt() { # name json filter — фильтр должен вернуть true
 jqt "deploy: вход ref в workflow_dispatch" "$deploy_wf" '.on.workflow_dispatch.inputs | has("ref") and has("tag") and has("services")'
 jqt "deploy: те же входы в workflow_call" "$deploy_wf" '.on.workflow_call.inputs | has("ref") and has("tag") and has("services")'
 jqt "deploy: запуск после зелёного CI на main" "$deploy_wf" '.on.workflow_run.workflows == ["CI"] and .on.workflow_run.branches == ["main"]'
+jqt "deploy: автодеплой только по push в main с зелёным CI" "$deploy_wf" '.jobs.plan.if | test("conclusion == .success.") and test("workflow_run.event == .push.")'
 jqt "deploy: jobs plan → build → deploy → prune" "$deploy_wf" '.jobs | has("plan") and has("build") and has("deploy") and has("prune")'
 jqt "deploy: build пишет в GHCR" "$deploy_wf" '.jobs.build.permissions.packages == "write"'
 jqt "deploy: build передаёт GEO_MONTH" "$deploy_wf" '[.jobs.build.steps[] | .with["build-args"]? // "" | test("GEO_MONTH=")] | any'
