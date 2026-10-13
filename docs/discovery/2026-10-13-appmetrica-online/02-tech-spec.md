@@ -2313,7 +2313,9 @@ AC-8.4.4 (UI — вкладки настроек):
   устройств, присылающих батчи независимо.
 - Target RPS at peak: 500 запросов/с на ingest (≈ 5 000 событий/с), 20 запросов/с на api.
 - Data write rate: средние 60 событий/с (150 млн/мес), пиковые 5 000 событий/с; ClickHouse async insert объединяет
-  вставки в блоки (настройки `async_insert_busy_timeout_max_ms = 1000`, `async_insert_max_data_size = 10485760`).
+  вставки в блоки (настройки `async_insert_busy_timeout_max_ms = 200`, `async_insert_max_data_size = 10485760`;
+  200, а не 1000: ingest ждёт ack, и под нагрузкой адаптивный таймаут уходит к максимуму — при 1000 P99 ≈ 920 мс,
+  при 200 — ≈ 210 мс на k6 500 rps, OQ-034).
 - Data read:write ratio: по запросам 1:100 (ingest доминирует), по объёму сканируемых данных 50:1 (отчёты).
 
 ### 3.3. Security requirements (детально)

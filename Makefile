@@ -11,6 +11,8 @@ BACKEND := $(ROOT)/backend
 WEB := $(ROOT)/web
 COMPOSE := docker compose -f $(ROOT)/docker-compose.dev.yml --env-file $(ROOT)/.env
 SQLC_IMAGE := sqlc/sqlc:1.31.1
+K6_IMAGE := grafana/k6:2.3.0
+PERF_REPORTS := $(BACKEND)/perf/reports
 COVER_PKGS := ingest reports auth identity deletion
 COVER_MIN := 80
 
@@ -54,6 +56,10 @@ dev: dev-infra migrate-up geo-db ## Всё сразу: инфраструкту�
 .PHONY: run-ingest
 run-ingest: ## Запустить ingest на :8081 (метрики :9091)
 	cd $(BACKEND) && METRICS_LISTEN_ADDR=:9091 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RW_PASSWORD) go run ./cmd/appmetrica ingest
+
+.PHONY: run-ingest-perf
+run-ingest-perf: ## ingest для make perf-ingest: лимит приложения 20 000 событий/с (500 rps × 10 событий одним ключом), LOG_LEVEL=info
+	$(MAKE) --no-print-directory run-ingest RATE_APP_EVENTS_PER_SEC=20000 RATE_APP_BURST=40000 LOG_LEVEL=info
 
 .PHONY: run-api
 run-api: ## Запустить api на :8080 (метрики :9092), пользователь ClickHouse appmetrica_ro
@@ -163,12 +169,24 @@ fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLoo
 	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzLooksLikePII$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
 
 .PHONY: test-scripts
-test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order)
+test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare)
 	bash $(ROOT)/scripts/test-ci-gates.sh
 
 .PHONY: tdd-order
 tdd-order: ## Проверить порядок коммитов TDD относительно BASE (по умолчанию origin/main)
 	bash $(ROOT)/scripts/check-tdd-order.sh $(or $(BASE),origin/main)
+
+.PHONY: perf-ingest
+perf-ingest: ## k6 2.3.0 в Docker: 500 rps × 10 мин на локальный ingest (`make dev-infra migrate-up seed` + run-ingest-perf); PERF_RATE, PERF_DURATION
+	@mkdir -p $(PERF_REPORTS)
+	@# host-gateway: ingest слушает на хосте; на Linux host.docker.internal иначе не резолвится.
+	docker run --rm --add-host=host.docker.internal:host-gateway -u $$(id -u):$$(id -g) \
+	  -v "$$(pwd)/backend/perf":/perf -w /perf \
+	  -e K6_APP_KEY=$(DEV_WRITE_KEY) -e INGEST_URL=$(or $(INGEST_URL),http://host.docker.internal:8081) \
+	  -e PERF_RATE=$(or $(PERF_RATE),500) -e PERF_DURATION=$(or $(PERF_DURATION),10m) \
+	  $(K6_IMAGE) run --summary-export reports/latest.json ingest-load.js
+	@if [ -f $(PERF_REPORTS)/baseline.json ]; then bash $(ROOT)/scripts/perf-compare.sh $(PERF_REPORTS)/baseline.json $(PERF_REPORTS)/latest.json; \
+	else echo "perf-ingest: baseline.json нет — сохраните отчёт: cp $(PERF_REPORTS)/latest.json $(PERF_REPORTS)/baseline.json"; fi
 
 .PHONY: test-web
 test-web: ## Unit-тесты web (Vitest)

@@ -11,7 +11,13 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
-const dialTimeout = 5 * time.Second
+const (
+	dialTimeout = 5 * time.Second
+	// maxConns — открытых и простаивающих соединений на процесс. Вставка с ожиданием ack держит соединение
+	// до сброса буфера async insert (до 1 с): 500 rps ingest (NFR-001) — до ~500 одновременных вставок.
+	// Равные лимиты: пул драйвера по умолчанию (10/5) закрывал соединения после каждой вставки.
+	maxConns = 512
+)
 
 // Options — параметры подключения (CLICKHOUSE_ADDR, CLICKHOUSE_DATABASE и пользователь процесса).
 type Options struct {
@@ -29,8 +35,10 @@ func (o Options) clickhouse() *clickhouse.Options {
 			Username: o.User,
 			Password: o.Password,
 		},
-		DialTimeout: dialTimeout,
-		Compression: &clickhouse.Compression{Method: clickhouse.CompressionLZ4},
+		DialTimeout:  dialTimeout,
+		MaxOpenConns: maxConns,
+		MaxIdleConns: maxConns,
+		Compression:  &clickhouse.Compression{Method: clickhouse.CompressionLZ4},
 	}
 }
 

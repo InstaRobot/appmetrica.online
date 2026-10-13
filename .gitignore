@@ -42,3 +42,6 @@ web/.pnpm-store/
 
 # Тестовые профили покрытия для scripts/coverage-gate.sh
 !scripts/testdata/*.out
+
+# Рабочий отчёт `make perf-ingest`; эталон baseline.json коммитится
+backend/perf/reports/latest.json

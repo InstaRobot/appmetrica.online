@@ -310,6 +310,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 - Go: `testing` + testify 1.12.1 (`require` для фатальных проверок) + testcontainers-go 0.44.0 с модулями `clickhouse` и `postgres` (образы те же, что в проде: 26.8.25.14 и 18.6). Golden-фикстуры отчётов в `backend/testdata/fixtures`.
 - Web: Vitest 5.0.4 + @testing-library/react 16.3.3 + @testing-library/user-event 14.6.8 + @testing-library/jest-dom 7.0.1 (матчеры DOM, совместимы с Vitest) + jsdom 30.1.2; MSW 3.0.3; @faker-js/faker 10.6.0 (devDependency: на нём построены MSW-моки orval `*.faker.ts`; в тестах — `faker.seed(...)`, см. 22-test-strategy.md §6).
 - E2E: Playwright 1.64.0 + @axe-core/playwright 4.13.0; вход через виртуальный WebAuthn-аутентификатор.
+- Нагрузка: k6 2.3.0 — Docker-образ `grafana/k6:2.3.0` (тег подтверждён `docker pull` 2026-10-13, `k6 version` → v2.3.0), не зависимость модулей; сценарий `backend/perf/ingest-load.js`, запуск `make perf-ingest`.
 - Подход — TDD (решение владельца), детали в [22-test-strategy.md](./22-test-strategy.md).
 
 #### 21. Lint/format и git-хуки

@@ -148,7 +148,7 @@ func localDay(t time.Time, loc *time.Location) time.Time {
 
 // retention — классический day-N: доля установок когорты, активных ровно на N-й день.
 func retention(installs map[uuid.UUID]*installStats, n int, today time.Time, loc *time.Location) float64 {
-	lastClosed := localDay(today.Add(-time.Nanosecond), loc)
+	lastClosed := localDay(today, loc).AddDate(0, 0, -1) // данные — по вчерашний день в TZ приложения
 	cohort, retained := 0, 0
 	for _, st := range installs {
 		day := st.first.AddDate(0, 0, n)
@@ -172,8 +172,12 @@ func TestParseOptions(t *testing.T) {
 		want options
 	}{
 		{"defaults", []string{"--write-key", key}, true, options{Apps: 3, Days: 35, DailyInstalls: 400, WriteKey: key, Seed: 1}},
-		{"all flags", []string{"--apps", "1", "--days", "3", "--daily-installs", "10", "--seed", "7", "--write-key", key}, true,
-			options{Apps: 1, Days: 3, DailyInstalls: 10, WriteKey: key, Seed: 7}},
+		{
+			"all flags",
+			[]string{"--apps", "1", "--days", "3", "--daily-installs", "10", "--seed", "7", "--write-key", key},
+			true,
+			options{Apps: 1, Days: 3, DailyInstalls: 10, WriteKey: key, Seed: 7},
+		},
 		{"missing key", nil, false, options{}},
 		{"bad key format", []string{"--write-key", "pk_short"}, false, options{}},
 		{"secret key instead of write key", []string{"--write-key", "sk_devseedkey0000000000000000000000"}, false, options{}},
