@@ -46,6 +46,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/v1/auth/state", w.GetAuthState)
 	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/begin", w.BeginSetup)
 	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/finish", w.FinishSetup)
+	mux.HandleFunc("POST /admin/v1/auth/login/begin", w.BeginLogin)
+	mux.HandleFunc("POST /admin/v1/auth/login/finish", w.FinishLogin)
+	mux.HandleFunc("POST /admin/v1/auth/logout", w.Logout)
 }
 
 // requestMeta — данные запроса, которых нет в RequestObject strict-сервера.

@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/go-webauthn/webauthn/protocol/webauthncbor"
@@ -36,8 +37,10 @@ type Authenticator struct {
 	Transports     []string
 	BackupEligible bool
 	BackupState    bool
-	// UserHandle — user.id из опций последней регистрации.
+	// UserHandle — user.id из опций последней регистрации; возвращается в assertion при входе.
 	UserHandle []byte
+	// SignCount — счётчик подписей в authenticator data. 0 — как у synced passkey (iCloud, Google).
+	SignCount uint32
 
 	key *ecdsa.PrivateKey
 }
@@ -150,18 +153,86 @@ func (a *Authenticator) Register(t testing.TB, options []byte) []byte {
 	return resp
 }
 
-// authData: rpIdHash | flags | signCount | AAGUID | len(credentialId) | credentialId | COSE-ключ.
-func (a *Authenticator) authData(t testing.TB, rpID string) []byte {
+// RequestOptions — нужная тестам часть опций входа {"publicKey": PublicKeyCredentialRequestOptionsJSON, "mediation": …}.
+type RequestOptions struct {
+	PublicKey struct {
+		Challenge        string `json:"challenge"`
+		RPID             string `json:"rpId"`
+		Timeout          int    `json:"timeout"`
+		UserVerification string `json:"userVerification"`
+		AllowCredentials []struct {
+			ID string `json:"id"`
+		} `json:"allowCredentials"`
+	} `json:"publicKey"`
+	Mediation string `json:"mediation"`
+}
+
+// ParseRequestOptions разбирает опции входа из ответа beginLogin.
+func ParseRequestOptions(t testing.TB, options []byte) RequestOptions {
 	t.Helper()
+	var o RequestOptions
+	require.NoError(t, json.Unmarshal(options, &o))
+	return o
+}
+
+// Login выполняет navigator.credentials.get по опциям beginLogin и возвращает AuthenticationResponseJSON
+// с userHandle (discoverable credential) и текущим SignCount.
+func (a *Authenticator) Login(t testing.TB, options []byte) []byte {
+	t.Helper()
+	o := ParseRequestOptions(t, options)
+	rpID := o.PublicKey.RPID
+	if rpID == "" {
+		rpID = a.RPID
+	}
+	clientData, err := json.Marshal(map[string]any{
+		"type":        "webauthn.get",
+		"challenge":   o.PublicKey.Challenge,
+		"origin":      a.Origin,
+		"crossOrigin": false,
+	})
+	require.NoError(t, err)
+
 	rpHash := sha256.Sum256([]byte(rpID))
-	flags := flagUP | flagUV | flagAT
+	authData := slices.Concat(rpHash[:], []byte{a.flags()})
+	authData = binary.BigEndian.AppendUint32(authData, a.SignCount)
+	clientHash := sha256.Sum256(clientData)
+	digest := sha256.Sum256(slices.Concat(authData, clientHash[:]))
+	sig, err := ecdsa.SignASN1(rand.Reader, a.key, digest[:])
+	require.NoError(t, err)
+
+	b64 := base64.RawURLEncoding.EncodeToString
+	resp, err := json.Marshal(map[string]any{
+		"id":    a.CredentialIDBase64(),
+		"rawId": a.CredentialIDBase64(),
+		"type":  "public-key",
+		"response": map[string]any{
+			"clientDataJSON":    b64(clientData),
+			"authenticatorData": b64(authData),
+			"signature":         b64(sig),
+			"userHandle":        b64(a.UserHandle),
+		},
+		"clientExtensionResults":  map[string]any{},
+		"authenticatorAttachment": "platform",
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (a *Authenticator) flags() byte {
+	flags := flagUP | flagUV
 	if a.BackupEligible {
 		flags |= flagBE
 	}
 	if a.BackupState {
 		flags |= flagBS
 	}
+	return flags
+}
 
+// authData: rpIdHash | flags | signCount | AAGUID | len(credentialId) | credentialId | COSE-ключ.
+func (a *Authenticator) authData(t testing.TB, rpID string) []byte {
+	t.Helper()
+	rpHash := sha256.Sum256([]byte(rpID))
 	pub, err := a.key.PublicKey.Bytes() // 0x04 | X | Y
 	require.NoError(t, err)
 	coseKey, err := webauthncbor.Marshal(map[int]any{
@@ -175,8 +246,8 @@ func (a *Authenticator) authData(t testing.TB, rpID string) []byte {
 
 	out := make([]byte, 0, 37+16+2+len(a.CredentialID)+len(coseKey))
 	out = append(out, rpHash[:]...)
-	out = append(out, flags)
-	out = binary.BigEndian.AppendUint32(out, 0)
+	out = append(out, a.flags()|flagAT)
+	out = binary.BigEndian.AppendUint32(out, a.SignCount)
 	out = append(out, TestAAGUID[:]...)
 	out = binary.BigEndian.AppendUint16(out, uint16(len(a.CredentialID))) //nolint:gosec // 32 байта
 	out = append(out, a.CredentialID...)

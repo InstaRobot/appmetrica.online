@@ -107,3 +107,15 @@ func ceremonyOptions(c auth.Ceremony) (map[string]any, error) {
 func fieldDetails(e *auth.ValidationError) map[string]any {
 	return map[string]any{"fields": map[string]any{e.Field: e.Message}}
 }
+
+func (s *Server) BeginLogin(context.Context, gen.BeginLoginRequestObject) (gen.BeginLoginResponseObject, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *Server) FinishLogin(context.Context, gen.FinishLoginRequestObject) (gen.FinishLoginResponseObject, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *Server) Logout(context.Context, gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
+	return nil, errors.New("not implemented")
+}

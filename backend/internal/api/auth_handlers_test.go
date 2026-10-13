@@ -261,3 +261,135 @@ func (s *authServer) tokenUsed(t *testing.T) string {
 	require.NoError(t, err)
 	return token
 }
+
+// login проходит beginLogin → assertion → finishLogin по HTTP.
+func (s *authServer) login(t *testing.T, a *testutil.Authenticator) (*response, []byte) {
+	t.Helper()
+	resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	var c ceremonyResp
+	require.NoError(t, json.Unmarshal(body, &c))
+	return s.do(t, http.MethodPost, "/admin/v1/auth/login/finish", map[string]any{
+		"ceremony_id": c.CeremonyID,
+		"credential":  json.RawMessage(a.Login(t, c.Options)),
+	})
+}
+
+func (s *authServer) setupOwner(t *testing.T) (*testutil.Authenticator, *http.Cookie) {
+	t.Helper()
+	token := s.token(t)
+	c := s.begin(t, token)
+	a := testutil.NewAuthenticator(t, s.rpID, s.cfg.PublicBaseURL)
+	resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/setup/"+token+"/finish", map[string]any{
+		"ceremony_id": c.CeremonyID, "credential": json.RawMessage(a.Register(t, c.Options)), "name": "MacBook",
+	})
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, string(body))
+	return a, sessionCookie(t, resp)
+}
+
+func TestAdminAuth_LoginLogoutFlow(t *testing.T) {
+	s := newAuthServer(t, "http://localhost:3000", "localhost")
+	a, setupCookie := s.setupOwner(t)
+
+	resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/logout", nil, setupCookie)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, string(body))
+	cleared := sessionCookie(t, resp)
+	require.Empty(t, cleared.Value)
+	require.Equal(t, -1, cleared.MaxAge)
+
+	resp, body = s.do(t, http.MethodGet, "/admin/v1/auth/state", nil, setupCookie)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"authenticated":false,"setup_required":false}`, string(body))
+
+	resp, body = s.do(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	var c struct {
+		CeremonyID string `json:"ceremony_id"`
+		Options    struct {
+			PublicKey map[string]any `json:"publicKey"`
+			Mediation string         `json:"mediation"`
+		} `json:"options"`
+	}
+	require.NoError(t, json.Unmarshal(body, &c))
+	require.Equal(t, "conditional", c.Options.Mediation)
+	require.Equal(t, "localhost", c.Options.PublicKey["rpId"])
+
+	resp, body = s.login(t, a)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, string(body))
+	cookie := sessionCookie(t, resp)
+	require.Len(t, cookie.Value, 43)
+	require.True(t, cookie.HttpOnly)
+	require.Equal(t, 2592000, cookie.MaxAge)
+	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+
+	resp, body = s.do(t, http.MethodGet, "/admin/v1/auth/state", nil, cookie)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"authenticated":true,"setup_required":false}`, string(body))
+}
+
+func TestAdminAuth_LoginErrors(t *testing.T) {
+	s := newAuthServer(t, "http://localhost:3000", "localhost")
+	a, _ := s.setupOwner(t)
+
+	t.Run("unknown ceremony", func(t *testing.T) {
+		resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/login/finish", map[string]any{
+			"ceremony_id": "0199d6b0-0c11-7a2b-9c3d-4e5f6a7b8c9d", "credential": map[string]any{},
+		})
+		requireError(t, resp, body, http.StatusNotFound, "not_found")
+	})
+
+	t.Run("unknown credential", func(t *testing.T) {
+		stranger := testutil.NewAuthenticator(t, "localhost", "http://localhost:3000")
+		stranger.UserHandle = a.UserHandle
+		resp, body := s.login(t, stranger)
+		requireError(t, resp, body, http.StatusUnprocessableEntity, "webauthn_verification_failed")
+		require.Empty(t, resp.Header.Values("Set-Cookie"))
+	})
+
+	t.Run("malformed body", func(t *testing.T) {
+		resp, body := s.do(t, http.MethodPost, "/admin/v1/auth/login/finish", []byte(`{"ceremony_id":`))
+		requireError(t, resp, body, http.StatusBadRequest, "invalid_request")
+	})
+}
+
+// doRaw — запрос без заголовка X-Requested-With, с произвольными заголовками.
+func (s *authServer) doRaw(t *testing.T, method, path string, header map[string]string, cookies ...*http.Cookie) (*response, []byte) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), method, s.srv.URL+path, nil)
+	require.NoError(t, err)
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	resp, err := s.srv.Client().Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	out, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return &response{StatusCode: resp.StatusCode, Header: resp.Header, cookies: resp.Cookies()}, out
+}
+
+func TestAdminAuth_CSRF(t *testing.T) {
+	s := newAuthServer(t, "http://localhost:3000", "localhost")
+	_, cookie := s.setupOwner(t)
+
+	resp, body := s.doRaw(t, http.MethodPost, "/admin/v1/auth/logout", nil, cookie)
+	requireError(t, resp, body, http.StatusForbidden, "csrf_check_failed")
+	resp, body = s.doRaw(t, http.MethodPost, "/admin/v1/auth/logout", map[string]string{
+		"X-Requested-With": "appmetrica-web", "Origin": "https://evil.example",
+	}, cookie)
+	requireError(t, resp, body, http.StatusForbidden, "csrf_check_failed")
+	resp, body = s.doRaw(t, http.MethodPost, "/admin/v1/auth/login/begin", nil)
+	requireError(t, resp, body, http.StatusForbidden, "csrf_check_failed")
+
+	resp, body = s.doRaw(t, http.MethodGet, "/admin/v1/auth/state", nil, cookie)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"authenticated":true,"setup_required":false}`, string(body), "выход без заголовка не сработал")
+
+	resp, body = s.doRaw(t, http.MethodPost, "/admin/v1/auth/logout", map[string]string{
+		"X-Requested-With": "appmetrica-web", "Origin": "http://localhost:3000",
+	}, cookie)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, string(body))
+}
