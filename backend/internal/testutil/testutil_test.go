@@ -24,6 +24,8 @@ type fakeT struct {
 
 func (f *fakeT) Helper() {}
 
+func (f *fakeT) Name() string { return "fake" }
+
 func (f *fakeT) Errorf(format string, args ...any) {
 	f.failed = true
 	f.msgs = append(f.msgs, fmt.Sprintf(format, args...))
@@ -67,7 +69,7 @@ func TestGolden_UpdateAndDiff(t *testing.T) {
 
 		b, err := os.ReadFile(path)
 		require.NoError(t, err)
-		require.Equal(t, want, string(b))
+		require.Equal(t, want, string(b)) //nolint:testifylint // проверяется точный формат файла, а не JSON-эквивалентность
 	})
 
 	t.Run("update overwrites stale file", func(t *testing.T) {
@@ -77,7 +79,7 @@ func TestGolden_UpdateAndDiff(t *testing.T) {
 
 		b, err := os.ReadFile(path)
 		require.NoError(t, err)
-		require.Equal(t, want, string(b))
+		require.Equal(t, want, string(b)) //nolint:testifylint // проверяется точный формат файла, а не JSON-эквивалентность
 	})
 
 	t.Run("match passes", func(t *testing.T) {
@@ -110,7 +112,7 @@ func TestGolden_UpdateAndDiff(t *testing.T) {
 
 		b, err := os.ReadFile(path)
 		require.NoError(t, err)
-		require.Equal(t, want, string(b), "без -update эталон не меняется")
+		require.Equal(t, want, string(b), "без -update эталон не меняется") //nolint:testifylint // точный формат файла
 	})
 
 	t.Run("missing golden fails with hint", func(t *testing.T) {

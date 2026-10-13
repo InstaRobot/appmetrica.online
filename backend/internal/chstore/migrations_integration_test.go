@@ -12,7 +12,7 @@ import (
 
 func TestClickHouseMigrations_AppliedAndIdempotent(t *testing.T) {
 	ctx := t.Context()
-	p, err := chstore.NewMigrationProvider(options(adminUser, adminPassword))
+	p, err := chstore.NewMigrationProvider(options(t, adminUser, adminPassword))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, p.Close()) }()
 

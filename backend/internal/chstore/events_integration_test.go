@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/chstore"
+	"appmetrica.online/backend/internal/testutil"
 )
 
 func TestEvents_ReplacingMergeTreeDedup(t *testing.T) {
@@ -141,7 +142,7 @@ func TestInsertRejected_RoundTrip(t *testing.T) {
 
 func TestOpen_WrongPasswordDoesNotLeakIt(t *testing.T) {
 	const secret = "wrong-secret-password-4711"
-	_, err := chstore.Open(t.Context(), options(rwUser, secret))
+	_, err := chstore.Open(t.Context(), options(t, rwUser, secret))
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), secret)
 }
@@ -150,7 +151,7 @@ func TestOpen_Unreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	const secret = "unreachable-secret-password"
-	_, err := chstore.Open(ctx, chstore.Options{Addr: "127.0.0.1:1", Database: database, User: rwUser, Password: secret})
+	_, err := chstore.Open(ctx, chstore.Options{Addr: "127.0.0.1:1", Database: testutil.ClickHouseDatabase, User: rwUser, Password: secret})
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), secret)
 }

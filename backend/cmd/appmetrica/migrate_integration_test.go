@@ -4,60 +4,39 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	tcclickhouse "github.com/testcontainers/testcontainers-go/modules/clickhouse"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/pgstore"
+	"appmetrica.online/backend/internal/testutil"
 )
 
 const (
-	chMigratePassword = "test_admin_password"
-	pgPassword        = "test_pg_password"
+	chMigratePassword = testutil.ClickHouseAdminPassword
+	pgPassword        = testutil.PostgresPassword
 )
 
-// startStores поднимает пустые Postgres и ClickHouse и выставляет env для `appmetrica migrate`.
+func TestMain(m *testing.M) {
+	os.Exit(testutil.Run(m))
+}
+
+// startStores создаёт пустые базы Postgres и ClickHouse и выставляет env для `appmetrica migrate`.
 func startStores(t *testing.T) (pgURL string, ch chstore.Options) {
 	t.Helper()
-	ctx := t.Context()
+	env := testutil.StartEmpty(t)
 
-	pg, err := postgres.Run(ctx, "postgres:18.6-trixie",
-		postgres.WithDatabase("appmetrica"),
-		postgres.WithUsername("appmetrica"),
-		postgres.WithPassword(pgPassword),
-		postgres.BasicWaitStrategies(),
-	)
-	if pg != nil {
-		t.Cleanup(func() { _ = pg.Terminate(t.Context()) })
-	}
-	require.NoError(t, err)
-	pgURL, err = pg.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	chc, err := tcclickhouse.Run(ctx, "clickhouse/clickhouse-server:26.8.25.14",
-		tcclickhouse.WithDatabase("appmetrica"),
-		tcclickhouse.WithUsername("appmetrica_admin"),
-		tcclickhouse.WithPassword(chMigratePassword),
-	)
-	if chc != nil {
-		t.Cleanup(func() { _ = chc.Terminate(t.Context()) })
-	}
-	require.NoError(t, err)
-	addr, err := chc.ConnectionHost(ctx)
-	require.NoError(t, err)
-
-	t.Setenv("POSTGRES_URL", pgURL)
-	t.Setenv("CLICKHOUSE_ADDR", addr)
-	t.Setenv("CLICKHOUSE_DATABASE", "appmetrica")
-	t.Setenv("CLICKHOUSE_MIGRATE_USER", "appmetrica_admin")
-	t.Setenv("CLICKHOUSE_MIGRATE_PASSWORD", chMigratePassword)
+	t.Setenv("POSTGRES_URL", env.PostgresURL)
+	t.Setenv("CLICKHOUSE_ADDR", env.ClickHouse.Addr)
+	t.Setenv("CLICKHOUSE_DATABASE", env.ClickHouse.Database)
+	t.Setenv("CLICKHOUSE_MIGRATE_USER", env.ClickHouse.User)
+	t.Setenv("CLICKHOUSE_MIGRATE_PASSWORD", env.ClickHouse.Password)
 	// Рабочий пользователь в migrate не используется: DDL выполняет только appmetrica_admin.
-	t.Setenv("CLICKHOUSE_USER", "appmetrica_rw")
+	t.Setenv("CLICKHOUSE_USER", testutil.ClickHouseRWUser)
 	t.Setenv("CLICKHOUSE_PASSWORD", "not-used")
-	return pgURL, chstore.Options{Addr: addr, Database: "appmetrica", User: "appmetrica_admin", Password: chMigratePassword}
+	return env.PostgresURL, env.ClickHouse
 }
 
 func runCLI(t *testing.T, args ...string) (code int, stdout, stderr string) {

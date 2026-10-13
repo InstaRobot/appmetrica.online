@@ -4,99 +4,59 @@ package chstore_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcclickhouse "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 
 	"appmetrica.online/backend/internal/chstore"
+	"appmetrica.online/backend/internal/testutil"
 )
 
 const (
-	clickhouseImage = "clickhouse/clickhouse-server:26.8.25.14"
-	database        = "appmetrica"
-	adminUser       = "appmetrica_admin"
-	adminPassword   = "test_admin_password"
-	rwUser          = "appmetrica_rw"
-	rwPassword      = "test_rw_password"
-	roUser          = "appmetrica_ro"
-	roPassword      = "test_ro_password"
+	adminUser     = testutil.ClickHouseAdminUser
+	adminPassword = testutil.ClickHouseAdminPassword
+	rwUser        = testutil.ClickHouseRWUser
+	rwPassword    = testutil.ClickHouseRWPassword
+	roUser        = testutil.ClickHouseROUser
+	roPassword    = testutil.ClickHouseROPassword
 )
 
-// chAddr — host:port нативного протокола контейнера; миграции применены в TestMain.
-var chAddr string
-
 func TestMain(m *testing.M) {
-	os.Exit(runWithClickHouse(m))
+	os.Exit(testutil.Run(m))
 }
 
-// runWithClickHouse поднимает ClickHouse с боевыми users.d/config.d из deploy/ и применяет миграции
-// пользователем appmetrica_admin, как это делает `appmetrica migrate up`.
-func runWithClickHouse(m *testing.M) int {
-	ctx := context.Background()
-	ctr, err := tcclickhouse.Run(ctx, clickhouseImage,
-		tcclickhouse.WithDatabase(database),
-		tcclickhouse.WithUsername(adminUser),
-		tcclickhouse.WithPassword(adminPassword),
-		testcontainers.WithEnv(map[string]string{
-			"CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
-			"CLICKHOUSE_RW_PASSWORD":               rwPassword,
-			"CLICKHOUSE_RO_PASSWORD":               roPassword,
-		}),
-		testcontainers.WithFiles(
-			testcontainers.ContainerFile{
-				HostFilePath:      "../../../deploy/clickhouse/users.d/appmetrica.xml",
-				ContainerFilePath: "/etc/clickhouse-server/users.d/appmetrica.xml",
-				FileMode:          0o644,
-			},
-			testcontainers.ContainerFile{
-				HostFilePath:      "../../../deploy/clickhouse/config.d/appmetrica.xml",
-				ContainerFilePath: "/etc/clickhouse-server/config.d/appmetrica.xml",
-				FileMode:          0o644,
-			},
-		),
-	)
-	if ctr != nil {
-		defer func() { _ = ctr.Terminate(ctx) }()
-	}
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "start clickhouse: %v\n", err)
-		return 1
-	}
-	chAddr, err = ctr.ConnectionHost(ctx)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "clickhouse addr: %v\n", err)
-		return 1
-	}
+var (
+	migrateOnce sync.Once
+	migrateErr  error
+)
 
-	p, err := chstore.NewMigrationProvider(options(adminUser, adminPassword))
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "clickhouse goose provider: %v\n", err)
-		return 1
-	}
-	_, err = p.Up(ctx)
-	_ = p.Close()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "clickhouse migrate up: %v\n", err)
-		return 1
-	}
-	return m.Run()
-}
-
-func options(user, password string) chstore.Options {
-	return chstore.Options{Addr: chAddr, Database: database, User: user, Password: password}
+// options — подключение к базе appmetrica общего сервера testutil (боевые users.d/config.d, гранты rw/ro).
+// При первом вызове база мигрируется пользователем appmetrica_admin, как это делает `appmetrica migrate up`.
+func options(t *testing.T, user, password string) chstore.Options {
+	t.Helper()
+	srv := testutil.ClickHouseServer(t)
+	migrateOnce.Do(func() {
+		p, err := chstore.NewMigrationProvider(srv.Options(adminUser, adminPassword))
+		if err == nil {
+			_, err = p.Up(context.Background())
+			err = errors.Join(err, p.Close())
+		}
+		migrateErr = err
+	})
+	require.NoError(t, migrateErr, "clickhouse migrate up")
+	return srv.Options(user, password)
 }
 
 // openStore подключается к ClickHouse пользователем user и закрывает соединение по окончании теста.
 func openStore(t *testing.T, user, password string) *chstore.Store {
 	t.Helper()
-	store, err := chstore.Open(t.Context(), options(user, password))
+	store, err := chstore.Open(t.Context(), options(t, user, password))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	return store

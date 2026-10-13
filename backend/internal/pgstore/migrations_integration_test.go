@@ -3,13 +3,9 @@
 package pgstore_test
 
 import (
-	"context"
 	"errors"
-	"fmt"
-	"net/url"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,69 +14,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"appmetrica.online/backend/internal/pgstore"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
-)
-
-const postgresImage = "postgres:18.6-trixie"
-
-var (
-	// adminURL — DSN служебной базы контейнера; каждый тест создаёт в нём свою базу.
-	adminURL string
-	dbSeq    atomic.Int64
+	"appmetrica.online/backend/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(runWithPostgres(m))
-}
-
-func runWithPostgres(m *testing.M) int {
-	ctx := context.Background()
-	ctr, err := postgres.Run(ctx, postgresImage,
-		postgres.WithDatabase("appmetrica"),
-		postgres.WithUsername("appmetrica"),
-		postgres.WithPassword("appmetrica"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "start postgres: %v\n", err)
-		return 1
-	}
-	defer func() { _ = ctr.Terminate(ctx) }()
-
-	adminURL, err = ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "postgres dsn: %v\n", err)
-		return 1
-	}
-	return m.Run()
-}
-
-// freshDatabase создаёт пустую базу для теста и возвращает её DSN.
-func freshDatabase(t *testing.T) string {
-	t.Helper()
-	ctx := t.Context()
-	name := fmt.Sprintf("t_%d", dbSeq.Add(1))
-
-	admin, err := pgx.Connect(ctx, adminURL)
-	require.NoError(t, err)
-	defer func() { _ = admin.Close(context.Background()) }()
-	_, err = admin.Exec(ctx, "CREATE DATABASE "+name)
-	require.NoError(t, err)
-
-	u, err := url.Parse(adminURL)
-	require.NoError(t, err)
-	u.Path = "/" + name
-	return u.String()
+	os.Exit(testutil.Run(m))
 }
 
 // openStore открывает Store на свежей базе; migrate=true применяет все миграции.
 func openStore(t *testing.T, migrate bool) *pgstore.Store {
 	t.Helper()
 	ctx := t.Context()
-	store, err := pgstore.Open(ctx, freshDatabase(t))
+	store, err := pgstore.Open(ctx, testutil.NewPostgresDB(t, false))
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 

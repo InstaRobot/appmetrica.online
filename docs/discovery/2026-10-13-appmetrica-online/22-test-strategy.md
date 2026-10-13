@@ -176,7 +176,8 @@ flowchart LR
 
 Проектная реализация:
 - Один контейнер ClickHouse и один Postgres на пакет (`TestMain`), каждый тест получает **собственную базу**:
-  ClickHouse — `CREATE DATABASE t_<sha1(test name)[:12]>` + применение миграций goose; Postgres — шаблонная база
+  ClickHouse — `CREATE DATABASE t_<sha1(test name)[:12]>_<n>` (n — счётчик вызовов в процессе, чтобы повторный
+  `testutil.Start` в том же тесте получал новую базу) + применение миграций goose; Postgres — шаблонная база
   `appmetrica_template` с миграциями и `CREATE DATABASE … TEMPLATE appmetrica_template` (≈ 50 мс).
 - Golden-фикстуры отчётов — NDJSON в `backend/testdata/fixtures/` (по одному событию `Event` с явными `app_id`,
   `event_time`, `install_id`, `user_id`, `session_id`, `name`, `duration_ms`, `environment`, `app_version`, `country`),

@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/testutil"
@@ -88,4 +89,20 @@ func TestHarness_SharedClickHouseServer(t *testing.T) {
 	require.NotEmpty(t, srv.Addr)
 	require.Equal(t, srv.Addr, testutil.ClickHouseServer(t).Addr)
 	require.Equal(t, "appmetrica", srv.Database)
+}
+
+func TestHarness_NewPostgresDB(t *testing.T) {
+	ctx := t.Context()
+	empty, migrated := testutil.NewPostgresDB(t, false), testutil.NewPostgresDB(t, true)
+	require.NotEqual(t, empty, migrated)
+
+	for dsn, want := range map[string]int{empty: 0, migrated: 1} {
+		conn, err := pgx.Connect(ctx, dsn)
+		require.NoError(t, err)
+		var n int
+		require.NoError(t, conn.QueryRow(ctx,
+			"SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'settings'").Scan(&n))
+		require.NoError(t, conn.Close(ctx))
+		require.Equal(t, want, n, dsn)
+	}
 }
