@@ -90,6 +90,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 		reader("GET /v1/apps/{app_id}/audience/breakdown", w.GetAudienceBreakdown)
 		reader("GET /v1/apps/{app_id}/retention", w.GetRetention)
 		reader("GET /v1/apps/{app_id}/realtime", w.GetRealtime)
+		reader("GET /v1/apps/{app_id}/profiles", w.SearchProfiles)
+		reader("GET /v1/apps/{app_id}/profiles/{person_key}", w.GetProfile)
 	}
 
 	owner("POST /admin/v1/apps", w.CreateApp)
