@@ -30,7 +30,11 @@ const (
 	testOrigin = "http://localhost:3000"
 )
 
-var t0 = time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
+var (
+	t0 = time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
+	// testPepper — KEY_HASH_PEPPER тестов (32 байта).
+	testPepper = []byte("test-pepper-0123456789abcdef-32b")
+)
 
 func TestMain(m *testing.M) {
 	os.Exit(testutil.Run(m))
@@ -45,13 +49,18 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWithConfig(t, testConfig())
+}
+
+func newHarnessWithConfig(t *testing.T, cfg config.API) *harness {
+	t.Helper()
 	pg, err := pgstore.Open(t.Context(), testutil.NewPostgresDB(t, true))
 	require.NoError(t, err)
 	t.Cleanup(pg.Close)
 
 	h := &harness{pg: pg, clock: clock.NewFixed(t0), logs: &bytes.Buffer{}}
 	logger := slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	h.svc, err = auth.NewService(pg, h.clock, logger, testConfig())
+	h.svc, err = auth.NewService(pg, h.clock, logger, cfg)
 	require.NoError(t, err)
 	return h
 }
@@ -64,6 +73,8 @@ func testConfig() config.API {
 		WebAuthnRPOrigins: []string{testOrigin},
 		SessionTTL:        720 * time.Hour,
 		SessionIdleTTL:    168 * time.Hour,
+		KeyHashPepper:       testPepper,
+		PublicBearerEnabled: true,
 	}
 }
 
