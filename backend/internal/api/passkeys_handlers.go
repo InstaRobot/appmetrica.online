@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
-
-	"github.com/oapi-codegen/nullable"
 
 	"appmetrica.online/backend/internal/auth"
 	gen "appmetrica.online/backend/internal/gen/api"
@@ -117,15 +114,11 @@ func passkeyModel(p auth.Passkey) gen.Passkey {
 			transports = append(transports, v)
 		}
 	}
-	lastUsed := nullable.NewNullNullable[time.Time]()
-	if p.LastUsedAt != nil {
-		lastUsed = nullable.NewNullableWithValue(*p.LastUsedAt)
-	}
 	return gen.Passkey{
 		Id:             p.ID,
 		Name:           p.Name,
 		CreatedAt:      p.CreatedAt,
-		LastUsedAt:     lastUsed,
+		LastUsedAt:     nullableValue(p.LastUsedAt),
 		BackupEligible: p.BackupEligible,
 		BackupState:    p.BackupState,
 		Transports:     transports,

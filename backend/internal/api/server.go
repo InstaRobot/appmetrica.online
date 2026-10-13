@@ -71,6 +71,16 @@ func (s *Server) Register(mux *http.ServeMux) {
 	owner("PATCH /admin/v1/passkeys/{passkey_id}", w.RenamePasskey)
 	owner("DELETE /admin/v1/passkeys/{passkey_id}", w.DeletePasskey)
 
+	// Read API пока только по cookie владельца; Bearer sk_ добавляется в T-021.
+	owner("GET /v1/apps", w.ListApps)
+	owner("GET /v1/apps/{app_id}", w.GetApp)
+
+	owner("POST /admin/v1/apps", w.CreateApp)
+	owner("PATCH /admin/v1/apps/{app_id}", w.UpdateApp)
+	owner("DELETE /admin/v1/apps/{app_id}", w.DeleteApp)
+	owner("POST /admin/v1/apps/{app_id}/archive", w.ArchiveApp)
+	owner("POST /admin/v1/apps/{app_id}/unarchive", w.UnarchiveApp)
+
 	if s.appEnv == config.EnvE2E {
 		s.registerE2E(mux)
 	}
