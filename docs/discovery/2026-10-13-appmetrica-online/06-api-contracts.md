@@ -1962,6 +1962,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Realtime' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }

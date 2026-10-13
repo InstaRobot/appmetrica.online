@@ -29,6 +29,7 @@ import {
 } from "@tanstack/react-query";
 import { apiFetch } from "../../../fetcher";
 import type {
+  BadRequestResponse,
   ForbiddenResponse,
   GetRealtimeParams,
   NotFoundResponse,
@@ -60,6 +61,11 @@ export type getRealtimeResponse200 = {
   status: 200;
 };
 
+export type getRealtimeResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
+};
+
 export type getRealtimeResponse401 = {
   data: UnauthenticatedResponse;
   status: 401;
@@ -89,6 +95,7 @@ export type getRealtimeResponseSuccess = getRealtimeResponse200 & {
   headers: Headers;
 };
 export type getRealtimeResponseError = (
+  | getRealtimeResponse400
   | getRealtimeResponse401
   | getRealtimeResponse403
   | getRealtimeResponse404
@@ -134,6 +141,7 @@ export const getGetRealtimeQueryKey = (appId: string, params?: GetRealtimeParams
 export const getGetRealtimeQueryOptions = <
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -166,6 +174,7 @@ export const getGetRealtimeQueryOptions = <
 
 export type GetRealtimeQueryResult = NonNullable<Awaited<ReturnType<typeof getRealtime>>>;
 export type GetRealtimeQueryError =
+  | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
   | NotFoundResponse
@@ -175,6 +184,7 @@ export type GetRealtimeQueryError =
 export function useGetRealtime<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -200,6 +210,7 @@ export function useGetRealtime<
 export function useGetRealtime<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -225,6 +236,7 @@ export function useGetRealtime<
 export function useGetRealtime<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -243,6 +255,7 @@ export function useGetRealtime<
 export function useGetRealtime<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -269,6 +282,7 @@ export function useGetRealtime<
 export const getGetRealtimeSuspenseQueryOptions = <
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -304,6 +318,7 @@ export const getGetRealtimeSuspenseQueryOptions = <
 
 export type GetRealtimeSuspenseQueryResult = NonNullable<Awaited<ReturnType<typeof getRealtime>>>;
 export type GetRealtimeSuspenseQueryError =
+  | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
   | NotFoundResponse
@@ -313,6 +328,7 @@ export type GetRealtimeSuspenseQueryError =
 export function useGetRealtimeSuspense<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -330,6 +346,7 @@ export function useGetRealtimeSuspense<
 export function useGetRealtimeSuspense<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -349,6 +366,7 @@ export function useGetRealtimeSuspense<
 export function useGetRealtimeSuspense<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
@@ -369,6 +387,7 @@ export function useGetRealtimeSuspense<
 export function useGetRealtimeSuspense<
   TData = Awaited<ReturnType<typeof getRealtime>>,
   TError =
+    | BadRequestResponse
     | UnauthenticatedResponse
     | ForbiddenResponse
     | NotFoundResponse
