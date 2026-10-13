@@ -138,6 +138,17 @@ func (c *KeyCache) Lookup(key string) (KeyInfo, error) {
 	return info, nil
 }
 
+// Peek возвращает запись ключа из последнего загруженного снимка без проверки его возраста и статуса
+// приложения и без учёта last_used_at — для журнала отказов, а не для приёма событий.
+func (c *KeyCache) Peek(key string) (KeyInfo, bool) {
+	s := c.snap.Load()
+	if s == nil {
+		return KeyInfo{}, false
+	}
+	info, ok := s.keys[key]
+	return info, ok
+}
+
 // FlushLastUsed пишет накопленный last_used_at одним запросом. При ошибке записи значения
 // возвращаются в буфер и уйдут со следующим сбросом.
 func (c *KeyCache) FlushLastUsed(ctx context.Context) error {

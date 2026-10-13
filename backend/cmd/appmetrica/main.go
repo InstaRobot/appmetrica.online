@@ -92,13 +92,16 @@ func newLogger(w io.Writer, cfg config.Common, process string) *slog.Logger {
 	return slog.New(h).With(slog.String("process", process), slog.String("version", version))
 }
 
-// newRouter — общий каркас HTTP-процесса: /health и цепочка httpx.
-func newRouter(logger *slog.Logger, c clock.Clock) http.Handler {
+// newRouter — общий каркас HTTP-процесса: /health, маршруты процесса (routes) и цепочка httpx.
+func newRouter(logger *slog.Logger, c clock.Clock, routes ...func(mux *http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = io.WriteString(w, `{"status":"ok"}`)
 	})
+	for _, register := range routes {
+		register(mux)
+	}
 	return httpx.Chain(mux,
 		httpx.RequestID(c),
 		httpx.AccessLog(logger, c),

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"appmetrica.online/backend/internal/clock"
@@ -33,7 +34,8 @@ type HandlerConfig struct {
 	BatchErrors BatchErrorLogger
 }
 
-// BatchErrorLogger пишет batch-ошибку известного приложения в rejected_events.
+// BatchErrorLogger получает каждую ошибку уровня батча после разбора Content-Type вместе с ключом
+// (из заголовка или тела, если он успел разобраться) и прочитанным телом (реализует RejectedLogger).
 type BatchErrorLogger interface {
 	LogBatchError(appKey string, receivedAt time.Time, body []byte, e *Error)
 }
@@ -53,6 +55,7 @@ func NewHandler(cfg HandlerConfig) http.Handler {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := h.cfg.Clock.Now()
 	sw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 	if supportedMediaType(r.Header.Get("Content-Type")) {
 		h.inner.ServeHTTP(sw, r)
@@ -60,26 +63,33 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		errUnsupportedMediaType.write(sw, r)
 	}
 	h.cfg.Metrics.Requests.WithLabelValues(strconv.Itoa(sw.status)).Inc()
+	h.cfg.Metrics.BatchDuration.Observe(h.cfg.Clock.Now().Sub(start).Seconds())
 }
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request) {
 	receivedAt := h.cfg.Clock.Now()
+	headerKey := r.Header.Get("X-App-Key")
 	body, e := readBody(r)
 	if e != nil {
-		e.write(w, r)
+		h.writeBatchError(w, r, strings.TrimSpace(headerKey), receivedAt, body, e)
 		return
 	}
-	batch, e := decodeBatch(body, r.Header.Get("X-App-Key"))
+	batch, e := decodeBatch(body, headerKey)
 	if e != nil {
-		e.write(w, r)
+		key := strings.TrimSpace(headerKey)
+		if batch != nil {
+			key = batch.AppKey
+		}
+		h.writeBatchError(w, r, key, receivedAt, body, e)
 		return
 	}
 	batch.ReceivedAt = receivedAt
 	batch.ClientIP, _ = httpx.ClientIP(r)
+	h.cfg.Metrics.BatchEvents.Observe(float64(len(batch.Events)))
 
 	res, err := h.cfg.Processor.Process(r.Context(), batch)
 	if err != nil {
-		h.writeProcessError(w, r, err)
+		h.writeProcessError(w, r, batch, body, err)
 		return
 	}
 	if res.Rejected == nil {
@@ -93,9 +103,17 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (h *handler) writeProcessError(w http.ResponseWriter, r *http.Request, err error) {
+// writeBatchError отвечает ошибкой уровня батча и передаёт её в журнал rejected_events.
+func (h *handler) writeBatchError(w http.ResponseWriter, r *http.Request, appKey string, receivedAt time.Time, body []byte, e *Error) {
+	e.write(w, r)
+	if h.cfg.BatchErrors != nil && appKey != "" {
+		h.cfg.BatchErrors.LogBatchError(appKey, receivedAt, body, e)
+	}
+}
+
+func (h *handler) writeProcessError(w http.ResponseWriter, r *http.Request, b *Batch, body []byte, err error) {
 	if e, ok := errors.AsType[*Error](err); ok {
-		e.write(w, r)
+		h.writeBatchError(w, r, b.AppKey, b.ReceivedAt, body, e)
 		return
 	}
 	h.cfg.Logger.ErrorContext(r.Context(), "ingest batch failed",

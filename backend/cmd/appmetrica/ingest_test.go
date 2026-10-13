@@ -93,7 +93,7 @@ func newTestIngestServer(t *testing.T, keys ingest.KeyStore, ready ...ingest.Rea
 	reg := prometheus.NewRegistry()
 	srv, err := newIngestServer(ingestTestConfig(), ingestDeps{
 		Keys: keys, Events: events, Rejected: rejected, Geo: noGeo{}, Ready: ready,
-	}, reg, slog.New(slog.NewTextHandler(io.Discard, nil)), clock.System{})
+	}, reg, slog.New(slog.NewTextHandler(io.Discard, nil)), clock.NewFixed(time.Now().UTC()))
 	require.NoError(t, err)
 	return srv, events, rejected, reg
 }

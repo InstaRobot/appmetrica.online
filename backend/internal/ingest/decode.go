@@ -51,19 +51,21 @@ func supportedMediaType(contentType string) bool {
 
 // readBody читает тело, уже ограниченное http.MaxBytesReader поверх распаковки gzip.
 // Любая другая ошибка чтения — обрыв или битый поток gzip — считается невалидным телом.
+// При ошибке возвращается прочитанное начало тела (для сэмпла в rejected_events).
 func readBody(r *http.Request) ([]byte, *Error) {
 	body, err := io.ReadAll(r.Body)
 	if err == nil {
 		return body, nil
 	}
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return nil, errPayloadTooLarge
+		return body, errPayloadTooLarge
 	}
-	return nil, errInvalidJSON
+	return body, errInvalidJSON
 }
 
 // decodeBatch разбирает тело в порядке 06-api-contracts.md §2.4.1: JSON → ключ → поля батча.
-// headerKey — значение заголовка X-App-Key; ключ из query string не читается никогда.
+// headerKey — значение заголовка X-App-Key; ключ из query string не читается никогда. Ошибка полей
+// батча возвращается вместе с Batch, в котором заполнен только AppKey.
 func decodeBatch(body []byte, headerKey string) (*Batch, *Error) {
 	var raw rawBatch
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -82,11 +84,11 @@ func decodeBatch(body []byte, headerKey string) (*Batch, *Error) {
 	}
 	sentAt, e := sentAt(raw.SentAt)
 	if e != nil {
-		return nil, e
+		return &Batch{AppKey: key}, e
 	}
 	events, e := events(raw.Events)
 	if e != nil {
-		return nil, e
+		return &Batch{AppKey: key}, e
 	}
 	b := &Batch{AppKey: key, SentAt: sentAt, Events: events}
 	if !isNull(raw.Context) {
