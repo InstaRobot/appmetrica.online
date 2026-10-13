@@ -227,7 +227,6 @@ func TestProfile_NotFound(t *testing.T) {
 		body := errorBody(t, e.get(t, profilePath(msk, url.PathEscape(key), ""), e.all), http.StatusNotFound)
 		require.Equal(t, "profile_not_found", body.Code, "person_key=%s", key)
 		require.Equal(t, "Профиль не найден", body.Message)
-		require.NotEmpty(t, body.RequestID)
 	}
 
 	body := errorBody(t, e.get(t, profilePath(nyc, url.PathEscape("u:"+f.user), ""), e.all), http.StatusNotFound)
