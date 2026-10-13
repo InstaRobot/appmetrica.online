@@ -7,12 +7,17 @@ import (
 	"io/fs"
 )
 
-//go:embed postgres/*.sql
+//go:embed postgres/*.sql clickhouse/*.sql
 var files embed.FS
 
 // Postgres возвращает миграции Postgres с корнем в каталоге postgres/ (формат, который ждёт goose Provider).
 func Postgres() fs.FS {
 	return sub("postgres")
+}
+
+// ClickHouse возвращает миграции ClickHouse с корнем в каталоге clickhouse/.
+func ClickHouse() fs.FS {
+	return sub("clickhouse")
 }
 
 func sub(dir string) fs.FS {

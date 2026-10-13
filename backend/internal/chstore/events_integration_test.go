@@ -4,7 +4,6 @@ package chstore_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -153,7 +152,7 @@ func TestOpen_Unreachable(t *testing.T) {
 	const secret = "unreachable-secret-password"
 	_, err := chstore.Open(ctx, chstore.Options{Addr: "127.0.0.1:1", Database: database, User: rwUser, Password: secret})
 	require.Error(t, err)
-	require.False(t, strings.Contains(err.Error(), secret))
+	require.NotContains(t, err.Error(), secret)
 }
 
 func TestStore_Ping(t *testing.T) {
