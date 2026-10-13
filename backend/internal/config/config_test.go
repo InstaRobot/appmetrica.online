@@ -167,6 +167,20 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 	})
 }
 
+// APP_ENV=e2e — стек Playwright: api открывает служебные маршруты /internal/e2e/*.
+func TestLoad_AppEnvE2E(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		"APP_ENV":         "e2e",
+		"POSTGRES_URL":    "postgres://u:p@localhost:5432/db",
+		"KEY_HASH_PEPPER": devPepper,
+	})
+
+	api, err := config.LoadAPI()
+	require.NoError(t, err)
+	require.Equal(t, config.Env("e2e"), api.AppEnv)
+}
+
 func TestLoad_InvalidValues(t *testing.T) {
 	base := map[string]string{
 		"POSTGRES_URL":    "postgres://u:p@localhost:5432/db",
@@ -183,7 +197,7 @@ func TestLoad_InvalidValues(t *testing.T) {
 		{"bad int", map[string]string{"INGEST_MAX_EVENTS": "many"}, loadIngest, "INGEST_MAX_EVENTS: invalid integer"},
 		{"zero int", map[string]string{"INGEST_MAX_EVENTS": "0"}, loadIngest, "INGEST_MAX_EVENTS: must be positive"},
 		{"bad bool", map[string]string{"INGEST_ACCEPT_DEVELOPMENT": "yes"}, loadIngest, "INGEST_ACCEPT_DEVELOPMENT: invalid boolean"},
-		{"bad app env", map[string]string{"APP_ENV": "staging"}, loadIngest, "APP_ENV: must be production or development"},
+		{"bad app env", map[string]string{"APP_ENV": "staging"}, loadIngest, "APP_ENV: must be production, development or e2e"},
 		{"bad log level", map[string]string{"LOG_LEVEL": "verbose"}, loadIngest, "LOG_LEVEL: must be debug, info, warn or error"},
 		{"missing pepper", map[string]string{"KEY_HASH_PEPPER": ""}, loadAPI, "KEY_HASH_PEPPER is required"},
 		{"pepper not base64", map[string]string{"KEY_HASH_PEPPER": "not base64!"}, loadAPI, "KEY_HASH_PEPPER: invalid base64"},

@@ -21,6 +21,8 @@ type Env string
 const (
 	EnvProduction  Env = "production"
 	EnvDevelopment Env = "development"
+	// EnvE2E — стек Playwright: api открывает служебные маршруты /internal/e2e/*.
+	EnvE2E Env = "e2e"
 )
 
 // Jobs — задачи worker, допустимые в WORKER_JOBS_ENABLED.
