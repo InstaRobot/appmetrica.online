@@ -33,16 +33,13 @@ type Event struct {
 	UserID string
 	// DurationMs — 0, если не передан (у session_end обязателен).
 	DurationMs int64
-	// Context — заданные поля context события.
+	// Context — заданные поля context события; слияние с батчем делает Enricher.Enrich.
 	Context ContextFields
 	// EventTime заполняет CorrectEventTime.
 	EventTime time.Time
 	// Resolved заполняет Enricher.Enrich.
 	Resolved ResolvedContext
 }
-
-// ValidateBatchContext проверяет context батча.
-func ValidateBatchContext(*Batch) (ContextFields, []ingestapi.Rejection) { return nil, nil }
 
 // rawEvent — поля Event из ingest.yaml; неизвестные поля игнорируются, как и на уровне батча (OQ-030).
 type rawEvent struct {
@@ -58,7 +55,7 @@ type rawEvent struct {
 
 // ValidateEvent проверяет events[index] и возвращает либо событие, либо первое найденное отклонение.
 // Порядок проверок: объект → insert_id → name → timestamp → install_id → session_id → duration_ms → user_id
-// (длина, затем PII-guard). Значения полей в текст отклонения не попадают.
+// (длина, затем PII-guard) → context. Значения полей в текст отклонения не попадают.
 func ValidateEvent(index int, raw json.RawMessage) (*Event, *ingestapi.Rejection) {
 	var r rawEvent
 	if isNull(raw) || json.Unmarshal(raw, &r) != nil {
@@ -88,6 +85,12 @@ func ValidateEvent(index int, raw json.RawMessage) (*Event, *ingestapi.Rejection
 	if ev.UserID, rej = userIDField(index, insertID, r.UserID); rej != nil {
 		return nil, rej
 	}
+	fields, cerr := parseContext(r.Context)
+	if cerr != nil {
+		return nil, rejectPath(index, insertID, ingestapi.RejectionCodeInvalidField,
+			"events["+strconv.Itoa(index)+"]."+cerr.field, cerr.message)
+	}
+	ev.Context = fields
 	return ev, nil
 }
 
@@ -97,6 +100,11 @@ func reject(index int, insertID string, code ingestapi.RejectionCode, field, mes
 	if field != "" {
 		path += "." + field
 	}
+	return rejectPath(index, insertID, code, path, message)
+}
+
+// rejectPath — Rejection с полным путём field ("context.platform" для context батча).
+func rejectPath(index int, insertID string, code ingestapi.RejectionCode, path, message string) *ingestapi.Rejection {
 	id := nullable.NewNullNullable[string]()
 	if insertID != "" {
 		id = nullable.NewNullableWithValue(insertID)

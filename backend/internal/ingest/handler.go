@@ -67,6 +67,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	batch.ReceivedAt = receivedAt
+	batch.ClientIP, _ = httpx.ClientIP(r)
 
 	res, err := h.cfg.Processor.Process(r.Context(), batch)
 	if err != nil {

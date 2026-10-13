@@ -144,7 +144,8 @@ func TestEnrich_GeoFromForwardedFor_NoIPPersisted(t *testing.T) {
 
 	require.Len(t, p.rows, 2)
 	for _, row := range p.rows {
-		require.Equal(t, london, geo.Location{Country: row.Country, Region: row.Region, City: row.City})
+		got := geo.Location{Country: row.Country, Region: row.Region, City: row.City}
+		require.Equal(t, london, got)
 	}
 	require.Len(t, p.samples, 1)
 

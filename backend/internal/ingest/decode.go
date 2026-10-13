@@ -30,7 +30,8 @@ type Batch struct {
 	Events     []json.RawMessage
 	ReceivedAt time.Time
 	Key        KeyInfo
-	// ClientIP — адрес клиента.
+	// ClientIP — адрес клиента из httpx.ClientIP (нулевой, если не определён). Только для гео-поиска
+	// в Enricher: не сохраняется, не логируется и не попадает в ответы и метрики.
 	ClientIP netip.Addr
 }
 
