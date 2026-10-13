@@ -85,9 +85,11 @@ func (s *fakeKeyStore) touchCalls() []sqlc.TouchWriteKeysLastUsedParams {
 // fakeProcessor стоит на месте записи в ClickHouse: батч, не дошедший до него, не пишет ни одной строки.
 type keyHarness struct {
 	harness
-	store *fakeKeyStore
-	cache *ingest.KeyCache
-	clock *clock.Fixed
+	store   *fakeKeyStore
+	cache   *ingest.KeyCache
+	clock   *clock.Fixed
+	logger  *slog.Logger
+	metrics *ingest.Metrics
 }
 
 func newKeyHarness(t *testing.T, cfg ingest.KeyCacheConfig) *keyHarness {
@@ -99,17 +101,23 @@ func newKeyHarness(t *testing.T, cfg ingest.KeyCacheConfig) *keyHarness {
 		harness: harness{proc: &fakeProcessor{}, reg: reg, logs: &bytes.Buffer{}},
 		store:   &fakeKeyStore{},
 		clock:   clock.NewFixed(receivedAt),
+		metrics: metrics,
 	}
-	logger := slog.New(slog.NewJSONHandler(h.logs, nil))
-	cfg.Store, cfg.Clock, cfg.Logger, cfg.Metrics = h.store, h.clock, logger, metrics
+	h.logger = slog.New(slog.NewJSONHandler(h.logs, nil))
+	cfg.Store, cfg.Clock, cfg.Logger, cfg.Metrics = h.store, h.clock, h.logger, metrics
 	h.cache = ingest.NewKeyCache(cfg)
-	h.handler = httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
-		Processor: ingest.Authenticate(h.cache, h.proc),
-		Clock:     h.clock,
-		Logger:    logger,
-		Metrics:   metrics,
-	}), httpx.RequestID(h.clock))
+	h.setPipeline(ingest.Authenticate(h.cache, h.proc))
 	return h
+}
+
+// setPipeline пересобирает хендлер вокруг другой цепочки шагов конвейера.
+func (h *keyHarness) setPipeline(p ingest.Processor) {
+	h.handler = httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
+		Processor: p,
+		Clock:     h.clock,
+		Logger:    h.logger,
+		Metrics:   h.metrics,
+	}), httpx.RequestID(h.clock))
 }
 
 func (h *keyHarness) post(t *testing.T, key string) *httptest.ResponseRecorder {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,8 @@ import (
 	"appmetrica.online/backend/internal/gen/ingestapi"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/ingest"
+	"appmetrica.online/backend/internal/pgstore/sqlc"
+	"appmetrica.online/backend/internal/ratelimit"
 )
 
 const (
@@ -455,22 +458,119 @@ func TestIngestHandler_RequestsMetric(t *testing.T) {
 // requestCounts — значения ingest_requests_total по метке status.
 func requestCounts(t *testing.T, reg *prometheus.Registry) map[string]float64 {
 	t.Helper()
+	return labelCounts(t, reg, "ingest_requests_total", "status")
+}
+
+// labelCounts — значения счётчика name по значению метки label.
+func labelCounts(t *testing.T, reg *prometheus.Registry, name, label string) map[string]float64 {
+	t.Helper()
 	families, err := reg.Gather()
 	require.NoError(t, err)
 	out := map[string]float64{}
 	for _, mf := range families {
-		if mf.GetName() != "ingest_requests_total" {
+		if mf.GetName() != name {
 			continue
 		}
 		for _, m := range mf.GetMetric() {
 			for _, l := range m.GetLabel() {
-				if l.GetName() == "status" {
+				if l.GetName() == label {
 					out[l.GetValue()] = m.GetCounter().GetValue()
 				}
 			}
 		}
 	}
 	return out
+}
+
+// newRateHarness — конвейер Authenticate → RateLimits.LimitApp → fakeProcessor; fakeProcessor стоит
+// на месте записи в ClickHouse. Ключ testKey принадлежит appA, otherKey — appB.
+func newRateHarness(t *testing.T, eventsPerSec float64, burst int) (*keyHarness, ingest.RateLimits) {
+	t.Helper()
+	h := newKeyHarness(t, ingest.KeyCacheConfig{})
+	h.store.set(keyRow(wk1, testKey, appA, sqlc.AppStatusActive), keyRow(wk2, otherKey, appB, sqlc.AppStatusActive))
+	require.NoError(t, h.cache.Refresh(t.Context()))
+	limits := ingest.RateLimits{
+		Apps:     ratelimit.NewAppLimiter(eventsPerSec, burst, h.clock),
+		Installs: ratelimit.NewInstallLimiter(100, 1000, h.clock),
+		Metrics:  h.metrics,
+	}
+	h.setPipeline(ingest.Authenticate(h.cache, limits.LimitApp(h.proc)))
+	return h, limits
+}
+
+func (h *keyHarness) postEvents(t *testing.T, key string, n int) *httptest.ResponseRecorder {
+	t.Helper()
+	return h.do(t, request{contentType: "application/json", header: key, body: []byte(batchWithEvents(n))})
+}
+
+func TestIngestHandler_AppRateLimited(t *testing.T) {
+	t.Run("burst 4000 exhausted (I-29)", func(t *testing.T) {
+		h, limits := newRateHarness(t, 2000, 4000)
+		ok, _ := limits.Apps.Allow(appA, 4000)
+		require.True(t, ok)
+
+		rec := h.postEvents(t, testKey, 10)
+		env := requireError(t, rec, http.StatusTooManyRequests, "app_rate_limited")
+		require.Equal(t, "Превышен лимит 2000 событий/с для приложения.", env.Error.Message)
+		retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, retryAfter, 1)
+		require.Empty(t, h.proc.calls(), "в CH ничего не записано")
+		require.Equal(t, map[string]float64{"app": 1}, labelCounts(t, h.reg, "ingest_rate_limited_total", "scope"))
+		require.Equal(t, map[string]float64{"429": 1}, requestCounts(t, h.reg))
+	})
+
+	t.Run("cost is the number of events (AC-1.5.4)", func(t *testing.T) {
+		h, _ := newRateHarness(t, 10, 20)
+		requireAccepted(t, h.postEvents(t, testKey, 15), 15)
+		rec := h.postEvents(t, testKey, 15)
+		requireError(t, rec, http.StatusTooManyRequests, "app_rate_limited")
+		require.Equal(t, "1", rec.Header().Get("Retry-After"), "не хватает 10 событий при 10/с")
+		require.Equal(t, map[string]float64{"app": 1}, labelCounts(t, h.reg, "ingest_rate_limited_total", "scope"))
+		require.Len(t, h.proc.calls(), 1)
+
+		h.clock.Advance(time.Second)
+		requireAccepted(t, h.postEvents(t, testKey, 15), 15)
+	})
+
+	t.Run("Retry-After rounds up to whole seconds", func(t *testing.T) {
+		h, _ := newRateHarness(t, 4, 20)
+		requireAccepted(t, h.postEvents(t, testKey, 15), 15)
+		rec := h.postEvents(t, testKey, 15)
+		requireError(t, rec, http.StatusTooManyRequests, "app_rate_limited")
+		require.Equal(t, "3", rec.Header().Get("Retry-After"), "10 событий при 4/с — 2,5 с")
+		require.Equal(t, "Превышен лимит 4 событий/с для приложения.", mustErrorMessage(t, rec))
+	})
+
+	t.Run("sub-second wait is reported as 1", func(t *testing.T) {
+		h, limits := newRateHarness(t, 2000, 4000)
+		ok, _ := limits.Apps.Allow(appA, 3995)
+		require.True(t, ok)
+		rec := h.postEvents(t, testKey, 10)
+		requireError(t, rec, http.StatusTooManyRequests, "app_rate_limited")
+		require.Equal(t, "1", rec.Header().Get("Retry-After"))
+	})
+
+	t.Run("apps have independent buckets", func(t *testing.T) {
+		h, _ := newRateHarness(t, 10, 20)
+		requireAccepted(t, h.postEvents(t, testKey, 20), 20)
+		requireError(t, h.postEvents(t, testKey, 1), http.StatusTooManyRequests, "app_rate_limited")
+		requireAccepted(t, h.postEvents(t, otherKey, 20), 20)
+	})
+
+	t.Run("rejected keys do not spend the app budget", func(t *testing.T) {
+		h, _ := newRateHarness(t, 10, 20)
+		requireError(t, h.postEvents(t, "pk_unknownunknownunknownunknownun", 20), http.StatusUnauthorized, "invalid_app_key")
+		requireAccepted(t, h.postEvents(t, testKey, 20), 20)
+		require.Empty(t, labelCounts(t, h.reg, "ingest_rate_limited_total", "scope"))
+	})
+}
+
+func mustErrorMessage(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var env errorEnvelope
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
+	return env.Error.Message
 }
 
 func mustField(t *testing.T, raw json.RawMessage, name string) string {
