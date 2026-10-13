@@ -14,6 +14,7 @@ import (
 	"appmetrica.online/backend/internal/config"
 	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/httpx"
+	"appmetrica.online/backend/internal/reports"
 )
 
 // Server реализует операции api.yaml. Операции других тикетов приходят из встроенного
@@ -23,6 +24,8 @@ type Server struct {
 
 	auth          *auth.Service
 	apps          *apps.Service
+	reports       *reports.Service // nil — отчёты не подключены (WithReports)
+	settings      SettingsReader
 	logger        *slog.Logger
 	appEnv        config.Env
 	publicBaseURL string
@@ -78,6 +81,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 
 	reader("GET /v1/apps", w.ListApps)
 	reader("GET /v1/apps/{app_id}", w.GetApp)
+	if s.reports != nil {
+		reader("GET /v1/portfolio", w.GetPortfolio)
+	}
 
 	owner("POST /admin/v1/apps", w.CreateApp)
 	owner("PATCH /admin/v1/apps/{app_id}", w.UpdateApp)

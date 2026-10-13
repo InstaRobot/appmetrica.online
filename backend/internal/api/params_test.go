@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,6 +155,51 @@ func TestParseCommonParams(t *testing.T) {
 		}
 	})
 
+	// AC-028.4 (AC-5.1.4): дата не разбирается по format: date — 400 invalid_request с details.field,
+	// значение в ответе не цитируется.
+	t.Run("invalid_date", func(t *testing.T) {
+		srv := &Server{}
+		w := &gen.ServerInterfaceWrapper{
+			Handler: gen.NewStrictHandlerWithOptions(srv, nil, gen.StrictHTTPServerOptions{
+				RequestErrorHandlerFunc:  invalidRequest,
+				ResponseErrorHandlerFunc: srv.internalError,
+			}),
+			ErrorHandlerFunc: invalidRequest,
+		}
+		for _, tc := range []struct {
+			name, query, field string
+			handler            http.HandlerFunc
+		}{
+			{"portfolio_month_13", "date=2026-13-01", "date", w.GetPortfolio},
+			{"portfolio_feb_30", "date=2026-02-30", "date", w.GetPortfolio},
+			{"portfolio_russian_format", "date=12.10.2026", "date", w.GetPortfolio},
+			{"portfolio_include_archived", "include_archived=yes", "include_archived", w.GetPortfolio},
+			{"summary_from", "from=2026-13-01&to=2026-10-12", "from", w.GetAudienceSummary},
+			{"summary_to_missing", "from=2026-10-01", "to", w.GetAudienceSummary},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/x?"+tc.query, nil)
+				req.SetPathValue("app_id", paramsApp.String())
+				rec := httptest.NewRecorder()
+				tc.handler(rec, req)
+				require.Equal(t, http.StatusBadRequest, rec.Code)
+				var body struct {
+					Error struct {
+						Code    string         `json:"code"`
+						Message string         `json:"message"`
+						Details map[string]any `json:"details"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+				require.Equal(t, "invalid_request", body.Error.Code)
+				require.Equal(t, map[string]any{"field": tc.field}, body.Error.Details)
+				require.Contains(t, body.Error.Message, tc.field)
+				require.NotContains(t, rec.Body.String(), "2026-13")
+				require.NotContains(t, rec.Body.String(), "yes")
+			})
+		}
+	})
+
 	t.Run("invalid_values", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
@@ -221,4 +267,27 @@ func TestParamError_Response(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), "script")
 	require.Contains(t, rec.Body.String(), `"field":"country"`)
 	require.Contains(t, rec.Body.String(), `"code":"invalid_request"`)
+}
+
+// Неверные environment и unit портфеля — 400 до обращения к хранилищам.
+func TestGetPortfolio_InvalidParams(t *testing.T) {
+	srv := &Server{}
+	for _, tc := range []struct {
+		name   string
+		params gen.GetPortfolioParams
+		field  string
+	}{
+		{"environment", gen.GetPortfolioParams{Environment: ptr(gen.Environment("staging"))}, "environment"},
+		{"unit_people", gen.GetPortfolioParams{Unit: ptr(gen.Unit("people"))}, "unit"},
+		{"unit_empty", gen.GetPortfolioParams{Unit: ptr(gen.Unit(""))}, "unit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := srv.GetPortfolio(t.Context(), gen.GetPortfolioRequestObject{Params: tc.params})
+			require.NoError(t, err)
+			bad, ok := resp.(gen.GetPortfolio400JSONResponse)
+			require.True(t, ok, "%T", resp)
+			require.Equal(t, "invalid_request", bad.Error.Code)
+			require.Equal(t, map[string]any{"field": tc.field}, *bad.Error.Details)
+		})
+	}
 }
