@@ -67,12 +67,12 @@ func newHarnessWithConfig(t *testing.T, cfg config.API) *harness {
 
 func testConfig() config.API {
 	return config.API{
-		PublicBaseURL:     testOrigin,
-		WebAuthnRPID:      testRPID,
-		WebAuthnRPName:    "appmetrica.online",
-		WebAuthnRPOrigins: []string{testOrigin},
-		SessionTTL:        720 * time.Hour,
-		SessionIdleTTL:    168 * time.Hour,
+		PublicBaseURL:       testOrigin,
+		WebAuthnRPID:        testRPID,
+		WebAuthnRPName:      "appmetrica.online",
+		WebAuthnRPOrigins:   []string{testOrigin},
+		SessionTTL:          720 * time.Hour,
+		SessionIdleTTL:      168 * time.Hour,
 		KeyHashPepper:       testPepper,
 		PublicBearerEnabled: true,
 	}

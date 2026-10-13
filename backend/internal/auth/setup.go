@@ -66,6 +66,12 @@ type Service struct {
 	// attempts — общий лимит попыток входа и регистрации по setup-ссылке на процесс (LimitAttempts).
 	// Указатель атомарный: ResetForE2E подменяет лимитер на полный.
 	attempts atomic.Pointer[rate.Limiter]
+	// pepper — KEY_HASH_PEPPER: ключ HMAC-SHA256 секретов `sk_`.
+	pepper []byte
+	// publicBearer — API_PUBLIC_BEARER_ENABLED: false закрывает Read API для Bearer-ключей.
+	publicBearer bool
+	apiKeyLimits apiKeyLimits
+	metrics      *apiMetrics
 }
 
 func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg config.API) (*Service, error) {
@@ -81,6 +87,9 @@ func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger, cfg co
 		baseURL:        strings.TrimSuffix(cfg.PublicBaseURL, "/"),
 		sessionTTL:     cfg.SessionTTL,
 		sessionIdleTTL: cfg.SessionIdleTTL,
+		pepper:         cfg.KeyHashPepper,
+		publicBearer:   cfg.PublicBearerEnabled,
+		metrics:        newAPIMetrics(),
 	}
 	s.attempts.Store(newAttemptsLimiter())
 	return s, nil

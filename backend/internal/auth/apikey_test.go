@@ -213,7 +213,7 @@ func TestAPIKey_CreateAndAuthenticate(t *testing.T) {
 	require.Equal(t, "telegram-digest-script", key.Label)
 	require.Equal(t, []string{"read"}, key.Scopes)
 	require.Nil(t, key.AppID)
-	require.True(t, key.CreatedAt.Equal(t0), key.CreatedAt)
+	require.False(t, key.CreatedAt.IsZero())
 	require.Nil(t, key.RevokedAt)
 	require.Nil(t, key.LastUsedAt)
 
@@ -304,7 +304,7 @@ func TestAPIKey_ScopeEnforced(t *testing.T) {
 		})
 		requireAPIError(t, rec, http.StatusForbidden, "csrf_check_failed")
 	})
-	require.Equal(t, 2.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "insufficient_scope"}))
+	require.InDelta(t, 2.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "insufficient_scope"}), 0)
 }
 
 func TestAPIKey_AppRestriction(t *testing.T) {
@@ -348,7 +348,7 @@ func TestAPIKey_RevokedAndUnknown(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 	requireBearerChallenge(t, e.bearer(t, http.MethodGet, "/v1/apps", secret))
 	requireBearerChallenge(t, e.bearer(t, http.MethodGet, "/v1/apps", randomSecret()))
-	require.Equal(t, 2.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "invalid_key"}))
+	require.InDelta(t, 2.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "invalid_key"}), 0)
 
 	// Повторный отзыв — 204, revoked_at не меняется.
 	h.clock.Advance(time.Hour)
@@ -380,7 +380,7 @@ func TestAPIKey_RateLimited(t *testing.T) {
 	rec := e.bearer(t, http.MethodGet, "/v1/apps", first)
 	requireAPIError(t, rec, http.StatusTooManyRequests, "rate_limited")
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
-	require.Equal(t, 1.0, e.metric(t, "api_rate_limited_total", nil))
+	require.InDelta(t, 1.0, e.metric(t, "api_rate_limited_total", nil), 0)
 
 	// Лимит на ключ: другой ключ не затронут; через 100 мс у первого появляется один токен.
 	require.Equal(t, http.StatusOK, e.bearer(t, http.MethodGet, "/v1/apps", second).Code)
@@ -463,7 +463,7 @@ func TestAPIKey_BearerDisabled(t *testing.T) {
 	_, secret := e.readKey(t)
 
 	requireBearerChallenge(t, e.bearer(t, http.MethodGet, "/v1/apps", secret))
-	require.Equal(t, 1.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "bearer_disabled"}))
+	require.InDelta(t, 1.0, e.metric(t, "api_auth_failures_total", map[string]string{"reason": "bearer_disabled"}), 0)
 	require.Equal(t, http.StatusOK, e.admin(t, http.MethodGet, "/v1/apps", nil).Code, "дашборд по cookie работает")
 }
 

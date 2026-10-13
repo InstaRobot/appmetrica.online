@@ -5,6 +5,10 @@ import (
 	"flag"
 	"io"
 	"log/slog"
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"appmetrica.online/backend/internal/api"
 	"appmetrica.online/backend/internal/apps"
@@ -14,7 +18,7 @@ import (
 	"appmetrica.online/backend/internal/pgstore"
 )
 
-// runAPI — `appmetrica api`: Read API и admin API на API_LISTEN_ADDR.
+// runAPI — `appmetrica api`: Read API и admin API на API_LISTEN_ADDR, метрики на METRICS_LISTEN_ADDR.
 func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if !parseFlags(flag.NewFlagSet("api", flag.ContinueOnError), args, stderr) {
 		return 2
@@ -39,6 +43,24 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	if err := authSvc.RegisterMetrics(reg); err != nil {
+		logger.Error("metrics init failed", slog.Any("error", err))
+		return 1
+	}
+
 	h := newRouter(logger, c, api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).Register)
-	return serveHTTP(ctx, logger, cfg.ListenAddr, h)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		if serveHTTP(ctx, logger, cfg.MetricsListenAddr, metricsHandler(reg)) != 0 {
+			cancel()
+		}
+	})
+	code := serveHTTP(ctx, logger, cfg.ListenAddr, h)
+	cancel()
+	wg.Wait()
+	return code
 }

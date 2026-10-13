@@ -11,6 +11,10 @@ UPDATE write_keys SET revoked_at = sqlc.arg(now)
 WHERE id = sqlc.arg(id) AND app_id = sqlc.arg(app_id) AND revoked_at IS NULL
 RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at;
 
+-- name: GetWriteKey :one
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+FROM write_keys WHERE id = sqlc.arg(id) AND app_id = sqlc.arg(app_id);
+
 -- name: LoadWriteKeyCache :many
 SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status, a.platform AS app_platform
 FROM write_keys AS k
@@ -37,8 +41,12 @@ RETURNING id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_us
 UPDATE api_keys SET revoked_at = sqlc.arg(now) WHERE id = sqlc.arg(id) AND revoked_at IS NULL
 RETURNING id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_used_at;
 
+-- name: GetApiKey :one
+SELECT id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_used_at
+FROM api_keys WHERE id = sqlc.arg(id);
+
 -- name: GetActiveApiKeyByHash :one
-SELECT id, scopes, app_id FROM api_keys WHERE key_hash = sqlc.arg(key_hash) AND revoked_at IS NULL;
+SELECT id, scopes, app_id, last_used_at FROM api_keys WHERE key_hash = sqlc.arg(key_hash) AND revoked_at IS NULL;
 
 -- name: TouchApiKeyLastUsed :exec
 UPDATE api_keys SET last_used_at = sqlc.arg(now)

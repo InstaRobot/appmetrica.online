@@ -86,19 +86,82 @@ func (q *Queries) CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) 
 }
 
 const getActiveApiKeyByHash = `-- name: GetActiveApiKeyByHash :one
-SELECT id, scopes, app_id FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL
+SELECT id, scopes, app_id, last_used_at FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL
 `
 
 type GetActiveApiKeyByHashRow struct {
-	ID     uuid.UUID
-	Scopes []string
-	AppID  *uuid.UUID
+	ID         uuid.UUID
+	Scopes     []string
+	AppID      *uuid.UUID
+	LastUsedAt *time.Time
 }
 
 func (q *Queries) GetActiveApiKeyByHash(ctx context.Context, keyHash []byte) (GetActiveApiKeyByHashRow, error) {
 	row := q.db.QueryRow(ctx, getActiveApiKeyByHash, keyHash)
 	var i GetActiveApiKeyByHashRow
-	err := row.Scan(&i.ID, &i.Scopes, &i.AppID)
+	err := row.Scan(
+		&i.ID,
+		&i.Scopes,
+		&i.AppID,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getApiKey = `-- name: GetApiKey :one
+SELECT id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_used_at
+FROM api_keys WHERE id = $1
+`
+
+type GetApiKeyRow struct {
+	ID         uuid.UUID
+	KeyPrefix  string
+	Label      string
+	Scopes     []string
+	AppID      *uuid.UUID
+	CreatedAt  time.Time
+	RevokedAt  *time.Time
+	LastUsedAt *time.Time
+}
+
+func (q *Queries) GetApiKey(ctx context.Context, id uuid.UUID) (GetApiKeyRow, error) {
+	row := q.db.QueryRow(ctx, getApiKey, id)
+	var i GetApiKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.KeyPrefix,
+		&i.Label,
+		&i.Scopes,
+		&i.AppID,
+		&i.CreatedAt,
+		&i.RevokedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getWriteKey = `-- name: GetWriteKey :one
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+FROM write_keys WHERE id = $1 AND app_id = $2
+`
+
+type GetWriteKeyParams struct {
+	ID    uuid.UUID
+	AppID uuid.UUID
+}
+
+func (q *Queries) GetWriteKey(ctx context.Context, arg GetWriteKeyParams) (WriteKey, error) {
+	row := q.db.QueryRow(ctx, getWriteKey, arg.ID, arg.AppID)
+	var i WriteKey
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.Key,
+		&i.Label,
+		&i.CreatedAt,
+		&i.RevokedAt,
+		&i.LastUsedAt,
+	)
 	return i, err
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/oapi-codegen/nullable"
 
 	"appmetrica.online/backend/internal/apps"
+	"appmetrica.online/backend/internal/auth"
 	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
@@ -17,14 +18,19 @@ const (
 	msgConfirmNameMismatch = "Название не совпадает"
 )
 
+// ListApps — для Bearer-ключа с app_id только его приложение; чужие app_id в остальных маршрутах
+// отсекает auth.RequireAPIAccess (404 app_not_found).
 func (s *Server) ListApps(ctx context.Context, req gen.ListAppsRequestObject) (gen.ListAppsResponseObject, error) {
 	list, err := s.apps.List(ctx, req.Params.IncludeArchived != nil && *req.Params.IncludeArchived)
 	if err != nil {
 		return nil, err
 	}
+	only, restricted := auth.APIKeyAppFrom(ctx)
 	items := make([]gen.App, 0, len(list))
 	for _, a := range list {
-		items = append(items, appModel(a))
+		if !restricted || a.ID == only {
+			items = append(items, appModel(a))
+		}
 	}
 	return gen.ListApps200JSONResponse{Items: items}, nil
 }
