@@ -125,8 +125,6 @@ gen-go-api: ## oapi-codegen: contracts/openapi → backend/internal/gen
 
 .PHONY: gen-sqlc
 gen-sqlc: ## sqlc (в Docker): queries/postgres + migrations/postgres → internal/pgstore/sqlc
-	@# До T-004 схемы Postgres нет — sqlc нечего генерировать.
-	@if [ ! -d $(BACKEND)/migrations/postgres ]; then echo "gen-sqlc: нет backend/migrations/postgres, пропуск"; exit 0; fi; \
 	docker run --rm -u $$(id -u):$$(id -g) -v "$$(pwd)/backend":/src -w /src $(SQLC_IMAGE) generate
 
 .PHONY: gen-web

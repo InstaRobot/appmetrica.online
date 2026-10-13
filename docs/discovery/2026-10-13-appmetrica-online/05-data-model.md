@@ -1053,7 +1053,8 @@ WHERE k.revoked_at IS NULL;
 -- name: TouchWriteKeysLastUsed :exec
 UPDATE write_keys AS k
 SET last_used_at = u.last_used_at
-FROM unnest(sqlc.arg(ids)::uuid[], sqlc.arg(last_used)::timestamptz[]) AS u(id, last_used_at)
+-- Два unnest в списке выборки равносильны unnest(a, b): sqlc 1.31.1 не выводит типы многоаргументного unnest.
+FROM (SELECT unnest(sqlc.arg(ids)::uuid[]) AS id, unnest(sqlc.arg(last_used)::timestamptz[]) AS last_used_at) AS u
 WHERE k.id = u.id AND (k.last_used_at IS NULL OR k.last_used_at < u.last_used_at);
 
 -- name: ListApiKeys :many
@@ -2024,3 +2025,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Первая версия: Postgres (13 таблиц, 8 enum), ClickHouse (6 таблиц + 3 MV), гранты, sqlc-запросы, канонический SQL отчётов, фикстуры |
+| 2026-10-13 | 1.1 | `TouchWriteKeysLastUsed`: `unnest(a, b)` заменён на подзапрос с двумя `unnest` — sqlc 1.31.1 не поддерживает многоаргументный `unnest` (T-004) |

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -281,7 +282,8 @@ func TestCreateDeletionRequest_IdempotentForActiveSubject(t *testing.T) {
 	require.Equal(t, first.ID, second.ID, "повторный запрос возвращает активный")
 	require.True(t, second.RequestedAt.Equal(now), "requested_at не сдвигается")
 
-	require.NoError(t, q.CompleteDeletionRequest(ctx, sqlc.CompleteDeletionRequestParams{ID: first.ID, Now: now.Add(2 * time.Hour)}))
+	completedAt := now.Add(2 * time.Hour)
+	require.NoError(t, q.CompleteDeletionRequest(ctx, sqlc.CompleteDeletionRequestParams{ID: first.ID, Now: ptr(completedAt)}))
 	third, err := q.CreateDeletionRequest(ctx, params)
 	require.NoError(t, err)
 	require.NotEqual(t, first.ID, third.ID, "после done создаётся новый запрос")
@@ -293,11 +295,11 @@ func TestLoadWriteKeyCache_SkipsRevokedKeys(t *testing.T) {
 	app := createApp(t, store, "A")
 	q := store.Queries()
 
-	active, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + repeat('a', 32), Label: "main"})
+	active, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + strings.Repeat("a", 32), Label: "main"})
 	require.NoError(t, err)
-	revoked, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + repeat('b', 32)})
+	revoked, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + strings.Repeat("b", 32)})
 	require.NoError(t, err)
-	_, err = q.RevokeWriteKey(ctx, sqlc.RevokeWriteKeyParams{ID: revoked.ID, AppID: app.ID, Now: time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)})
+	_, err = q.RevokeWriteKey(ctx, sqlc.RevokeWriteKeyParams{ID: revoked.ID, AppID: app.ID, Now: ptr(time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC))})
 	require.NoError(t, err)
 
 	rows, err := q.LoadWriteKeyCache(ctx)
@@ -313,7 +315,7 @@ func TestLoadWriteKeyCache_SkipsRevokedKeys(t *testing.T) {
 	requirePgError(t, err, pgCheckViolation, "write_keys_key_format_chk")
 
 	// Повторно отозвать нельзя: строки нет.
-	_, err = q.RevokeWriteKey(ctx, sqlc.RevokeWriteKeyParams{ID: revoked.ID, AppID: app.ID, Now: time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)})
+	_, err = q.RevokeWriteKey(ctx, sqlc.RevokeWriteKeyParams{ID: revoked.ID, AppID: app.ID, Now: ptr(time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC))})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
@@ -326,13 +328,7 @@ func TestApps_NameUniqueCaseInsensitive(t *testing.T) {
 	requirePgError(t, err, pgUniqueViolation, "apps_name_lower_uq")
 }
 
-func repeat(c byte, n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = c
-	}
-	return string(b)
-}
+func ptr[T any](v T) *T { return &v }
 
 var errBoom = errors.New("boom")
 
@@ -367,4 +363,40 @@ func TestInTx_CommitsAndRollsBack(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, apps, 1)
 	require.Equal(t, "committed", apps[0].Name)
+}
+
+func TestTouchWriteKeysLastUsed_OnlyMovesForward(t *testing.T) {
+	ctx := t.Context()
+	store := openStore(t, true)
+	app := createApp(t, store, "A")
+	q := store.Queries()
+
+	k1, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + strings.Repeat("c", 32)})
+	require.NoError(t, err)
+	k2, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: "pk_" + strings.Repeat("d", 32)})
+	require.NoError(t, err)
+
+	t1 := time.Date(2026, 10, 13, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(5 * time.Minute)
+	require.NoError(t, q.TouchWriteKeysLastUsed(ctx, sqlc.TouchWriteKeysLastUsedParams{
+		Ids: []uuid.UUID{k1.ID, k2.ID}, LastUsed: []time.Time{t2, t1},
+	}))
+	// Более старое значение не перезаписывает свежее.
+	require.NoError(t, q.TouchWriteKeysLastUsed(ctx, sqlc.TouchWriteKeysLastUsedParams{
+		Ids: []uuid.UUID{k1.ID}, LastUsed: []time.Time{t1},
+	}))
+	// Пустой батч — no-op.
+	require.NoError(t, q.TouchWriteKeysLastUsed(ctx, sqlc.TouchWriteKeysLastUsedParams{
+		Ids: []uuid.UUID{}, LastUsed: []time.Time{},
+	}))
+
+	keys, err := q.ListWriteKeys(ctx, app.ID)
+	require.NoError(t, err)
+	got := map[uuid.UUID]time.Time{}
+	for _, k := range keys {
+		require.NotNil(t, k.LastUsedAt)
+		got[k.ID] = *k.LastUsedAt
+	}
+	require.True(t, got[k1.ID].Equal(t2))
+	require.True(t, got[k2.ID].Equal(t1))
 }
