@@ -291,3 +291,90 @@ func TestGetPortfolio_InvalidParams(t *testing.T) {
 		})
 	}
 }
+
+// AC-030.4 (AC-5.3.4): periods — day 1..90 (по умолчанию 30), week 1..52 (по умолчанию 12); вне пределов и
+// неизвестная cohort_granularity — 400 invalid_request с details.field. Общие параметры проверяются как у
+// остальных отчётов.
+func TestParseRetentionParams(t *testing.T) {
+	msk, err := time.LoadLocation("Europe/Moscow")
+	require.NoError(t, err)
+	base := func(t *testing.T) gen.GetRetentionParams {
+		return gen.GetRetentionParams{From: day(t, "2026-09-13"), To: day(t, "2026-10-12")}
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		p, q, perr := parseRetentionParams(base(t), paramsApp, msk)
+		require.Nil(t, perr)
+		require.Equal(t, reports.RetentionQuery{Granularity: reports.GranularityDay, Periods: reports.DefaultDayPeriods}, q)
+		require.Equal(t, reports.Params{
+			AppID: paramsApp, Location: msk, Env: reports.EnvProduction, Unit: identity.Persons,
+			Period: reports.Period{From: day(t, "2026-09-13").Time, To: day(t, "2026-10-12").Time},
+		}, p)
+
+		in := base(t)
+		in.CohortGranularity = ptr(gen.CohortGranularityWeek)
+		_, q, perr = parseRetentionParams(in, paramsApp, msk)
+		require.Nil(t, perr)
+		require.Equal(t, reports.RetentionQuery{Granularity: reports.GranularityWeek, Periods: reports.DefaultWeekPeriods}, q)
+	})
+
+	t.Run("explicit", func(t *testing.T) {
+		in := base(t)
+		in.Periods = ptr(90)
+		in.Environment = ptr(gen.EnvironmentQ(gen.EnvironmentDevelopment))
+		in.Unit = ptr(gen.UnitQ(gen.UnitInstalls))
+		in.Platform = &[]gen.Platform{gen.PlatformAndroid}
+		in.Country = &[]string{"RU", "DE"}
+		p, q, perr := parseRetentionParams(in, paramsApp, msk)
+		require.Nil(t, perr)
+		require.Equal(t, reports.RetentionQuery{Granularity: reports.GranularityDay, Periods: 90}, q)
+		require.Equal(t, reports.EnvDevelopment, p.Env)
+		require.Equal(t, identity.Installs, p.Unit)
+		require.Equal(t, reports.Filters{Platform: []string{"android"}, Country: []string{"RU", "DE"}}, p.Filters)
+
+		in = base(t)
+		in.CohortGranularity = ptr(gen.CohortGranularityWeek)
+		in.Periods = ptr(52)
+		_, q, perr = parseRetentionParams(in, paramsApp, msk)
+		require.Nil(t, perr)
+		require.Equal(t, reports.RetentionQuery{Granularity: reports.GranularityWeek, Periods: 52}, q)
+
+		in.Periods = ptr(1)
+		_, q, perr = parseRetentionParams(in, paramsApp, msk)
+		require.Nil(t, perr)
+		require.Equal(t, 1, q.Periods)
+	})
+
+	for _, tc := range []struct {
+		name        string
+		granularity *gen.CohortGranularity
+		periods     *int
+		mutate      func(*gen.GetRetentionParams)
+		code, field string
+	}{
+		{name: "day_91", periods: ptr(91), code: "invalid_request", field: "periods"},
+		{name: "week_53", granularity: ptr(gen.CohortGranularityWeek), periods: ptr(53), code: "invalid_request", field: "periods"},
+		{name: "week_90", granularity: ptr(gen.CohortGranularityWeek), periods: ptr(90), code: "invalid_request", field: "periods"},
+		{name: "zero", periods: ptr(0), code: "invalid_request", field: "periods"},
+		{name: "negative", granularity: ptr(gen.CohortGranularityWeek), periods: ptr(-1), code: "invalid_request", field: "periods"},
+		{name: "granularity_month", granularity: ptr(gen.CohortGranularity("month")), code: "invalid_request", field: "cohort_granularity"},
+		{name: "granularity_empty", granularity: ptr(gen.CohortGranularity("")), code: "invalid_request", field: "cohort_granularity"},
+		{name: "unit", mutate: func(p *gen.GetRetentionParams) { p.Unit = ptr(gen.UnitQ("people")) }, code: "invalid_request", field: "unit"},
+		{name: "from_after_to", mutate: func(p *gen.GetRetentionParams) { p.From = day(t, "2026-10-13") }, code: "invalid_request", field: "from"},
+		{name: "range_367", mutate: func(p *gen.GetRetentionParams) { p.From = day(t, "2025-10-11") }, code: "range_too_large", field: "to"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := base(t)
+			in.CohortGranularity, in.Periods = tc.granularity, tc.periods
+			if tc.mutate != nil {
+				tc.mutate(&in)
+			}
+			_, _, perr := parseRetentionParams(in, paramsApp, msk)
+			require.NotNil(t, perr)
+			require.Equal(t, tc.code, perr.code)
+			require.Equal(t, tc.field, perr.field)
+			require.NotContains(t, perr.message, "month")
+			require.NotContains(t, perr.message, "people")
+		})
+	}
+}
