@@ -12,6 +12,8 @@ backend/coverage.out
 
 # Гео-база (скачивается при сборке/`make geo-db`)
 *.mmdb
+# Синтетическая тестовая база (1,7 КБ, `go run ./testdata/gen geo`) коммитится
+!backend/testdata/geo/test-city.mmdb
 *.mmdb.gz
 
 # Node / Next.js

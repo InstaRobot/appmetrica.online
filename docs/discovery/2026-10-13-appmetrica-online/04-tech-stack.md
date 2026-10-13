@@ -283,6 +283,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 - **Поставка**: mmdb скачивается в CI при сборке образа (`https://download.db-ip.com/free/dbip-city-lite-YYYY-MM.mmdb.gz`, кэш по месяцу), кладётся в `/app/geo/dbip-city-lite.mmdb`; workflow `geo-refresh.yml` (cron `0 6 2 * *`) пересобирает и деплоит ingest.
 - **Атрибуция**: «IP Geolocation by DB-IP» со ссылкой https://db-ip.com в футере дашборда — обязательное условие лицензии.
 - **Альтернативы**: MaxMind GeoLite2 — нужен аккаунт, license key и EULA с обязанностью обновлять базу; без гео — владелец выбрал «страна + город».
+- **Тестовая mmdb**: `backend/testdata/geo/test-city.mmdb` собирает `github.com/maxmind/mmdbwriter` 1.2.0 (официальный писатель формата MaxMind DB, Apache-2.0/MIT, сам читает через maxminddb-golang/v2) из `internal/testutil/geodb.go`; перегенерация — `go run ./testdata/gen geo`. В production-бинарник не попадает (импортируется только тестовой инфраструктурой). Альтернативы: копия `GeoIP2-City-Test.mmdb` из MaxMind-DB — нет IPv6 Яндекса и другой `database_type`; собственный писатель формата — лишний код без проверки.
 
 #### 15. Очереди — не используем
 - **Почему**: при 500 rps и записи батчами ClickHouse async insert сам буферизует вставки; ответ 200 отдаётся после подтверждения записи. Kafka/Redis добавили бы два stateful-компонента ради нагрузки, которой нет.
@@ -346,6 +347,7 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
 	github.com/oapi-codegen/nullable v1.1.0
 	github.com/oapi-codegen/runtime v1.7.0
@@ -525,3 +527,4 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 | 2026-10-13 | 1.0 | Initial stack selection по итогам discovery-интервью (Go + ClickHouse + Postgres + Next.js + Dokploy на Hetzner AX102-1) |
 | 2026-10-13 | 1.1 | T-002: добавлены `github.com/oapi-codegen/nullable` 1.1.0 (runtime сгенерированных моделей при `nullable-type: true`) и прямая зависимость `github.com/getkin/kin-openapi` 0.149.0 (тесты спек); web devDependency `@faker-js/faker` 10.6.0 (MSW-моки orval; альтернатива — `mock: false` в orval, но тогда теряются сгенерированные MSW-хендлеры из 22-test-strategy.md) |
 | 2026-10-13 | 1.2 | T-007: web-зависимости примитивов shadcn `cmdk` 1.1.1 (`command`) и `react-day-picker` 10.0.2 (`calendar`); `shadcn/tailwind.css` скопирован в `web/src/app/shadcn.css` вместо зависимости `shadcn`; `next-themes` не используется |
+| 2026-10-13 | 1.3 | T-012: `github.com/maxmind/mmdbwriter` 1.2.0 — генерация тестовой mmdb `backend/testdata/geo/test-city.mmdb` (только тестовая инфраструктура `internal/testutil`) |

@@ -33,11 +33,16 @@ type Event struct {
 	UserID string
 	// DurationMs — 0, если не передан (у session_end обязателен).
 	DurationMs int64
-	// Context — сырой context события; nil, если поля нет или оно null. Валидируется при слиянии с батчем.
-	Context json.RawMessage
+	// Context — заданные поля context события.
+	Context ContextFields
 	// EventTime заполняет CorrectEventTime.
 	EventTime time.Time
+	// Resolved заполняет Enricher.Enrich.
+	Resolved ResolvedContext
 }
+
+// ValidateBatchContext проверяет context батча.
+func ValidateBatchContext(*Batch) (ContextFields, []ingestapi.Rejection) { return nil, nil }
 
 // rawEvent — поля Event из ingest.yaml; неизвестные поля игнорируются, как и на уровне батча (OQ-030).
 type rawEvent struct {
@@ -82,9 +87,6 @@ func ValidateEvent(index int, raw json.RawMessage) (*Event, *ingestapi.Rejection
 	}
 	if ev.UserID, rej = userIDField(index, insertID, r.UserID); rej != nil {
 		return nil, rej
-	}
-	if !isNull(r.Context) {
-		ev.Context = r.Context
 	}
 	return ev, nil
 }

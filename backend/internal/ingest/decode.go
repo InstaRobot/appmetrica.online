@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 )
@@ -29,6 +30,8 @@ type Batch struct {
 	Events     []json.RawMessage
 	ReceivedAt time.Time
 	Key        KeyInfo
+	// ClientIP — адрес клиента.
+	ClientIP netip.Addr
 }
 
 // rawBatch — верхний уровень EventBatch; неизвестные поля игнорируются.

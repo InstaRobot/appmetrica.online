@@ -61,7 +61,7 @@ func TestValidateEvent(t *testing.T) {
 		require.True(t, mustTime(t, "2026-10-13T09:11:58.004Z").Equal(ev.Timestamp))
 		require.Equal(t, "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90", ev.UserID)
 		require.Zero(t, ev.DurationMs)
-		require.JSONEq(t, `{"app_version":"3.5.0"}`, string(ev.Context))
+		require.Equal(t, ingest.ContextFields{"app_version": "3.5.0"}, ev.Context)
 	})
 
 	t.Run("session_end_valid", func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestValidateEvent(t *testing.T) {
 		require.Equal(t, ingestapi.EventNameSessionEnd, ev.Name)
 		require.Equal(t, int64(183986), ev.DurationMs)
 		require.Empty(t, ev.UserID)
-		require.Nil(t, ev.Context)
+		require.Empty(t, ev.Context)
 	})
 
 	t.Run("duration_bounds_accepted", func(t *testing.T) {
@@ -99,7 +99,7 @@ func TestValidateEvent(t *testing.T) {
 		ev, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"user_id": nil, "duration_ms": nil, "context": nil}))
 		require.Nil(t, rej)
 		require.Empty(t, ev.UserID)
-		require.Nil(t, ev.Context)
+		require.Empty(t, ev.Context)
 	})
 
 	t.Run("unknown_fields_ignored", func(t *testing.T) {
@@ -310,4 +310,164 @@ func TestEventTimestampKeepsClientOffset(t *testing.T) {
 	require.Nil(t, rej)
 	_, offset := ev.Timestamp.Zone()
 	require.Equal(t, 3*int(time.Hour/time.Second), offset)
+}
+
+// batchWithContext — батч для ValidateBatchContext: context (nil — поля нет) и сырые события.
+func batchWithContext(t *testing.T, ctx any, events ...json.RawMessage) *ingest.Batch {
+	t.Helper()
+	b := &ingest.Batch{Events: events}
+	if ctx != nil {
+		raw, err := json.Marshal(ctx)
+		require.NoError(t, err)
+		b.Context = raw
+	}
+	return b
+}
+
+func TestValidateContext(t *testing.T) {
+	t.Run("batch_platform_invalid", func(t *testing.T) {
+		b := batchWithContext(t, map[string]any{"platform": "tvos", "app_version": "3.4.0"},
+			eventJSON(t, nil), eventJSON(t, map[string]any{"insert_id": "not-a-uuid"}))
+		fields, rejected := ingest.ValidateBatchContext(b)
+		require.Nil(t, fields)
+		require.Len(t, rejected, 2)
+		for i, rej := range rejected {
+			require.Equal(t, i, rej.Index)
+			require.Equal(t, ingestapi.RejectionCodeInvalidField, rej.Code)
+			require.Equal(t, "context.platform", rej.Field)
+			require.False(t, rej.Retryable)
+			require.NotContains(t, rej.Message, "tvos")
+		}
+		require.Equal(t, validInsertID, rejected[0].InsertId.MustGet())
+		require.True(t, rejected[1].InsertId.IsNull(), "insert_id не UUID — null")
+	})
+
+	t.Run("batch_context_valid", func(t *testing.T) {
+		b := batchWithContext(t, map[string]any{
+			"platform": "ios", "os_name": "iOS", "os_version": "26.0.1", "app_version": "3.4.0", "app_build": "341",
+			"device_model": "iPhone17,3", "device_type": "phone", "locale": "ru-RU", "environment": "development",
+			"ip": "none", "unknown_field": 42, "os_name_typo": "x",
+		}, eventJSON(t, nil))
+		fields, rejected := ingest.ValidateBatchContext(b)
+		require.Empty(t, rejected)
+		require.Equal(t, ingest.ContextFields{
+			"platform": "ios", "os_name": "iOS", "os_version": "26.0.1", "app_version": "3.4.0", "app_build": "341",
+			"device_model": "iPhone17,3", "device_type": "phone", "locale": "ru-RU", "environment": "development",
+			"ip": "none",
+		}, fields, "неизвестные поля игнорируются (OQ-030)")
+	})
+
+	t.Run("batch_context_absent_or_null", func(t *testing.T) {
+		for _, b := range []*ingest.Batch{
+			batchWithContext(t, nil, eventJSON(t, nil)),
+			{Context: json.RawMessage(`null`), Events: []json.RawMessage{eventJSON(t, nil)}},
+			batchWithContext(t, map[string]any{}, eventJSON(t, nil)),
+		} {
+			fields, rejected := ingest.ValidateBatchContext(b)
+			require.Empty(t, rejected)
+			require.Empty(t, fields)
+		}
+	})
+
+	t.Run("batch_null_fields_are_absent", func(t *testing.T) {
+		b := batchWithContext(t, map[string]any{"platform": nil, "app_version": "3.4.0"}, eventJSON(t, nil))
+		fields, rejected := ingest.ValidateBatchContext(b)
+		require.Empty(t, rejected)
+		require.Equal(t, ingest.ContextFields{"app_version": "3.4.0"}, fields)
+	})
+
+	t.Run("batch_context_not_object", func(t *testing.T) {
+		for _, raw := range []string{`[1]`, `"ios"`, `42`, `true`} {
+			b := &ingest.Batch{Context: json.RawMessage(raw), Events: []json.RawMessage{eventJSON(t, nil)}}
+			_, rejected := ingest.ValidateBatchContext(b)
+			require.Len(t, rejected, 1, raw)
+			require.Equal(t, "context", rejected[0].Field, raw)
+			require.Equal(t, ingestapi.RejectionCodeInvalidField, rejected[0].Code)
+		}
+	})
+
+	t.Run("batch_rejects_every_event", func(t *testing.T) {
+		events := make([]json.RawMessage, 5)
+		for i := range events {
+			events[i] = eventJSON(t, nil)
+		}
+		_, rejected := ingest.ValidateBatchContext(batchWithContext(t, map[string]any{"device_type": "fridge"}, events...))
+		require.Len(t, rejected, 5)
+		require.Equal(t, "context.device_type", rejected[4].Field)
+		require.Equal(t, 4, rejected[4].Index)
+	})
+
+	t.Run("event_platform_invalid", func(t *testing.T) {
+		_, rej := ingest.ValidateEvent(2, eventJSON(t, map[string]any{"context": map[string]any{"platform": "tvos"}}))
+		require.NotNil(t, rej)
+		require.Equal(t, ingestapi.RejectionCodeInvalidField, rej.Code)
+		require.Equal(t, "events[2].context.platform", rej.Field)
+		require.Equal(t, validInsertID, rej.InsertId.MustGet())
+	})
+
+	t.Run("event_context_not_object", func(t *testing.T) {
+		_, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"context": "ios"}))
+		require.NotNil(t, rej)
+		require.Equal(t, "events[0].context", rej.Field)
+	})
+
+	t.Run("event_context_checked_after_user_id", func(t *testing.T) {
+		_, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{
+			"user_id": "ivan@example.com", "context": map[string]any{"platform": "tvos"},
+		}))
+		require.NotNil(t, rej)
+		require.Equal(t, ingestapi.RejectionCodeUserIdLooksLikePii, rej.Code)
+	})
+
+	t.Run("field_rules", func(t *testing.T) {
+		long := func(n int) string { return strings.Repeat("я", n) }
+		tests := []struct {
+			name  string
+			field string
+			value any
+			ok    bool
+		}{
+			{"platform_each_value", "platform", "android", true},
+			{"platform_case_sensitive", "platform", "iOS", false},
+			{"platform_empty", "platform", "", false},
+			{"platform_not_string", "platform", 1, false},
+			{"device_type_valid", "device_type", "tablet", true},
+			{"device_type_invalid", "device_type", "fridge", false},
+			{"environment_valid", "environment", "production", true},
+			{"environment_invalid", "environment", "staging", false},
+			{"os_name_32_chars", "os_name", long(32), true},
+			{"os_name_33_chars", "os_name", long(33), false},
+			{"os_version_33_chars", "os_version", long(33), false},
+			{"app_version_64_chars", "app_version", long(64), true},
+			{"app_version_65_chars", "app_version", long(65), false},
+			{"app_build_65_chars", "app_build", long(65), false},
+			{"device_model_65_chars", "device_model", long(65), false},
+			{"locale_35_chars", "locale", long(35), true},
+			{"locale_36_chars", "locale", long(36), false},
+			{"ip_45_chars", "ip", long(45), true},
+			{"ip_46_chars", "ip", long(46), false},
+			{"ip_not_string", "ip", []int{1, 2}, false},
+			{"empty_string_allowed", "app_version", "", true},
+			{"app_version_number", "app_version", 3.4, false},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				_, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"context": map[string]any{tc.field: tc.value}}))
+				if tc.ok {
+					require.Nil(t, rej)
+					return
+				}
+				require.NotNil(t, rej)
+				require.Equal(t, ingestapi.RejectionCodeInvalidField, rej.Code)
+				require.Equal(t, "events[0].context."+tc.field, rej.Field)
+			})
+		}
+	})
+
+	t.Run("all_platforms_accepted", func(t *testing.T) {
+		for _, p := range []string{"ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"} {
+			_, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"context": map[string]any{"platform": p}}))
+			require.Nil(t, rej, p)
+		}
+	})
 }

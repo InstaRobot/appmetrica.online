@@ -1,6 +1,6 @@
 // Package testutil — тестовая инфраструктура backend: контейнеры ClickHouse и Postgres на пакет,
 // изолированные базы на тест, NDJSON-фикстуры событий и golden-файлы ответов.
-// Импортируется только из *_test.go.
+// Импортируется только из *_test.go и генератора testdata/gen.
 package testutil
 
 import (

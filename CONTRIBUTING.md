@@ -69,7 +69,7 @@ cd backend && go test -race -count=1 -tags=integration ./... && cd ..
 - **Не принимать** ключ `pk_`/`sk_` в query string. Только заголовок `X-App-Key` / поле тела `app_key` (ingest) и `Authorization: Bearer` (Read API).
 - **Не менять** определения метрик (active, new, sessions, retention day-N classic, active_now) без изменения `05-data-model.md` и golden-фикстур в `backend/testdata/fixtures/`.
 - **Не использовать** anti-pattern стек: Jest, ESLint, axios, moment.js, lodash целиком, styled-components, redux-saga, class-компоненты React, `node:latest`.
-- **Не коммитить** `.env`, дампы БД, `*.mmdb`, сгенерированные отчёты покрытия.
+- **Не коммитить** `.env`, дампы БД, `*.mmdb` (исключение — синтетическая `backend/testdata/geo/test-city.mmdb` из `go run ./testdata/gen geo`), сгенерированные отчёты покрытия.
 
 ## 6. Стиль кода
 
