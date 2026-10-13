@@ -14,10 +14,10 @@ func TestPerMinute(t *testing.T) {
 	first := time.Date(2026, 9, 10, 11, 30, 0, 0, time.UTC)
 
 	got := perMinute(now, kolkata, map[int64]uint64{
-		first.Unix():                         2,
-		first.Add(29 * time.Minute).Unix():   5,
-		first.Add(-time.Minute).Unix():       7, // до окна
-		first.Add(30 * time.Minute).Unix():   9, // текущая минута
+		first.Unix():                       2,
+		first.Add(29 * time.Minute).Unix(): 5,
+		first.Add(-time.Minute).Unix():     7, // до окна
+		first.Add(30 * time.Minute).Unix(): 9, // текущая минута
 	})
 	require.Len(t, got, RealtimeMinutes)
 	for i, m := range got {

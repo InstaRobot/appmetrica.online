@@ -127,12 +127,12 @@ func TestRealtime_PerMinuteAlways30(t *testing.T) {
 	t.Run("buckets", func(t *testing.T) {
 		dup := session(t, 5, "", ago(15*time.Minute-10*time.Second)) // 11:45:10
 		env := startWith(t, concat(
-			[]chstore.EventRow{session(t, 1, "", ago(30*time.Minute))},                                  // 11:30:00 — первая минута
-			[]chstore.EventRow{session(t, 2, "", realtimeNow.Add(-30*time.Minute-time.Millisecond).Format(time.RFC3339Nano))}, // до окна
-			[]chstore.EventRow{session(t, 3, "", realtimeNow.Add(10*time.Second).Format(time.RFC3339Nano))},                   // текущая минута
-			visit(t, 4, "", ago(15*time.Minute-40*time.Second), 10*time.Second),                         // 11:45:40, session_end не старт
-			[]chstore.EventRow{dup, received(dup, realtimeNow)},                                         // ретрай
-			[]chstore.EventRow{session(t, 6, "", ago(time.Minute-59*time.Second))},                       // 11:59:59.000
+			[]chstore.EventRow{session(t, 1, "", ago(30*time.Minute))},                  // 11:30:00 — первая минута
+			[]chstore.EventRow{session(t, 2, "", ago(30*time.Minute+time.Millisecond))}, // до окна
+			[]chstore.EventRow{session(t, 3, "", ago(-10*time.Second))},                 // текущая минута
+			visit(t, 4, "", ago(15*time.Minute-40*time.Second), 10*time.Second),         // 11:45:40, session_end не старт
+			[]chstore.EventRow{dup, received(dup, realtimeNow)},                         // ретрай
+			[]chstore.EventRow{session(t, 6, "", ago(time.Minute-59*time.Second))},      // 11:59:59.000
 		))
 
 		got := realtimeAt(t, env, now, realtimeParams(t, EnvProduction))
