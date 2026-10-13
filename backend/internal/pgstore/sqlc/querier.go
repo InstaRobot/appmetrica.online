@@ -53,6 +53,7 @@ type Querier interface {
 	ListDeletionRequests(ctx context.Context, appID *uuid.UUID) ([]DeletionRequest, error)
 	ListLatestJobRuns(ctx context.Context) ([]JobRun, error)
 	ListPasskeyCredentials(ctx context.Context, ownerID uuid.UUID) ([]ListPasskeyCredentialsRow, error)
+	// Колонки ListPasskeys, CreatePasskey и RenamePasskey совпадают: строки приводятся к ListPasskeysRow.
 	ListPasskeys(ctx context.Context) ([]ListPasskeysRow, error)
 	ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]WriteKey, error)
 	LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow, error)

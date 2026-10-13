@@ -47,9 +47,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	w := &gen.ServerInterfaceWrapper{Handler: si, ErrorHandlerFunc: invalidRequest}
 	csrf := auth.CSRF(s.publicBaseURL, writeError)
 	limit := s.auth.LimitAttempts(writeError)
+	session := s.auth.RequireSession(writeError)
 
 	public := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(h)) }
 	attempt := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(limit(h))) }
+	owner := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(session(h))) }
 
 	public("GET /admin/v1/auth/state", w.GetAuthState)
 	attempt("POST /admin/v1/auth/login/begin", w.BeginLogin)
@@ -57,6 +59,12 @@ func (s *Server) Register(mux *http.ServeMux) {
 	attempt("POST /admin/v1/auth/setup/{token}/begin", w.BeginSetup)
 	attempt("POST /admin/v1/auth/setup/{token}/finish", w.FinishSetup)
 	public("POST /admin/v1/auth/logout", w.Logout)
+
+	owner("GET /admin/v1/passkeys", w.ListPasskeys)
+	owner("POST /admin/v1/passkeys/register/begin", w.BeginPasskeyRegistration)
+	owner("POST /admin/v1/passkeys/register/finish", w.FinishPasskeyRegistration)
+	owner("PATCH /admin/v1/passkeys/{passkey_id}", w.RenamePasskey)
+	owner("DELETE /admin/v1/passkeys/{passkey_id}", w.DeletePasskey)
 }
 
 // writeError — auth.ErrorWriter поверх конверта ошибки httpx.

@@ -1,6 +1,7 @@
+-- Колонки ListPasskeys, CreatePasskey и RenamePasskey совпадают: строки приводятся к ListPasskeysRow.
 -- name: ListPasskeys :many
 SELECT id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at
-FROM passkeys ORDER BY created_at;
+FROM passkeys ORDER BY created_at, id;
 
 -- name: ListPasskeyCredentials :many
 SELECT id, credential_id, public_key, attestation_type, aaguid, sign_count, transports, backup_eligible, backup_state
@@ -19,7 +20,7 @@ INSERT INTO passkeys (owner_id, credential_id, public_key, attestation_type, aag
                       backup_eligible, backup_state, name)
 VALUES (sqlc.arg(owner_id), sqlc.arg(credential_id), sqlc.arg(public_key), sqlc.arg(attestation_type), sqlc.arg(aaguid),
         sqlc.arg(sign_count), sqlc.arg(transports), sqlc.arg(backup_eligible), sqlc.arg(backup_state), sqlc.arg(name))
-RETURNING id, name, created_at;
+RETURNING id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at;
 
 -- Счётчик только растёт (0 → 0 — synced passkey без счётчика): параллельный вход со старым значением
 -- не откатывает sign_count и получает 0 строк.
@@ -30,7 +31,8 @@ WHERE id = sqlc.arg(id)
   AND (sign_count < sqlc.arg(sign_count) OR (sign_count = 0 AND sqlc.arg(sign_count) = 0));
 
 -- name: RenamePasskey :one
-UPDATE passkeys SET name = sqlc.arg(name) WHERE id = sqlc.arg(id) RETURNING id, name;
+UPDATE passkeys SET name = sqlc.arg(name) WHERE id = sqlc.arg(id)
+RETURNING id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at;
 
 -- name: DeletePasskey :execrows
 DELETE FROM passkeys WHERE id = sqlc.arg(id);

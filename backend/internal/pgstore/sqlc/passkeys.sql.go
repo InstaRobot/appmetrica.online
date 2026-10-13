@@ -28,7 +28,7 @@ INSERT INTO passkeys (owner_id, credential_id, public_key, attestation_type, aag
                       backup_eligible, backup_state, name)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10)
-RETURNING id, name, created_at
+RETURNING id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at
 `
 
 type CreatePasskeyParams struct {
@@ -45,9 +45,14 @@ type CreatePasskeyParams struct {
 }
 
 type CreatePasskeyRow struct {
-	ID        uuid.UUID
-	Name      string
-	CreatedAt time.Time
+	ID             uuid.UUID
+	Name           string
+	Aaguid         uuid.UUID
+	Transports     []string
+	BackupEligible bool
+	BackupState    bool
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
 }
 
 func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (CreatePasskeyRow, error) {
@@ -64,7 +69,16 @@ func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (C
 		arg.Name,
 	)
 	var i CreatePasskeyRow
-	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Aaguid,
+		&i.Transports,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
 	return i, err
 }
 
@@ -156,7 +170,7 @@ func (q *Queries) ListPasskeyCredentials(ctx context.Context, ownerID uuid.UUID)
 
 const listPasskeys = `-- name: ListPasskeys :many
 SELECT id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at
-FROM passkeys ORDER BY created_at
+FROM passkeys ORDER BY created_at, id
 `
 
 type ListPasskeysRow struct {
@@ -170,6 +184,7 @@ type ListPasskeysRow struct {
 	LastUsedAt     *time.Time
 }
 
+// Колонки ListPasskeys, CreatePasskey и RenamePasskey совпадают: строки приводятся к ListPasskeysRow.
 func (q *Queries) ListPasskeys(ctx context.Context) ([]ListPasskeysRow, error) {
 	rows, err := q.db.Query(ctx, listPasskeys)
 	if err != nil {
@@ -200,7 +215,8 @@ func (q *Queries) ListPasskeys(ctx context.Context) ([]ListPasskeysRow, error) {
 }
 
 const renamePasskey = `-- name: RenamePasskey :one
-UPDATE passkeys SET name = $1 WHERE id = $2 RETURNING id, name
+UPDATE passkeys SET name = $1 WHERE id = $2
+RETURNING id, name, aaguid, transports, backup_eligible, backup_state, created_at, last_used_at
 `
 
 type RenamePasskeyParams struct {
@@ -209,14 +225,29 @@ type RenamePasskeyParams struct {
 }
 
 type RenamePasskeyRow struct {
-	ID   uuid.UUID
-	Name string
+	ID             uuid.UUID
+	Name           string
+	Aaguid         uuid.UUID
+	Transports     []string
+	BackupEligible bool
+	BackupState    bool
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
 }
 
 func (q *Queries) RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (RenamePasskeyRow, error) {
 	row := q.db.QueryRow(ctx, renamePasskey, arg.Name, arg.ID)
 	var i RenamePasskeyRow
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Aaguid,
+		&i.Transports,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
 	return i, err
 }
 

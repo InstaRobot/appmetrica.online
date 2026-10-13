@@ -216,10 +216,11 @@ func (s *Service) FinishSetup(ctx context.Context, in FinishSetupInput) (Session
 			return verificationFailed("credential already registered")
 		}
 
-		passkeyID, err = insertPasskey(ctx, q, user.id, cred, name)
+		pk, err := insertPasskey(ctx, q, user.id, cred, name)
 		if err != nil {
 			return err
 		}
+		passkeyID = pk.ID
 		if _, err := q.MarkSetupTokenUsed(ctx, sqlc.MarkSetupTokenUsedParams{Now: &now, TokenHash: hash}); err != nil {
 			return fmt.Errorf("auth: mark setup token used: %w", err)
 		}
@@ -284,7 +285,7 @@ func saveCeremony(ctx context.Context, q *sqlc.Queries, kind sqlc.CeremonyKind, 
 	return Ceremony{ID: id, Options: options}, nil
 }
 
-func insertPasskey(ctx context.Context, q *sqlc.Queries, ownerID uuid.UUID, cred *webauthn.Credential, name string) (uuid.UUID, error) {
+func insertPasskey(ctx context.Context, q *sqlc.Queries, ownerID uuid.UUID, cred *webauthn.Credential, name string) (Passkey, error) {
 	aaguid, err := uuid.FromBytes(cred.Authenticator.AAGUID)
 	if err != nil {
 		aaguid = uuid.Nil
@@ -312,11 +313,11 @@ func insertPasskey(ctx context.Context, q *sqlc.Queries, ownerID uuid.UUID, cred
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.As(err, &pgErr) && pgErr.ConstraintName == "passkeys_credential_id_uq":
-		return uuid.Nil, verificationFailed("credential already registered")
+		return Passkey{}, verificationFailed("credential already registered")
 	case err != nil:
-		return uuid.Nil, fmt.Errorf("auth: create passkey: %w", err)
+		return Passkey{}, fmt.Errorf("auth: create passkey: %w", err)
 	}
-	return row.ID, nil
+	return passkeyFromRow(sqlc.ListPasskeysRow(row)), nil
 }
 
 // validatePasskeyName: 1..64 символа после обрезки пробелов по краям.
