@@ -37,3 +37,6 @@ web/.pnpm-store/
 
 # Скиллы Claude Code — симлинки на локальную библиотеку, в репо не храним
 .claude/skills/
+
+# Тестовые профили покрытия для scripts/coverage-gate.sh
+!scripts/testdata/*.out

@@ -1,0 +1,17 @@
+mode: atomic
+appmetrica.online/backend/internal/ingest/handler.go:41.66,48.16 40 12
+appmetrica.online/backend/internal/ingest/handler.go:48.16,51.4 6 0
+appmetrica.online/backend/internal/ingest/validate.go:17.52,30.2 39 3
+appmetrica.online/backend/internal/ingest/validate.go:30.2,35.3 15 0
+appmetrica.online/backend/internal/ingest/handler.go:41.66,48.16 40 0
+appmetrica.online/backend/internal/reports/audience.go:22.70,40.2 60 5
+appmetrica.online/backend/internal/reports/audience.go:40.2,44.3 15 0
+appmetrica.online/backend/internal/reports/retention.go:18.64,30.2 25 2
+appmetrica.online/backend/internal/auth/session.go:12.58,30.2 85 7
+appmetrica.online/backend/internal/auth/session.go:30.2,33.3 15 0
+appmetrica.online/backend/internal/identity/merge.go:9.40,20.2 85 1
+appmetrica.online/backend/internal/identity/merge.go:20.2,24.3 15 0
+appmetrica.online/backend/internal/deletion/executor.go:15.61,37.2 85 4
+appmetrica.online/backend/internal/deletion/executor.go:37.2,41.3 15 0
+appmetrica.online/backend/internal/httpx/cors.go:10.40,20.2 1 1
+appmetrica.online/backend/internal/httpx/cors.go:20.2,30.3 99 0
