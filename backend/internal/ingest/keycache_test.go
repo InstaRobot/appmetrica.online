@@ -85,9 +85,9 @@ func (s *fakeKeyStore) touchCalls() []sqlc.TouchWriteKeysLastUsedParams {
 // fakeProcessor стоит на месте записи в ClickHouse: батч, не дошедший до него, не пишет ни одной строки.
 type keyHarness struct {
 	harness
-	store   *fakeKeyStore
-	cache   *ingest.KeyCache
-	clock   *clock.Fixed
+	store *fakeKeyStore
+	cache *ingest.KeyCache
+	clock *clock.Fixed
 }
 
 func newKeyHarness(t *testing.T, cfg ingest.KeyCacheConfig) *keyHarness {

@@ -57,6 +57,16 @@ func TestImportRules(t *testing.T) {
 			},
 		},
 		{
+			name:  "allowed package covers its subpackages",
+			graph: archtest.Graph{p + "internal/ingest": {p + "internal/pgstore/sqlc"}},
+			want:  nil,
+		},
+		{
+			name:  "subpackage of a forbidden package is forbidden",
+			graph: archtest.Graph{p + "internal/reports": {p + "internal/pgstore/sqlc"}},
+			want:  []string{"internal/reports → internal/pgstore/sqlc"},
+		},
+		{
 			name:  "unknown internal package needs a rule",
 			graph: archtest.Graph{p + "internal/billing": {"fmt"}},
 			want:  []string{"internal/billing: нет правила в archtest (07-project-structure.md §5)"},

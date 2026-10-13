@@ -21,7 +21,8 @@ type Graph map[string][]string
 const free = "*"
 
 // rules — какие пакеты internal/* может импортировать пакет (пути относительно модуля).
-// Собственные подпакеты (pgstore → pgstore/sqlc) разрешены всегда; импорты вне internal/ не проверяются.
+// Собственные подпакеты разрешены всегда; разрешение пакета распространяется на его подпакеты
+// (internal/pgstore разрешает и internal/pgstore/sqlc); импорты вне internal/ не проверяются.
 var rules = map[string][]string{
 	"cmd/appmetrica": {free},
 	"internal/api": {
@@ -81,7 +82,7 @@ func Check(g Graph) []string {
 			if !ok || !strings.HasPrefix(dep, "internal/") || strings.HasPrefix(dep, rel+"/") {
 				continue
 			}
-			if !slices.Contains(allowed, dep) {
+			if !slices.ContainsFunc(allowed, func(a string) bool { return dep == a || strings.HasPrefix(dep, a+"/") }) {
 				out = append(out, rel+" → "+dep)
 			}
 		}
