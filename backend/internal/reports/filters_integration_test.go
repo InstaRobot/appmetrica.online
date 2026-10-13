@@ -32,10 +32,16 @@ func TestFilters_OrWithinAndAcross_ClickHouse(t *testing.T) {
 		want    []string
 	}{
 		{"none", Filters{}, []string{installKey(1), installKey(2), installKey(3), installKey(4)}},
-		{"platform_and_versions", Filters{Platform: []string{"ios"}, AppVersion: []string{"2.4.0", "2.5.0"}},
-			[]string{installKey(1), installKey(2)}},
-		{"platforms_and_country", Filters{Platform: []string{"ios", "android"}, Country: []string{"RU"}},
-			[]string{installKey(1), installKey(3)}},
+		{
+			"platform_and_versions",
+			Filters{Platform: []string{"ios"}, AppVersion: []string{"2.4.0", "2.5.0"}},
+			[]string{installKey(1), installKey(2)},
+		},
+		{
+			"platforms_and_country",
+			Filters{Platform: []string{"ios", "android"}, Country: []string{"RU"}},
+			[]string{installKey(1), installKey(3)},
+		},
 		{"os_name", Filters{OSName: []string{"Android"}}, []string{installKey(3)}},
 		{"empty_value", Filters{AppVersion: []string{""}}, []string{installKey(4)}},
 		{"no_match", Filters{Country: []string{"DE"}}, nil},
