@@ -9,3 +9,7 @@ generate:
   embedded-spec: true
 output-options:
   nullable-type: true
+compatibility:
+  # Константы enum всегда с префиксом типа: без него значение `platform` из BreakdownDimension
+  # становится константой `Platform` и конфликтует со схемой Platform.
+  always-prefix-enum-values: true

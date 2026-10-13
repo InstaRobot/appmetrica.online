@@ -138,7 +138,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 
 ### 5. Backend pattern — Go `net/http` + oapi-codegen strict server
 
-**Выбрано**: stdlib `net/http` ServeMux (паттерны `GET /v1/apps/{app_id}`), код серверов генерируется oapi-codegen 2.8.0 (`strict-server` + `std-http-server`) из `contracts/openapi/ingest.yaml` и `contracts/openapi/api.yaml`; runtime 1.7.0; валидация запросов по спеке — `nethttp-middleware` 1.2.0 (kin-openapi 0.149.0). Middleware — цепочка `func(http.Handler) http.Handler`; из chi подключается только пакет `github.com/go-chi/chi/v5/middleware` 5.4.0 (RequestID, Recoverer).
+**Выбрано**: stdlib `net/http` ServeMux (паттерны `GET /v1/apps/{app_id}`), код серверов генерируется oapi-codegen 2.8.0 (`strict-server` + `std-http-server`) из `contracts/openapi/ingest.yaml` и `contracts/openapi/api.yaml`; runtime 1.7.0; nullable 1.1.0 (`nullable.Nullable[T]` для `nullable: true` в сгенерированных моделях); валидация запросов по спеке — `nethttp-middleware` 1.2.0 (kin-openapi 0.149.0). Middleware — цепочка `func(http.Handler) http.Handler`; из chi подключается только пакет `github.com/go-chi/chi/v5/middleware` 5.4.0 (RequestID, Recoverer).
 
 **Rationale**:
 - Контракт-первым: одна спека → Go-сервер, TS-клиент (orval), доки (Fumadocs). Расхождение кода и доков исключено конструктивно.
@@ -152,6 +152,10 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 - **echo v5**: собственный `echo.Context` ломает совместимость с net/http-экосистемой; ветка v4 получает фиксы только до 2026-12-31.
 - **ogen 1.24.0**: быстрее, OTel из коробки, но собственный роутер и громоздкие обёртки `Opt*/Nil*`; поддержка OAS 3.1 частичная.
 - **OpenAPI 3.1**: в oapi-codegen 2.8 поддержка «initial»; 3.0.3 одинаково понимают oapi-codegen, orval и fumadocs-openapi (последний сам поднимает 3.0 → 3.1 для рендера).
+
+**`github.com/oapi-codegen/nullable` 1.1.0** (добавлено в T-002): runtime-зависимость сгенерированного кода — конфиги `oapi-*.cfg.yaml` включают `output-options.nullable-type: true`, и поля `nullable: true` генерируются как `nullable.Nullable[T]` (различает «поле отсутствует» и `null`, нужно для PATCH `updateApp`/`updateSettings`). Версия — та, что выбирает MVS вместе с oapi-codegen 2.8.0. Альтернатива — выключить `nullable-type` и получать `*T`, но тогда PATCH не отличает `null` от пропущенного поля.
+
+**`github.com/getkin/kin-openapi` 0.149.0** — прямая зависимость с T-002: структурная валидация спек (`openapi3.Loader` + `doc.Validate`) и проверка ответов в контрактных тестах (`openapi3filter`).
 
 **Требование безопасности**: oapi-codegen не ниже 2.8.0 — в 2.7.x были advisories о code injection (GHSA).
 
@@ -301,7 +305,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 
 #### 20. Тестирование
 - Go: `testing` + testify 1.12.1 (`require` для фатальных проверок) + testcontainers-go 0.44.0 с модулями `clickhouse` и `postgres` (образы те же, что в проде: 26.8.25.14 и 18.6). Golden-фикстуры отчётов в `backend/testdata/fixtures`.
-- Web: Vitest 5.0.4 + @testing-library/react 16.3.3 + @testing-library/user-event 14.6.8 + @testing-library/jest-dom 7.0.1 (матчеры DOM, совместимы с Vitest) + jsdom 30.1.2; MSW 3.0.3.
+- Web: Vitest 5.0.4 + @testing-library/react 16.3.3 + @testing-library/user-event 14.6.8 + @testing-library/jest-dom 7.0.1 (матчеры DOM, совместимы с Vitest) + jsdom 30.1.2; MSW 3.0.3; @faker-js/faker 10.6.0 (devDependency: на нём построены MSW-моки orval `*.faker.ts`; в тестах — `faker.seed(...)`, см. 22-test-strategy.md §6).
 - E2E: Playwright 1.64.0 + @axe-core/playwright 4.13.0; вход через виртуальный WebAuthn-аутентификатор.
 - Подход — TDD (решение владельца), детали в [22-test-strategy.md](./22-test-strategy.md).
 
@@ -335,11 +339,13 @@ toolchain go1.27.2
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.49.0
+	github.com/getkin/kin-openapi v0.149.0
 	github.com/go-chi/chi/v5 v5.4.0
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
+	github.com/oapi-codegen/nullable v1.1.0
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/oschwald/geoip2-golang/v2 v2.5.0
 	github.com/oschwald/maxminddb-golang/v2 v2.8.0
@@ -397,6 +403,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.8",
+    "@faker-js/faker": "10.6.0",
     "@types/mdx": "2.0.14",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
@@ -512,3 +519,4 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial stack selection по итогам discovery-интервью (Go + ClickHouse + Postgres + Next.js + Dokploy на Hetzner AX102-1) |
+| 2026-10-13 | 1.1 | T-002: добавлены `github.com/oapi-codegen/nullable` 1.1.0 (runtime сгенерированных моделей при `nullable-type: true`) и прямая зависимость `github.com/getkin/kin-openapi` 0.149.0 (тесты спек); web devDependency `@faker-js/faker` 10.6.0 (MSW-моки orval; альтернатива — `mock: false` в orval, но тогда теряются сгенерированные MSW-хендлеры из 22-test-strategy.md) |

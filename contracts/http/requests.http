@@ -1,0 +1,151 @@
+# Ручная проверка публичных операций (VS Code REST Client / JetBrains HTTP Client).
+# Контракты — contracts/openapi/{ingest,api}.yaml. Admin API (/admin/v1, x-internal) вызывается только дашбордом.
+# Каждый запрос размечен `# @name <operationId>`: backend/internal/api/spec_test.go проверяет,
+# что для каждой публичной операции есть запрос.
+#
+# Локально: `make dev`, write-ключ — DEV_WRITE_KEY из .env (`make seed`), sk_-ключ создаётся
+# на экране «Настройки → API-ключи». Для production замените @ingest / @api.
+
+@ingest = http://localhost:8081
+@api = http://localhost:8080
+@writeKey = pk_devseedkey0000000000000000000000
+@apiKey = sk_replace_with_your_read_key
+@appId = 00000000-0000-0000-0000-000000000000
+@from = 2026-10-01
+@to = 2026-10-13
+
+### Ingest: CORS preflight
+# @name preflightEvents
+OPTIONS {{ingest}}/v1/events
+Origin: https://site.ru
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type, x-app-key
+
+### Ingest: батч session_start + session_end
+# @name ingestEvents
+POST {{ingest}}/v1/events
+Content-Type: application/json
+X-App-Key: {{writeKey}}
+
+{
+  "sent_at": "{{$datetime iso8601}}",
+  "context": {
+    "platform": "ios",
+    "os_name": "iOS",
+    "os_version": "26.1",
+    "app_version": "1.0.0",
+    "device_model": "iPhone17,1",
+    "device_type": "phone",
+    "locale": "ru-RU",
+    "environment": "development"
+  },
+  "events": [
+    {
+      "insert_id": "{{$guid}}",
+      "name": "session_start",
+      "timestamp": "{{$datetime iso8601}}",
+      "install_id": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
+      "session_id": "0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f"
+    },
+    {
+      "insert_id": "{{$guid}}",
+      "name": "session_end",
+      "timestamp": "{{$datetime iso8601}}",
+      "install_id": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
+      "session_id": "0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f",
+      "duration_ms": 42000
+    }
+  ]
+}
+
+### Ingest: liveness
+# @name ingestHealth
+GET {{ingest}}/health
+
+### Ingest: readiness
+# @name ingestReady
+GET {{ingest}}/ready
+
+### API: liveness
+# @name apiHealth
+GET {{api}}/health
+
+### API: readiness
+# @name apiReady
+GET {{api}}/ready
+
+### Список приложений
+# @name listApps
+GET {{api}}/v1/apps?include_archived=false
+Authorization: Bearer {{apiKey}}
+
+### Приложение
+# @name getApp
+GET {{api}}/v1/apps/{{appId}}
+Authorization: Bearer {{apiKey}}
+
+### Портфель за день
+# @name getPortfolio
+GET {{api}}/v1/portfolio?date={{to}}&environment=production&unit=persons
+Authorization: Bearer {{apiKey}}
+
+### Аудитория: сводка
+# @name getAudienceSummary
+GET {{api}}/v1/apps/{{appId}}/audience/summary?from={{from}}&to={{to}}&compare=previous_period&unit=persons
+Authorization: Bearer {{apiKey}}
+
+### Аудитория: временной ряд
+# @name getAudienceTimeseries
+GET {{api}}/v1/apps/{{appId}}/audience/timeseries?from={{from}}&to={{to}}&granularity=day&metric=active
+Authorization: Bearer {{apiKey}}
+
+### Аудитория: rolling active (DAU/WAU/MAU)
+# @name getRollingActive
+GET {{api}}/v1/apps/{{appId}}/audience/rolling-active?from={{from}}&to={{to}}
+Authorization: Bearer {{apiKey}}
+
+### Аудитория: разбивка
+# @name getAudienceBreakdown
+GET {{api}}/v1/apps/{{appId}}/audience/breakdown?from={{from}}&to={{to}}&dimension=platform&metric=active&limit=50
+Authorization: Bearer {{apiKey}}
+
+### Retention
+# @name getRetention
+GET {{api}}/v1/apps/{{appId}}/retention?from={{from}}&to={{to}}&cohort_granularity=day&periods=30
+Authorization: Bearer {{apiKey}}
+
+### Realtime
+# @name getRealtime
+GET {{api}}/v1/apps/{{appId}}/realtime?environment=production
+Authorization: Bearer {{apiKey}}
+
+### Поиск профилей
+# @name searchProfiles
+GET {{api}}/v1/apps/{{appId}}/profiles?q=6f1c2a9e
+Authorization: Bearer {{apiKey}}
+
+### Профиль по install_id (person_key i:<uuid>; для user_id — u:<id>)
+# @name getProfile
+GET {{api}}/v1/apps/{{appId}}/profiles/i:6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21?sessions_limit=100
+Authorization: Bearer {{apiKey}}
+
+### Здоровье интеграции
+# @name getIntegrationHealth
+GET {{api}}/v1/apps/{{appId}}/integration/health?hours=24
+Authorization: Bearer {{apiKey}}
+
+### Запрос на удаление данных (scope delete)
+# @name createDeletionRequest
+POST {{api}}/v1/apps/{{appId}}/deletion-requests
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "subject_type": "install",
+  "subject_value": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21"
+}
+
+### Статус запроса на удаление (id из ответа createDeletionRequest)
+# @name getDeletionRequest
+GET {{api}}/v1/apps/{{appId}}/deletion-requests/{{createDeletionRequest.response.body.$.id}}
+Authorization: Bearer {{apiKey}}

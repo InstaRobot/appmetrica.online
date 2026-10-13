@@ -125,6 +125,8 @@ gen-go-api: ## oapi-codegen: contracts/openapi → backend/internal/gen
 
 .PHONY: gen-sqlc
 gen-sqlc: ## sqlc (в Docker): queries/postgres + migrations/postgres → internal/pgstore/sqlc
+	@# До T-004 схемы Postgres нет — sqlc нечего генерировать.
+	@if [ ! -d $(BACKEND)/migrations/postgres ]; then echo "gen-sqlc: нет backend/migrations/postgres, пропуск"; exit 0; fi; \
 	docker run --rm -u $$(id -u):$$(id -g) -v "$$(pwd)/backend":/src -w /src $(SQLC_IMAGE) generate
 
 .PHONY: gen-web
@@ -133,7 +135,10 @@ gen-web: ## orval: contracts/openapi/api.yaml → web/src/lib/api/gen
 
 .PHONY: gen-check
 gen-check: gen ## Проверить, что сгенерированный код закоммичен и актуален
+	@# git diff не видит новых неотслеживаемых файлов — их ловит git ls-files --others.
 	git diff --exit-code -- backend/internal/gen backend/internal/pgstore/sqlc web/src/lib/api/gen
+	@untracked=$$(git ls-files --others --exclude-standard -- backend/internal/gen backend/internal/pgstore/sqlc web/src/lib/api/gen); \
+	if [ -n "$$untracked" ]; then echo "gen-check: сгенерированный код не закоммичен:"; echo "$$untracked"; exit 1; fi
 
 # ---------------------------------------------------------------------------
 # Тесты и качество

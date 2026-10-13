@@ -17,6 +17,8 @@ export default defineConfig({
       override: {
         mutator: { path: "src/lib/api/fetcher.ts", name: "apiFetch" },
         query: { useQuery: true, useSuspenseQuery: true },
+        // Моки не подставляют `undefined` в необязательные поля — иначе конфликт с exactOptionalPropertyTypes.
+        mock: { exactOptional: true },
       },
     },
   },

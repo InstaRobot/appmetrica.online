@@ -10,7 +10,6 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
-      "!src/lib/api/gen",
       "!.next",
       "!.source",
       "!next-env.d.ts",
@@ -63,6 +62,12 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/lib/api/gen/**"],
+      "linter": { "enabled": false }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {

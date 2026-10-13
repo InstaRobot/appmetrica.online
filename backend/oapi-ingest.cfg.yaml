@@ -9,3 +9,7 @@ generate:
   embedded-spec: true
 output-options:
   nullable-type: true
+compatibility:
+  # Константы enum всегда с префиксом типа — так же, как в oapi-api.cfg.yaml (там без префикса
+  # значение `platform` из BreakdownDimension конфликтует со схемой Platform).
+  always-prefix-enum-values: true
