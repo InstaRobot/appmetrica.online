@@ -302,6 +302,7 @@
 | OQ-014 | iOS-приложение №1 для сверки | Open | владелец | 2026-10-26 |
 | OQ-020 | Heartbeat для длительности | Deferred | владелец | 2026-12-27 |
 | OQ-021 | Мобильная вёрстка | Deferred | владелец | 2027-02-27 |
+| OQ-030 | Неизвестные поля верхнего уровня `EventBatch` (в ingest.yaml `additionalProperties: false`): транспорт T-009 их игнорирует, а не отвечает `400 invalid_batch` — новые поля клиентов не ломают приём старым сервером | Default: игнорировать | владелец | 2026-10-30 |
 | RQ-001 | Object lock + ротация бэкапов | In research (E9b) | владелец | 2026-11-24 |
 | RQ-002 | Conditional UI passkey | In research (E2) | владелец | 2026-10-30 |
 | RQ-003 | Lightweight DELETE + bloom filter | In research (E6) | владелец | 2026-11-18 |
