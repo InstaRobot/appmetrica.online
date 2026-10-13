@@ -71,7 +71,16 @@ func (s *authServer) token(t *testing.T) string {
 	return token
 }
 
-func (s *authServer) do(t *testing.T, method, path string, body any, cookies ...*http.Cookie) (*http.Response, []byte) {
+// response — прочитанный ответ: тело закрыто внутри do.
+type response struct {
+	StatusCode int
+	Header     http.Header
+	cookies    []*http.Cookie
+}
+
+func (r *response) Cookies() []*http.Cookie { return r.cookies }
+
+func (s *authServer) do(t *testing.T, method, path string, body any, cookies ...*http.Cookie) (*response, []byte) {
 	t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -95,10 +104,10 @@ func (s *authServer) do(t *testing.T, method, path string, body any, cookies ...
 	}
 	resp, err := s.srv.Client().Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	out, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return resp, out
+	return &response{StatusCode: resp.StatusCode, Header: resp.Header, cookies: resp.Cookies()}, out
 }
 
 type ceremonyResp struct {
@@ -115,7 +124,7 @@ func (s *authServer) begin(t *testing.T, token string) ceremonyResp {
 	return c
 }
 
-func requireError(t *testing.T, resp *http.Response, body []byte, status int, code string) map[string]any {
+func requireError(t *testing.T, resp *response, body []byte, status int, code string) map[string]any {
 	t.Helper()
 	require.Equal(t, status, resp.StatusCode, string(body))
 	require.Contains(t, resp.Header.Get("Content-Type"), "application/json")
@@ -132,7 +141,7 @@ func requireError(t *testing.T, resp *http.Response, body []byte, status int, co
 	return env.Error.Details
 }
 
-func sessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
+func sessionCookie(t *testing.T, resp *response) *http.Cookie {
 	t.Helper()
 	for _, c := range resp.Cookies() {
 		if c.Name == "am_session" {

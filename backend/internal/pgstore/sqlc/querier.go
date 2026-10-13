@@ -57,6 +57,7 @@ type Querier interface {
 	ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]WriteKey, error)
 	LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow, error)
 	LockOwner(ctx context.Context) (uuid.UUID, error)
+	LockSetupToken(ctx context.Context, tokenHash []byte) (LockSetupTokenRow, error)
 	MarkDayClosed(ctx context.Context, arg MarkDayClosedParams) error
 	MarkSetupTokenUsed(ctx context.Context, arg MarkSetupTokenUsedParams) (int64, error)
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (RenamePasskeyRow, error)

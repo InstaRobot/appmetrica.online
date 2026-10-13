@@ -39,3 +39,8 @@ WHERE token_hash = sqlc.arg(token_hash) AND last_seen_at < sqlc.arg(now)::timest
 
 -- name: RevokeSession :exec
 UPDATE auth_sessions SET revoked_at = sqlc.arg(now) WHERE token_hash = sqlc.arg(token_hash) AND revoked_at IS NULL;
+
+-- name: LockSetupToken :one
+SELECT token_hash, expires_at, used_at FROM passkey_setup_tokens
+WHERE token_hash = sqlc.arg(token_hash)
+FOR UPDATE;

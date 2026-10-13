@@ -139,6 +139,25 @@ func (q *Queries) GetUsableSetupToken(ctx context.Context, arg GetUsableSetupTok
 	return i, err
 }
 
+const lockSetupToken = `-- name: LockSetupToken :one
+SELECT token_hash, expires_at, used_at FROM passkey_setup_tokens
+WHERE token_hash = $1
+FOR UPDATE
+`
+
+type LockSetupTokenRow struct {
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+func (q *Queries) LockSetupToken(ctx context.Context, tokenHash []byte) (LockSetupTokenRow, error) {
+	row := q.db.QueryRow(ctx, lockSetupToken, tokenHash)
+	var i LockSetupTokenRow
+	err := row.Scan(&i.TokenHash, &i.ExpiresAt, &i.UsedAt)
+	return i, err
+}
+
 const markSetupTokenUsed = `-- name: MarkSetupTokenUsed :execrows
 UPDATE passkey_setup_tokens SET used_at = $1
 WHERE token_hash = $2 AND used_at IS NULL

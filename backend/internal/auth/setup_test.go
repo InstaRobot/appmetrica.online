@@ -371,8 +371,8 @@ func TestFinishSetup_NameValidation(t *testing.T) {
 	token := h.newToken(t)
 
 	for name, value := range map[string]string{
-		"empty":   "",
-		"spaces":  "   ",
+		"empty":    "",
+		"spaces":   "   ",
 		"65 runes": strings.Repeat("я", 65),
 	} {
 		c, err := h.svc.BeginSetup(t.Context(), token)
