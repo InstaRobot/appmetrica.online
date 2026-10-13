@@ -1,10 +1,13 @@
 package reports
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"appmetrica.online/backend/internal/clock"
 )
 
 func TestIntegrationHours(t *testing.T) {
@@ -93,4 +96,58 @@ func TestIntegrationWindowStart(t *testing.T) {
 	require.True(t, time.Date(2026, 9, 9, 13, 0, 0, 0, time.UTC).Equal(integrationWindowStart(now, msk, 24)))
 	require.True(t, time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC).Equal(integrationWindowStart(now, msk, 1)))
 	require.True(t, time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC).Equal(integrationWindowStart(now, nil, 1)))
+}
+
+func TestIntegrationHealth_HoursOutOfRange(t *testing.T) {
+	svc := NewService(nil, clock.NewFixed(time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)))
+	for _, h := range []int{0, -1, MaxIntegrationHours + 1} {
+		_, err := svc.IntegrationHealth(t.Context(), Params{}, h)
+		require.ErrorIs(t, err, ErrUnsupported, "hours=%d", h)
+	}
+}
+
+func TestIntegrationVersions(t *testing.T) {
+	at := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	msk := time.FixedZone("MSK", 3*3600)
+	h1, h2 := at.Add(-2*time.Hour), at.Add(-time.Hour)
+
+	got := integrationVersions(
+		[]hourVersionRow{
+			{Hour: h1, AppVersion: "1.0", N: 2, LastSeen: at.Add(-90 * time.Minute)},
+			{Hour: h2, AppVersion: "1.0", N: 3, LastSeen: at.Add(-30 * time.Minute).In(msk)},
+			{Hour: h2, AppVersion: "2.0", N: 1, LastSeen: at.Add(-10 * time.Minute)},
+		},
+		[]hourVersionRow{
+			{Hour: h1, AppVersion: "1.0", N: 4, LastSeen: at.Add(-100 * time.Minute)},
+			{Hour: h2, AppVersion: "", N: 1, LastSeen: at.Add(-30 * time.Minute)},
+			{Hour: h2, AppVersion: "0.9", N: 5, LastSeen: at.Add(-5 * time.Minute)},
+		},
+	)
+	require.Equal(t, []IntegrationVersion{
+		{AppVersion: "0.9", Rejected: 5, LastSeen: at.Add(-5 * time.Minute)},
+		{AppVersion: "2.0", Accepted: 1, LastSeen: at.Add(-10 * time.Minute)},
+		{AppVersion: "", Rejected: 1, LastSeen: at.Add(-30 * time.Minute)},
+		{AppVersion: "1.0", Accepted: 5, Rejected: 4, LastSeen: at.Add(-30 * time.Minute)},
+	}, got, "по убыванию last_seen, при равенстве — по версии; last_seen в UTC")
+
+	require.NotNil(t, integrationVersions(nil, nil))
+	require.Empty(t, integrationVersions(nil, nil))
+
+	var many []hourVersionRow
+	for i := range IntegrationVersionsMax + 10 {
+		many = append(many, hourVersionRow{Hour: h2, AppVersion: fmt.Sprintf("1.%03d", i), N: 1, LastSeen: at.Add(time.Duration(i) * time.Second)})
+	}
+	got = integrationVersions(many, nil)
+	require.Len(t, got, IntegrationVersionsMax)
+	require.Equal(t, fmt.Sprintf("1.%03d", IntegrationVersionsMax+9), got[0].AppVersion, "остаются самые свежие версии")
+	require.Equal(t, "1.010", got[IntegrationVersionsMax-1].AppVersion)
+}
+
+func TestByHour(t *testing.T) {
+	h := time.Date(2026, 9, 10, 11, 0, 0, 0, time.UTC)
+	require.Equal(t, map[int64]uint64{h.Unix(): 5, h.Add(time.Hour).Unix(): 1}, byHour([]hourVersionRow{
+		{Hour: h, AppVersion: "1.0", N: 2},
+		{Hour: h.In(time.FixedZone("MSK", 3*3600)), AppVersion: "2.0", N: 3},
+		{Hour: h.Add(time.Hour), AppVersion: "1.0", N: 1},
+	}))
 }

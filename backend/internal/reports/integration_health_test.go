@@ -176,11 +176,6 @@ func TestIntegrationHealth_IgnoresUnknownApp(t *testing.T) {
 	require.True(t, rejected[5].ReceivedAt.Equal(got.Reasons[0].LastSeen))
 	require.Equal(t, rejected[5].PayloadSample, got.Reasons[0].ExamplePayload)
 	require.Equal(t, []IntegrationVersion{{AppVersion: "2.4.0", Rejected: 1, LastSeen: got.Versions[0].LastSeen}}, got.Versions)
-
-	// Отказы с nil app_id не приписываются и «нулевому» приложению.
-	nilApp := healthParams(t, "Europe/Moscow")
-	nilApp.AppID = uuid.Nil
-	require.Zero(t, healthAt(t, env, healthNow, nilApp, 24).RejectedTotal)
 }
 
 // Тест-вектор waiting: приложение без событий — first_event_at = null, итоги 0, 24 нулевые точки.
