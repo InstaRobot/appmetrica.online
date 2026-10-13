@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   typedRoutes: true,
   cacheComponents: true,
+  // Prefetch <Link> берёт только статическую часть маршрута — данные владельца не префетчатся.
+  partialPrefetching: true,
   async rewrites() {
     return {
       beforeFiles: [],

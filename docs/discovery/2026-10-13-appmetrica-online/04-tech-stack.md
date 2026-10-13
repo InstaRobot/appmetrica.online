@@ -126,6 +126,8 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 - Radix — проверенная accessibility (WCAG 2.2 AA, фокус-менеджмент, клавиатура) и больше обучающих примеров у кодинг-агентов, чем у Base UI, ставшего дефолтом shadcn в июле 2026.
 - Стиль AppMetrica (светлая тема, карточки-виджеты, синий акцент) собирается из `Card`, `Table`, `Tabs`, `Select`, `Popover`, `Calendar`, `Tooltip`, `Dialog`, `Command` + токены в [14-ux-ui-spec.md](./14-ux-ui-spec.md).
 - С сентября 2026 shadcn берёт `cn` из пакета `cn` 0.4.0 — фиксируем его в зависимостях.
+- Зависимости примитивов shadcn (ставятся CLI при `add`, версии фиксируются точно): `cmdk` 1.1.1 — основа `command` (AppSwitcher, поиск часового пояса); `react-day-picker` 10.0.2 — основа `calendar` (PeriodPicker, локаль `ru` из date-fns). Альтернатива — писать комбобокс и календарь на голых Radix-примитивах: больше кода и своя доступность клавиатуры, выигрыша нет.
+- Что CLI ставит, но мы **не** берём: `shadcn` как runtime-зависимость (из него нужен только `shadcn/tailwind.css` с кастомными вариантами `data-open:` и т. п. — файл скопирован в `web/src/app/shadcn.css`), `next-themes` у `sonner` (тёмной темы нет, тема Toaster зафиксирована `light`). После `add chart` CLI откатывает recharts на 3.8.0 — возвращаем 3.10.1.
 
 **Альтернативы**:
 - **Base UI** (новый дефолт shadcn): современнее, но меньше наработанных паттернов; Radix выбран ради предсказуемости.
@@ -378,6 +380,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
     "@tanstack/react-query": "5.104.2",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "cn": "0.4.0",
     "date-fns": "4.4.0",
     "fumadocs-core": "16.17.2",
@@ -389,6 +392,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
     "nuqs": "2.10.2",
     "radix-ui": "1.8.1",
     "react": "19.3.0",
+    "react-day-picker": "10.0.2",
     "react-dom": "19.3.0",
     "recharts": "3.10.1",
     "tailwind-merge": "3.7.0",
@@ -520,3 +524,4 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial stack selection по итогам discovery-интервью (Go + ClickHouse + Postgres + Next.js + Dokploy на Hetzner AX102-1) |
 | 2026-10-13 | 1.1 | T-002: добавлены `github.com/oapi-codegen/nullable` 1.1.0 (runtime сгенерированных моделей при `nullable-type: true`) и прямая зависимость `github.com/getkin/kin-openapi` 0.149.0 (тесты спек); web devDependency `@faker-js/faker` 10.6.0 (MSW-моки orval; альтернатива — `mock: false` в orval, но тогда теряются сгенерированные MSW-хендлеры из 22-test-strategy.md) |
+| 2026-10-13 | 1.2 | T-007: web-зависимости примитивов shadcn `cmdk` 1.1.1 (`command`) и `react-day-picker` 10.0.2 (`calendar`); `shadcn/tailwind.css` скопирован в `web/src/app/shadcn.css` вместо зависимости `shadcn`; `next-themes` не используется |

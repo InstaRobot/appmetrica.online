@@ -22,7 +22,7 @@ describe("plural", () => {
     expect(plural(n, forms)).toBe(want);
   });
 
-  it("uses the absolute value and the many form for fractions", () => {
+  it("uses the absolute value and the few form for fractions", () => {
     expect(plural(-1, forms)).toBe("событие");
     expect(plural(1.5, forms)).toBe("события");
   });
