@@ -79,7 +79,7 @@ func TestRequestID_GeneratesULID(t *testing.T) {
 	}))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/events", nil))
 
 	id := rec.Header().Get("X-Request-Id")
 	requireULID(t, id)
@@ -102,7 +102,7 @@ func TestRequestID_UniqueAndTimeOrdered(t *testing.T) {
 	for i := range 100 {
 		c.Advance(time.Millisecond)
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 		id := rec.Header().Get("X-Request-Id")
 		requireULID(t, id)
 		require.False(t, seen[id], "повтор id на итерации %d", i)
@@ -128,7 +128,7 @@ func TestRequestID_IncomingHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := httpx.RequestID(clock.NewFixed(fixedNow))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 			req.Header.Set("X-Request-Id", tt.incoming)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
@@ -146,11 +146,11 @@ func TestRequestID_IncomingHeader(t *testing.T) {
 
 func TestAccessLog_NoClientIP(t *testing.T) {
 	var buf bytes.Buffer
-	h := stack(newLogger(&buf), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := stack(newLogger(&buf), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/events?app_key=pk_secret", strings.NewReader("{}"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events?app_key=pk_secret", strings.NewReader("{}"))
 	req.RemoteAddr = "203.0.113.7:5000"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	req.Header.Set("X-Real-Ip", "203.0.113.7")
@@ -177,7 +177,7 @@ func TestAccessLog_DurationFromClock(t *testing.T) {
 	h := httpx.AccessLog(newLogger(&buf), c)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		c.Advance(1500 * time.Millisecond)
 	}))
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil))
 
 	lines := decodeLogLines(t, &buf)
 	require.Len(t, lines, 1)
@@ -236,7 +236,7 @@ func TestRecover_AfterHeadersWritten(t *testing.T) {
 		panic("late boom")
 	}))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 
 	require.Equal(t, http.StatusAccepted, rec.Code, "ответ уже начат — статус не переписывается")
 	require.NotContains(t, rec.Body.String(), "internal_error")
@@ -248,7 +248,7 @@ func TestRecover_ErrAbortHandlerPropagates(t *testing.T) {
 		panic(http.ErrAbortHandler)
 	}))
 	require.PanicsWithError(t, http.ErrAbortHandler.Error(), func() {
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 	})
 }
 
@@ -257,7 +257,7 @@ func TestWriteError_Envelope(t *testing.T) {
 		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_batch", "Поле events обязательно.", map[string]any{"field": "events"})
 	}))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/events", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", nil))
 
 	var env errorEnvelope
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
@@ -269,7 +269,7 @@ func TestWriteError_Envelope(t *testing.T) {
 
 	// details не передан — поля нет в JSON.
 	rec = httptest.NewRecorder()
-	httpx.WriteError(rec, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusNotFound, "not_found", "Не найдено.", nil)
+	httpx.WriteError(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil), http.StatusNotFound, "not_found", "Не найдено.", nil)
 	require.NotContains(t, rec.Body.String(), "details")
 }
 
@@ -316,7 +316,7 @@ func TestGzip_DecodesBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewReader(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", bytes.NewReader(tt.body))
 			if tt.encoding != "" {
 				req.Header.Set("Content-Encoding", tt.encoding)
 			}
@@ -343,7 +343,7 @@ func TestGzip_Rejects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := httpx.Chain(echoBody(), httpx.RequestID(clock.NewFixed(fixedNow)), httpx.Gunzip())
-			req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewReader(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", bytes.NewReader(tt.body))
 			req.Header.Set("Content-Encoding", tt.encoding)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
@@ -373,7 +373,7 @@ func TestBodyLimit_AppliesAfterGunzip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := gzipBytes(t, bytes.Repeat([]byte("a"), tt.size))
 			require.Less(t, len(body), 20*1024, "сжатое тело маленькое, лимит считается по распакованному")
-			req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewReader(body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", bytes.NewReader(body))
 			req.Header.Set("Content-Encoding", "gzip")
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
@@ -386,11 +386,11 @@ func TestBodyLimit_PlainBody(t *testing.T) {
 	h := httpx.Chain(echoBody(), httpx.BodyLimit(4))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader("1234")))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("1234")))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader("12345")))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("12345")))
 	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 }
 
@@ -415,7 +415,7 @@ func TestClientIP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 			req.RemoteAddr = tt.remoteAddr
 			for _, v := range tt.xff {
 				req.Header.Add("X-Forwarded-For", v)

@@ -50,7 +50,7 @@ func loadEnvExample(t *testing.T) map[string]string {
 	t.Helper()
 	f, err := os.Open(filepath.Join("..", "..", "..", ".env.example"))
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	vars := map[string]string{}
 	sc := bufio.NewScanner(f)
@@ -100,7 +100,7 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 		require.Equal(t, 15*time.Second, ing.KeyCacheRefresh)
 		require.Equal(t, int64(1<<20), ing.MaxBodyBytes)
 		require.Equal(t, ":8081", ing.ListenAddr)
-		require.Equal(t, 2000.0, ing.RateAppEventsPerSec)
+		require.InDelta(t, 2000.0, ing.RateAppEventsPerSec, 1e-9)
 		require.Equal(t, 4000, ing.RateAppBurst)
 		require.Equal(t, 100, ing.RateInstallPerMin)
 		require.Equal(t, 1000, ing.RateInstallBurst)
