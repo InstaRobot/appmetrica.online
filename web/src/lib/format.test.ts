@@ -9,6 +9,7 @@ import {
   formatDuration,
   formatInt,
   formatPercent,
+  formatRejectionRate,
   formatWeekdayDate,
   formatWeekRange,
   shortId,
@@ -134,5 +135,16 @@ describe("realtime formatting", () => {
     expect(shortId("123456789")).toBe("123456789");
     expect(shortId("1234567890")).toBe("1234…7890");
     expect(shortId("")).toBe("—");
+  });
+});
+
+describe("integration formatting", () => {
+  it("formats rejection rate with two significant digits", () => {
+    expect(formatRejectionRate(1204, 412905)).toBe(`0,29${NBSP}%`);
+    expect(formatRejectionRate(12, 300112)).toBe(`0,004${NBSP}%`);
+    expect(formatRejectionRate(1190, 98400)).toBe(`1,2${NBSP}%`);
+    expect(formatRejectionRate(0, 10)).toBe(`0${NBSP}%`);
+    expect(formatRejectionRate(5, 0)).toBe(`100${NBSP}%`);
+    expect(formatRejectionRate(0, 0)).toBe("—");
   });
 });
