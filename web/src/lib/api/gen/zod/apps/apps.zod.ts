@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import * as zod from "zod";
 
@@ -20,22 +20,32 @@ export const ListAppsQueryParams = zod.object({
 
 export const listAppsResponseItemsItemNameMax = 64;
 
+export const listAppsResponseItemsItemPlatformsMax = 9;
+
 export const ListAppsResponse = zod.object({
   items: zod.array(
     zod.object({
       id: zod.uuid(),
       name: zod.string().min(1).max(listAppsResponseItemsItemNameMax),
-      platform: zod.enum([
-        "ios",
-        "android",
-        "web",
-        "macos",
-        "windows",
-        "linux",
-        "bot",
-        "server",
-        "other",
-      ]),
+      platform: zod
+        .enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"])
+        .describe("Устарело — первая платформа из platforms. Будет удалено в следующем релизе."),
+      platforms: zod
+        .array(
+          zod.enum([
+            "ios",
+            "android",
+            "web",
+            "macos",
+            "windows",
+            "linux",
+            "bot",
+            "server",
+            "other",
+          ]),
+        )
+        .min(1)
+        .max(listAppsResponseItemsItemPlatformsMax),
       timezone: zod.string(),
       status: zod.enum(["active", "archived"]),
       created_at: zod.iso.datetime({ offset: true }),
@@ -51,20 +61,20 @@ export const GetAppParams = zod.object({
 
 export const getAppResponseNameMax = 64;
 
+export const getAppResponsePlatformsMax = 9;
+
 export const GetAppResponse = zod.object({
   id: zod.uuid(),
   name: zod.string().min(1).max(getAppResponseNameMax),
-  platform: zod.enum([
-    "ios",
-    "android",
-    "web",
-    "macos",
-    "windows",
-    "linux",
-    "bot",
-    "server",
-    "other",
-  ]),
+  platform: zod
+    .enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"])
+    .describe("Устарело — первая платформа из platforms. Будет удалено в следующем релизе."),
+  platforms: zod
+    .array(
+      zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+    )
+    .min(1)
+    .max(getAppResponsePlatformsMax),
   timezone: zod.string(),
   status: zod.enum(["active", "archived"]),
   created_at: zod.iso.datetime({ offset: true }),

@@ -8,8 +8,9 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
+import type { PlatformList } from "./platformList";
 
 export interface UpdateAppBody {
   /**
@@ -18,4 +19,5 @@ export interface UpdateAppBody {
    */
   name?: string;
   timezone?: string;
+  platforms?: PlatformList;
 }

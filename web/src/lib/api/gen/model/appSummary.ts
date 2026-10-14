@@ -8,14 +8,20 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import type { AppStatus } from "./appStatus";
 import type { Platform } from "./platform";
+import type { PlatformList } from "./platformList";
 
 export interface AppSummary {
   id: string;
   name: string;
+  /**
+   * Устарело — первая платформа из platforms. Будет удалено в следующем релизе.
+   * @deprecated
+   */
   platform: Platform;
+  platforms: PlatformList;
   status: AppStatus;
 }

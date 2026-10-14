@@ -8,11 +8,11 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
 import type { ApiKeyList, CreateApiKeyResult, WriteKey, WriteKeyList } from "../../model";
-import { ApiKeyScope } from "../../model";
+import { ApiKeyScope, Platform } from "../../model";
 
 export const getListWriteKeysResponseMock = (
   overrideResponse: Partial<Extract<WriteKeyList, object>> = {},
@@ -22,6 +22,10 @@ export const getListWriteKeysResponseMock = (
     app_id: faker.string.uuid(),
     key: faker.helpers.fromRegExp("^pk_[A-Za-z0-9]{32}$"),
     label: faker.string.alpha({ length: { min: 10, max: 64 } }),
+    platform: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(Object.values(Platform)),
+      null,
+    ]),
     created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
     revoked_at: faker.helpers.arrayElement([
       faker.date.past().toISOString().slice(0, 19) + "Z",
@@ -42,6 +46,7 @@ export const getCreateWriteKeyResponseMock = (
   app_id: faker.string.uuid(),
   key: faker.helpers.fromRegExp("^pk_[A-Za-z0-9]{32}$"),
   label: faker.string.alpha({ length: { min: 10, max: 64 } }),
+  platform: faker.helpers.arrayElement([faker.helpers.arrayElement(Object.values(Platform)), null]),
   created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
   revoked_at: faker.helpers.arrayElement([
     faker.date.past().toISOString().slice(0, 19) + "Z",

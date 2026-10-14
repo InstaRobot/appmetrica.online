@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
 import type { App, AppList } from "../../model";
@@ -21,6 +21,7 @@ export const getListAppsResponseMock = (
     id: faker.string.uuid(),
     name: faker.string.alpha({ length: { min: 1, max: 64 } }),
     platform: faker.helpers.arrayElement(Object.values(Platform)),
+    platforms: faker.helpers.arrayElements(Object.values(Platform)),
     timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
     status: faker.helpers.arrayElement(Object.values(AppStatus)),
     created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
@@ -39,6 +40,7 @@ export const getGetAppResponseMock = (
   id: faker.string.uuid(),
   name: faker.string.alpha({ length: { min: 1, max: 64 } }),
   platform: faker.helpers.arrayElement(Object.values(Platform)),
+  platforms: faker.helpers.arrayElements(Object.values(Platform)),
   timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
   status: faker.helpers.arrayElement(Object.values(AppStatus)),
   created_at: faker.date.past().toISOString().slice(0, 19) + "Z",

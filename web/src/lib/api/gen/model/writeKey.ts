@@ -8,8 +8,9 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
+import type { Platform } from "./platform";
 
 export interface WriteKey {
   id: string;
@@ -18,6 +19,8 @@ export interface WriteKey {
   key: string;
   /** @maxLength 64 */
   label: string;
+  /** Платформа событий без context.platform; null — любая платформа. */
+  platform: Platform | null;
   created_at: string;
   /** @nullable */
   revoked_at: string | null;

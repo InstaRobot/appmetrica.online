@@ -51,10 +51,10 @@ func (s *Server) CreateApp(ctx context.Context, req gen.CreateAppRequestObject) 
 	if req.Body == nil {
 		return gen.CreateApp400JSONResponse{BadRequestJSONResponse: invalidBody(ctx)}, nil
 	}
-	app, key, err := s.apps.Create(ctx, apps.CreateInput{
-		Name:     req.Body.Name,
-		Platform: string(req.Body.Platform),
-		Timezone: req.Body.Timezone,
+	res, err := s.apps.Create(ctx, apps.CreateInput{
+		Name:      req.Body.Name,
+		Platforms: platformStrings(req.Body.Platforms),
+		Timezone:  req.Body.Timezone,
 	})
 	var verr *apps.ValidationError
 	switch {
@@ -65,14 +65,23 @@ func (s *Server) CreateApp(ctx context.Context, req gen.CreateAppRequestObject) 
 	case err != nil:
 		return nil, err
 	}
-	return gen.CreateApp201JSONResponse{App: appModel(app), WriteKey: writeKeyModel(key)}, nil
+	keys := make([]gen.WriteKey, 0, len(res.WriteKeys))
+	for _, k := range res.WriteKeys {
+		keys = append(keys, writeKeyModel(k))
+	}
+	return gen.CreateApp201JSONResponse{App: appModel(res.App), WriteKeys: keys}, nil
 }
 
 func (s *Server) UpdateApp(ctx context.Context, req gen.UpdateAppRequestObject) (gen.UpdateAppResponseObject, error) {
 	if req.Body == nil {
 		return gen.UpdateApp400JSONResponse{BadRequestJSONResponse: invalidBody(ctx)}, nil
 	}
-	app, err := s.apps.Update(ctx, req.AppId, apps.UpdateInput{Name: req.Body.Name, Timezone: req.Body.Timezone})
+	in := apps.UpdateInput{Name: req.Body.Name, Timezone: req.Body.Timezone}
+	if req.Body.Platforms != nil {
+		platforms := platformStrings(*req.Body.Platforms)
+		in.Platforms = &platforms
+	}
+	app, err := s.apps.Update(ctx, req.AppId, in)
 	var verr *apps.ValidationError
 	switch {
 	case errors.As(err, &verr):
@@ -157,11 +166,30 @@ func appValidation(ctx context.Context, e *apps.ValidationError) gen.BadRequestJ
 	return gen.BadRequestJSONResponse(apiError(ctx, "invalid_request", e.Message, details))
 }
 
+// platformStrings — платформы тела запроса как строки: значения проверяет apps.Service.
+func platformStrings(in gen.PlatformList) []string {
+	out := make([]string, len(in))
+	for i, p := range in {
+		out[i] = string(p)
+	}
+	return out
+}
+
+// platformListModel — набор платформ приложения в порядке enum (как хранится в apps.platforms).
+func platformListModel(in []sqlc.AppPlatform) gen.PlatformList {
+	out := make(gen.PlatformList, len(in))
+	for i, p := range in {
+		out[i] = gen.Platform(p)
+	}
+	return out
+}
+
 func appModel(a sqlc.App) gen.App {
 	return gen.App{
 		Id:         a.ID,
 		Name:       a.Name,
 		Platform:   gen.Platform(a.Platform),
+		Platforms:  platformListModel(a.Platforms),
 		Timezone:   a.Timezone,
 		Status:     gen.AppStatus(a.Status),
 		CreatedAt:  a.CreatedAt,
@@ -176,6 +204,7 @@ func writeKeyModel(k sqlc.WriteKey) gen.WriteKey {
 		AppId:      k.AppID,
 		Key:        k.Key,
 		Label:      k.Label,
+		Platform:   nullablePlatform(k.Platform),
 		CreatedAt:  k.CreatedAt,
 		RevokedAt:  nullableValue(k.RevokedAt),
 		LastUsedAt: nullableValue(k.LastUsedAt),
@@ -195,6 +224,14 @@ func deletionRequestModel(d sqlc.DeletionRequest) gen.DeletionRequest {
 		CompletedAt:  nullableValue(d.CompletedAt),
 		Error:        nullableValue(d.Error),
 	}
+}
+
+// nullablePlatform — платформа ключа; nil (любая платформа) пишется как null.
+func nullablePlatform(p *sqlc.AppPlatform) nullable.Nullable[gen.Platform] {
+	if p == nil {
+		return nullable.NewNullNullable[gen.Platform]()
+	}
+	return nullable.NewNullableWithValue(gen.Platform(*p))
 }
 
 // nullableValue — nullable-поле контракта: nil пишется как явный null.

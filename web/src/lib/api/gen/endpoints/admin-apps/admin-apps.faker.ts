@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
 import type { App, CreateAppResult, DeletionRequest } from "../../model";
@@ -27,6 +27,7 @@ export const getCreateAppResponseMock = (
     id: faker.string.uuid(),
     name: faker.string.alpha({ length: { min: 1, max: 64 } }),
     platform: faker.helpers.arrayElement(Object.values(Platform)),
+    platforms: faker.helpers.arrayElements(Object.values(Platform)),
     timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
     status: faker.helpers.arrayElement(Object.values(AppStatus)),
     created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
@@ -36,21 +37,27 @@ export const getCreateAppResponseMock = (
       null,
     ]),
   },
-  write_key: {
-    id: faker.string.uuid(),
-    app_id: faker.string.uuid(),
-    key: faker.helpers.fromRegExp("^pk_[A-Za-z0-9]{32}$"),
-    label: faker.string.alpha({ length: { min: 10, max: 64 } }),
-    created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
-    revoked_at: faker.helpers.arrayElement([
-      faker.date.past().toISOString().slice(0, 19) + "Z",
-      null,
-    ]),
-    last_used_at: faker.helpers.arrayElement([
-      faker.date.past().toISOString().slice(0, 19) + "Z",
-      null,
-    ]),
-  },
+  write_keys: Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.uuid(),
+      app_id: faker.string.uuid(),
+      key: faker.helpers.fromRegExp("^pk_[A-Za-z0-9]{32}$"),
+      label: faker.string.alpha({ length: { min: 10, max: 64 } }),
+      platform: faker.helpers.arrayElement([
+        faker.helpers.arrayElement(Object.values(Platform)),
+        null,
+      ]),
+      created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
+      revoked_at: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + "Z",
+        null,
+      ]),
+      last_used_at: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + "Z",
+        null,
+      ]),
+    }),
+  ),
   ...overrideResponse,
 });
 
@@ -60,6 +67,7 @@ export const getUpdateAppResponseMock = (
   id: faker.string.uuid(),
   name: faker.string.alpha({ length: { min: 1, max: 64 } }),
   platform: faker.helpers.arrayElement(Object.values(Platform)),
+  platforms: faker.helpers.arrayElements(Object.values(Platform)),
   timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
   status: faker.helpers.arrayElement(Object.values(AppStatus)),
   created_at: faker.date.past().toISOString().slice(0, 19) + "Z",

@@ -62,15 +62,22 @@ func NewService(store *pgstore.Store, c clock.Clock, logger *slog.Logger) *Servi
 
 // CreateInput — тело createApp.
 type CreateInput struct {
-	Name     string
-	Platform string
-	Timezone string
+	Name      string
+	Platforms []string
+	Timezone  string
 }
 
 // UpdateInput — тело updateApp: nil — поле не меняется.
 type UpdateInput struct {
-	Name     *string
-	Timezone *string
+	Name      *string
+	Timezone  *string
+	Platforms *[]string
+}
+
+// CreateResult — новое приложение и его write-ключи, по одному на платформу в порядке app.Platforms.
+type CreateResult struct {
+	App       sqlc.App
+	WriteKeys []sqlc.WriteKey
 }
 
 // List — приложения по имени без учёта регистра; архивные — только при includeArchived.
@@ -94,53 +101,60 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (sqlc.App, error) {
 	return app, nil
 }
 
-// Create создаёт приложение и его первый write-ключ в одной транзакции.
-func (s *Service) Create(ctx context.Context, in CreateInput) (sqlc.App, sqlc.WriteKey, error) {
+// Create создаёт приложение и по write-ключу на каждую его платформу в одной транзакции: ключ с платформой
+// задаёт платформу событий без context.platform. Метка ключа — название платформы.
+func (s *Service) Create(ctx context.Context, in CreateInput) (CreateResult, error) {
 	name, err := validateName(in.Name)
 	if err != nil {
-		return sqlc.App{}, sqlc.WriteKey{}, err
+		return CreateResult{}, err
 	}
-	platform := sqlc.AppPlatform(in.Platform)
-	if !platform.Valid() {
-		return sqlc.App{}, sqlc.WriteKey{}, &ValidationError{Field: "platform", Message: "Неизвестная платформа"}
+	platforms, err := normalizePlatforms(in.Platforms)
+	if err != nil {
+		return CreateResult{}, err
 	}
 	tz, err := validateTimezone(in.Timezone)
 	if err != nil {
-		return sqlc.App{}, sqlc.WriteKey{}, err
+		return CreateResult{}, err
 	}
-	key, err := newWriteKey()
-	if err != nil {
-		return sqlc.App{}, sqlc.WriteKey{}, err
+	keys := make([]string, len(platforms))
+	for i := range keys {
+		if keys[i], err = newWriteKey(); err != nil {
+			return CreateResult{}, err
+		}
 	}
-	var (
-		app sqlc.App
-		wk  sqlc.WriteKey
-	)
+	var res CreateResult
 	err = s.store.InTx(ctx, func(q *sqlc.Queries) error {
-		app, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: name, Platforms: []sqlc.AppPlatform{platform}, Timezone: tz})
+		res.App, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: name, Platforms: platforms, Timezone: tz})
 		switch {
 		case isNameTaken(err):
 			return ErrNameTaken
 		case err != nil:
 			return fmt.Errorf("apps: create: %w", err)
 		}
-		wk, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: key, Label: firstKeyLabel})
-		if err != nil {
-			return fmt.Errorf("apps: create write key: %w", err)
+		res.WriteKeys = make([]sqlc.WriteKey, 0, len(platforms))
+		for i, p := range platforms {
+			wk, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{
+				AppID: res.App.ID, Key: keys[i], Label: platformLabels[p], Platform: &p,
+			})
+			if err != nil {
+				return fmt.Errorf("apps: create write key: %w", err)
+			}
+			res.WriteKeys = append(res.WriteKeys, wk)
 		}
 		return nil
 	})
 	if err != nil {
-		return sqlc.App{}, sqlc.WriteKey{}, err
+		return CreateResult{}, err
 	}
-	s.logger.InfoContext(ctx, "app created", slog.String("app_id", app.ID.String()))
-	return app, wk, nil
+	s.logger.InfoContext(ctx, "app created", slog.String("app_id", res.App.ID.String()))
+	return res, nil
 }
 
-// Update меняет имя и/или часовой пояс. Платформа не меняется: от неё зависят уже собранные события.
+// Update меняет имя, часовой пояс и/или набор платформ. Ключи и собранные события смена платформ не
+// затрагивает: ключи снятых платформ остаются активными, их отзывают отдельно.
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sqlc.App, error) {
-	if in.Name == nil && in.Timezone == nil {
-		return sqlc.App{}, &ValidationError{Message: "Укажите название или часовой пояс"}
+	if in.Name == nil && in.Timezone == nil && in.Platforms == nil {
+		return sqlc.App{}, &ValidationError{Message: "Укажите название, часовой пояс или платформы"}
 	}
 	params := sqlc.UpdateAppParams{ID: id, Now: s.clock.Now()}
 	if in.Name != nil {
@@ -156,6 +170,13 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sql
 			return sqlc.App{}, err
 		}
 		params.Timezone = &tz
+	}
+	if in.Platforms != nil {
+		platforms, err := normalizePlatforms(*in.Platforms)
+		if err != nil {
+			return sqlc.App{}, err
+		}
+		params.Platforms = platforms
 	}
 	app, err := s.store.Queries().UpdateApp(ctx, params)
 	switch {
@@ -275,6 +296,29 @@ func (s *Service) idempotent(ctx context.Context, id uuid.UUID, err error, op st
 	}
 	_, err = s.Get(ctx, id)
 	return err
+}
+
+// normalizePlatforms убирает дубли и упорядочивает платформы как в enum app_platform; пустой набор и
+// неизвестное значение — ValidationError по полю platforms.
+func normalizePlatforms(in []string) ([]sqlc.AppPlatform, error) {
+	if len(in) == 0 {
+		return nil, &ValidationError{Field: "platforms", Message: "Выберите хотя бы одну платформу"}
+	}
+	seen := make(map[sqlc.AppPlatform]bool, len(in))
+	for _, v := range in {
+		p := sqlc.AppPlatform(v)
+		if !p.Valid() {
+			return nil, &ValidationError{Field: "platforms", Message: "Неизвестная платформа"}
+		}
+		seen[p] = true
+	}
+	out := make([]sqlc.AppPlatform, 0, len(seen))
+	for _, p := range sqlc.AllAppPlatformValues() {
+		if seen[p] {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 func validateName(name string) (string, error) {

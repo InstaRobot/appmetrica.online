@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import * as zod from "zod";
 
@@ -26,6 +26,22 @@ export const ListWriteKeysResponse = zod.object({
       app_id: zod.uuid(),
       key: zod.string().regex(listWriteKeysResponseItemsItemKeyRegExp),
       label: zod.string().max(listWriteKeysResponseItemsItemLabelMax),
+      platform: zod
+        .union([
+          zod.enum([
+            "ios",
+            "android",
+            "web",
+            "macos",
+            "windows",
+            "linux",
+            "bot",
+            "server",
+            "other",
+          ]),
+          zod.null(),
+        ])
+        .describe("Платформа событий без context.platform; null — любая платформа."),
       created_at: zod.iso.datetime({ offset: true }),
       revoked_at: zod.iso.datetime({ offset: true }).nullable(),
       last_used_at: zod.iso.datetime({ offset: true }).nullable(),
@@ -56,6 +72,12 @@ export const CreateWriteKeyResponse = zod.object({
   app_id: zod.uuid(),
   key: zod.string().regex(createWriteKeyResponseKeyRegExp),
   label: zod.string().max(createWriteKeyResponseLabelMax),
+  platform: zod
+    .union([
+      zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+      zod.null(),
+    ])
+    .describe("Платформа событий без context.platform; null — любая платформа."),
   created_at: zod.iso.datetime({ offset: true }),
   revoked_at: zod.iso.datetime({ offset: true }).nullable(),
   last_used_at: zod.iso.datetime({ offset: true }).nullable(),

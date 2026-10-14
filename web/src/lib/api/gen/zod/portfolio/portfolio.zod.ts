@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import * as zod from "zod";
 
@@ -25,6 +25,8 @@ export const GetPortfolioQueryParams = zod.object({
 
 export const getPortfolioResponseEnvironmentDefault = `production`;
 export const getPortfolioResponseUnitDefault = `persons`;
+export const getPortfolioResponseRowsItemAppPlatformsMax = 9;
+
 export const getPortfolioResponseRowsItemRetentionD1Min = 0;
 export const getPortfolioResponseRowsItemRetentionD1Max = 1;
 
@@ -45,17 +47,25 @@ export const GetPortfolioResponse = zod.object({
       app: zod.object({
         id: zod.uuid(),
         name: zod.string(),
-        platform: zod.enum([
-          "ios",
-          "android",
-          "web",
-          "macos",
-          "windows",
-          "linux",
-          "bot",
-          "server",
-          "other",
-        ]),
+        platform: zod
+          .enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"])
+          .describe("Устарело — первая платформа из platforms. Будет удалено в следующем релизе."),
+        platforms: zod
+          .array(
+            zod.enum([
+              "ios",
+              "android",
+              "web",
+              "macos",
+              "windows",
+              "linux",
+              "bot",
+              "server",
+              "other",
+            ]),
+          )
+          .min(1)
+          .max(getPortfolioResponseRowsItemAppPlatformsMax),
         status: zod.enum(["active", "archived"]),
       }),
       active_today: zod.int(),

@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 
 export * from "./alertKey";
@@ -89,6 +89,7 @@ export * from "./passkey";
 export * from "./passkeyList";
 export * from "./passkeyTransportsItem";
 export * from "./platform";
+export * from "./platformList";
 export * from "./portfolio";
 export * from "./portfolioRow";
 export * from "./profile";

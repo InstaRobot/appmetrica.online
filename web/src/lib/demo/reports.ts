@@ -83,7 +83,13 @@ export function portfolio(
     const day = dayStats(scope, date);
     const prevWeek = dayStats(scope, addDays(date, -7)).active;
     rows.push({
-      app: { id: app.id, name: app.name, platform: app.platform, status: app.status },
+      app: {
+        id: app.id,
+        name: app.name,
+        platform: app.platform,
+        platforms: app.platforms,
+        status: app.status,
+      },
       active_today: dayStats(scope, scope.today).active,
       active_date: day.active,
       active_same_day_prev_week: prevWeek,

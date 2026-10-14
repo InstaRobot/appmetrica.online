@@ -3,6 +3,8 @@ package apps
 import (
 	"crypto/rand"
 	"fmt"
+
+	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
 const (
@@ -10,9 +12,21 @@ const (
 
 	writeKeyPrefix = "pk_"
 	writeKeyChars  = 32
-	// firstKeyLabel — label первого write-ключа нового приложения (02-tech-spec.md FR-009).
-	firstKeyLabel = "Основной"
 )
+
+// platformLabels — метки write-ключей, которые Create выпускает на каждую платформу приложения
+// (PLATFORM_LABEL в 06-feature-tickets.md T-MP-002).
+var platformLabels = map[sqlc.AppPlatform]string{
+	sqlc.AppPlatformIos:     "iOS",
+	sqlc.AppPlatformAndroid: "Android",
+	sqlc.AppPlatformWeb:     "Веб",
+	sqlc.AppPlatformMacos:   "macOS",
+	sqlc.AppPlatformWindows: "Windows",
+	sqlc.AppPlatformLinux:   "Linux",
+	sqlc.AppPlatformBot:     "Бот",
+	sqlc.AppPlatformServer:  "Бэкенд",
+	sqlc.AppPlatformOther:   "Другое",
+}
 
 // newWriteKey — публичный write-ключ `pk_` + 32 символа base62 из crypto/rand.
 // Байты ≥ 248 отбрасываются: 248 = 4·62, так что остаток по 62 распределён равномерно.

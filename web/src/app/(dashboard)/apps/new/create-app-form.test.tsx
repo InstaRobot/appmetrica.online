@@ -71,9 +71,7 @@ describe("CreateAppForm", () => {
     await user.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${created.id}/integration`));
-    expect(bodies).toEqual([
-      { name: "Notes iOS", platforms: ["ios"], timezone: "Europe/Moscow" },
-    ]);
+    expect(bodies).toEqual([{ name: "Notes iOS", platforms: ["ios"], timezone: "Europe/Moscow" }]);
     expect(toasts.success).toHaveBeenCalledWith("Приложение создано");
   });
 

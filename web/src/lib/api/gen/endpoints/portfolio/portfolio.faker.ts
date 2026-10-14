@@ -8,7 +8,7 @@
  * Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
  * (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
  *
- * OpenAPI spec version: 1.0.0
+ * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
 import type { Portfolio } from "../../model";
@@ -25,6 +25,7 @@ export const getGetPortfolioResponseMock = (
       id: faker.string.uuid(),
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       platform: faker.helpers.arrayElement(Object.values(Platform)),
+      platforms: faker.helpers.arrayElements(Object.values(Platform)),
       status: faker.helpers.arrayElement(Object.values(AppStatus)),
     },
     active_today: faker.number.int(),

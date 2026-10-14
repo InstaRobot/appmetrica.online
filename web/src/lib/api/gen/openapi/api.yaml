@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: appmetrica.online API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Read API (`/v1`, Bearer `sk_…` со scopes read/delete, либо cookie дашборда)
     и внутренний Admin API (`/admin/v1`, только cookie `am_session`, все операции x-internal).
@@ -668,7 +668,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateAppBody' }
       responses:
         '201':
-          description: Приложение и первый write-ключ
+          description: Приложение и write-ключи его платформ
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CreateAppResult' }
@@ -1084,7 +1084,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: last_passkey | app_name_taken | confirm_name_mismatch | deletion_pending
+      description: last_passkey | app_name_taken | confirm_name_mismatch | deletion_pending | merge_in_progress | app_archived
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1116,6 +1116,12 @@ components:
     Platform:
       type: string
       enum: [ios, android, web, macos, windows, linux, bot, server, other]
+    PlatformList:
+      type: array
+      minItems: 1
+      maxItems: 9
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/Platform' }
     Environment:
       type: string
       enum: [production, development]
@@ -1169,11 +1175,15 @@ components:
       enum: [running, ok, failed]
     App:
       type: object
-      required: [id, name, platform, timezone, status, created_at, updated_at, archived_at]
+      required: [id, name, platform, platforms, timezone, status, created_at, updated_at, archived_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 64 }
-        platform: { $ref: '#/components/schemas/Platform' }
+        platform:
+          allOf: [{ $ref: '#/components/schemas/Platform' }]
+          deprecated: true
+          description: Устарело — первая платформа из platforms. Будет удалено в следующем релизе.
+        platforms: { $ref: '#/components/schemas/PlatformList' }
         timezone: { type: string, example: Europe/Moscow }
         status: { $ref: '#/components/schemas/AppStatus' }
         created_at: { type: string, format: date-time }
@@ -1181,11 +1191,15 @@ components:
         archived_at: { type: string, format: date-time, nullable: true }
     AppSummary:
       type: object
-      required: [id, name, platform, status]
+      required: [id, name, platform, platforms, status]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        platform: { $ref: '#/components/schemas/Platform' }
+        platform:
+          allOf: [{ $ref: '#/components/schemas/Platform' }]
+          deprecated: true
+          description: Устарело — первая платформа из platforms. Будет удалено в следующем релизе.
+        platforms: { $ref: '#/components/schemas/PlatformList' }
         status: { $ref: '#/components/schemas/AppStatus' }
     AppList:
       type: object
@@ -1575,10 +1589,10 @@ components:
     CreateAppBody:
       type: object
       additionalProperties: false
-      required: [name, platform, timezone]
+      required: [name, platforms, timezone]
       properties:
         name: { type: string, minLength: 1, maxLength: 64 }
-        platform: { $ref: '#/components/schemas/Platform' }
+        platforms: { $ref: '#/components/schemas/PlatformList' }
         timezone: { type: string, description: IANA, example: Europe/Moscow }
     UpdateAppBody:
       type: object
@@ -1587,6 +1601,7 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 64 }
         timezone: { type: string }
+        platforms: { $ref: '#/components/schemas/PlatformList' }
     DeleteAppBody:
       type: object
       additionalProperties: false
@@ -1595,12 +1610,16 @@ components:
         confirm_name: { type: string }
     WriteKey:
       type: object
-      required: [id, app_id, key, label, created_at, revoked_at, last_used_at]
+      required: [id, app_id, key, label, platform, created_at, revoked_at, last_used_at]
       properties:
         id: { type: string, format: uuid }
         app_id: { type: string, format: uuid }
         key: { type: string, pattern: '^pk_[A-Za-z0-9]{32}$' }
         label: { type: string, maxLength: 64 }
+        platform:
+          allOf: [{ $ref: '#/components/schemas/Platform' }]
+          nullable: true
+          description: Платформа событий без context.platform; null — любая платформа.
         created_at: { type: string, format: date-time }
         revoked_at: { type: string, format: date-time, nullable: true }
         last_used_at: { type: string, format: date-time, nullable: true }
@@ -1618,10 +1637,14 @@ components:
         label: { type: string, maxLength: 64, default: '' }
     CreateAppResult:
       type: object
-      required: [app, write_key]
+      required: [app, write_keys]
       properties:
         app: { $ref: '#/components/schemas/App' }
-        write_key: { $ref: '#/components/schemas/WriteKey' }
+        write_keys:
+          type: array
+          minItems: 1
+          description: По ключу на каждую платформу приложения, в порядке platforms.
+          items: { $ref: '#/components/schemas/WriteKey' }
     ApiKey:
       type: object
       required: [id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_used_at]

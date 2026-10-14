@@ -33,7 +33,7 @@ const schema = () => import("@/lib/forms/schemas").then((m) => m.createAppSchema
 
 const messages = {
   name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },
-  platform: "Выберите платформу",
+  platforms: "Выберите платформу",
   timezone: "Выберите часовой пояс",
 };
 
@@ -43,14 +43,15 @@ const PLATFORM_OPTIONS = Object.values(Platform).map((value) => ({
   label: value === Platform.server ? "Сервер" : PLATFORM_LABELS[value],
 }));
 
-// S-04: создание приложения (FR-009). После 201 — экран интеграции с write-ключом и сниппетами.
+// S-04: создание приложения (FR-009). После 201 — экран интеграции с write-ключами и сниппетами.
+// Пока платформа выбирается одна: мультивыбор — T-MP-011.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const create = useMutation({ mutationFn: (body: CreateAppRequest) => createApp(body) });
 
   const form = useZodForm(schema, {
-    defaultValues: { name: "", platform: "", timezone: defaultTimezone },
+    defaultValues: { name: "", platforms: [], timezone: defaultTimezone },
     messages,
     serverErrors: { app_name_taken: "name" },
     onSubmit: async (body) => {
@@ -68,7 +69,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
   });
 
   const name = form.field("name");
-  const platform = form.field("platform");
+  const platform = form.field("platforms");
   const timezone = form.field("timezone");
 
   return (
@@ -95,10 +96,10 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
               Платформа <Required />
             </Label>
             <Select
-              value={form.values.platform}
-              onValueChange={(value) => form.setValue("platform", value)}
+              value={form.values.platforms[0] ?? ""}
+              onValueChange={(value) => form.setValue("platforms", [value as Platform])}
               onOpenChange={(open) => {
-                if (!open) form.blur("platform");
+                if (!open) form.blur("platforms");
               }}
             >
               <SelectTrigger
@@ -117,8 +118,8 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
                 ))}
               </SelectContent>
             </Select>
-            {form.errors.platform ? (
-              <FieldError id={form.errorId("platform")} message={form.errors.platform} />
+            {form.errors.platforms ? (
+              <FieldError id={form.errorId("platforms")} message={form.errors.platforms} />
             ) : (
               <p id="platform-hint" className="text-caption text-fg-muted">
                 Используется по умолчанию, если в событии не передан context.platform.
