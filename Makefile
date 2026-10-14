@@ -8,6 +8,7 @@ SHELL := /bin/bash
 # Пути относительные: абсолютный $(CURDIR) ломает рецепты, если в пути к репозиторию есть пробел.
 ROOT := .
 BACKEND := $(ROOT)/backend
+RECONCILE := $(ROOT)/scripts/reconcile
 WEB := $(ROOT)/web
 COMPOSE := docker compose -f $(ROOT)/docker-compose.dev.yml --env-file $(ROOT)/.env
 SQLC_IMAGE := sqlc/sqlc:1.31.1
@@ -151,6 +152,10 @@ gen-check: gen ## Проверить, что сгенерированный ко
 	@untracked=$$(git ls-files --others --exclude-standard -- backend/internal/gen backend/internal/pgstore/sqlc web/src/lib/api/gen); \
 	if [ -n "$$untracked" ]; then echo "gen-check: сгенерированный код не закоммичен:"; echo "$$untracked"; exit 1; fi
 
+.PHONY: reconcile
+reconcile: ## Сверка с AppMetrica (NFR-010): make reconcile ARGS="-csv am.csv -api https://api.appmetrica.online/v1 -app <id>", ключ sk_ в AM_SK
+	@bin=$$(mktemp -d)/reconcile && go -C $(RECONCILE) build -o "$$bin" . && "$$bin" $(ARGS)
+
 # ---------------------------------------------------------------------------
 # Тесты и качество
 # ---------------------------------------------------------------------------
@@ -176,9 +181,10 @@ fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLoo
 	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzLooksLikePII$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
 
 .PHONY: test-scripts
-test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare) и деплоя (deploy-plan, dokploy-deploy, geo-month)
+test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare), деплоя (deploy-plan, dokploy-deploy, geo-month) и сверки (scripts/reconcile)
 	bash $(ROOT)/scripts/test-ci-gates.sh
 	bash $(ROOT)/scripts/test-deploy.sh
+	cd $(RECONCILE) && go test -race -count=1 ./...
 
 .PHONY: tdd-order
 tdd-order: ## Проверить порядок коммитов TDD относительно BASE (по умолчанию origin/main)
@@ -212,8 +218,9 @@ e2e: ## E2E Playwright (требует запущенных ingest, api с APP_E
 lint: lint-go lint-web ## Линтеры Go и web
 
 .PHONY: lint-go
-lint-go: ## golangci-lint v2
+lint-go: ## golangci-lint v2 (backend и scripts/reconcile с конфигом backend)
 	cd $(BACKEND) && golangci-lint run ./...
+	cd $(RECONCILE) && golangci-lint run -c ../../backend/.golangci.yml ./...
 
 .PHONY: lint-web
 lint-web: ## Biome + проверка типов

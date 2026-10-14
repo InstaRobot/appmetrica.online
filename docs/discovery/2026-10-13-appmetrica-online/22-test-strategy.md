@@ -473,11 +473,14 @@ Go-именование: `TestSubject_ExpectedOutcomeWhenCondition` (напри�
 ### 11.3 Сверка с AppMetrica (NFR-010) — процедура 14 дней
 
 1. Подготовка: в первом приложении (iOS) интеграция по рецепту из `/docs/recipes/ios-swift`, AppMetrica SDK остаётся.
-2. Ежедневно в 10:00 MSK скрипт `scripts/reconcile/appmetrica_compare.go` (запуск владельцем или GitHub Actions
-   `workflow_dispatch`) получает за вчера: из нашего Read API — `getAudienceSummary?unit=installs` (active, new) и
-   `getRetention?unit=installs&cohort_granularity=day&periods=1` (D1 когорты позавчера); из AppMetrica Reporting API —
-   те же метрики (`ym:u:activeUsers`, `ym:u:newUsers`, retention day 1) по OAuth-токену из env `APPMETRICA_OAUTH_TOKEN`.
-3. Результат дописывается в `docs/reconciliation/2026-<app>.csv` (`date, metric, ours, appmetrica, diff_pct`).
+2. Ежедневно в 10:00 MSK владелец выгружает из AppMetrica CSV отчёта «Аудитория» по дням (дата, активные, новые)
+   с колонкой retention D1 и запускает `make reconcile` (`scripts/reconcile/appmetrica_compare.go`). Скрипт берёт
+   диапазон дат из CSV и запрашивает наш Read API по ключу `sk_` из env `AM_SK`:
+   `getAudienceTimeseries?unit=installs&granularity=day` для `metric=active` и `metric=new` и
+   `getRetention?unit=installs&cohort_granularity=day&periods=1` для D1. Reporting API AppMetrica не используется (OQ-068).
+3. Таблица `date | metric | ours | appmetrica | diff | PASS/FAIL` с вердиктом сохраняется в `docs/reconciliation/<date>.md`,
+   ответы Read API — в `docs/reconciliation/<date>-snapshot.json` (`-save`); exit 1 при любом FAIL. Порядок —
+   `docs/reconciliation/README.md`.
 4. Критерий прохода: 14 подряд дней, где |diff_pct| ≤ 5 % для active и new и ≤ 3 п.п. для D1; ни одного дня с
    `ingest_down` в `alert_states`.
 5. Расхождение > 5 % → разбор по чек-листу (разные определения сессии, фильтр `environment`, TZ приложения, события

@@ -112,6 +112,17 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: backend
 
+      # scripts/reconcile — отдельный Go-модуль (сверка с AppMetrica, NFR-010), линтуется конфигом backend.
+      - uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: scripts/reconcile
+          args: -c ../../backend/.golangci.yml
+
+      - name: Reconcile script tests (scripts/reconcile)
+        working-directory: scripts/reconcile
+        run: go test -race -count=1 ./...
+
       # internal/docscheck выполняет curl-сниппеты документации в bash: нужны curl, gzip и uuidgen.
       - name: Tools for docs snippet checks (uuidgen)
         run: command -v uuidgen || (sudo apt-get update && sudo apt-get install -y uuid-runtime)
