@@ -38,5 +38,9 @@ SET status = CASE WHEN attempts >= 5 THEN 'failed'::deletion_status ELSE 'pendin
 WHERE id = sqlc.arg(id);
 
 -- name: RequeueStuckDeletionRequests :execrows
-UPDATE deletion_requests SET status = 'pending'
+-- Зависший running (worker упал посреди удаления) возвращается в очередь; с исчерпанными попытками — failed:
+-- следующий claim нарушил бы CHECK attempts ≤ 5.
+UPDATE deletion_requests
+SET status = CASE WHEN attempts >= 5 THEN 'failed'::deletion_status ELSE 'pending'::deletion_status END,
+    error  = coalesce(error, 'worker interrupted')
 WHERE status = 'running' AND started_at < sqlc.arg(stale_before)::timestamptz;

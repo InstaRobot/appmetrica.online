@@ -192,10 +192,14 @@ func (q *Queries) ListDeletionRequests(ctx context.Context, appID *uuid.UUID) ([
 }
 
 const requeueStuckDeletionRequests = `-- name: RequeueStuckDeletionRequests :execrows
-UPDATE deletion_requests SET status = 'pending'
+UPDATE deletion_requests
+SET status = CASE WHEN attempts >= 5 THEN 'failed'::deletion_status ELSE 'pending'::deletion_status END,
+    error  = coalesce(error, 'worker interrupted')
 WHERE status = 'running' AND started_at < $1::timestamptz
 `
 
+// Зависший running (worker упал посреди удаления) возвращается в очередь; с исчерпанными попытками — failed:
+// следующий claim нарушил бы CHECK attempts ≤ 5.
 func (q *Queries) RequeueStuckDeletionRequests(ctx context.Context, staleBefore time.Time) (int64, error) {
 	result, err := q.db.Exec(ctx, requeueStuckDeletionRequests, staleBefore)
 	if err != nil {

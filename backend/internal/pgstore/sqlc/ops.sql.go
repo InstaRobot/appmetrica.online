@@ -14,6 +14,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const appendDeletedAppToJobRun = `-- name: AppendDeletedAppToJobRun :exec
+UPDATE job_runs
+SET details = jsonb_set(details, '{deleted_apps}', coalesce(details -> 'deleted_apps', '[]'::jsonb) || jsonb_build_array($1::jsonb))
+WHERE id = $2
+`
+
+type AppendDeletedAppToJobRunParams struct {
+	Request json.RawMessage
+	ID      uuid.UUID
+}
+
+// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
+func (q *Queries) AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error {
+	_, err := q.db.Exec(ctx, appendDeletedAppToJobRun, arg.Request, arg.ID)
+	return err
+}
+
 const deleteExpiredCeremonies = `-- name: DeleteExpiredCeremonies :execrows
 DELETE FROM webauthn_ceremonies WHERE expires_at < $1::timestamptz
 `
@@ -66,7 +83,8 @@ func (q *Queries) DeleteSpentSetupTokens(ctx context.Context, now time.Time) (in
 }
 
 const finishJobRun = `-- name: FinishJobRun :exec
-UPDATE job_runs SET finished_at = $1, status = $2, details = $3 WHERE id = $4
+UPDATE job_runs SET finished_at = $1, status = $2, details = details || $3::jsonb
+WHERE id = $4
 `
 
 type FinishJobRunParams struct {
@@ -76,6 +94,7 @@ type FinishJobRunParams struct {
 	ID      uuid.UUID
 }
 
+// details дополняет записанное задачей по ходу цикла (AppendDeletedAppToJobRun), а не заменяет.
 func (q *Queries) FinishJobRun(ctx context.Context, arg FinishJobRunParams) error {
 	_, err := q.db.Exec(ctx, finishJobRun,
 		arg.Now,

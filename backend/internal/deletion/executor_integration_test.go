@@ -4,10 +4,12 @@ package deletion_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,7 +103,8 @@ func insertDailyStats(t *testing.T, env *testutil.Env, appID uuid.UUID) {
 	ctx := clickhouse.Context(t.Context(), clickhouse.WithParameters(clickhouse.Parameters{"app_id": appID.String()}))
 	require.NoError(t, env.CH.Conn().Exec(ctx, `INSERT INTO daily_stats
 SELECT {app_id:UUID}, toDate('2026-10-05'), env, unit, 10, 2, 12, 11, 600000, now64(3)
-FROM (SELECT arrayJoin(['production', 'development']) AS env) CROSS JOIN (SELECT arrayJoin(['persons', 'installs']) AS unit)`))
+FROM (SELECT arrayJoin(['production', 'development']) AS env) AS e
+CROSS JOIN (SELECT arrayJoin(['persons', 'installs']) AS unit) AS u`))
 }
 
 // count — число строк таблицы table, удовлетворяющих where (параметры — params).
@@ -169,14 +172,15 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 	require.Nil(t, dr.Error)
 
 	p := clickhouse.Parameters{
-		"app": appID.String(), "user": user, "i1": i1.String(), "i2": i2.String(), "i3": i3.String(),
+		// user_id сравнивается через hex: тест не зависит от экранирования параметров String.
+		"app": appID.String(), "user_hex": strings.ToUpper(hex.EncodeToString([]byte(user))), "i1": i1.String(), "i2": i2.String(), "i3": i3.String(),
 		"shared": shared.String(), "other": otherApp.String(),
 	}
 	mine := "app_id = {app:UUID} AND install_id IN ({i1:UUID}, {i2:UUID})"
-	require.Zero(t, count(t, h.env, "events", "app_id = {app:UUID} AND (user_id = {user:String} OR install_id IN ({i1:UUID}, {i2:UUID}))", p))
+	require.Zero(t, count(t, h.env, "events", "app_id = {app:UUID} AND (hex(user_id) = {user_hex:String} OR install_id IN ({i1:UUID}, {i2:UUID}))", p))
 	require.Zero(t, count(t, h.env, "install_first_seen", mine, p))
 	require.Zero(t, count(t, h.env, "identity_links", mine, p))
-	require.Zero(t, count(t, h.env, "user_first_seen", "app_id = {app:UUID} AND user_id = {user:String}", p))
+	require.Zero(t, count(t, h.env, "user_first_seen", "app_id = {app:UUID} AND hex(user_id) = {user_hex:String}", p))
 
 	// u2 и общее устройство (его первый владелец — u2) на месте; из общего устройства ушли только события U.
 	require.Equal(t, uint64(6), count(t, h.env, "events", "app_id = {app:UUID} AND install_id = {i3:UUID}", p))
@@ -220,11 +224,12 @@ func TestDeletion_InstallRemovesInstallData(t *testing.T) {
 	require.Equal(t, sqlc.DeletionStatusDone, h.status(t, appID, id).Status)
 
 	p := clickhouse.Parameters{"app": appID.String(), "target": target.String(), "keep": keep.String()}
-	for _, table := range []string{"events", "install_first_seen", "identity_links", "rejected_events"} {
+	for _, table := range []string{"events", "install_first_seen", "identity_links"} {
 		require.Zero(t, count(t, h.env, table, "app_id = {app:UUID} AND install_id = {target:UUID}", p), table)
 	}
 	require.Equal(t, uint64(1), count(t, h.env, "events", "app_id = {app:UUID} AND install_id = {keep:UUID}", p))
 	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {app:UUID}", p))
+	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {app:UUID} AND position(payload_sample, {keep:String}) > 0", p))
 	// user_first_seen по install не чистится: u1 остался на другой установке.
 	require.Equal(t, uint64(1), count(t, h.env, "user_first_seen", "app_id = {app:UUID} AND user_id = 'u1'", p))
 }

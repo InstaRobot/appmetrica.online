@@ -408,3 +408,10 @@ func TestRejectedNeedles(t *testing.T) {
 	require.Equal(t, ids[0].String(), chunks[0][0])
 	require.Empty(t, needleChunks(nil))
 }
+
+// Значение параметра String сервер разбирает как Escaped-текст: обратный слеш и управляющие символы экранируются.
+func TestStringParam(t *testing.T) {
+	require.Equal(t, "u-42", stringParam("u-42"))
+	require.Equal(t, `o'brien\\x "42"`, stringParam(`o'brien\x "42"`))
+	require.Equal(t, `a\tb\nc\0`, stringParam("a\tb\nc\x00"))
+}

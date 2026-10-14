@@ -166,7 +166,7 @@ jobs:
         run: pnpm check:bundle | tee -a "$GITHUB_STEP_SUMMARY"
 
   e2e:
-    name: e2e (Playwright against real ingest + api + ClickHouse + Postgres)
+    name: e2e (Playwright against real ingest + api + worker + ClickHouse + Postgres)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -196,7 +196,7 @@ jobs:
           # Демо-данные для отчётных спек (audience.spec.ts открывает «Seed iOS»).
           make seed
 
-      - name: Start ingest and api
+      - name: Start ingest, api and worker
         run: |
           set -a; source .env; set +a
           cd backend
@@ -204,11 +204,14 @@ jobs:
           METRICS_LISTEN_ADDR=:9091 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica ingest > ../ingest.log 2>&1 &
           # APP_ENV=e2e открывает /internal/e2e/* для global-setup (сброс владельца и ссылка на passkey).
           APP_ENV=e2e METRICS_LISTEN_ADDR=:9092 CLICKHOUSE_USER=appmetrica_ro CLICKHOUSE_PASSWORD="$CLICKHOUSE_RO_PASSWORD" ../bin/appmetrica api > ../api.log 2>&1 &
+          # Job deletion для profiles-deletion.spec.ts («deletes user data end to end»).
+          WORKER_JOBS_ENABLED=deletion METRICS_LISTEN_ADDR=:9093 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica worker > ../worker.log 2>&1 &
           for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8080/ready >/dev/null && curl -fsS http://localhost:8081/ready >/dev/null; then echo "backend ready"; exit 0; fi
+            if curl -fsS http://localhost:8080/ready >/dev/null && curl -fsS http://localhost:8081/ready >/dev/null \
+              && curl -fsS http://localhost:8082/health >/dev/null; then echo "backend ready"; exit 0; fi
             sleep 1
           done
-          echo "backend did not become ready"; cat ../api.log ../ingest.log; exit 1
+          echo "backend did not become ready"; cat ../api.log ../ingest.log ../worker.log; exit 1
 
       - name: Install web deps and Playwright Chromium
         working-directory: web
@@ -250,6 +253,7 @@ jobs:
             web/.lighthouseci
             ingest.log
             api.log
+            worker.log
           retention-days: 7
 
   perf-reports:

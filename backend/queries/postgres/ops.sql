@@ -17,7 +17,15 @@ RETURNING owner_timezone, telegram_chat_id, digest_enabled, digest_time, alerts_
 INSERT INTO job_runs (job, started_at) VALUES (sqlc.arg(job), sqlc.arg(now)) RETURNING id;
 
 -- name: FinishJobRun :exec
-UPDATE job_runs SET finished_at = sqlc.arg(now), status = sqlc.arg(status), details = sqlc.arg(details) WHERE id = sqlc.arg(id);
+-- details дополняет записанное задачей по ходу цикла (AppendDeletedAppToJobRun), а не заменяет.
+UPDATE job_runs SET finished_at = sqlc.arg(now), status = sqlc.arg(status), details = details || sqlc.arg(details)::jsonb
+WHERE id = sqlc.arg(id);
+
+-- name: AppendDeletedAppToJobRun :exec
+-- Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
+UPDATE job_runs
+SET details = jsonb_set(details, '{deleted_apps}', coalesce(details -> 'deleted_apps', '[]'::jsonb) || jsonb_build_array(sqlc.arg(request)::jsonb))
+WHERE id = sqlc.arg(id);
 
 -- name: ListLatestJobRuns :many
 SELECT DISTINCT ON (job) id, job, started_at, finished_at, status, details

@@ -13,6 +13,8 @@ import (
 )
 
 type Querier interface {
+	// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
+	AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
 	ClaimNextDeletionRequest(ctx context.Context, now *time.Time) (DeletionRequest, error)
 	CompleteDeletionRequest(ctx context.Context, arg CompleteDeletionRequestParams) error
@@ -38,6 +40,7 @@ type Querier interface {
 	DeleteSetupTokens(ctx context.Context) error
 	DeleteSpentSetupTokens(ctx context.Context, now time.Time) (int64, error)
 	FailDeletionRequest(ctx context.Context, arg FailDeletionRequestParams) error
+	// details дополняет записанное задачей по ходу цикла (AppendDeletedAppToJobRun), а не заменяет.
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) error
 	GetActiveApiKeyByHash(ctx context.Context, keyHash []byte) (GetActiveApiKeyByHashRow, error)
 	GetActiveSession(ctx context.Context, arg GetActiveSessionParams) (GetActiveSessionRow, error)
@@ -70,6 +73,8 @@ type Querier interface {
 	MarkDayClosed(ctx context.Context, arg MarkDayClosedParams) error
 	MarkSetupTokenUsed(ctx context.Context, arg MarkSetupTokenUsedParams) (int64, error)
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (RenamePasskeyRow, error)
+	// Зависший running (worker упал посреди удаления) возвращается в очередь; с исчерпанными попытками — failed:
+	// следующий claim нарушил бы CHECK attempts ≤ 5.
 	RequeueStuckDeletionRequests(ctx context.Context, staleBefore time.Time) (int64, error)
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) (RevokeApiKeyRow, error)
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
