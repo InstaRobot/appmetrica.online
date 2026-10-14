@@ -34,7 +34,7 @@ func TestRunWorker_ProcessesDeletionRequests(t *testing.T) {
 	t.Setenv("WORKER_JOBS_ENABLED", "deletion")
 
 	q := env.PG.Queries()
-	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "App", Platform: sqlc.AppPlatformWeb, Timezone: "UTC"})
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "App", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformWeb}, Timezone: "UTC"})
 	require.NoError(t, err)
 	const user = "secret-user-42"
 	dr, err := deletion.NewService(env.PG, clock.System{}, slog.New(slog.NewTextHandler(io.Discard, nil))).

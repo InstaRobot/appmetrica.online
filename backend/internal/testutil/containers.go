@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	tcclickhouse "github.com/testcontainers/testcontainers-go/modules/clickhouse"
@@ -147,6 +148,34 @@ func start(t testing.TB, migrated bool) *Env {
 func NewPostgresDB(t testing.TB, migrated bool) string {
 	t.Helper()
 	return createPostgresDB(t, startPostgres(t).adminURL, databaseName(t.Name()), migrated)
+}
+
+// NewPostgresAt создаёт для теста базу Postgres на версии миграций version и возвращает пул к ней
+// (тесты миграций: данные до миграции → MigrateTo → проверка).
+func NewPostgresAt(t testing.TB, version int64) *pgxpool.Pool {
+	t.Helper()
+	store, err := pgstore.Open(t.Context(), NewPostgresDB(t, false))
+	require.NoError(t, err)
+	t.Cleanup(store.Close)
+	require.NoError(t, MigrateTo(t.Context(), store.Pool(), version))
+	return store.Pool()
+}
+
+// MigrateTo поднимает или откатывает схему базы пула до версии version.
+func MigrateTo(ctx context.Context, pool *pgxpool.Pool, version int64) error {
+	p, err := pgstore.NewMigrationProvider(pool)
+	if err != nil {
+		return err
+	}
+	current, err := p.GetDBVersion(ctx)
+	if err == nil {
+		if version < current {
+			_, err = p.DownTo(ctx, version)
+		} else {
+			_, err = p.UpTo(ctx, version)
+		}
+	}
+	return errors.Join(err, p.Close())
 }
 
 // databaseName — t_<sha1(имя теста)[:12]>_<n>: читаемо в логах и уникально при повторных вызовах.

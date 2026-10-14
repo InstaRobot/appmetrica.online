@@ -58,17 +58,17 @@ func TestMigrateUp_BothStores(t *testing.T) {
 
 	code, stdout, stderr = runCLI(t, "migrate", "up")
 	require.Equal(t, 0, code, stderr)
-	require.Contains(t, stdout, "postgres: применено миграций: 1, версия 00001")
+	require.Contains(t, stdout, "postgres: применено миграций: 2, версия 00002")
 	require.Contains(t, stdout, "clickhouse: применено миграций: 3, версия 00003")
 
 	code, stdout, stderr = runCLI(t, "migrate", "up")
 	require.Equal(t, 0, code, stderr)
-	require.Contains(t, stdout, "postgres: применено миграций: 0, версия 00001")
+	require.Contains(t, stdout, "postgres: применено миграций: 0, версия 00002")
 	require.Contains(t, stdout, "clickhouse: применено миграций: 0, версия 00003")
 
 	code, stdout, stderr = runCLI(t, "migrate", "status")
 	require.Equal(t, 0, code, stderr)
-	require.Contains(t, stdout, "postgres: версия 00001")
+	require.Contains(t, stdout, "postgres: версия 00002")
 	require.Contains(t, stdout, "clickhouse: версия 00003")
 	require.NotContains(t, stdout, "ожидает")
 	require.NotContains(t, stdout+stderr, pgPassword)
@@ -82,7 +82,7 @@ func TestMigrateUp_BothStores(t *testing.T) {
 	defer func() { require.NoError(t, pp.Close()) }()
 	v, err := pp.GetDBVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), v)
+	require.Equal(t, int64(2), v)
 
 	cp, err := chstore.NewMigrationProvider(chOpts)
 	require.NoError(t, err)

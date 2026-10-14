@@ -46,7 +46,7 @@ func newHarness(t *testing.T) *harness {
 func (h *harness) createApp(t *testing.T, name string) uuid.UUID {
 	t.Helper()
 	app, err := h.env.PG.Queries().CreateApp(t.Context(), sqlc.CreateAppParams{
-		Name: name, Platform: sqlc.AppPlatformIos, Timezone: "Europe/Moscow",
+		Name: name, Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}, Timezone: "Europe/Moscow",
 	})
 	require.NoError(t, err)
 	return app.ID

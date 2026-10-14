@@ -20,11 +20,11 @@ type memKeys struct{}
 
 func (memKeys) LoadWriteKeyCache(context.Context) ([]sqlc.LoadWriteKeyCacheRow, error) {
 	return []sqlc.LoadWriteKeyCacheRow{{
-		WriteKeyID:  uuid.MustParse("0199d5f0-0000-7000-8000-000000000001"),
-		Key:         devWriteKey,
-		AppID:       uuid.MustParse("0199d5f0-0000-7000-8000-000000000002"),
-		AppStatus:   sqlc.AppStatusActive,
-		AppPlatform: sqlc.AppPlatformServer,
+		WriteKeyID:   uuid.MustParse("0199d5f0-0000-7000-8000-000000000001"),
+		Key:          devWriteKey,
+		AppID:        uuid.MustParse("0199d5f0-0000-7000-8000-000000000002"),
+		AppStatus:    sqlc.AppStatusActive,
+		AppPlatforms: []sqlc.AppPlatform{sqlc.AppPlatformServer},
 	}}, nil
 }
 

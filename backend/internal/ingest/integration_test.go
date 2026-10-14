@@ -40,7 +40,7 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 	ctx := t.Context()
 	env := testutil.Start(t)
 	q := env.PG.Queries()
-	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platform: sqlc.AppPlatformIos, Timezone: "Europe/Moscow"})
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}, Timezone: "Europe/Moscow"})
 	require.NoError(t, err)
 	key, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: testKey, Label: "Основной"})
 	require.NoError(t, err)

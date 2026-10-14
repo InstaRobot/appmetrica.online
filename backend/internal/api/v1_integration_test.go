@@ -121,7 +121,7 @@ func TestGetIntegrationHealth_HTTP(t *testing.T) {
 	t.Run("waiting_for_first_event", func(t *testing.T) {
 		fresh := uuid.MustParse("5ce0a000-0000-4000-8000-0000000000aa")
 		_, err := e.env.PG.Pool().Exec(ctx,
-			`INSERT INTO apps (id, name, platform, timezone) VALUES ($1, 'Новое', 'web', 'Europe/Moscow')`, fresh)
+			`INSERT INTO apps (id, name, platform, platforms, timezone) VALUES ($1, 'Новое', 'web', '{web}', 'Europe/Moscow')`, fresh)
 		require.NoError(t, err)
 		got, raw := health(t, fresh, "")
 		require.Contains(t, raw, `"first_event_at":null`)

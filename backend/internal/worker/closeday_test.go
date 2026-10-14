@@ -79,7 +79,7 @@ func (h *harness) addApp(t *testing.T, app testutil.ScenarioApp, createdDay stri
 		status, archivedAt = "archived", &d
 	}
 	_, err = h.env.PG.Pool().Exec(t.Context(),
-		`INSERT INTO apps (id, name, platform, timezone, status, created_at, archived_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO apps (id, name, platform, platforms, timezone, status, created_at, archived_at) VALUES ($1, $2, $3, ARRAY[$3::app_platform], $4, $5, $6, $7)`,
 		app.ID, app.Name, app.Platform, app.Timezone, status, d, archivedAt)
 	require.NoError(t, err)
 }

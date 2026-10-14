@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/clock"
+	"appmetrica.online/backend/internal/pgstore/sqlc"
 	"appmetrica.online/backend/internal/testutil"
 )
 
@@ -55,7 +56,7 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, key, keys[0].Key)
-	require.EqualValues(t, "ios", keys[0].AppPlatform)
+	require.Equal(t, []sqlc.AppPlatform{sqlc.AppPlatformIos}, keys[0].AppPlatforms)
 
 	var keyed uint64
 	require.NoError(t, env.CH.Conn().QueryRow(ctx,

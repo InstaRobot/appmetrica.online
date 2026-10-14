@@ -30,7 +30,7 @@ var (
 )
 
 func keyRow(id uuid.UUID, key string, app uuid.UUID, status sqlc.AppStatus) sqlc.LoadWriteKeyCacheRow {
-	return sqlc.LoadWriteKeyCacheRow{WriteKeyID: id, Key: key, AppID: app, AppStatus: status, AppPlatform: sqlc.AppPlatformIos}
+	return sqlc.LoadWriteKeyCacheRow{WriteKeyID: id, Key: key, AppID: app, AppStatus: status, AppPlatforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}}
 }
 
 // fakeKeyStore — Postgres кэша ключей: снимок write_keys+apps, ошибка загрузки и журнал TouchWriteKeysLastUsed.

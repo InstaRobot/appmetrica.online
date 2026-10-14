@@ -36,7 +36,7 @@ func (s stubKeyStore) LoadWriteKeyCache(context.Context) ([]sqlc.LoadWriteKeyCac
 	}
 	return []sqlc.LoadWriteKeyCacheRow{{
 		WriteKeyID: uuid.New(), Key: ingestTestKey, AppID: uuid.New(),
-		AppStatus: sqlc.AppStatusActive, AppPlatform: sqlc.AppPlatformIos,
+		AppStatus: sqlc.AppStatusActive, AppPlatforms: []sqlc.AppPlatform{sqlc.AppPlatformIos},
 	}}, nil
 }
 

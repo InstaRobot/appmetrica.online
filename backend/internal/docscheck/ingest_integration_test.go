@@ -25,7 +25,7 @@ func newIngest(t *testing.T) (http.Handler, func(t *testing.T, accepted int)) {
 	ctx := t.Context()
 	env := testutil.Start(t)
 	q := env.PG.Queries()
-	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Docs", Platform: sqlc.AppPlatformServer, Timezone: "Europe/Moscow"})
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Docs", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformServer}, Timezone: "Europe/Moscow"})
 	require.NoError(t, err)
 	_, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: devWriteKey, Label: "DEV_WRITE_KEY"})
 	require.NoError(t, err)

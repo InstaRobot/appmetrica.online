@@ -55,7 +55,7 @@ func newPortfolioEnv(t *testing.T) *portfolioEnv {
 	env.LoadNDJSON(t, testutil.ScenarioPath())
 	for _, app := range testutil.ScenarioApps {
 		_, err := env.PG.Pool().Exec(t.Context(),
-			`INSERT INTO apps (id, name, platform, timezone) VALUES ($1, $2, $3, $4)`,
+			`INSERT INTO apps (id, name, platform, platforms, timezone) VALUES ($1, $2, $3, ARRAY[$3::app_platform], $4)`,
 			app.ID, app.Name, app.Platform, app.Timezone)
 		require.NoError(t, err)
 	}

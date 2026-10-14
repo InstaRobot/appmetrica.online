@@ -33,7 +33,7 @@ func realtimeIngest(t *testing.T, env *testutil.Env) (http.Handler, uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 	q := env.PG.Queries()
-	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platform: sqlc.AppPlatformIos, Timezone: "Europe/Moscow"})
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}, Timezone: "Europe/Moscow"})
 	require.NoError(t, err)
 	_, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: realtimeKey, Label: "Основной"})
 	require.NoError(t, err)

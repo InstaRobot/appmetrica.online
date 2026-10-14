@@ -38,9 +38,9 @@ func TestKeyCache_PostgresRevokeArchiveAndLastUsed(t *testing.T) {
 	t.Cleanup(store.Close)
 	q := store.Queries()
 
-	notes, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platform: sqlc.AppPlatformIos, Timezone: "Europe/Moscow"})
+	notes, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}, Timezone: "Europe/Moscow"})
 	require.NoError(t, err)
-	site, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Site", Platform: sqlc.AppPlatformWeb, Timezone: "UTC"})
+	site, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Site", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformWeb}, Timezone: "UTC"})
 	require.NoError(t, err)
 	k1, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: notes.ID, Key: testKey, Label: "Основной"})
 	require.NoError(t, err)

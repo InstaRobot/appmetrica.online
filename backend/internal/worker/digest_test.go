@@ -139,7 +139,7 @@ func newDigestHarness(t *testing.T, bot *fakeBotAPI, opts ...digestOption) *dige
 	h.addApp(t, testutil.ScenarioApps[1].Name, testutil.ScenarioApps[1], "active")
 	h.addApp(t, testutil.ScenarioApps[2].Name, testutil.ScenarioApps[2], "archived")
 	_, err := env.PG.Pool().Exec(t.Context(),
-		`INSERT INTO apps (name, platform, timezone) VALUES ('Бот поддержки & <FAQ>', 'bot', 'Europe/Moscow')`)
+		`INSERT INTO apps (name, platform, platforms, timezone) VALUES ('Бот поддержки & <FAQ>', 'bot', '{bot}', 'Europe/Moscow')`)
 	require.NoError(t, err)
 	h.setSettings(t, "UPDATE settings SET telegram_chat_id = '123', digest_enabled = true, digest_time = '09:00', owner_timezone = 'Europe/Moscow'")
 	return h
@@ -152,7 +152,7 @@ func (h *digestHarness) addApp(t *testing.T, name string, app testutil.ScenarioA
 		archivedAt = &digestNow
 	}
 	_, err := h.env.PG.Pool().Exec(t.Context(),
-		`INSERT INTO apps (id, name, platform, timezone, status, archived_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+		`INSERT INTO apps (id, name, platform, platforms, timezone, status, archived_at) VALUES ($1, $2, $3, ARRAY[$3::app_platform], $4, $5, $6)`,
 		app.ID, name, app.Platform, app.Timezone, status, archivedAt)
 	require.NoError(t, err)
 }
