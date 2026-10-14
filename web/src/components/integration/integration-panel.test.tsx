@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IntegrationHealth } from "@/lib/api/gen/model";
+import { formatDateTime } from "@/lib/format";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -109,6 +110,30 @@ describe("IntegrationPanel", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("textbox", { name: "write-ключ" })).toHaveValue(KEY);
     expect(screen.getByRole("tab", { name: "Kotlin" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("shows when the last event arrived, taken from the freshest app version", async () => {
+    mockApi(() =>
+      health({
+        versions: [
+          { app_version: "2.1.0", accepted: 10, rejected: 0, last_seen: "2026-10-13T09:05:00Z" },
+          { app_version: "2.1.1", accepted: 20, rejected: 0, last_seen: "2026-10-13T11:32:00Z" },
+        ],
+      }),
+    );
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    const last = await screen.findByRole("group", { name: "Последнее событие" });
+    expect(last.textContent).toContain(
+      formatDateTime("2026-10-13T11:32:00Z", makeApp({ id: APP_ID }).timezone),
+    );
+  });
+
+  it("shows a dash for the last event when no version has events", async () => {
+    mockApi(() => health({ versions: [] }));
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    expect(await screen.findByRole("group", { name: "Последнее событие" })).toHaveTextContent("—");
   });
 
   it("warns when the rejection rate reaches 1 %", async () => {
