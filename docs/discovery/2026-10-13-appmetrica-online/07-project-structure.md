@@ -5,8 +5,7 @@
 > Файловая и модульная структура монорепозитория: Go-бэкенд (`backend/`), Next.js-дашборд с документацией (`web/`),
 > контракты (`contracts/`) и инфраструктура (`deploy/`). Документ объясняет, **почему** структура именно такая,
 > и отвечает на вопрос «куда положить новый файл» без угадывания. Источник имён — канонический якорь пакета:
-> пути из этого документа используются в [13-tickets.md](./13-tickets.md), [12-dev-runbook.md](./12-dev-runbook.md)
-> и bootstrap kit [00-bootstrap/](./00-bootstrap/README.md).
+> пути из этого документа используются в [12-dev-runbook.md](./12-dev-runbook.md).
 
 ---
 
@@ -14,8 +13,7 @@
 
 ```
 appmetrica.online/
-├── AGENTS.md                         # правила для AI-агентов (TDD, Validation Commands, запреты)
-├── CLAUDE.md -> AGENTS.md            # симлинк, отдельно не редактируется
+├── CONTRIBUTING.md                   # правила разработки (TDD, Validation Commands, запреты)
 ├── README.md                         # что это, как запустить за 5 минут, ссылки на discovery
 ├── Makefile                          # единая точка входа: dev, gen, test, lint, e2e, seed, passkey-link, perf, reconcile
 ├── lefthook.yml                      # git hooks (fmt/lint/commit-msg/pre-push tests)
@@ -28,7 +26,6 @@ appmetrica.online/
 │       ├── ci.yml                    # backend → web → e2e → images (GHCR)
 │       ├── deploy.yml                # Dokploy API через Tailscale, ручной откат по тегу
 │       └── geo-refresh.yml           # ежемесячная пересборка ingest со свежей DB-IP
-├── .ralphex/                         # конфиг и промпты автономного цикла ralphex (progress/ не коммитится)
 ├── contracts/
 │   ├── openapi/
 │   │   ├── ingest.yaml               # OAS 3.0.3, POST /v1/events (i.appmetrica.online)
@@ -43,7 +40,6 @@ appmetrica.online/
 │   └── dokploy/README.md             # ручные шаги в UI Dokploy (приложения, домены, healthcheck JSON)
 └── docs/
     ├── discovery/2026-10-13-appmetrica-online/   # этот пакет
-    ├── plans/20261013-appmetrica-online.md       # ralphex-план
     └── reconciliation/README.md                  # процедура 14-дневной сверки с AppMetrica (NFR-010)
 ```
 
@@ -302,7 +298,7 @@ backend/
 
 Новых миграций после `00001`–`00003` в MVP нет: ClickHouse-схема разложена на три файла (основная таблица,
 агрегаты с MV, служебные таблицы), Postgres — один `00001_init.sql`. Любое изменение схемы — новый файл со следующим
-номером; существующие миграции не редактируются (AGENTS.md §5).
+номером; существующие миграции не редактируются (CONTRIBUTING.md §5).
 
 **Почему ingest-хендлер написан руками, а api — сгенерирован.** Strict-сервер oapi-codegen декодирует тело целиком в
 типизированную структуру: одно событие с невалидным UUID сломало бы декодирование всего батча и дало `400`, а контракт
@@ -441,8 +437,7 @@ web/
 
 ```
 docs/
-├── discovery/2026-10-13-appmetrica-online/   # discovery-пакет (00-summary … 22-test-strategy, 00-bootstrap/)
-├── plans/20261013-appmetrica-online.md       # ralphex-план (чекбоксы задач)
+├── discovery/2026-10-13-appmetrica-online/   # discovery-пакет (00-summary … 22-test-strategy)
 └── reconciliation/README.md                  # процедура 14-дневной сверки с AppMetrica (NFR-010)
 
 web/content/docs/                              # пользовательская документация API (S-13, за логином)
@@ -586,7 +581,7 @@ web/content/docs/                              # пользовательска�
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial project structure (monorepo backend + web + contracts + deploy) |
-| 2026-10-14 | 1.1 | Сверка с кодом после MVP (Task 52): каталоги `scripts/`, `docs/reconciliation/`, `contracts/http/`, `.ralphex/`; вместо `docs/adr/` — ADR в 03-architecture §5; страницы с `*-view.tsx`; компоненты по 14-ux-ui-spec §4 плюс оболочки (`app-shell`, `user-menu`, `audience-kpis`, `realtime-panel`, `app-settings-panel`, `app-danger-zone`, `tab-header`) и ленивые обёртки `lazy-*`; `lib/` (`url-state` вместо `search-params`, `forms/`, `docs/`, `errors`, `rejection-codes` и др.), хуки — только два; backend: `keycache.go` в `internal/ingest` (снимок в atomic.Pointer, last_used_at раз в 5 мин), три миграции ClickHouse 00001–00003, пакет `docscheck`, `perf/`, `testdata/{geo,gen}`; правила archtest для тестовых пакетов; фикстуры `smoke`/`scenario` + golden; E2E-спеки и a11y в каждой спеке; таблица `scripts/`; «куда положить» — имена хендлеров `v1_<report>.go` / `<area>_handlers.go` и задач worker |
+| 2026-10-14 | 1.1 | Сверка с кодом после MVP (Task 52): каталоги `scripts/`, `docs/reconciliation/`, `contracts/http/`; вместо `docs/adr/` — ADR в 03-architecture §5; страницы с `*-view.tsx`; компоненты по 14-ux-ui-spec §4 плюс оболочки (`app-shell`, `user-menu`, `audience-kpis`, `realtime-panel`, `app-settings-panel`, `app-danger-zone`, `tab-header`) и ленивые обёртки `lazy-*`; `lib/` (`url-state` вместо `search-params`, `forms/`, `docs/`, `errors`, `rejection-codes` и др.), хуки — только два; backend: `keycache.go` в `internal/ingest` (снимок в atomic.Pointer, last_used_at раз в 5 мин), три миграции ClickHouse 00001–00003, пакет `docscheck`, `perf/`, `testdata/{geo,gen}`; правила archtest для тестовых пакетов; фикстуры `smoke`/`scenario` + golden; E2E-спеки и a11y в каждой спеке; таблица `scripts/`; «куда положить» — имена хендлеров `v1_<report>.go` / `<area>_handlers.go` и задач worker |
 | 2026-10-14 | 1.2 | Ревью MVP: `internal/worker` может импортировать `identity` (лист без зависимостей; алиас `reports.UnitPersons` убран); экранирование параметров ClickHouse — общее в `chstore/params.go`; флаг `--seed` у `cmd/seed` |
 | 2026-10-14 | 1.x | Макет «Dashboard v2»: `(public)/page.tsx` (S-00 лендинг), `(dashboard)/portfolio/page.tsx` (портфель на /portfolio), `app/demo/**` и `lib/demo/**` + `lib/demo-mode.ts` (S-15 демо-режим), `components/landing/**`, `lib/theme.ts`, `hooks/use-theme.ts`, `components/layout/{theme-toggle,demo-banner}.tsx` |
 | 2026-10-14 | 1.x | Публичный релиз: `deploy/selfhost/` (docker-compose.yml, .env.example, Caddyfile — установка на любой сервер), `README.md` (EN) и `README.ru.md` (RU), `LICENSE` (AGPL-3.0) |

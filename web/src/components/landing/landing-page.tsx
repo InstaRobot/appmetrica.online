@@ -60,7 +60,7 @@ const STEPS = [
 ] as const;
 
 // Адрес ingest — из сборки (NEXT_PUBLIC_INGEST_URL, у self-hosted установки свой домен); читается
-// внутри функции, а не на уровне модуля (AGENTS.md §8).
+// внутри функции, а не на уровне модуля (CONTRIBUTING.md §8).
 const DEFAULT_INGEST_URL = "https://i.appmetrica.online";
 
 const snippet = (ingestUrl: string) => `curl -X POST ${ingestUrl}/v1/events \\

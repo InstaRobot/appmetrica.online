@@ -332,8 +332,8 @@ make passkey-link # one-time passkey sign-up link for http://localhost:3000
 ```
 
 Before committing: `make check` (code generation check, linters, Go/web/script unit tests). Integration tests:
-`make test-integration` (Docker). E2E: `make e2e` (see [AGENTS.md](AGENTS.md)). The project follows TDD and
-Conventional Commits; rules for humans and AI agents are in [AGENTS.md](AGENTS.md).
+`make test-integration` (Docker). E2E: `make e2e`. The project follows TDD and Conventional Commits; development rules (in Russian) are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 Repository layout:
 

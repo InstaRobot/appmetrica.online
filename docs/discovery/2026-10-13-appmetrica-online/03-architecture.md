@@ -450,7 +450,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Владелец / агент
+    participant Dev as Владелец
     participant GH as GitHub Actions
     participant REG as GHCR
     participant TS as Tailscale

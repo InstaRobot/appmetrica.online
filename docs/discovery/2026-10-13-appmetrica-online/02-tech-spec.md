@@ -70,7 +70,7 @@ MVP за 4–6 недель включает следующие функцион
 - Внешние сервисы: DB-IP City Lite (mmdb, CC BY 4.0, ежемесячно, скачивается при сборке образа ingest),
   Telegram Bot API (`sendMessage`), healthchecks.io Hobbyist (dead-man switch), Hetzner Object Storage fsn1 (S3-бэкапы
   ClickHouse и Postgres), GitHub (Actions, GHCR), Tailscale (доступ к панели Dokploy и SSH из CI).
-- Внутренние команды: нет — владелец один; реализацию ведёт AI-агент по тикетам из [13-tickets.md](./13-tickets.md),
+- Внутренние команды: нет — владелец один; реализацию ведёт владелец,
   владелец ревьюит и деплоит (10–15 часов в неделю).
 - Лицензии: DB-IP Lite — CC BY 4.0 (обязательная атрибуция «IP Geolocation by DB-IP» со ссылкой https://db-ip.com в
   футере дашборда); ClickHouse — Apache-2.0; PostgreSQL — PostgreSQL License; Dokploy — Apache-2.0 ядро (проприетарные
@@ -91,7 +91,7 @@ MVP за 4–6 недель включает следующие функцион
 - [ ] E2E-тест Playwright для P0-сценариев UI
 - [ ] Для UI: 0 нарушений `@axe-core/playwright` и проход только с клавиатуры
 - [ ] Perf budget выдержан (если в story указан NFR)
-- [ ] Ревью: AI-ревью (ralphex review agents) + approve владельца; внимание к качеству тестов
+- [ ] Ревью: approve владельца; внимание к качеству тестов
 - [ ] Задеплоено в production через Dokploy с успешным healthcheck, ручной smoke владельцем
 - [ ] Владелец принял результат (product owner acceptance)
 
@@ -1907,7 +1907,7 @@ AC-6.2.5 (invariant — SLA):
 
 #### Story 7.1: Документация за логином (FR-023)
 
-**Как** владелец (и AI-агент, интегрирующий мои приложения), **я хочу** полную документацию с рецептами,
+**Как** владелец (или разработчик, интегрирующий мои приложения), **я хочу** полную документацию с рецептами,
 **чтобы** встроить отправку событий в любое приложение без SDK.
 
 **Контекст**: Fumadocs (core/ui 16.17.2, mdx 15.4.7, openapi 12.4.2) в route group `(docs)`, путь `/docs`. Страницы:
@@ -2651,4 +2651,3 @@ Review rejects PR где implementation commit предшествует test com
 - UX/UI: [14-ux-ui-spec.md](./14-ux-ui-spec.md)
 - Ops runbooks: [21-ops-runbooks.md](./21-ops-runbooks.md)
 - Test strategy: [22-test-strategy.md](./22-test-strategy.md)
-- Tickets: [13-tickets.md](./13-tickets.md)

@@ -8,7 +8,7 @@
 @source "../../content";
 
 :root {
-  /* Палитра по макету «Dashboard v2» (Claude Design), значения подобраны под WCAG 2.2 AA:
+  /* Палитра по макету «Dashboard v2», значения подобраны под WCAG 2.2 AA:
      контраст пар токенов проверяет globals.test.ts для обеих тем. */
   color-scheme: light;
 

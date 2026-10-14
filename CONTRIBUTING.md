@@ -1,13 +1,14 @@
-# AGENTS.md — правила для AI-агентов и разработчиков appmetrica.online
+# Contributing to appmetrica.online
 
-> `CLAUDE.md` — симлинк на этот файл (`ln -s AGENTS.md CLAUDE.md`). Правь только `AGENTS.md`.
+Правила разработки проекта: процесс, проверки перед коммитом, запреты и стиль кода. Установка и эксплуатация —
+в [README.ru.md](README.ru.md) / [README.md](README.md).
 
 ## 1. Что это за проект
 
-appmetrica.online — внутренняя система аналитики приложений одного владельца (замена Яндекс AppMetrica без SDK).
-Клиенты (iOS, Android, веб, боты) шлют системные события `session_start` / `session_end` по HTTP на
-`https://i.appmetrica.online/v1/events`; владелец смотрит портфель, аудиторию, retention, realtime и профили
-в дашборде `https://appmetrica.online` и читает те же данные через Read API `https://api.appmetrica.online/v1`.
+appmetrica.online — открытая self-hosted аналитика приложений без SDK. Клиенты (iOS, Android, веб, боты) шлют
+системные события `session_start` / `session_end` по HTTP на `https://<ingest-домен>/v1/events`; владелец
+установки смотрит портфель, аудиторию, retention, realtime и профили в дашборде и читает те же данные через
+Read API `https://<api-домен>/v1`.
 
 Источник правды по требованиям — discovery-пакет `docs/discovery/2026-10-13-appmetrica-online/`:
 
@@ -20,7 +21,7 @@ appmetrica.online — внутренняя система аналитики п�
 | HTTP-контракты (OpenAPI) | `06-api-contracts.md`, `contracts/openapi/*.yaml` |
 | Куда класть файлы | `07-project-structure.md` |
 | Экраны, токены, состояния | `14-ux-ui-spec.md` |
-| Тикеты и порядок работ | `13-tickets.md`, `docs/plans/20261013-appmetrica-online.md` |
+| План и вехи | `08-roadmap.md` |
 | Команды разработки и деплоя | `12-dev-runbook.md`, `21-ops-runbooks.md` |
 | Стратегия тестирования | `22-test-strategy.md` |
 
@@ -35,14 +36,14 @@ appmetrica.online — внутренняя система аналитики п�
 
 ## 3. Обязательный процесс работы (TDD)
 
-1. Возьми тикет из `13-tickets.md` (или задачу из ralphex-плана). Прочитай его acceptance criteria и указанные секции discovery-доков.
-2. **Сначала тест.** Напиши падающий тест по `test_path` из тикета (Go: `*_test.go` рядом с кодом; интеграционные — с build-тегом `integration`; web: `*.test.ts(x)` рядом с компонентом; E2E — `web/e2e/*.spec.ts`). Запусти и убедись, что он падает по ожидаемой причине.
+1. Возьми задачу (issue) и прочитай связанные требования FR/NFR и секции discovery-доков.
+2. **Сначала тест.** Напиши падающий тест (Go: `*_test.go` рядом с кодом; интеграционные — с build-тегом `integration`; web: `*.test.ts(x)` рядом с компонентом; E2E — `web/e2e/*.spec.ts`). Запусти и убедись, что он падает по ожидаемой причине.
 3. Минимальная реализация до зелёного теста. Затем рефакторинг при зелёных тестах.
 4. Если меняется HTTP-контракт: сначала правишь `contracts/openapi/*.yaml`, затем `make gen`, затем код и тесты.
 5. Если меняется схема БД: новая миграция goose (`backend/migrations/{postgres,clickhouse}/NNNNN_snake_case.sql`), старые миграции не редактируются никогда.
 6. Перед коммитом выполни Validation Commands (раздел 4). Все должны пройти.
-7. Коммит по Conventional Commits: `<type>(<scope>): <subject>` на английском, scope — имя пакета или экрана (`feat(ingest): reject events older than late window`). Типы: feat, fix, refactor, test, docs, chore, ci, build, perf, revert. В теле — ID тикета (`Refs: T-012`). Тест и реализация — разными коммитами: сначала `test(<scope>): …`, потом `feat`/`fix`. CI-job `tdd-order` (`scripts/check-tdd-order.sh`) падает, если первый коммит с кодом пакета раньше первого коммита с его тестом; локально — `make tdd-order BASE=origin/main`. Метку `tdd-exception` (hotfix) ставит только владелец.
-8. Один тикет — одна ветка `feat/T-012-short-slug` — один PR не больше ~500 строк диффа (без сгенерированного кода).
+7. Коммит по Conventional Commits: `<type>(<scope>): <subject>` на английском, scope — имя пакета или экрана (`feat(ingest): reject events older than late window`). Типы: feat, fix, refactor, test, docs, chore, ci, build, perf, revert. В теле — ссылка на issue (`Refs: #12`). Тест и реализация — разными коммитами: сначала `test(<scope>): …`, потом `feat`/`fix`. CI-job `tdd-order` (`scripts/check-tdd-order.sh`) падает, если первый коммит с кодом пакета раньше первого коммита с его тестом; локально — `make tdd-order BASE=origin/main`. Метку `tdd-exception` (hotfix) ставит только владелец.
+8. Одна задача — одна ветка `feat/short-slug` — один PR не больше ~500 строк диффа (без сгенерированного кода).
 
 ## 4. Validation Commands (выполнять перед каждым коммитом)
 

@@ -17,7 +17,7 @@
 ## Для кого
 
 - **Primary users**: единственный пользователь — владелец и разработчик приложений (solo). Владеет Go, TypeScript/React, Linux/Docker/ops; ClickHouse не знает — поэтому в пакете подробные runbook-и и тесты аналитического SQL на фикстурах. Смотрит дашборд только с десктопа.
-- **Secondary stakeholders**: пользователи приложений владельца (субъекты данных по GDPR и 152-ФЗ — их `install_id`, `user_id`, страна и город); ревьюеры App Store и Google Play (privacy labels, Data safety — отказ от SDK упрощает декларации); AI-агент-реализатор, который пишет код по тикетам этого пакета.
+- **Secondary stakeholders**: пользователи приложений владельца (субъекты данных по GDPR и 152-ФЗ — их `install_id`, `user_id`, страна и город); ревьюеры App Store и Google Play (privacy labels, Data safety — отказ от SDK упрощает декларации).
 
 ## Core experience (2 минуты в продукте)
 
@@ -83,14 +83,10 @@
 - **Дорожная карта**: [08-roadmap.md](./08-roadmap.md)
 - **Риски и mitigations**: [09-risks-and-mitigations.md](./09-risks-and-mitigations.md)
 - **Открытые вопросы**: [10-open-questions.md](./10-open-questions.md)
-- **Handoff в реализацию**: [11-handoff.md](./11-handoff.md)
 - **Dev runbook**: [12-dev-runbook.md](./12-dev-runbook.md)
-- **Тикеты**: [13-tickets.md](./13-tickets.md) и [13-tickets.json](./13-tickets.json)
 - **UX/UI спецификация**: [14-ux-ui-spec.md](./14-ux-ui-spec.md)
 - **Ops runbooks (ClickHouse, Dokploy, бэкапы)**: [21-ops-runbooks.md](./21-ops-runbooks.md)
 - **Стратегия тестирования (TDD)**: [22-test-strategy.md](./22-test-strategy.md)
-- **Bootstrap kit**: [00-bootstrap/](./00-bootstrap/)
-- **План автономной разработки (ralphex)**: [../../plans/20261013-appmetrica-online.md](../../plans/20261013-appmetrica-online.md)
 
 ---
 

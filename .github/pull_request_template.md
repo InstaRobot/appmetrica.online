@@ -6,7 +6,7 @@ Refs: T-NNN
 
 ## Допущения
 
-<!-- Решения, которых нет в discovery-доках (AGENTS.md §7). Каждое — строкой в 10-open-questions.md. Нет — «нет». -->
+<!-- Решения, которых нет в discovery-доках (CONTRIBUTING.md §7). Каждое — строкой в 10-open-questions.md. Нет — «нет». -->
 
 ## Чек-лист
 

@@ -222,7 +222,7 @@ DAU и новые ±5 % каждый день 14 дней, D1 ±3 п.п.
 **Mitigation**:
 - [21-ops-runbooks.md](./21-ops-runbooks.md) с готовыми SQL-запросами диагностики и пошаговым восстановлением.
 - Все аналитические запросы покрыты тестами на фикстурах; ручной SQL на проде только через пользователя `appmetrica_ro`.
-- Запрет `OPTIMIZE ... FINAL` на `events` без чтения runbook (правило в `AGENTS.md`).
+- Запрет `OPTIMIZE ... FINAL` на `events` без чтения runbook (правило в `CONTRIBUTING.md`).
 - Схема меняется только миграциями goose с ревью; `ALTER ... MODIFY COLUMN` (мутация) — отдельной миграцией вне пика.
 
 ---
@@ -265,7 +265,7 @@ Lightweight `DELETE FROM appmetrica.events` ставит маску удален
 Дубли с одним `insert_id` схлопываются только при слиянии партов, поэтому `count()` по сырым событиям может временно завышать цифры.
 - **Вероятность / Impact**: High / Medium.
 - **Mitigation**: метрики идемпотентны по конструкции: `uniqExact(person_key)`, `uniqExact(session_id)`, длительность —
-  `max(duration_ms)` по `session_id`. Использовать `count()` для метрик запрещено правилом в `AGENTS.md` и ревью SQL.
+  `max(duration_ms)` по `session_id`. Использовать `count()` для метрик запрещено правилом в `CONTRIBUTING.md` и ревью SQL.
   Тест идемпотентности: повторная отправка батча не меняет ни одной метрики.
 
 ### R-012: Расхождение часов клиента
@@ -349,9 +349,9 @@ Swarm Update Config `Order: start-first` запускает новую верс�
 
 ### R-024: Ёмкость владельца на ревью (bus factor = 1)
 
-Агент производит PR быстрее, чем владелец успевает их ревьюить при 10–15 ч/нед.
+PR приходит больше, чем владелец успевает ревьюить при 10–15 ч/нед.
 - **Вероятность / Impact**: High / Medium (сдвиг сроков, а не провал).
-- **Mitigation**: PR ≤ 500 LOC, зелёный CI до ревью, ralphex-пайплайн (5 ревью-агентов + внешнее ревью) до владельца,
+- **Mitigation**: PR ≤ 500 LOC, зелёный CI до ревью, автоматические проверки CI до владельца,
   20 % буфер на эпик ([08-roadmap.md](./08-roadmap.md)).
 
 ### R-025: Rate limit установки при досыле большой офлайн-очереди
@@ -473,7 +473,7 @@ Swarm Update Config `Order: start-first` запускает новую верс�
 ### R-034: Зависимость от одного человека (операционная память)
 
 - Вся операционная память у владельца.
-- **Mitigation**: `AGENTS.md`, [12-dev-runbook.md](./12-dev-runbook.md), [21-ops-runbooks.md](./21-ops-runbooks.md),
+- **Mitigation**: `CONTRIBUTING.md`, [12-dev-runbook.md](./12-dev-runbook.md), [21-ops-runbooks.md](./21-ops-runbooks.md),
   ADR в `docs/adr/`. Всё, что сделано руками в Dokploy, записано в `deploy/dokploy/README.md`.
 
 ---

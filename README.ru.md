@@ -333,8 +333,8 @@ make passkey-link # одноразовая ссылка регистрации p
 ```
 
 Перед коммитом — `make check` (проверка кодогенерации, линтеры, unit-тесты Go, web и скриптов). Интеграционные
-тесты — `make test-integration` (нужен Docker). E2E — `make e2e` (см. [AGENTS.md](AGENTS.md)). Проект ведётся по TDD и
-Conventional Commits; правила для людей и AI-агентов — в [AGENTS.md](AGENTS.md).
+тесты — `make test-integration` (нужен Docker). E2E — `make e2e`. Проект ведётся по TDD и Conventional Commits; правила разработки —
+в [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Структура репозитория:
 

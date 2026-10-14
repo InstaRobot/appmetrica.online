@@ -1,7 +1,7 @@
 # Test Strategy — appmetrica.online
 
 > Единая стратегия тестирования проекта. Определяет pyramid, frameworks,
-> coverage targets, CI gates, fixtures. Консумер: AI-агент + QA + разработчики.
+> coverage targets, CI gates, fixtures. Консумер: QA и разработчики.
 > Каждая фича наследует эту стратегию (см. `features/<slug>/08-test-plan.md`).
 >
 > Подход: **TDD** (решение владельца от 2026-10-13). Поведение и AC каждого требования — в
@@ -356,7 +356,7 @@ Reviewer checklist: тест был написан ДО реализации (с
 - Смотрим: тесты рождаются в одном commit с implementation → reject PR, ask to split.
 - Exception: hotfix под production incident — тесты добавляем в follow-up PR в течение 24 часов.
 
-Автоматизация для ralphex/AI-агента: в каждом тикете первый коммит имеет тип `test(<scope>):`, второй —
+Автоматизация: в каждом тикете первый коммит имеет тип `test(<scope>):`, второй —
 `feat(<scope>):`/`fix(<scope>):`. Скрипт `scripts/check-tdd-order.sh` (запускается в CI на PR) проверяет, что для
 каждого изменённого `*_test.go` / `*.test.ts(x)` / `*.spec.ts` коммит с тестом не позже первого коммита с
 изменением соответствующего non-test файла того же пакета; нарушение — warning в PR-комментарии и блок merge
@@ -727,6 +727,5 @@ export async function setupOwner(page: Page, baseURL: string): Promise<void> {
 - Per-feature test plans: `features/<slug>/08-test-plan.md`
 - FR AC definitions: `02-tech-spec.md`
 - API test vectors: `06-api-contracts.md §9-examples`
-- Ticket breakdown (tests-first): `13-tickets.md`
 - Ops drills и восстановление: [21-ops-runbooks.md](./21-ops-runbooks.md)
 - Dev-окружение и команды `make`: [12-dev-runbook.md](./12-dev-runbook.md)

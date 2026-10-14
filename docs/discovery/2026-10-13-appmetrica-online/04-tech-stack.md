@@ -66,7 +66,7 @@
 Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/static-debian12:nonroot`, `CGO_ENABLED=0`.
 
 **Rationale**:
-- Владелец уверенно пишет и деплоит Go — может ревьюить код агента и чинить инциденты сам.
+- Владелец уверенно пишет и деплоит Go — может ревьюить код и чинить инциденты сам.
 - Ingestion — горячий путь: до ~500 запросов/с в пике и батчи по 500 событий. Go даёт предсказуемую память, один статический бинарник и goroutine-воркеры для батч-вставок в ClickHouse.
 - Один бинарник `appmetrica` с подкомандами `ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck` — три контейнера из одного образа, один набор зависимостей и тестов.
 - Distroless-образ без shell уменьшает поверхность атаки; HEALTHCHECK выполняется самим бинарником (`appmetrica healthcheck --url …`), curl не нужен.
@@ -104,7 +104,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 - Документация API (Fumadocs) нативно встраивается в App Router в route group `(docs)` того же приложения — один деплой для дашборда и доков.
 - RSC для первой отрисовки отчётов (данные с Go API на сервере), Client Components только для интерактивных фильтров, графиков и realtime-поллинга.
 - `src/proxy.ts` (переименованный `middleware.ts` в Next 16) выполняет дешёвую проверку наличия cookie `am_session` и редирект на `/login`.
-- Cache Components в 16.4 включены по умолчанию — **страницы с данными владельца не используют `'use cache'`**, иначе ответы с данными сессии попадут в кэш. Это правило закреплено в `AGENTS.md`.
+- Cache Components в 16.4 включены по умолчанию — **страницы с данными владельца не используют `'use cache'`**, иначе ответы с данными сессии попадут в кэш. Это правило закреплено в `CONTRIBUTING.md`.
 
 **TypeScript 6.0.3, а не 7.0.2**: TS 7 (нативный компилятор на Go) не имеет JS API; на нём не работают openapi-typescript (#2841), hey-api (#4235); typescript-eslint требует `<6.1.0`; страница настройки TS 7 в доках Next.js помечена experimental. Переход — после TS 7.1 со стабильным API.
 
@@ -122,8 +122,8 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 **Выбрано**: shadcn CLI 4.21.4, инициализация **явно с Radix**: `pnpm dlx shadcn@4.21.4 init -b radix`. Tailwind 4.3.3 + `@tailwindcss/postcss` 4.3.3, CSS-first конфиг через `@theme`. Иконки lucide-react 1.56.0. Анимации tw-animate-css 1.4.0.
 
 **Rationale**:
-- Копируемые компоненты в собственном репо (`web/src/components/ui`) — агент правит их как обычный код, без борьбы с чужой темой.
-- Radix — проверенная accessibility (WCAG 2.2 AA, фокус-менеджмент, клавиатура) и больше обучающих примеров у кодинг-агентов, чем у Base UI, ставшего дефолтом shadcn в июле 2026.
+- Копируемые компоненты в собственном репо (`web/src/components/ui`) — их правят как обычный код, без борьбы с чужой темой.
+- Radix — проверенная accessibility (WCAG 2.2 AA, фокус-менеджмент, клавиатура) и больше примеров и документации, чем у Base UI, ставшего дефолтом shadcn в июле 2026.
 - Стиль AppMetrica (светлая тема, карточки-виджеты, синий акцент) собирается из `Card`, `Table`, `Tabs`, `Select`, `Popover`, `Calendar`, `Tooltip`, `Dialog`, `Command` + токены в [14-ux-ui-spec.md](./14-ux-ui-spec.md).
 - С сентября 2026 shadcn берёт `cn` из пакета `cn` 0.4.0 — фиксируем его в зависимостях.
 - Зависимости примитивов shadcn (ставятся CLI при `add`, версии фиксируются точно): `cmdk` 1.1.1 — основа `command` (AppSwitcher, поиск часового пояса); `react-day-picker` 10.0.2 — основа `calendar` (PeriodPicker, локаль `ru` из date-fns). Альтернатива — писать комбобокс и календарь на голых Radix-примитивах: больше кода и своя доступность клавиатуры, выигрыша нет.
@@ -144,7 +144,7 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 
 **Rationale**:
 - Контракт-первым: одна спека → Go-сервер, TS-клиент (orval), доки (Fumadocs). Расхождение кода и доков исключено конструктивно.
-- Strict server даёт типизированные request/response — агент не может забыть поле ответа.
+- Strict server даёт типизированные request/response — поле ответа нельзя забыть.
 - Горячий хендлер `POST /v1/events` пишется руками поверх сгенерированных типов (нужен контроль над gzip, лимитом тела, частичным успехом), остальные — через strict server.
 - WebAuthn-эндпоинты используют `CreateCredential` / `ValidatePasskeyLogin` go-webauthn на сырых байтах тела: `Finish*`-хелперы сами читают `*http.Request`, а strict server к этому моменту тело уже разобрал.
 - Сгенерированный код коммитится в `backend/internal/gen/{ingestapi,api}`; CI проверяет, что `make gen` не даёт diff.
@@ -479,7 +479,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 | Conventional Commits | ✅ | commit-msg хук lefthook + проверка в CI |
 | Renovate / Dependabot | ✅ | `renovate.json`: gomod, npm, dockerfile, github-actions; patch — automerge после зелёного CI |
 | ADR | ✅ | ADR-001…ADR-014 в [03-architecture.md](./03-architecture.md) |
-| AGENTS.md / CLAUDE.md | ✅ | `AGENTS.md` в корне, `CLAUDE.md` — симлинк |
+| CONTRIBUTING.md | ✅ | правила разработки в корне репозитория |
 | Security baseline | ✅ | OWASP API Top 10 2023, секреты только в env Dokploy/GitHub, `govulncheck` + `pnpm audit` в CI, CSP с nonce на web |
 | Perf budgets | ✅ | NFR-003 (P95 ≤ 1,5 с), NFR-006 (LCP ≤ 2,5 с, initial JS ≤ 250 KB gz, INP ≤ 200 мс) |
 | Accessibility | ✅ | WCAG 2.2 AA, axe-core в Playwright |

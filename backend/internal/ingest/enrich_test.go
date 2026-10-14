@@ -433,7 +433,7 @@ func TestPayloadSample(t *testing.T) {
 		require.Contains(t, sample, `"name":"session_start"`)
 	})
 
-	// Codex review: экранированные ключи и значения ("\u0069p", "\u0040") проходили мимо шаблонов
+	// Ревью: экранированные ключи и значения ("\u0069p", "\u0040") проходили мимо шаблонов
 	// неразбираемого тела; дубликат context с пустым объектом оставлял первый ip в исходных байтах.
 	t.Run("escaped_key_and_value_in_invalid_json", func(t *testing.T) {
 		body := `{"context":{"\u0069p":"` + londonIP + `","Ip":"2a02:6b8::1"},"events":[{"user_id":"ivan\u0040example.com"},{"user_id":"\u007542"},`

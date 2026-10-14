@@ -1101,7 +1101,7 @@ curl -sS "https://api.appmetrica.online/v1/apps/$APP/deletion-requests/0199d6d0-
 
 ## 3. Webhooks (исходящие, если есть)
 
-Исходящих webhooks клиентам нет: потребитель данных — сам владелец через дашборд и Read API. Входящих webhooks тоже нет (ни Stripe, ни Clerk). Ниже — что система отправляет наружу вместо webhooks, чтобы агент-реализатор не искал несуществующий механизм подписки.
+Исходящих webhooks клиентам нет: потребитель данных — сам владелец через дашборд и Read API. Входящих webhooks тоже нет (ни Stripe, ни Clerk). Ниже — что система отправляет наружу вместо webhooks.
 
 ### 3.1. Format
 
@@ -3485,7 +3485,7 @@ func NewRouter(s *Server, mw httpx.Middlewares) http.Handler {
 }
 ```
 
-`web/orval.config.ts` (идентичен `00-bootstrap/web/orval.config.ts`; сгенерированный код — в `web/src/lib/api/gen/**`, рукописный mutator `web/src/lib/api/fetcher.ts` лежит вне `gen/`, чтобы `clean: true` его не стирал):
+`web/orval.config.ts` (сгенерированный код — в `web/src/lib/api/gen/**`, рукописный mutator `web/src/lib/api/fetcher.ts` лежит вне `gen/`, чтобы `clean: true` его не стирал):
 ```typescript
 import { defineConfig } from "orval";
 

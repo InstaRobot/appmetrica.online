@@ -2,7 +2,7 @@
 
 **Tier**: шаблон Tier 3/4, применён к Tier 1–2 продукту. Документ включён в пакет, потому что у владельца нет экспертизы
 ClickHouse, а продукт держит один сервер с данными, которые нельзя потерять.
-**Consumer**: владелец (solo) во время инцидентов, провижининга и плановых работ; AI-агент при подготовке ops-тикетов.
+**Consumer**: владелец (solo) во время инцидентов, провижининга и плановых работ.
 
 > Окружение: Hetzner AX102-1 (FSN1), Ubuntu 24.04 на RAID1, Tailscale, Dokploy ≥ v0.30.8 (Traefik v3.6, Docker Swarm),
 > Applications `appmetrica-ingest` / `appmetrica-api` / `appmetrica-worker` / `appmetrica-web` из GHCR, compose `clickhouse-stack`

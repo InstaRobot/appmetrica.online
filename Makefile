@@ -232,7 +232,7 @@ fmt: ## Форматирование Go (gofumpt + goimports) и web (Biome)
 	cd $(WEB) && pnpm format
 
 .PHONY: check
-check: gen-check lint test ## Validation Commands: всё, что агент обязан прогнать перед коммитом
+check: gen-check lint test ## Validation Commands: всё, что нужно прогнать перед коммитом
 
 # ---------------------------------------------------------------------------
 # Сборка и отладка

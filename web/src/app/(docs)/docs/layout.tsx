@@ -10,7 +10,7 @@ import "../docs.css";
 
 // DocsShell (S-13): шапка дашборда сверху, под ней layout Fumadocs (сайдбар, контент, оглавление).
 // Документация только для владельца: сессия проверяется на сервере при каждом запросе,
-// 'use cache' в этой route group запрещён (AGENTS.md §5).
+// 'use cache' в этой route group запрещён (CONTRIBUTING.md §5).
 // Провайдер Fumadocs читает usePathname, а сессия — cookie запроса, поэтому вся оболочка под
 // Suspense: статическая часть ответа — только полоса шапки.
 export default function DocsShell({ children }: LayoutProps<"/docs">) {

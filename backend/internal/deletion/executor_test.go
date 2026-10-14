@@ -283,7 +283,7 @@ func TestDeletion_AppNotDeletedWhenClickHouseFails(t *testing.T) {
 	require.Equal(t, sqlc.DeletionStatusPending, q.get(id).Status)
 }
 
-// Codex review: ingest держит снимок ключей KEY_CACHE_REFRESH и после архивации ещё принимает события
+// Ревью: ingest держит снимок ключей KEY_CACHE_REFRESH и после архивации ещё принимает события
 // приложения; purge раньше их вставки оставил бы строки без приложения. Запрос app берётся не раньше
 // AppPurgeDelay после requested_at; запросы user/install той же очереди не ждут.
 func TestDeletion_AppWaitsForPurgeDelay(t *testing.T) {
@@ -435,7 +435,7 @@ func TestRejectedNeedles(t *testing.T) {
 	require.Equal(t, []string{`"Юзер"`}, userNeedles("Юзер"))
 	// JSONEncoder в Swift экранирует слеш: ищем обе записи; HTML-символы не экранируются.
 	require.Equal(t, []string{`"a/b <x>"`, `"a\/b <x>"`}, userNeedles("a/b <x>"))
-	// Codex review: сэмпл хранится в каноничном виде ingest.PayloadSample (encoding/json без HTML-экранирования),
+	// Ревью: сэмпл хранится в каноничном виде ingest.PayloadSample (encoding/json без HTML-экранирования),
 	// поэтому первый needle совпадает и с user_id, который клиент прислал экранированным ("\u007531");
 	// проверка самого сэмпла — ingest TestPayloadSample/canonical_escaping_for_deletion_needles.
 	require.Equal(t, `"u31"`, userNeedles("u31")[0])

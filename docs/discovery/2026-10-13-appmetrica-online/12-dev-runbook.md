@@ -1,11 +1,11 @@
 # Dev Runbook: appmetrica.online
 
 **Цель**: пошаговое руководство от пустого репозитория до работающего production на Hetzner + Dokploy.
-**Consumer**: AI-агент реализации или владелец проекта (solo, уверенно владеет Go, TS/React, Linux/Docker; ClickHouse — по runbook-ам).
+**Consumer**: разработчик проекта (Go, TS/React, Linux/Docker; ClickHouse — по runbook-ам).
 
 > Каждый шаг — конкретная команда. Значения (пути, версии, имена переменных) совпадают с
 > [04-tech-stack.md](./04-tech-stack.md), [05-data-model.md](./05-data-model.md), [06-api-contracts.md](./06-api-contracts.md),
-> [07-project-structure.md](./07-project-structure.md) и bootstrap kit [00-bootstrap/](./00-bootstrap/README.md).
+> [07-project-structure.md](./07-project-structure.md).
 > Эксплуатация ClickHouse, бэкапы и инциденты — в [21-ops-runbooks.md](./21-ops-runbooks.md).
 
 ---
@@ -61,33 +61,19 @@ corepack prepare pnpm@12.11.2 --activate
 ## 1. Scaffold repository
 
 ### 1.1. Create empty repo
+Репозиторий уже существует — клонируй его:
 ```bash
-gh repo create appmetrica-online --private --clone
-cd appmetrica-online
-mkdir -p docs/discovery && cp -R "<путь к пакету>/2026-10-13-appmetrica-online" docs/discovery/
+git clone https://github.com/InstaRobot/appmetrica.online.git
+cd appmetrica.online
 ```
 
 ### 1.2. Copy bootstrap files
-Скопировать все файлы каркаса (включая скрытые `.github`, `.env.example`, `.gitignore`) в корень, кроме README каркаса:
-```bash
-rsync -a --exclude README.md docs/discovery/2026-10-13-appmetrica-online/00-bootstrap/ ./
-ln -s AGENTS.md CLAUDE.md
-mkdir -p contracts/openapi backend/cmd/appmetrica backend/cmd/seed backend/internal \
-  backend/migrations/postgres backend/migrations/clickhouse backend/queries/postgres backend/testdata/fixtures \
-  web/src/app web/src/components web/src/hooks web/src/lib/api/gen web/src/test web/content/docs web/e2e \
-  deploy/dokploy docs/adr docs/plans
-```
-
-Контракты OpenAPI копируются из [06-api-contracts.md](./06-api-contracts.md) в `contracts/openapi/ingest.yaml` и
-`contracts/openapi/api.yaml` (это первый тикет эпика E0).
+> **N/A для этого проекта.** Причина: каркас (Makefile, конфиги, CI, Dockerfile-ы) уже лежит в репозитории.
 
 ### 1.3. First commit
-Перед первым коммитом устанавливаются git hooks (lefthook), чтобы уже первый коммит прошёл проверку Conventional Commits:
+Установи git hooks (lefthook): они проверяют формат, линтеры и Conventional Commits перед коммитом.
 ```bash
 lefthook install
-git add -A
-git commit -m "chore: scaffold repository from discovery bootstrap kit"
-git push -u origin main
 ```
 
 ---
@@ -269,19 +255,15 @@ Postgres: `make psql`, затем `\dt`, `SELECT id, name, platform, status FROM
 
 ## 6. First feature — smoke test
 
-Реализуй первый тикет эпика E0 из [13-tickets.md](./13-tickets.md) (каркас бинарника `appmetrica` с `/health` и
-`healthcheck`) по TDD и убедись:
+Проверь, что окружение разработки работает:
 
-1. Падающий тест `backend/cmd/appmetrica/healthcheck_test.go` написан и запущен до кода (`go test ./cmd/appmetrica/` — FAIL).
-2. Реализация `appmetrica healthcheck --url` и `GET /health` → тест зелёный.
-3. `cd backend && go test -race -count=1 ./... && golangci-lint run ./...` — без ошибок.
-4. `make gen-check` — без диффа.
-5. `cd web && pnpm biome check . && pnpm typecheck && pnpm test` — зелёные.
-6. `docker build --build-arg GEO_MONTH=$(date -u +%Y-%m) -t appmetrica-backend:dev backend` — образ собирается; `docker run --rm appmetrica-backend:dev healthcheck --url http://127.0.0.1:1` завершается с кодом 1.
-7. Коммит `feat(cmd): add healthcheck subcommand and /health endpoint` (Refs: T-номер из 13-tickets).
+1. `cd backend && go test -race -count=1 ./... && golangci-lint run ./...` — без ошибок.
+2. `make gen-check` — без диффа.
+3. `cd web && pnpm biome check . && pnpm typecheck && pnpm test` — зелёные.
+4. `docker build --build-arg GEO_MONTH=$(date -u +%Y-%m) -t appmetrica-backend:dev backend` — образ собирается; `docker run --rm appmetrica-backend:dev healthcheck --url http://127.0.0.1:1` завершается с кодом 1.
+5. `make dev`, затем `make seed` и `make passkey-link` — дашборд на `http://localhost:3000` открывается с демо-данными.
 
-Если все пункты ✅ — инфраструктура разработки работает, можно брать следующий тикет по порядку из ralphex-плана
-`docs/plans/20261013-appmetrica-online.md`.
+Изменения дальше вносятся по [CONTRIBUTING.md](../../../CONTRIBUTING.md): сначала падающий тест, затем реализация.
 
 ---
 
@@ -336,7 +318,7 @@ make lint      # golangci-lint run ./... + pnpm biome check . + pnpm typecheck
 make fmt       # golangci-lint fmt (gofumpt + goimports) + pnpm format
 ```
 
-### 7.5. All checks at once (Validation Commands — агент запускает перед каждым коммитом)
+### 7.5. All checks at once (Validation Commands — перед каждым коммитом)
 ```bash
 make gen-check
 cd backend && go test -race -count=1 ./... && golangci-lint run ./... && cd ..
@@ -592,8 +574,6 @@ passkey (телефон + ноутбук) в S-12 → Passkeys; удалить �
 ## 15. Next steps — handoff
 
 После того как runbook выполнен и smoke-тест прошёл:
-→ продолжай с первого незакрытого тикета по порядку зависимостей из [13-tickets.md](./13-tickets.md) или ralphex-плана
-`docs/plans/20261013-appmetrica-online.md` (каждая задача самодостаточна и содержит Validation Commands из раздела 7.5).
-→ реализационные скиллы и порядок передачи контекста — в [11-handoff.md](./11-handoff.md): Go-часть — `29-golang-expert`
-с подскиллами (testing, database, observability), web — `01-nextjs-expert` и `03-frontend-developer`.
+→ правила разработки (TDD, проверки перед коммитом, запреты) — [CONTRIBUTING.md](../../../CONTRIBUTING.md);
+→ установка на сервер через Docker Compose — [README.ru.md](../../../README.ru.md);
 → эксплуатация после запуска (бэкапы, восстановление, диск, инциденты) — [21-ops-runbooks.md](./21-ops-runbooks.md).

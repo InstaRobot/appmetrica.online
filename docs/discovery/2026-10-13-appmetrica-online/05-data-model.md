@@ -6,7 +6,7 @@
 > **PostgreSQL 18.6** хранит метаданные: владелец, passkey, сессии входа, приложения, ключи, журнал удалений, настройки и служебное состояние worker.
 > **ClickHouse 26.8.25.14 LTS** хранит события и производные агрегаты.
 > ORM не используется. Postgres: `pgx/v5 v5.11.0` + `sqlc v1.31.1` (типобезопасный код из SQL) + `goose v3.29.0` (миграции). ClickHouse: `clickhouse-go/v2 v2.49.0` + goose (диалект `clickhouse`).
-> Имена таблиц, колонок и enum-значений канонические, они совпадают с [06-api-contracts.md](./06-api-contracts.md), [02-tech-spec.md](./02-tech-spec.md) и [13-tickets.md](./13-tickets.md).
+> Имена таблиц, колонок и enum-значений канонические, они совпадают с [06-api-contracts.md](./06-api-contracts.md), [02-tech-spec.md](./02-tech-spec.md).
 
 ---
 
@@ -1403,7 +1403,7 @@ DROP TABLE IF EXISTS rejected_events;
 -- +goose StatementEnd
 ```
 
-`deploy/clickhouse/users.d/appmetrica.xml` (идентичен `00-bootstrap/deploy/clickhouse/users.d/appmetrica.xml`). Пользователь `appmetrica_admin` создаётся самим образом ClickHouse через env контейнера `CLICKHOUSE_USER=appmetrica_admin` / `CLICKHOUSE_PASSWORD=${CLICKHOUSE_ADMIN_PASSWORD}` и используется только для DDL-миграций goose (`CLICKHOUSE_MIGRATE_USER` / `CLICKHOUSE_MIGRATE_PASSWORD` в api) и для clickhouse-backup (`CLICKHOUSE_USERNAME`). Пароли `appmetrica_rw` / `appmetrica_ro` берутся из env контейнера ClickHouse `CLICKHOUSE_RW_PASSWORD` / `CLICKHOUSE_RO_PASSWORD`; в Go-сервисы они приходят как `CLICKHOUSE_PASSWORD`:
+`deploy/clickhouse/users.d/appmetrica.xml` . Пользователь `appmetrica_admin` создаётся самим образом ClickHouse через env контейнера `CLICKHOUSE_USER=appmetrica_admin` / `CLICKHOUSE_PASSWORD=${CLICKHOUSE_ADMIN_PASSWORD}` и используется только для DDL-миграций goose (`CLICKHOUSE_MIGRATE_USER` / `CLICKHOUSE_MIGRATE_PASSWORD` в api) и для clickhouse-backup (`CLICKHOUSE_USERNAME`). Пароли `appmetrica_rw` / `appmetrica_ro` берутся из env контейнера ClickHouse `CLICKHOUSE_RW_PASSWORD` / `CLICKHOUSE_RO_PASSWORD`; в Go-сервисы они приходят как `CLICKHOUSE_PASSWORD`:
 ```xml
 <!--
   Пользователи и профили ClickHouse для appmetrica.online.
