@@ -35,6 +35,14 @@ FROM job_runs ORDER BY job, started_at DESC;
 SELECT id, job, started_at, finished_at, status, details
 FROM job_runs WHERE job = sqlc.arg(job) AND status = 'ok' ORDER BY started_at DESC LIMIT 1;
 
+-- name: GetDigestDayState :one
+-- Запуски digest с начала суток владельца: отправлен ли дайджест (ok с details.sent_on) и неудачные попытки;
+-- без неудач last_failed_at = since.
+SELECT coalesce(bool_or(status = 'ok' AND details ->> 'sent_on' IS NOT NULL), false)::boolean AS sent,
+       count(*) FILTER (WHERE status = 'failed') AS failed_attempts,
+       coalesce(max(started_at) FILTER (WHERE status = 'failed'), sqlc.arg(since)::timestamptz)::timestamptz AS last_failed_at
+FROM job_runs WHERE job = 'digest' AND started_at >= sqlc.arg(since)::timestamptz;
+
 -- name: DeleteOldJobRuns :execrows
 DELETE FROM job_runs WHERE started_at < sqlc.arg(before)::timestamptz;
 

@@ -122,6 +122,28 @@ func (q *Queries) GetAlertState(ctx context.Context, key string) (AlertState, er
 	return i, err
 }
 
+const getDigestDayState = `-- name: GetDigestDayState :one
+SELECT coalesce(bool_or(status = 'ok' AND details ->> 'sent_on' IS NOT NULL), false)::boolean AS sent,
+       count(*) FILTER (WHERE status = 'failed') AS failed_attempts,
+       coalesce(max(started_at) FILTER (WHERE status = 'failed'), $1::timestamptz)::timestamptz AS last_failed_at
+FROM job_runs WHERE job = 'digest' AND started_at >= $1::timestamptz
+`
+
+type GetDigestDayStateRow struct {
+	Sent           bool
+	FailedAttempts int64
+	LastFailedAt   time.Time
+}
+
+// Запуски digest с начала суток владельца: отправлен ли дайджест (ok с details.sent_on) и неудачные попытки;
+// без неудач last_failed_at = since.
+func (q *Queries) GetDigestDayState(ctx context.Context, since time.Time) (GetDigestDayStateRow, error) {
+	row := q.db.QueryRow(ctx, getDigestDayState, since)
+	var i GetDigestDayStateRow
+	err := row.Scan(&i.Sent, &i.FailedAttempts, &i.LastFailedAt)
+	return i, err
+}
+
 const getLastClosedDay = `-- name: GetLastClosedDay :one
 SELECT coalesce(max(day), DATE '1970-01-01')::date AS day FROM closed_days WHERE app_id = $1
 `

@@ -48,6 +48,9 @@ type Querier interface {
 	GetApiKey(ctx context.Context, id uuid.UUID) (GetApiKeyRow, error)
 	GetApp(ctx context.Context, id uuid.UUID) (App, error)
 	GetDeletionRequest(ctx context.Context, arg GetDeletionRequestParams) (DeletionRequest, error)
+	// Запуски digest с начала суток владельца: отправлен ли дайджест (ok с details.sent_on) и неудачные попытки;
+	// без неудач last_failed_at = since.
+	GetDigestDayState(ctx context.Context, since time.Time) (GetDigestDayStateRow, error)
 	GetLastClosedDay(ctx context.Context, appID uuid.UUID) (pgtype.Date, error)
 	GetLastSuccessfulJobRun(ctx context.Context, job JobName) (JobRun, error)
 	GetOrCreateOwner(ctx context.Context, webauthnUserHandle []byte) (GetOrCreateOwnerRow, error)

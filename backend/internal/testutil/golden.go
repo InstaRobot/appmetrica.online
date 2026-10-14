@@ -68,6 +68,31 @@ func (g Golden) Assert(t testing.TB, name string, got any) {
 		"golden %s расходится с ответом; если изменение ожидаемо, перезапустите `go test -update`", name)
 }
 
+// AssertGoldenText сравнивает текст got с файлом path (например, internal/worker/testdata/digest.golden.txt);
+// флаг -update перезаписывает эталон.
+func AssertGoldenText(t testing.TB, path, got string) {
+	t.Helper()
+	Golden{Dir: filepath.Dir(path), Update: *update}.AssertText(t, filepath.Base(path), got)
+}
+
+// AssertText сравнивает got с эталоном name байт в байт, без нормализации.
+func (g Golden) AssertText(t testing.TB, name, got string) {
+	t.Helper()
+	path := filepath.Join(g.Dir, name)
+	if g.Update {
+		require.NoError(t, os.MkdirAll(g.Dir, 0o750))
+		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
+		return
+	}
+	want, err := os.ReadFile(path) //nolint:gosec // путь к эталону задаёт тест
+	if errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("golden %s не найден; создайте его запуском `go test -update`", path)
+	}
+	require.NoError(t, err)
+	require.Equal(t, string(want), got,
+		"golden %s расходится с ответом; если изменение ожидаемо, перезапустите `go test -update`", name)
+}
+
 func canonicalJSON(v any) ([]byte, error) {
 	var raw []byte
 	switch b := v.(type) {

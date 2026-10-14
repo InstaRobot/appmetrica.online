@@ -132,6 +132,7 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 		require.Equal(t, []string{"system_check", "digest", "close_day", "deletion", "session_cleanup"}, w.JobsEnabled)
 		require.Equal(t, 20, w.DiskFreeAlertPct)
 		require.Empty(t, w.TelegramBotToken)
+		require.Equal(t, "http://localhost:3000", w.PublicBaseURL)
 
 		m, err := config.LoadMigrate()
 		require.NoError(t, err)
@@ -204,6 +205,23 @@ func TestLoad_APITelegramAndBackup(t *testing.T) {
 	require.Equal(t, api.BackupAPIURL, w.BackupAPIURL)
 }
 
+// worker читает тот же PUBLIC_BASE_URL, что и api: ссылка на портфель в дайджесте Telegram.
+func TestLoad_WorkerPublicBaseURL(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		"POSTGRES_URL":    "postgres://u:p@localhost:5432/db",
+		"KEY_HASH_PEPPER": devPepper,
+		"PUBLIC_BASE_URL": "https://appmetrica.online/",
+	})
+
+	api, err := config.LoadAPI()
+	require.NoError(t, err)
+	w, err := config.LoadWorker()
+	require.NoError(t, err)
+	require.Equal(t, "https://appmetrica.online", w.PublicBaseURL)
+	require.Equal(t, api.PublicBaseURL, w.PublicBaseURL)
+}
+
 func TestLoad_InvalidValues(t *testing.T) {
 	base := map[string]string{
 		"POSTGRES_URL":    "postgres://u:p@localhost:5432/db",
@@ -228,6 +246,7 @@ func TestLoad_InvalidValues(t *testing.T) {
 		{"bad origin", map[string]string{"WEBAUTHN_RP_ORIGINS": "localhost:3000"}, loadAPI, "WEBAUTHN_RP_ORIGINS: invalid origin"},
 		{"unknown job", map[string]string{"WORKER_JOBS_ENABLED": "digest,mine_bitcoin"}, loadWorker, `WORKER_JOBS_ENABLED: unknown job "mine_bitcoin"`},
 		{"pct out of range", map[string]string{"DISK_FREE_ALERT_PCT": "101"}, loadWorker, "DISK_FREE_ALERT_PCT: must be between 1 and 99"},
+		{"bad worker base url", map[string]string{"PUBLIC_BASE_URL": "https://appmetrica.online/app"}, loadWorker, "PUBLIC_BASE_URL: invalid origin"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

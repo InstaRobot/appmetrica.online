@@ -82,9 +82,11 @@ type API struct {
 
 type Worker struct {
 	Common
-	ListenAddr          string
-	JobsEnabled         []string
-	TelegramBotToken    string
+	ListenAddr       string
+	JobsEnabled      []string
+	TelegramBotToken string
+	// PublicBaseURL — ссылка на портфель в дайджесте Telegram.
+	PublicBaseURL       string
 	HealthchecksPingURL string
 	BackupAPIURL        string
 	DiskFreeAlertPct    int

@@ -136,6 +136,30 @@ func TestGolden_UpdateAndDiff(t *testing.T) {
 	})
 }
 
+func TestGolden_AssertText(t *testing.T) {
+	dir := t.TempDir()
+	const text = "<b>Портфель</b>\nстрока без перевода в конце"
+
+	golden := testutil.Golden{Dir: dir, Update: true}
+	golden.AssertText(t, "x.golden.txt", text)
+	b, err := os.ReadFile(filepath.Join(dir, "x.golden.txt"))
+	require.NoError(t, err)
+	require.Equal(t, text, string(b), "текст пишется как есть")
+
+	golden.Update = false
+	f := runFake(func(ft testing.TB) { golden.AssertText(ft, "x.golden.txt", text) })
+	require.False(t, f.failed, f.msgs)
+
+	f = runFake(func(ft testing.TB) { golden.AssertText(ft, "x.golden.txt", text+"\n") })
+	require.True(t, f.failed, "лишний перевод строки — расхождение")
+	require.Contains(t, strings.Join(f.msgs, "\n"), "-update")
+
+	f = runFake(func(ft testing.TB) { golden.AssertText(ft, "absent.golden.txt", text) })
+	require.True(t, f.failed)
+	require.Contains(t, strings.Join(f.msgs, "\n"), "absent.golden.txt")
+	require.NoFileExists(t, filepath.Join(dir, "absent.golden.txt"))
+}
+
 func TestParseNDJSON(t *testing.T) {
 	appID := uuid.MustParse("0b6f1c1e-5d1a-4a53-9a47-2f0f6f7f4a01")
 	installID := uuid.MustParse("6a1d6a0e-9c55-4c1b-8a3e-9b1e2f6c7d01")
