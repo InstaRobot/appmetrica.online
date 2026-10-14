@@ -294,57 +294,60 @@ export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTablePro
   const [revoking, setRevoking] = useState<WriteKey | null>(null);
   const keys = query.data?.status === 200 ? query.data.data.items : undefined;
 
+  // #write-keys — цель ссылки «Создать ключ для {платформа}» вкладки «Интеграция».
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Write-ключи</CardTitle>
-        <CardAction>
-          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-            <Plus aria-hidden="true" />
-            Создать ключ
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        {query.isError && !keys ? (
-          <ErrorState
-            error={query.error as unknown as ApiError}
-            onRetry={() => void query.refetch()}
-          />
-        ) : !keys ? (
-          <TableSkeleton rows={2} />
-        ) : (
-          <Table>
-            <caption className="sr-only">Write-ключи</caption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ключ</TableHead>
-                <TableHead>Метка</TableHead>
-                <TableHead>Платформа</TableHead>
-                <TableHead>Создан</TableHead>
-                <TableHead>Использован</TableHead>
-                <TableHead>
-                  <span className="sr-only">Действия</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <WriteKeyRows keys={keys} timezone={timezone} onRevoke={setRevoking} />
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
+    <section id="write-keys" aria-labelledby="write-keys-title" className="scroll-mt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle id="write-keys-title">Write-ключи</CardTitle>
+          <CardAction>
+            <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+              <Plus aria-hidden="true" />
+              Создать ключ
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          {query.isError && !keys ? (
+            <ErrorState
+              error={query.error as unknown as ApiError}
+              onRetry={() => void query.refetch()}
+            />
+          ) : !keys ? (
+            <TableSkeleton rows={2} />
+          ) : (
+            <Table>
+              <caption className="sr-only">Write-ключи</caption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ключ</TableHead>
+                  <TableHead>Метка</TableHead>
+                  <TableHead>Платформа</TableHead>
+                  <TableHead>Создан</TableHead>
+                  <TableHead>Использован</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Действия</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <WriteKeyRows keys={keys} timezone={timezone} onRevoke={setRevoking} />
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
 
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Новый write-ключ</DialogTitle>
-            <DialogDescription>Ключ для отправки событий в ingest.</DialogDescription>
-          </DialogHeader>
-          <CreateWriteKeyForm appId={appId} platforms={platforms} />
-        </DialogContent>
-      </Dialog>
-      <RevokeWriteKeyDialog appId={appId} writeKey={revoking} onClose={() => setRevoking(null)} />
-    </Card>
+        <Dialog open={creating} onOpenChange={setCreating}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Новый write-ключ</DialogTitle>
+              <DialogDescription>Ключ для отправки событий в ingest.</DialogDescription>
+            </DialogHeader>
+            <CreateWriteKeyForm appId={appId} platforms={platforms} />
+          </DialogContent>
+        </Dialog>
+        <RevokeWriteKeyDialog appId={appId} writeKey={revoking} onClose={() => setRevoking(null)} />
+      </Card>
+    </section>
   );
 }

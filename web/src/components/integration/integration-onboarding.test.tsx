@@ -43,7 +43,7 @@ function writeKey(overrides: Partial<WriteKey> = {}): WriteKey {
 }
 
 type MockOptions = {
-  platforms?: Platform[];
+  platforms?: [Platform, ...Platform[]];
   keys?: WriteKey[];
   /** Платформы, наблюдавшиеся за 48 ч, по окружениям. */
   observed?: { production?: string[]; development?: string[] };
@@ -63,7 +63,7 @@ function breakdown(values: string[]): Breakdown {
 function mockApi(opts: MockOptions = {}) {
   const requests: URLSearchParams[] = [];
   const breakdownRequests: URLSearchParams[] = [];
-  const platforms = opts.platforms ?? ["ios"];
+  const platforms: [Platform, ...Platform[]] = opts.platforms ?? ["ios"];
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
       HttpResponse.json(

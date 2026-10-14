@@ -1,8 +1,9 @@
 import type { Platform } from "@/lib/api/gen/model";
 
-// Сниппеты онбординга S-10 (FR-017, 14-ux-ui-spec.md «Сниппеты»). Тексты для платформы ios совпадают
-// с эталоном спецификации (snippets.test.ts); для других платформ в curl меняются только значения
-// context, в Swift и Go — значение platform.
+// Сниппеты онбординга S-10 (FR-017, 14-ux-ui-spec.md «Сниппеты»). Тексты совпадают с эталоном
+// спецификации (snippets.test.ts) для его платформ: Kotlin — android, JavaScript — web, остальные — ios.
+// Для других платформ в curl меняются только значения context, в Swift, Kotlin, JavaScript и Go —
+// значение platform: секция вкладки «Интеграция» подставляет свою платформу.
 
 export const SNIPPET_LANGS = ["curl", "swift", "kotlin", "javascript", "go"] as const;
 export type SnippetLang = (typeof SNIPPET_LANGS)[number];
@@ -171,7 +172,7 @@ enum Analytics {
 `;
 }
 
-function kotlinSnippet({ ingestUrl, writeKey }: SnippetInput): string {
+function kotlinSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
   return `import android.content.Context
 import android.os.Build
 import org.json.JSONArray
@@ -209,7 +210,7 @@ object Analytics {
 
     fun context(app: Context, versionName: String, versionCode: Long, debug: Boolean): JSONObject =
         JSONObject()
-            .put("platform", "android")
+            .put("platform", "${platform}")
             .put("os_name", "Android")
             .put("os_version", Build.VERSION.RELEASE)
             .put("app_version", versionName)
@@ -231,7 +232,7 @@ object Analytics {
 `;
 }
 
-function javascriptSnippet({ ingestUrl, writeKey }: SnippetInput): string {
+function javascriptSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
   return `const ENDPOINT = "${ingestUrl}";
 const WRITE_KEY = "${writeKey}";
 
@@ -245,7 +246,7 @@ function installId() {
 }
 
 const context = {
-  platform: "web",
+  platform: "${platform}",
   app_version: "1.0.0",
   device_type: "desktop",
   locale: navigator.language,

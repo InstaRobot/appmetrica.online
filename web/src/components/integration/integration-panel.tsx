@@ -2,12 +2,13 @@
 
 import { keepPreviousData } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { useId, useState } from "react";
+import { lazy, Suspense, useId, useState } from "react";
 import { ErrorState } from "@/components/feedback/error-state";
 import { HourlyIngestChart } from "@/components/reports/lazy-charts";
 import { IntegrationSkeleton } from "@/components/skeletons/integration-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetIntegrationHealth } from "@/lib/api/gen/endpoints/integration/integration";
@@ -15,7 +16,6 @@ import type { App, IntegrationHealth } from "@/lib/api/gen/model";
 import { formatDateTime, formatInt, formatRejectionRate } from "@/lib/format";
 import { ingestEndpoint } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
-import { IntegrationOnboarding } from "./integration-onboarding";
 import { isRejectionRateHigh, RejectionRateWarning } from "./rejection-rate-warning";
 import { RejectionReasonsTable } from "./rejection-reasons-table";
 import { VersionsHealthTable } from "./versions-health-table";
@@ -26,9 +26,30 @@ const HOURS = 24;
 const WAITING_POLL_MS = 3000;
 const HEALTHY_POLL_MS = 30_000;
 
+// Онбординг (ключи, сниппеты, статус платформ) — отдельный чанк: с секциями по платформам initial JS
+// /apps/[appId]/integration выходил за бюджет 250 KB gz.
+const LazyIntegrationOnboarding = lazy(() =>
+  import("./integration-onboarding").then((m) => ({ default: m.IntegrationOnboarding })),
+);
+
+function IntegrationOnboarding(props: { app: App; ingestUrl: string }) {
+  return (
+    <Suspense
+      fallback={
+        <Card role="status" aria-label="Загрузка…" className="gap-3 px-6">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-8 w-full" />
+        </Card>
+      }
+    >
+      <LazyIntegrationOnboarding {...props} />
+    </Suspense>
+  );
+}
+
 type IntegrationPanelProps = { appId: string };
 
-// S-10 Интеграция (FR-017). Приложение (платформа, TZ) берётся из кэша AppShell.
+// S-10 Интеграция (FR-017, FR-7). Приложение (платформы, TZ) берётся из кэша AppShell.
 export function IntegrationPanel({ appId }: IntegrationPanelProps) {
   const app = useGetApp(appId);
   return app.data?.status === 200 ? (

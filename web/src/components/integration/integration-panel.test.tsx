@@ -44,7 +44,7 @@ function mockApi(respond: (n: number) => IntegrationHealth | { status: number })
   let n = 0;
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
-      HttpResponse.json(makeApp({ id: APP_ID, platform: "android" })),
+      HttpResponse.json(makeApp({ id: APP_ID, platform: "android", platforms: ["android"] })),
     ),
     http.get(`*/admin/v1/apps/${APP_ID}/write-keys`, () =>
       HttpResponse.json({
@@ -54,6 +54,7 @@ function mockApi(respond: (n: number) => IntegrationHealth | { status: number })
             app_id: APP_ID,
             key: KEY,
             label: "",
+            platform: null,
             created_at: "2026-09-01T00:00:00Z",
             revoked_at: null,
             last_used_at: null,
@@ -108,7 +109,8 @@ describe("IntegrationPanel", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("textbox", { name: "write-ключ" })).toHaveValue(KEY);
+    // Онбординг — ленивый чанк: ключ появляется после его загрузки.
+    expect(await screen.findByRole("textbox", { name: "write-ключ" })).toHaveValue(KEY);
     expect(screen.getByRole("tab", { name: "Kotlin" })).toHaveAttribute("aria-selected", "true");
   });
 
