@@ -15,6 +15,7 @@ import (
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/deletion"
+	"appmetrica.online/backend/internal/merge"
 	"appmetrica.online/backend/internal/pgstore"
 	"appmetrica.online/backend/internal/reports"
 	"appmetrica.online/backend/internal/telegram"
@@ -81,6 +82,7 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		worker.CloseDayJob(pg.Queries(), stats, pg, c, worker.DefaultCloseMaxDays),
 		worker.DigestJob(pg.Queries(), stats, tg, c, logger, cfg.PublicBaseURL),
 		worker.SessionCleanupJob(pg.Queries(), c),
+		worker.MergeJob(merge.NewExecutor(pg, c, logger, worker.MergeFailedNotifier(pg.Queries(), tg, logger)), pg),
 	)
 	if err := errors.Join(sched.RegisterMetrics(reg), check.RegisterMetrics(reg)); err != nil {
 		logger.Error("metrics init failed", slog.Any("error", err))

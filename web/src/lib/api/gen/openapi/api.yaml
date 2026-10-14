@@ -1275,7 +1275,7 @@ components:
       enum: [disk_free, insert_errors, backup_stale, ingest_down, api_down, clickhouse_down]
     JobName:
       type: string
-      enum: [close_day, digest, system_check, deletion, session_cleanup]
+      enum: [close_day, digest, system_check, deletion, session_cleanup, app_merge]
     JobStatus:
       type: string
       enum: [running, ok, failed]

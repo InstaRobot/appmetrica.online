@@ -37,7 +37,7 @@ type command struct {
 var commands = []command{
 	{"ingest", "приём событий POST /v1/events (i.appmetrica.online)", runIngest},
 	{"api", "Read API /v1 и admin API /admin/v1 (api.appmetrica.online)", runAPI},
-	{"worker", "фоновые задачи: system_check, digest, close_day, deletion, session_cleanup", runWorker},
+	{"worker", "фоновые задачи: system_check, digest, close_day, deletion, session_cleanup, app_merge", runWorker},
 	{"migrate", "миграции Postgres и ClickHouse: migrate up|status", runMigrate},
 	{"admin", "администрирование: admin passkey-link", runAdmin},
 	{"healthcheck", "проверка /health для Docker HEALTHCHECK: healthcheck --url <url>", func(ctx context.Context, args []string, _, stderr io.Writer) int {

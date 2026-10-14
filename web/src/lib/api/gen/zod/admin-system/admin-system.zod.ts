@@ -44,7 +44,14 @@ export const GetSystemStatusResponse = zod.object({
   jobs: zod.array(
     zod.object({
       id: zod.uuid(),
-      job: zod.enum(["close_day", "digest", "system_check", "deletion", "session_cleanup"]),
+      job: zod.enum([
+        "close_day",
+        "digest",
+        "system_check",
+        "deletion",
+        "session_cleanup",
+        "app_merge",
+      ]),
       started_at: zod.iso.datetime({ offset: true }),
       finished_at: zod.iso.datetime({ offset: true }).nullable(),
       status: zod.enum(["running", "ok", "failed"]),

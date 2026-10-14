@@ -26,7 +26,7 @@ const (
 )
 
 // Jobs — задачи worker, допустимые в WORKER_JOBS_ENABLED.
-var Jobs = []string{"system_check", "digest", "close_day", "deletion", "session_cleanup"}
+var Jobs = []string{"system_check", "digest", "close_day", "deletion", "session_cleanup", "app_merge"}
 
 type ClickHouse struct {
 	Addr     string

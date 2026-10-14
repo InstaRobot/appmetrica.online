@@ -19,4 +19,5 @@ export const JobName = {
   system_check: "system_check",
   deletion: "deletion",
   session_cleanup: "session_cleanup",
+  app_merge: "app_merge",
 } as const;
