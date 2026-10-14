@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus"
-	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/clock"
@@ -239,29 +238,35 @@ func TestMoveKeysThenWaits(t *testing.T) {
 // AC-008.2: wait_keys ждёт deletion.AppPurgeDelay от keys_moved_at, затем переходит к copy.
 func TestWaitKeysStep(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		moved time.Duration // keys_moved_at = now − moved
-		step  sqlc.AppMergeStep
-		calls []string
+		name   string
+		moved  time.Duration // keys_moved_at = now − moved
+		copies bool
 	}{
-		{"waits 5 minutes after the move", 5 * time.Minute, sqlc.AppMergeStepWaitKeys, []string{"claim"}},
-		{"waits a second before the delay", deletion.AppPurgeDelay - time.Second, sqlc.AppMergeStepWaitKeys, []string{"claim"}},
-		{"copies at the delay", deletion.AppPurgeDelay, sqlc.AppMergeStepCopy, []string{"claim", "set_step:copy"}},
-		{"copies 18 minutes after the move", 18 * time.Minute, sqlc.AppMergeStepCopy, []string{"claim", "set_step:copy"}},
+		{"waits 5 minutes after the move", 5 * time.Minute, false},
+		{"waits a second before the delay", deletion.AppPurgeDelay - time.Second, false},
+		{"copies at the delay", deletion.AppPurgeDelay, true},
+		{"copies 18 minutes after the move", 18 * time.Minute, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := pendingMerge()
 			moved := execNow.Add(-tc.moved)
 			m.Status, m.Step, m.KeysMovedAt, m.StartedAt = sqlc.AppMergeStatusRunning, sqlc.AppMergeStepWaitKeys, &moved, &moved
 			s := &fakeStore{merge: m}
+			cp := &fakeCopier{}
 			var failed []failedCall
-			res, err := newTestExecutor(s, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
+			res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
 			require.NoError(t, err)
-			require.Equal(t, tc.step, s.merge.Step)
-			require.Equal(t, tc.step, res.Step)
-			require.Equal(t, sqlc.AppMergeStatusRunning, res.Status)
-			require.Equal(t, tc.calls, s.calls)
 			require.Empty(t, failed)
+			if !tc.copies {
+				require.Equal(t, Result{MergeID: m.ID, Status: sqlc.AppMergeStatusRunning, Step: sqlc.AppMergeStepWaitKeys}, res)
+				require.Equal(t, []string{"claim"}, s.calls)
+				require.Empty(t, cp.calls)
+				return
+			}
+			// Источник без событий: после ожидания слияние проходит copy и следующие шаги в том же запуске.
+			require.Equal(t, []string{"claim", "set_step:copy", "timezone"}, s.calls[:3])
+			require.Equal(t, []string{"partitions:UTC", "rejected"}, cp.calls)
+			require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
 		})
 	}
 }
@@ -272,7 +277,8 @@ func TestWithKeysWait(t *testing.T) {
 	var failed []failedCall
 	_, err := newTestExecutor(s, clock.NewFixed(execNow), &failed, WithKeysWait(0)).RunOnce(t.Context(), uuid.New())
 	require.NoError(t, err)
-	require.Equal(t, sqlc.AppMergeStepCopy, s.merge.Step, "без ожидания — сразу к копированию")
+	require.Contains(t, s.calls, "set_step:copy", "без ожидания — сразу к копированию")
+	require.Equal(t, sqlc.AppMergeStepDone, s.merge.Step)
 }
 
 // Полный цикл на фейке: шаги идут подряд в одном запуске, пока ни один не ждёт.
@@ -451,16 +457,21 @@ func TestExecutorMetrics(t *testing.T) {
 
 	_, err := e.RunOnce(t.Context(), uuid.New())
 	require.NoError(t, err)
-	require.InDelta(t, 410, promtest.ToFloat64(e.metrics.copiedEvents), 0, "партиция 202608 скопирована раньше")
-	require.Equal(t, 3, promtest.CollectAndCount(e.metrics.stepDuration), "copy, purge_source, reclose")
-	for _, step := range []string{"copy", "purge_source", "reclose"} {
-		require.Equal(t, 1, promtest.CollectAndCount(e.metrics.stepDuration.MustCurryWith(prometheus.Labels{"step": step})), step)
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	copied, steps := -1.0, map[string]uint64{}
+	for _, f := range families {
+		for _, metric := range f.GetMetric() {
+			switch f.GetName() {
+			case "merge_copied_events_total":
+				copied = metric.GetCounter().GetValue()
+			case "merge_step_duration_seconds":
+				steps[metric.GetLabel()[0].GetValue()] = metric.GetHistogram().GetSampleCount()
+			}
+		}
 	}
-	require.NoError(t, promtest.GatherAndCompare(reg, strings.NewReader(`
-# HELP merge_copied_events_total События, скопированные из источника в цель шагом copy слияния приложений.
-# TYPE merge_copied_events_total counter
-merge_copied_events_total 410
-`), "merge_copied_events_total"))
+	require.InDelta(t, 410, copied, 0, "партиция 202608 скопирована раньше")
+	require.Equal(t, map[string]uint64{"copy": 1, "purge_source": 1, "reclose": 1}, steps)
 }
 
 // Шаг copy дольше 30 минут — предупреждение merge.slow в логе.

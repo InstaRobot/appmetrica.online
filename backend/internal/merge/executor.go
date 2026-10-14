@@ -2,14 +2,18 @@ package merge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/deletion"
@@ -19,6 +23,9 @@ import (
 
 // maxErrorLen — байт текста ошибки в app_merges.error (его показывают API и баннер слияния).
 const maxErrorLen = 1000
+
+// slowStep — шаг дольше таймаута запуска job app_merge: предупреждение merge.slow в логе.
+const slowStep = 30 * time.Minute
 
 // errSourceGone — строки источника нет: переносить ключи некуда и неоткуда.
 var errSourceGone = errors.New("merge: source app is gone")
@@ -48,29 +55,45 @@ type store interface {
 	setStep(ctx context.Context, arg sqlc.SetAppMergeStepParams) error
 	// moveKeys — шаг move_keys одной транзакцией, включая переход к wait_keys с keys_moved_at = now.
 	moveKeys(ctx context.Context, m sqlc.AppMerge, now time.Time) error
+	// appTimezone — часовой пояс приложения (first_source_day считается в поясе цели).
+	appTimezone(ctx context.Context, id uuid.UUID) (string, error)
+	addCopiedPartition(ctx context.Context, arg sqlc.AddCopiedPartitionParams) error
+	// purgeSource — удаление строки apps источника одной транзакцией с копией слияния в job_runs.details
+	// запуска runID и переходом к reclose.
+	purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) error
 	// reclose — шаг reclose одной транзакцией: переоткрытие closed_days цели и status done.
 	reclose(ctx context.Context, m sqlc.AppMerge, now time.Time) error
 	fail(ctx context.Context, id uuid.UUID, msg string) error
 }
 
+// appPurger — удаление данных приложения из ClickHouse (deletion.Purger).
+type appPurger interface {
+	PurgeApp(ctx context.Context, appID uuid.UUID) error
+}
+
 // Executor выполняет шаги слияния (FR-8): job app_merge worker-а.
 type Executor struct {
 	store    store
+	copier   copier
+	purger   appPurger
 	clock    clock.Clock
 	logger   *slog.Logger
 	onFailed OnFailed
 	keysWait time.Duration
-	// stubSteps — шаги copy и purge_source переходят к следующему без работы (unit-тесты до T-MP-009);
-	// без него они ждут: источник нельзя удалять, пока события не скопированы.
-	stubSteps bool
+	metrics  *metrics
 }
 
-func NewExecutor(store *pgstore.Store, c clock.Clock, logger *slog.Logger, onFailed OnFailed, opts ...Option) *Executor {
-	return newExecutor(pgStore{store: store}, c, logger, onFailed, opts...)
+// NewExecutor — исполнитель поверх Postgres и соединения ClickHouse рабочего пользователя (копия событий
+// и удаление источника через deletion.Purger).
+func NewExecutor(store *pgstore.Store, ch driver.Conn, c clock.Clock, logger *slog.Logger, onFailed OnFailed, opts ...Option) *Executor {
+	return newExecutor(pgStore{store: store}, chCopier{conn: ch}, deletion.NewClickHousePurger(ch), c, logger, onFailed, opts...)
 }
 
-func newExecutor(s store, c clock.Clock, logger *slog.Logger, onFailed OnFailed, opts ...Option) *Executor {
-	e := &Executor{store: s, clock: c, logger: logger, onFailed: onFailed, keysWait: deletion.AppPurgeDelay}
+func newExecutor(s store, cp copier, p appPurger, c clock.Clock, logger *slog.Logger, onFailed OnFailed, opts ...Option) *Executor {
+	e := &Executor{
+		store: s, copier: cp, purger: p, clock: c, logger: logger, onFailed: onFailed,
+		keysWait: deletion.AppPurgeDelay, metrics: newMetrics(),
+	}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -90,7 +113,7 @@ const (
 // подряд, пока очередной шаг не ждёт или слияние не завершено. Слияния идут по одному в порядке создания:
 // следующее начнётся, когда текущее завершится или упадёт. Ошибка шага делает слияние failed (onFailed);
 // остановка worker-а (отмена ctx) — нет: слияние остаётся running и продолжится со своего шага.
-func (e *Executor) RunOnce(ctx context.Context, _ uuid.UUID) (Result, error) {
+func (e *Executor) RunOnce(ctx context.Context, runID uuid.UUID) (Result, error) {
 	m, ok, err := e.store.claim(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("merge: claim: %w", err)
@@ -108,7 +131,7 @@ func (e *Executor) RunOnce(ctx context.Context, _ uuid.UUID) (Result, error) {
 	for m.Status == sqlc.AppMergeStatusRunning {
 		started := e.clock.Now()
 		step := m.Step
-		next, waiting, err := e.step(ctx, m, started)
+		next, waiting, err := e.step(ctx, m, runID, started)
 		if err != nil {
 			e.logStep(ctx, m, step, started, outcomeFailed, slog.String("error", err.Error()))
 			return e.failed(ctx, m, err)
@@ -124,7 +147,8 @@ func (e *Executor) RunOnce(ctx context.Context, _ uuid.UUID) (Result, error) {
 }
 
 // step выполняет текущий шаг m и возвращает слияние после него; waiting — шаг повторится в следующем запуске.
-func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, now time.Time) (next sqlc.AppMerge, waiting bool, err error) {
+// runID — запуск job, в job_runs.details которого purge_source записывает удалённый источник.
+func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) (next sqlc.AppMerge, waiting bool, err error) {
 	switch m.Step {
 	case sqlc.AppMergeStepMoveKeys:
 		if err := e.store.moveKeys(ctx, m, now); err != nil {
@@ -143,15 +167,11 @@ func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, now time.Time) (ne
 		}
 		return e.advance(ctx, m, sqlc.AppMergeStepCopy, now)
 	case sqlc.AppMergeStepCopy:
-		if !e.stubSteps {
-			return m, true, nil
-		}
-		return e.advance(ctx, m, sqlc.AppMergeStepPurgeSource, now)
+		m, err := e.copy(ctx, m, now)
+		return m, false, err
 	case sqlc.AppMergeStepPurgeSource:
-		if !e.stubSteps {
-			return m, true, nil
-		}
-		return e.advance(ctx, m, sqlc.AppMergeStepReclose, now)
+		m, err := e.purgeSource(ctx, m, runID, now)
+		return m, false, err
 	case sqlc.AppMergeStepReclose:
 		if err := e.store.reclose(ctx, m, now); err != nil {
 			return m, false, err
@@ -161,6 +181,75 @@ func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, now time.Time) (ne
 	default:
 		return m, false, fmt.Errorf("merge: unexpected step %q", m.Step)
 	}
+}
+
+// copy копирует партиции источника, которых нет в copied_partitions, отмечая каждую после копии, затем журнал
+// отказов, и переходит к purge_source с first_source_day — первым днём событий источника в часовом поясе цели.
+// Сбой оставляет скопированные партиции в copied_partitions: повтор продолжит со следующей.
+func (e *Executor) copy(ctx context.Context, m sqlc.AppMerge, now time.Time) (sqlc.AppMerge, error) {
+	if m.SourceAppID == nil {
+		return m, errSourceGone
+	}
+	source := *m.SourceAppID
+	tz, err := e.store.appTimezone(ctx, m.TargetAppID)
+	if err != nil {
+		return m, fmt.Errorf("merge: target timezone: %w", err)
+	}
+	parts, err := e.copier.partitions(ctx, source, tz)
+	if err != nil {
+		return m, err
+	}
+	for _, p := range parts {
+		id := int32(p.ID) //nolint:gosec // YYYYMM
+		if slices.Contains(m.CopiedPartitions, id) {
+			continue
+		}
+		if err := e.copier.copyPartition(ctx, source, m.TargetAppID, p.ID); err != nil {
+			return m, fmt.Errorf("merge: copy partition %d: %w", p.ID, err)
+		}
+		rows := int64(p.Rows) //nolint:gosec // строк в партиции одного приложения далеко до 2^63
+		if err := e.store.addCopiedPartition(ctx, sqlc.AddCopiedPartitionParams{Partition: id, Rows: rows, ID: m.ID}); err != nil {
+			return m, fmt.Errorf("merge: record partition %d: %w", p.ID, err)
+		}
+		m.CopiedPartitions = append(m.CopiedPartitions, id)
+		m.CopiedEvents += rows
+		e.metrics.copiedEvents.Add(float64(p.Rows))
+	}
+	if err := e.copier.copyRejected(ctx, source, m.TargetAppID); err != nil {
+		return m, err
+	}
+	var first pgtype.Date
+	for _, p := range parts {
+		if !first.Valid || p.FirstDay.Before(first.Time) {
+			first = pgtype.Date{Time: p.FirstDay, Valid: true}
+		}
+	}
+	if err := e.store.setStep(ctx, sqlc.SetAppMergeStepParams{
+		Step: sqlc.AppMergeStepPurgeSource, Now: now, FirstSourceDay: first, ID: m.ID,
+	}); err != nil {
+		return m, fmt.Errorf("merge: set step %s: %w", sqlc.AppMergeStepPurgeSource, err)
+	}
+	m.Step = sqlc.AppMergeStepPurgeSource
+	if first.Valid {
+		m.FirstSourceDay = first
+	}
+	return m, nil
+}
+
+// purgeSource удаляет данные источника из ClickHouse (повтор безопасен: ALTER … DELETE по app_id), затем строку
+// apps источника; app_merges.source_app_id обнуляется внешним ключом.
+func (e *Executor) purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) (sqlc.AppMerge, error) {
+	if m.SourceAppID == nil {
+		return m, errSourceGone
+	}
+	if err := e.purger.PurgeApp(ctx, *m.SourceAppID); err != nil {
+		return m, fmt.Errorf("merge: purge source: %w", err)
+	}
+	if err := e.store.purgeSource(ctx, m, runID, now); err != nil {
+		return m, err
+	}
+	m.SourceAppID, m.Step = nil, sqlc.AppMergeStepReclose
+	return m, nil
 }
 
 func (e *Executor) advance(ctx context.Context, m sqlc.AppMerge, step sqlc.AppMergeStep, now time.Time) (sqlc.AppMerge, bool, error) {
@@ -199,15 +288,22 @@ func (e *Executor) logStep(ctx context.Context, m sqlc.AppMerge, step sqlc.AppMe
 	if m.SourceAppID != nil {
 		source = m.SourceAppID.String()
 	}
-	e.logger.LogAttrs(ctx, level, "merge step", append([]slog.Attr{
-		slog.String("event", "merge.step"),
+	duration := e.clock.Now().Sub(started)
+	if out != outcomeWaiting {
+		e.metrics.stepDuration.WithLabelValues(string(step)).Observe(duration.Seconds())
+	}
+	ids := []slog.Attr{
 		slog.String("merge_id", m.ID.String()),
 		slog.String("target_app_id", m.TargetAppID.String()),
 		slog.String("source_app_id", source),
 		slog.String("step", string(step)),
-		slog.Int64("duration_ms", e.clock.Now().Sub(started).Milliseconds()),
-		slog.String("outcome", string(out)),
-	}, attrs...)...)
+		slog.Int64("duration_ms", duration.Milliseconds()),
+	}
+	e.logger.LogAttrs(ctx, level, "merge step", slices.Concat(
+		[]slog.Attr{slog.String("event", "merge.step")}, ids, []slog.Attr{slog.String("outcome", string(out))}, attrs)...)
+	if step == sqlc.AppMergeStepCopy && duration > slowStep {
+		e.logger.LogAttrs(ctx, slog.LevelWarn, "merge step slow", append([]slog.Attr{slog.String("event", "merge.slow")}, ids...)...)
+	}
 }
 
 func result(m sqlc.AppMerge) Result {
@@ -303,6 +399,56 @@ func (s pgStore) reclose(ctx context.Context, m sqlc.AppMerge, now time.Time) er
 		}
 		if err := q.FinishAppMerge(ctx, sqlc.FinishAppMergeParams{Now: now, ID: m.ID}); err != nil {
 			return fmt.Errorf("merge: finish: %w", err)
+		}
+		return nil
+	})
+}
+
+func (s pgStore) appTimezone(ctx context.Context, id uuid.UUID) (string, error) {
+	app, err := s.store.Queries().GetApp(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return app.Timezone, nil
+}
+
+func (s pgStore) addCopiedPartition(ctx context.Context, arg sqlc.AddCopiedPartitionParams) error {
+	return s.store.Queries().AddCopiedPartition(ctx, arg)
+}
+
+// mergedApp — копия слияния в job_runs.details.merged_apps: строка источника удаляется, а журнал запусков
+// хранит, какое приложение и куда было объединено.
+type mergedApp struct {
+	MergeID         uuid.UUID          `json:"merge_id"`
+	TargetAppID     uuid.UUID          `json:"target_app_id"`
+	SourceAppID     uuid.UUID          `json:"source_app_id"`
+	SourceName      string             `json:"source_name"`
+	SourcePlatforms []sqlc.AppPlatform `json:"source_platforms"`
+	SourceTimezone  string             `json:"source_timezone"`
+	CopiedEvents    int64              `json:"copied_events"`
+	TotalEvents     int64              `json:"total_events"`
+	CreatedAt       time.Time          `json:"created_at"`
+	DeletedAt       time.Time          `json:"deleted_at"`
+}
+
+func (s pgStore) purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) error {
+	copyJSON, err := json.Marshal(mergedApp{
+		MergeID: m.ID, TargetAppID: m.TargetAppID, SourceAppID: *m.SourceAppID, SourceName: m.SourceName,
+		SourcePlatforms: m.SourcePlatforms, SourceTimezone: m.SourceTimezone, CopiedEvents: m.CopiedEvents,
+		TotalEvents: m.TotalEvents, CreatedAt: m.CreatedAt, DeletedAt: now,
+	})
+	if err != nil {
+		return fmt.Errorf("merge: encode merge copy: %w", err)
+	}
+	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		if err := q.AppendMergedAppToJobRun(ctx, sqlc.AppendMergedAppToJobRunParams{Merge: copyJSON, ID: runID}); err != nil {
+			return fmt.Errorf("merge: copy merge to job_runs: %w", err)
+		}
+		if _, err := q.DeleteApp(ctx, *m.SourceAppID); err != nil {
+			return fmt.Errorf("merge: delete source app: %w", err)
+		}
+		if err := q.SetAppMergeStep(ctx, sqlc.SetAppMergeStepParams{Step: sqlc.AppMergeStepReclose, Now: now, ID: m.ID}); err != nil {
+			return fmt.Errorf("merge: set step reclose: %w", err)
 		}
 		return nil
 	})

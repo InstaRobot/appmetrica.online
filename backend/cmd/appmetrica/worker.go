@@ -76,15 +76,16 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		checkCfg.Backups = chstore.NewBackupClient(cfg.BackupAPIURL, nil)
 	}
 	check := worker.NewSystemCheck(checkCfg)
+	merges := merge.NewExecutor(pg, ch.Conn(), c, logger, worker.MergeFailedNotifier(pg.Queries(), tg, logger))
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
 		check.Job(),
 		worker.DeletionJob(executor),
 		worker.CloseDayJob(pg.Queries(), stats, pg, c, worker.DefaultCloseMaxDays),
 		worker.DigestJob(pg.Queries(), stats, tg, c, logger, cfg.PublicBaseURL),
 		worker.SessionCleanupJob(pg.Queries(), c),
-		worker.MergeJob(merge.NewExecutor(pg, c, logger, worker.MergeFailedNotifier(pg.Queries(), tg, logger)), pg),
+		worker.MergeJob(merges, pg),
 	)
-	if err := errors.Join(sched.RegisterMetrics(reg), check.RegisterMetrics(reg)); err != nil {
+	if err := errors.Join(sched.RegisterMetrics(reg), check.RegisterMetrics(reg), merges.RegisterMetrics(reg)); err != nil {
 		logger.Error("metrics init failed", slog.Any("error", err))
 		return 1
 	}

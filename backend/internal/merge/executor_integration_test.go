@@ -286,7 +286,7 @@ func (c *faultyConn) Exec(ctx context.Context, query string, args ...any) error 
 	if strings.HasPrefix(q, "INSERT INTO events") {
 		c.copies++
 		if c.copies == c.closeAfter {
-			return c.Conn.Close()
+			return c.Close()
 		}
 	}
 	return nil

@@ -24,6 +24,8 @@ type Querier interface {
 	AppDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error)
 	// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
 	AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error
+	// Копия слияния в details.merged_apps цикла — до удаления строки apps источника (app_merges.source_app_id обнулится).
+	AppendMergedAppToJobRun(ctx context.Context, arg AppendMergedAppToJobRunParams) error
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
 	ClaimNextAppMerge(ctx context.Context) (AppMerge, error)
 	// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со

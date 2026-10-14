@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,16 +22,6 @@ import (
 
 // pgUniqueViolation — частичный уникальный индекс активных слияний: параллельная заявка успела раньше.
 const pgUniqueViolation = "23505"
-
-// qSourcePartitions — месячные партиции событий источника: число строк и первый и последний день
-// в часовом поясе источника. Партиция — единица копирования шага copy.
-const qSourcePartitions = `
-SELECT toYYYYMM(event_date) AS partition, count() AS rows,
-       toDate(min(event_time), {tz:String}) AS first_day, toDate(max(event_time), {tz:String}) AS last_day
-FROM events
-WHERE app_id = {source:UUID}
-GROUP BY partition
-ORDER BY partition`
 
 // Service — заявки на слияние приложений.
 type Service struct {
@@ -226,27 +215,7 @@ func (s *Service) Retry(ctx context.Context, targetID, mergeID uuid.UUID) (sqlc.
 
 // partitions — партиции событий источника по возрастанию; дни — в часовом поясе источника.
 func (s *Service) partitions(ctx context.Context, source sqlc.App) ([]Partition, error) {
-	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
-		"source": source.ID.String(),
-		"tz":     source.Timezone,
-	}))
-	rows, err := s.ch.Query(ctx, qSourcePartitions)
-	if err != nil {
-		return nil, fmt.Errorf("merge: source partitions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []Partition
-	for rows.Next() {
-		var p Partition
-		if err := rows.Scan(&p.ID, &p.Rows, &p.FirstDay, &p.LastDay); err != nil {
-			return nil, fmt.Errorf("merge: scan partition: %w", err)
-		}
-		out = append(out, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("merge: source partitions: %w", err)
-	}
-	return out, nil
+	return chCopier{conn: s.ch}.partitions(ctx, source.ID, source.Timezone)
 }
 
 func distinctApps(targetID, sourceID uuid.UUID) error {

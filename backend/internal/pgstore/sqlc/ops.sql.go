@@ -31,6 +31,23 @@ func (q *Queries) AppendDeletedAppToJobRun(ctx context.Context, arg AppendDelete
 	return err
 }
 
+const appendMergedAppToJobRun = `-- name: AppendMergedAppToJobRun :exec
+UPDATE job_runs
+SET details = jsonb_set(details, '{merged_apps}', coalesce(details -> 'merged_apps', '[]'::jsonb) || jsonb_build_array($1::jsonb))
+WHERE id = $2
+`
+
+type AppendMergedAppToJobRunParams struct {
+	Merge json.RawMessage
+	ID    uuid.UUID
+}
+
+// Копия слияния в details.merged_apps цикла — до удаления строки apps источника (app_merges.source_app_id обнулится).
+func (q *Queries) AppendMergedAppToJobRun(ctx context.Context, arg AppendMergedAppToJobRunParams) error {
+	_, err := q.db.Exec(ctx, appendMergedAppToJobRun, arg.Merge, arg.ID)
+	return err
+}
+
 const deleteExpiredCeremonies = `-- name: DeleteExpiredCeremonies :execrows
 DELETE FROM webauthn_ceremonies WHERE expires_at < $1::timestamptz
 `

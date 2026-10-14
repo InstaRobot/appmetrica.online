@@ -27,6 +27,12 @@ UPDATE job_runs
 SET details = jsonb_set(details, '{deleted_apps}', coalesce(details -> 'deleted_apps', '[]'::jsonb) || jsonb_build_array(sqlc.arg(request)::jsonb))
 WHERE id = sqlc.arg(id);
 
+-- name: AppendMergedAppToJobRun :exec
+-- Копия слияния в details.merged_apps цикла — до удаления строки apps источника (app_merges.source_app_id обнулится).
+UPDATE job_runs
+SET details = jsonb_set(details, '{merged_apps}', coalesce(details -> 'merged_apps', '[]'::jsonb) || jsonb_build_array(sqlc.arg(merge)::jsonb))
+WHERE id = sqlc.arg(id);
+
 -- name: ListLatestJobRuns :many
 SELECT DISTINCT ON (job) id, job, started_at, finished_at, status, details
 FROM job_runs ORDER BY job, started_at DESC;
