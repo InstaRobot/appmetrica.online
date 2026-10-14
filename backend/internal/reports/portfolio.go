@@ -107,32 +107,28 @@ FROM daily_stats FINAL
 WHERE app_id = {app_id:UUID} AND environment = {env:String} AND unit = {unit:String}
   AND day BETWEEN {closed_from:Date} AND {closed_to:Date}
 ORDER BY day`
-
-	// qPortfolioPlatforms — активные периода по events.platform: человек на двух платформах — в обеих строках.
-	qPortfolioPlatforms = `WITH ` + identity.LinksCTE + `
-SELECT e.platform AS platform, uniqExact(` + identity.PersonKeyExpr + `) AS active
-FROM events AS e
-LEFT JOIN links AS l ON l.install_id = e.install_id
-WHERE ` + eventsFilter + `
-GROUP BY platform`
 )
 
 // qPortfolioDate — метрики даты по событиям периода date − 7 … date ({date:Date}): активные за date и date − 7,
-// новые за date, когорты D1 (date − 1) и D7 (date − 7) и вернувшиеся из них в date. Когорта — люди с first_seen
-// в день когорты, активные в этот день (как в QRetentionDay).
+// новые за date, когорты D1 (date − 1) и D7 (date − 7) и вернувшиеся из них в date, активные за date по
+// events.platform (человек на двух платформах — в обеих). Когорта — люди с first_seen в день когорты, активные
+// в этот день (как в QRetentionDay). Платформы считаются здесь, а не отдельным запросом: links и события
+// периода уже собраны в people (отдельный запрос поднимал P95 портфеля на 30 %).
 var qPortfolioDate = `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(
 	flag("toDate(e.event_time, {tz:String}) = {date:Date}", "on_date"),
 	flag("toDate(e.event_time, {tz:String}) = subtractDays({date:Date}, 1)", "on_d1"),
 	flag("toDate(e.event_time, {tz:String}) = subtractDays({date:Date}, 7)", "on_d7"),
+	uniqValuesIf("e.platform", "toDate(e.event_time, {tz:String}) = {date:Date}", "platforms_date"),
 ) + `,
-ppf AS (SELECT person_key, on_date, on_d1, on_d7, toDate(first_seen, {tz:String}) AS first_day FROM people)
+ppf AS (SELECT person_key, on_date, on_d1, on_d7, platforms_date, toDate(first_seen, {tz:String}) AS first_day FROM people)
 SELECT uniqExactIf(person_key, on_date) AS active_date,
        uniqExactIf(person_key, on_d7) AS active_same_day_prev_week,
        uniqExactIf(person_key, on_date AND first_day = {date:Date}) AS new_date,
        uniqExactIf(person_key, on_d1 AND first_day = subtractDays({date:Date}, 1)) AS cohort_d1,
        uniqExactIf(person_key, on_d1 AND on_date AND first_day = subtractDays({date:Date}, 1)) AS returned_d1,
        uniqExactIf(person_key, on_d7 AND first_day = subtractDays({date:Date}, 7)) AS cohort_d7,
-       uniqExactIf(person_key, on_d7 AND on_date AND first_day = subtractDays({date:Date}, 7)) AS returned_d7
+       uniqExactIf(person_key, on_d7 AND on_date AND first_day = subtractDays({date:Date}, 7)) AS returned_d7,
+       sumMap(mapFromArrays(platforms_date, arrayMap(x -> toUInt64(1), platforms_date))) AS platforms_date
 FROM ppf`
 
 // Portfolio считает строки портфеля на дату: до portfolioParallelism приложений одновременно, первая ошибка
@@ -192,12 +188,16 @@ func (s *Service) portfolioRow(ctx context.Context, q PortfolioQuery, app Portfo
 
 	p := base
 	p.Period = Period{From: day.AddDate(0, 0, -7), To: day}
-	var cohortD1, returnedD1, cohortD7, returnedD7 uint64
+	var (
+		cohortD1, returnedD1, cohortD7, returnedD7 uint64
+		platforms                                  map[string]uint64
+	)
 	err := s.conn.QueryRow(p.bindWith(ctx, clickhouse.Parameters{"date": day.Format(time.DateOnly)}), qPortfolioDate).
-		Scan(&row.ActiveDate, &row.ActiveSameDayPrevWeek, &row.NewDate, &cohortD1, &returnedD1, &cohortD7, &returnedD7)
+		Scan(&row.ActiveDate, &row.ActiveSameDayPrevWeek, &row.NewDate, &cohortD1, &returnedD1, &cohortD7, &returnedD7, &platforms)
 	if err != nil {
 		return PortfolioRow{}, fmt.Errorf("date metrics: %w", err)
 	}
+	row.Platforms = platformActive(platforms)
 	row.ActiveDeltaPct = deltaPct(row.ActiveDate, row.ActiveSameDayPrevWeek)
 	row.RetentionD1 = ratio(returnedD1, cohortD1)
 	row.RetentionD7 = ratio(returnedD7, cohortD7)
@@ -205,9 +205,6 @@ func (s *Service) portfolioRow(ctx context.Context, q PortfolioQuery, app Portfo
 	p.Period = Period{From: day, To: day}
 	if err := s.conn.QueryRow(p.Bind(ctx), qPortfolioSessions).Scan(&row.SessionsDate); err != nil {
 		return PortfolioRow{}, fmt.Errorf("sessions: %w", err)
-	}
-	if row.Platforms, err = s.platformActive(ctx, p); err != nil {
-		return PortfolioRow{}, fmt.Errorf("platforms: %w", err)
 	}
 
 	p.Period = Period{From: today, To: today}
@@ -237,26 +234,14 @@ func (s *Service) portfolioRow(ctx context.Context, q PortfolioQuery, app Portfo
 	return row, nil
 }
 
-// platformActive — активные периода p по платформам в порядке sortPlatformActive; нет событий — пустой список.
-func (s *Service) platformActive(ctx context.Context, p Params) ([]PlatformActive, error) {
-	rows, err := s.conn.Query(p.Bind(ctx), qPortfolioPlatforms)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := []PlatformActive{}
-	for rows.Next() {
-		var v PlatformActive
-		if err := rows.Scan(&v.Platform, &v.Active); err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+// platformActive — активные за дату по платформам в порядке sortPlatformActive; нет событий — пустой список.
+func platformActive(byPlatform map[string]uint64) []PlatformActive {
+	out := make([]PlatformActive, 0, len(byPlatform))
+	for platform, active := range byPlatform {
+		out = append(out, PlatformActive{Platform: platform, Active: active})
 	}
 	sortPlatformActive(out)
-	return out, nil
+	return out
 }
 
 // sortPlatformActive — по убыванию active, затем в порядке enum; неизвестные платформы — после известных

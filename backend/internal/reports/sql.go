@@ -58,6 +58,11 @@ func uniqValues(expr, alias string) agg {
 	return agg{expr: "groupUniqArray(" + expr + ")", alias: alias, empty: "[]", merge: "groupUniqArrayArray"}
 }
 
+// uniqValuesIf — различные значения expr событий человека с условием cond.
+func uniqValuesIf(expr, cond, alias string) agg {
+	return agg{expr: "groupUniqArrayIf(" + expr + ", " + cond + ")", alias: alias, empty: "[]", merge: "groupUniqArrayArray"}
+}
+
 // firstSeenNone — first_seen строк событий в peopleFirstCTE: больше любого настоящего, поэтому min() его не
 // выбирает, а у человека без first_seen он не попадает ни в один период.
 const firstSeenNone = `toDateTime64('2299-12-31 23:59:59.999', 3, 'UTC')`
