@@ -35,28 +35,31 @@ const PerfPowerUser = "perf-power-user"
 // PerfPowerInstall — первая установка PerfPowerUser (поиск профиля по install_id).
 var PerfPowerInstall = uuid.MustParse("7e4f1000-0000-4000-8000-000000000001")
 
-// PerfApp — приложение перф-синтетики. DAU — PerfConfig.DAU / dauDivisor.
+// PerfApp — приложение перф-синтетики. DAU — PerfConfig.DAU / dauDivisor. Platforms — платформы событий,
+// первая из них — Platform; установка получает одну платформу по долям perfPlatformShares.
 type PerfApp struct {
 	Code       string
 	ID         uuid.UUID
 	Platform   string
+	Platforms  []string
 	Timezone   string
 	WriteKeyID uuid.UUID
 	dauDivisor int
 }
 
-// PerfApps — основное приложение (DAU из конфигурации) и два меньших (DAU/10 и DAU/50) для портфеля.
+// PerfApps — основное приложение (DAU из конфигурации, iOS, Android и Web) и два меньших одноплатформенных
+// (DAU/10 и DAU/50) для портфеля.
 var PerfApps = []PerfApp{
 	{
-		Code: "main", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000001"), Platform: "ios",
+		Code: "main", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000001"), Platform: "ios", Platforms: []string{"ios", "android", "web"},
 		Timezone: "Europe/Moscow", WriteKeyID: uuid.MustParse("7e4f0b00-0000-4000-8000-000000000001"), dauDivisor: 1,
 	},
 	{
-		Code: "android", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000002"), Platform: "android",
+		Code: "android", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000002"), Platform: "android", Platforms: []string{"android"},
 		Timezone: "America/New_York", WriteKeyID: uuid.MustParse("7e4f0b00-0000-4000-8000-000000000002"), dauDivisor: 10,
 	},
 	{
-		Code: "web", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000003"), Platform: "web",
+		Code: "web", ID: uuid.MustParse("7e4f0a00-0000-4000-8000-000000000003"), Platform: "web", Platforms: []string{"web"},
 		Timezone: "Asia/Tokyo", WriteKeyID: uuid.MustParse("7e4f0b00-0000-4000-8000-000000000003"), dauDivisor: 50,
 	},
 }
@@ -131,6 +134,10 @@ type perfDevice struct{ osName, osVersion, model, kind string }
 
 type perfGeo struct{ country, region, city, locale string }
 
+// perfPlatformShares — доли платформ мультиплатформенного приложения в десятых: 70 % у первой, 20 % у второй,
+// остаток у третьей.
+var perfPlatformShares = []int{7, 2, 1}
+
 var perfDevices = map[string][]perfDevice{
 	"ios": {
 		{"iOS", "26.1", "iPhone17,1", "phone"},
@@ -182,7 +189,8 @@ type perfInstall struct {
 	login      uint8 // perfLogin*
 	activeDays uint8 // 0, 1 или 2 (насыщается)
 	dev        bool
-	device     uint8
+	platform   uint8 // индекс в PerfApp.Platforms
+	device     uint8 // индекс в perfDevices платформы приложения, по модулю — для остальных платформ
 	geo        uint8
 	lag        uint8 // дней до обновления на вышедшую версию
 	immortal   bool  // не уходит в отток и активна каждый день
@@ -262,6 +270,7 @@ func newPerfAppGen(cfg PerfConfig, app PerfApp, stream uint64, stats *PerfStats)
 		keeper.id, keeper.user, keeper.power = PerfPowerInstall, PerfPowerUser, true
 		ipad := g.newInstall()
 		ipad.immortal, ipad.dev, ipad.user, ipad.device = true, false, PerfPowerUser, 4 // iPad14,1
+		keeper.platform, ipad.platform = 0, 0
 		g.pool = append(g.pool, ipad)
 	}
 	g.pool = append(g.pool, keeper)
@@ -284,7 +293,22 @@ func (g *perfAppGen) newInstall() *perfInstall {
 	case login < perfLoginNow+perfLoginLater:
 		in.login = perfLoginSecond
 	}
+	in.platform = g.platformOf(in.id)
 	return in
+}
+
+// platformOf выбирает платформу установки по последнему байту install_id, не расходуя поток PCG: остальные
+// поля синтетики не зависят от числа платформ.
+func (g *perfAppGen) platformOf(id uuid.UUID) uint8 {
+	bucket := int(id[15] % 10)
+	last := len(g.app.Platforms) - 1
+	for i, share := range perfPlatformShares[:last] {
+		if bucket < share {
+			return uint8(i) //nolint:gosec // ≤ 3 платформ
+		}
+		bucket -= share
+	}
+	return uint8(last) //nolint:gosec // ≤ 3 платформ
 }
 
 // day генерирует события локального дня d приложения: сначала дожившие установки пула, затем новые.
@@ -345,7 +369,9 @@ func (g *perfAppGen) activate(rows []chstore.EventRow, in *perfInstall, local ti
 	}
 	slices.Sort(starts)
 
-	device := perfDevices[g.app.Platform][in.device]
+	platform := g.app.Platforms[in.platform]
+	devices := perfDevices[platform]
+	device := devices[int(in.device)%len(devices)]
 	geo := perfGeos[in.geo]
 	release := max(0, d-int(in.lag)) / perfReleaseDays
 	env := "production"
@@ -354,7 +380,7 @@ func (g *perfAppGen) activate(rows []chstore.EventRow, in *perfInstall, local ti
 	}
 	midnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, g.loc)
 	base := chstore.EventRow{
-		AppID: g.app.ID, InstallID: in.id, UserID: in.user, Environment: env, Platform: g.app.Platform,
+		AppID: g.app.ID, InstallID: in.id, UserID: in.user, Environment: env, Platform: platform,
 		OSName: device.osName, OSVersion: device.osVersion, AppVersion: g.versions[release], AppBuild: g.builds[release],
 		DeviceModel: device.model, DeviceType: device.kind, Locale: geo.locale,
 		Country: geo.country, Region: geo.region, City: geo.city, WriteKeyID: g.app.WriteKeyID,
