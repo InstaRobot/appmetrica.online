@@ -165,6 +165,7 @@ LIMIT {limit:UInt32}`
 // её человека (matched_by=install_id); q как user_id — профиль u:<q> (matched_by=user_id). Без совпадений —
 // пустой список.
 func (s *Service) SearchProfiles(ctx context.Context, appID uuid.UUID, q string) ([]ProfileSummary, error) {
+	defer s.track(ReportProfileSearch)()
 	out := []ProfileSummary{}
 	if q == "" || utf8.RuneCountInString(q) > identity.MaxUserIDLength {
 		return out, nil
@@ -204,6 +205,7 @@ func (s *Service) SearchProfiles(ctx context.Context, appID uuid.UUID, q string)
 // Profile — карточка профиля приложения appID: ошибки — identity.ErrInvalidPersonKey (формат person_key),
 // ErrUnsupported (sessions_limit вне 1..MaxSessionsLimit), ErrProfileNotFound (нет событий человека).
 func (s *Service) Profile(ctx context.Context, appID uuid.UUID, q ProfileQuery) (Profile, error) {
+	defer s.track(ReportProfile)()
 	key, err := identity.ParsePersonKey(q.PersonKey)
 	if err != nil {
 		return Profile{}, fmt.Errorf("reports: profile: %w", err)

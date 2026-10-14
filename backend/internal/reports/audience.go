@@ -173,65 +173,121 @@ var dimensionExprs = map[Dimension]string{
 
 // Запросы аудитории (05-data-model.md §10.4, QAudience*, QTimeseries*, QRollingActive, QBreakdown*). Люди и
 // сессии — только uniqExact (OQ-042). Длительность — max(duration_ms) по session_end сессии; сессии без
-// session_end в неё не входят, avgOrNull/…OrNull дают NULL, если завершённых сессий нет.
-const (
-	qAudienceSummary = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + evCTE + `,
-sess AS (
-    SELECT session_id, max(duration_ms) AS duration_ms FROM ev WHERE name = 'session_end' GROUP BY session_id
-)
-SELECT
-    (SELECT uniqExact(person_key) FROM ev) AS active,
-    (SELECT uniqExact(a.person_key) FROM ev AS a
-        INNER JOIN persons_first AS pf ON pf.person_key = a.person_key
-        WHERE pf.first_seen >= {start_utc:DateTime64(3)} AND pf.first_seen < {end_utc:DateTime64(3)}) AS new,
-    (SELECT uniqExactIf(session_id, name = 'session_start') FROM ev) AS sessions,
-    (SELECT toUInt64(round(avgOrNull(duration_ms))) FROM sess) AS avg_duration_ms,
-    (SELECT toUInt64(round(quantileExactInclusiveOrNull(0.5)(duration_ms))) FROM sess) AS median_duration_ms`
+// session_end в неё не входят, avgOrNull/…OrNull дают NULL, если завершённых сессий нет. Люди считаются по
+// peopleCTE / peopleFirstCTE (склейка после предагрегации), сессии и длительности — по events без links.
+var (
+	// qAudiencePeople — активные и новые текущего периода [{split_utc}, {end_utc}) и предыдущего
+	// [{start_utc}, {split_utc}) за один проход: без сравнения split_utc = start_utc и предыдущий период пуст.
+	qAudiencePeople = `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(
+		flag("e.event_time >= {split_utc:DateTime64(3)}", "cur"),
+		flag("e.event_time < {split_utc:DateTime64(3)}", "prev"),
+	) + `
+SELECT uniqExactIf(person_key, cur) AS active,
+       uniqExactIf(person_key, cur
+           AND first_seen >= {split_utc:DateTime64(3)} AND first_seen < {end_utc:DateTime64(3)}) AS new,
+       uniqExactIf(person_key, prev) AS prev_active,
+       uniqExactIf(person_key, prev
+           AND first_seen >= {start_utc:DateTime64(3)} AND first_seen < {split_utc:DateTime64(3)}) AS prev_new
+FROM people`
 
-	// qRollingActive — {from:Date} … {to:Date}; период Params начинается за 29 дней до from.
-	qRollingActive = `WITH ` + identity.LinksCTE + `, ` + evCTE + `,
-daily AS (SELECT toDate(event_time, {tz:String}) AS day, uniqExactState(person_key) AS st FROM ev GROUP BY day),
+	// qRollingActive — {from:Date} … {to:Date}; период Params начинается за 29 дней до from. Дни активности
+	// человека d1 < d2 < … покрывают окно W (1, 7, 30 дней) на днях [dᵢ, min(dᵢ₊₁, dᵢ + W)) — отрезки не
+	// пересекаются, поэтому DAU, WAU и MAU дня — префиксные суммы +1 в начале и −1 после конца отрезков.
+	qRollingActive = `WITH ` + identity.LinksCTE + `, ` + peopleCTE(uniqValues("toDate(e.event_time, {tz:String})", "days")) + `,
+deltas AS (
+    SELECT tupleElement(ev, 1) AS day,
+           sum(tupleElement(ev, 2)) AS d1, sum(tupleElement(ev, 3)) AS d7, sum(tupleElement(ev, 4)) AS d30
+    FROM (
+        SELECT arrayJoin(arrayFlatten(arrayMap((d, next) -> [
+                   (d, 1, 1, 1), (addDays(d, 1), -1, 0, 0),
+                   (least(next, addDays(d, 7)), 0, -1, 0), (least(next, addDays(d, 30)), 0, 0, -1)],
+               days, arrayPushBack(arrayPopFront(days), toDate('2149-01-01'))))) AS ev
+        FROM (SELECT arraySort(groupUniqArrayArray(days)) AS days FROM people GROUP BY person_key)
+    )
+    GROUP BY day
+),
 calendar AS (
     SELECT addDays(subtractDays({from:Date}, 29), number) AS day
     FROM numbers(toUInt64(dateDiff('day', subtractDays({from:Date}, 29), {to:Date}) + 1))
-),
-daily_full AS (SELECT c.day AS day, d.st AS st FROM calendar AS c LEFT JOIN daily AS d ON d.day = c.day)
-SELECT day, dau, wau, mau FROM (
-    SELECT day,
-           finalizeAggregation(st) AS dau,
-           uniqExactMerge(st) OVER (ORDER BY toUInt32(day) RANGE BETWEEN 6 PRECEDING AND CURRENT ROW) AS wau,
-           uniqExactMerge(st) OVER (ORDER BY toUInt32(day) RANGE BETWEEN 29 PRECEDING AND CURRENT ROW) AS mau
-    FROM daily_full
+)
+SELECT day, toUInt64(dau) AS dau, toUInt64(wau) AS wau, toUInt64(mau) AS mau FROM (
+    SELECT c.day AS day, sum(dl.d1) OVER w AS dau, sum(dl.d7) OVER w AS wau, sum(dl.d30) OVER w AS mau
+    FROM calendar AS c LEFT JOIN deltas AS dl ON dl.day = c.day
+    WINDOW w AS (ORDER BY c.day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 )
 WHERE day BETWEEN {from:Date} AND {to:Date}
 ORDER BY day`
 
-	// qBreakdownBase — события периода с person_key и значением измерения $DIM.
-	qBreakdownBase = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `,
-evd AS (
-    SELECT ` + identity.PersonKeyExpr + ` AS person_key, $DIM AS value, e.name AS name, e.session_id AS session_id
-    FROM events AS e
-    LEFT JOIN links AS l ON l.install_id = e.install_id
-    WHERE ` + eventsFilter + `
-)`
-
-	qBreakdownActive = qBreakdownBase + `
-SELECT value, uniqExact(person_key) AS count, (SELECT uniqExact(person_key) FROM evd) AS total
-FROM evd GROUP BY value ORDER BY count DESC, value ASC LIMIT {limit:UInt32}`
-
-	qBreakdownSessions = qBreakdownBase + `
-SELECT value, uniqExactIf(session_id, name = 'session_start') AS count,
-       (SELECT uniqExactIf(session_id, name = 'session_start') FROM evd) AS total
-FROM evd GROUP BY value ORDER BY count DESC, value ASC LIMIT {limit:UInt32}`
-
-	qBreakdownNew = qBreakdownBase + `,
-evn AS (
-    SELECT evd.person_key AS person_key, evd.value AS value
-    FROM evd INNER JOIN persons_first AS pf ON pf.person_key = evd.person_key
-    WHERE pf.first_seen >= {start_utc:DateTime64(3)} AND pf.first_seen < {end_utc:DateTime64(3)}
+	// qBreakdownActive, qBreakdownNew — значения измерения $DIM человека (vals) и люди по значениям.
+	qBreakdownActive = `WITH ` + identity.LinksCTE + `, ` + peopleCTE(uniqValues("$DIM", "vals")) + `
+SELECT value, count, total FROM (
+    SELECT value, count, g, max(if(g = 1, count, 0)) OVER () AS total FROM (
+        SELECT value, uniqExact(person_key) AS count, grouping(value) AS g
+        FROM people ARRAY JOIN vals AS value
+        GROUP BY GROUPING SETS ((value), ())
+    )
 )
-SELECT value, uniqExact(person_key) AS count, (SELECT uniqExact(person_key) FROM evn) AS total
-FROM evn GROUP BY value ORDER BY count DESC, value ASC LIMIT {limit:UInt32}`
+` + breakdownOrder
+
+	qBreakdownNew = `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(uniqValues("$DIM", "vals")) + `
+SELECT value, count, total FROM (
+    SELECT value, count, g, max(if(g = 1, count, 0)) OVER () AS total FROM (
+        SELECT value, uniqExact(person_key) AS count, grouping(value) AS g
+        FROM people ARRAY JOIN vals AS value
+        WHERE first_seen >= {start_utc:DateTime64(3)} AND first_seen < {end_utc:DateTime64(3)}
+        GROUP BY GROUPING SETS ((value), ())
+    )
+)
+` + breakdownOrder
+)
+
+const (
+	// qAudienceSessions — сессии и длительности текущего и предыдущего периода (см. qAudiencePeople): сессия
+	// относится к периоду своего session_start, длительность — своего session_end. Части соединяются CROSS JOIN
+	// и считаются по очереди: множества 13 млн session_id и сессий с session_end не держатся в памяти вместе.
+	qAudienceSessions = `SELECT s.sessions, d.avg_duration_ms, d.median_duration_ms,
+       s.prev_sessions, d.prev_avg_duration_ms, d.prev_median_duration_ms
+FROM (
+    SELECT uniqExactIf(e.session_id, e.event_time >= {split_utc:DateTime64(3)}) AS sessions,
+           uniqExactIf(e.session_id, e.event_time < {split_utc:DateTime64(3)}) AS prev_sessions
+    FROM events AS e
+    WHERE ` + eventsFilter + ` AND e.name = 'session_start'
+) AS s
+CROSS JOIN (
+    SELECT toUInt64(round(avgOrNullIf(duration_ms, ended))) AS avg_duration_ms,
+           toUInt64(round(quantileExactInclusiveOrNullIf(0.5)(duration_ms, ended))) AS median_duration_ms,
+           toUInt64(round(avgOrNullIf(prev_duration_ms, prev_ended))) AS prev_avg_duration_ms,
+           toUInt64(round(quantileExactInclusiveOrNullIf(0.5)(prev_duration_ms, prev_ended))) AS prev_median_duration_ms
+    FROM (
+        SELECT e.session_id AS session_id,
+               max(e.event_time >= {split_utc:DateTime64(3)}) AS ended,
+               maxIf(e.duration_ms, e.event_time >= {split_utc:DateTime64(3)}) AS duration_ms,
+               max(e.event_time < {split_utc:DateTime64(3)}) AS prev_ended,
+               maxIf(e.duration_ms, e.event_time < {split_utc:DateTime64(3)}) AS prev_duration_ms
+        FROM events AS e
+        WHERE ` + eventsFilter + ` AND e.name = 'session_end'
+        GROUP BY session_id
+    )
+) AS d`
+
+	// qBreakdownSessions — сессии по значению $DIM их session_start; итог — отдельной частью CROSS JOIN:
+	// множества session_id по значениям и общее строятся по очереди, а не одновременно (GROUPING SETS).
+	qBreakdownSessions = `SELECT v.value AS value, v.count AS count, t.total AS total
+FROM (
+    SELECT $DIM AS value, uniqExact(e.session_id) AS count
+    FROM events AS e
+    WHERE ` + eventsFilter + ` AND e.name = 'session_start'
+    GROUP BY value
+) AS v
+CROSS JOIN (
+    SELECT uniqExact(e.session_id) AS total
+    FROM events AS e
+    WHERE ` + eventsFilter + ` AND e.name = 'session_start'
+) AS t
+ORDER BY count DESC, value ASC LIMIT {limit:UInt32}`
+
+	// breakdownOrder — строки значений (g = 0) без строки итога GROUPING SETS (g = 1), total — из неё.
+	breakdownOrder = `WHERE g = 0 ORDER BY count DESC, value ASC LIMIT {limit:UInt32}`
 )
 
 // timeseriesSQL — запрос ряда (ts DateTime, value UInt64) метрики m по корзинам g; только значения из whitelist.
@@ -246,23 +302,27 @@ func timeseriesSQL(m Metric, g Granularity) (string, error) {
 		return `WITH ` + identity.LinksCTE + `, ` + evCTE + `
 SELECT ` + bucket("event_time") + ` AS ts, uniqExact(person_key) AS value FROM ev GROUP BY ts`, nil
 	case MetricNew:
-		// Новые корзины — активные в ней люди, чей first_seen попадает в ту же корзину.
-		return `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + evCTE + `,
-pb AS (SELECT DISTINCT ` + bucket("event_time") + ` AS ts, person_key FROM ev)
-SELECT pb.ts AS ts, uniqExactIf(pb.person_key, ` + bucket("pf.first_seen") + ` = pb.ts) AS value
-FROM pb INNER JOIN persons_first AS pf ON pf.person_key = pb.person_key
+		// Новые корзины — люди, чей first_seen попадает в корзину, где они активны.
+		return `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(uniqValues(bucket("e.event_time"), "buckets")) + `
+SELECT ` + bucket("first_seen") + ` AS ts, uniqExact(person_key) AS value
+FROM people
+WHERE first_seen >= {start_utc:DateTime64(3)} AND first_seen < {end_utc:DateTime64(3)} AND has(buckets, ts)
 GROUP BY ts`, nil
 	case MetricSessions:
-		return `WITH ` + identity.LinksCTE + `, ` + evCTE + `
-SELECT ` + bucket("event_time") + ` AS ts, uniqExact(session_id) AS value FROM ev WHERE name = 'session_start' GROUP BY ts`, nil
+		return `SELECT ` + bucket("e.event_time") + ` AS ts, uniqExact(e.session_id) AS value
+FROM events AS e
+WHERE ` + eventsFilter + ` AND e.name = 'session_start'
+GROUP BY ts`, nil
 	case MetricAvgDuration:
 		// Сессия попадает в корзину своего session_end.
-		return `WITH ` + identity.LinksCTE + `, ` + evCTE + `,
-sess AS (
-    SELECT session_id, max(duration_ms) AS duration_ms, max(event_time) AS ended_at
-    FROM ev WHERE name = 'session_end' GROUP BY session_id
+		return `SELECT ` + bucket("ended_at") + ` AS ts, toUInt64(round(avg(duration_ms))) AS value
+FROM (
+    SELECT e.session_id AS session_id, max(e.duration_ms) AS duration_ms, max(e.event_time) AS ended_at
+    FROM events AS e
+    WHERE ` + eventsFilter + ` AND e.name = 'session_end'
+    GROUP BY session_id
 )
-SELECT ` + bucket("ended_at") + ` AS ts, toUInt64(round(avg(duration_ms))) AS value FROM sess GROUP BY ts`, nil
+GROUP BY ts`, nil
 	default:
 		return "", fmt.Errorf("%w: metric", ErrUnsupported)
 	}
@@ -288,52 +348,58 @@ func breakdownSQL(d Dimension, m Metric) (string, error) {
 	return strings.ReplaceAll(query, "$DIM", expr), nil
 }
 
-// AudienceSummary — KPI аудитории за период p; compare — и за предыдущий период той же длины.
+// AudienceSummary — KPI аудитории за период p; compare — и за предыдущий период той же длины. Оба периода
+// читаются одним проходом (граница — {split_utc}), люди и сессии считаются параллельно.
 func (s *Service) AudienceSummary(ctx context.Context, p Params, compare bool) (AudienceSummary, error) {
-	cur, err := s.audienceMetrics(ctx, p)
-	if err != nil {
-		return AudienceSummary{}, err
+	defer s.track(ReportAudienceSummary)()
+	scan := p
+	split, _ := p.Period.Bounds(p.location())
+	prevPeriod := p.Period.Previous()
+	if compare {
+		scan.Period = Period{From: prevPeriod.From, To: p.Period.To}
 	}
+	ctx = scan.bindWith(ctx, clickhouse.Parameters{"split_utc": split.Format(paramDateTime)})
+
+	var (
+		cur, prev                  AudienceMetrics
+		avg, median, pAvg, pMedian *uint64
+	)
+	err := parallel(ctx,
+		func(ctx context.Context) error {
+			return s.conn.QueryRow(ctx, qAudiencePeople).Scan(&cur.Active, &cur.New, &prev.Active, &prev.New)
+		},
+		func(ctx context.Context) error {
+			return s.conn.QueryRow(ctx, qAudienceSessions).Scan(&cur.Sessions, &avg, &median, &prev.Sessions, &pAvg, &pMedian)
+		},
+	)
+	if err != nil {
+		return AudienceSummary{}, fmt.Errorf("reports: audience summary: %w", err)
+	}
+	cur.AvgDurationMs, cur.MedianDurationMs = optional(avg), optional(median)
+	prev.AvgDurationMs, prev.MedianDurationMs = optional(pAvg), optional(pMedian)
+
 	out := AudienceSummary{From: dateOf(p.Period.From), To: dateOf(p.Period.To), AudienceMetrics: cur}
 	if !compare {
 		return out, nil
 	}
-	prev := p
-	prev.Period = p.Period.Previous()
-	base, err := s.audienceMetrics(ctx, prev)
-	if err != nil {
-		return AudienceSummary{}, err
-	}
 	out.Compare = &AudienceCompare{
-		From:            dateOf(prev.Period.From),
-		To:              dateOf(prev.Period.To),
-		AudienceMetrics: base,
+		From:            dateOf(prevPeriod.From),
+		To:              dateOf(prevPeriod.To),
+		AudienceMetrics: prev,
 		DeltaPct: AudienceDelta{
-			Active:           changePct(number(cur.Active), number(base.Active)),
-			New:              changePct(number(cur.New), number(base.New)),
-			Sessions:         changePct(number(cur.Sessions), number(base.Sessions)),
-			AvgDurationMs:    changePct(cur.AvgDurationMs, base.AvgDurationMs),
-			MedianDurationMs: changePct(cur.MedianDurationMs, base.MedianDurationMs),
+			Active:           changePct(number(cur.Active), number(prev.Active)),
+			New:              changePct(number(cur.New), number(prev.New)),
+			Sessions:         changePct(number(cur.Sessions), number(prev.Sessions)),
+			AvgDurationMs:    changePct(cur.AvgDurationMs, prev.AvgDurationMs),
+			MedianDurationMs: changePct(cur.MedianDurationMs, prev.MedianDurationMs),
 		},
 	}
 	return out, nil
 }
 
-func (s *Service) audienceMetrics(ctx context.Context, p Params) (AudienceMetrics, error) {
-	var (
-		out         AudienceMetrics
-		avg, median *uint64
-	)
-	if err := s.conn.QueryRow(p.Bind(ctx), qAudienceSummary).Scan(&out.Active, &out.New, &out.Sessions, &avg, &median); err != nil {
-		return AudienceMetrics{}, fmt.Errorf("reports: audience summary: %w", err)
-	}
-	out.AvgDurationMs = optional(avg)
-	out.MedianDurationMs = optional(median)
-	return out, nil
-}
-
 // AudienceTimeseries — ряд метрики по корзинам периода p, пустые корзины — 0 (avg_duration_ms — nil).
 func (s *Service) AudienceTimeseries(ctx context.Context, p Params, q TimeseriesQuery) (Timeseries, error) {
+	defer s.track(ReportAudienceTimeseries)()
 	query, err := timeseriesSQL(q.Metric, q.Granularity)
 	if err != nil {
 		return Timeseries{}, err
@@ -390,6 +456,7 @@ func (s *Service) series(ctx context.Context, p Params, q TimeseriesQuery, query
 
 // RollingActive — DAU, WAU и MAU для каждого дня периода p; окна читают события до 29 дней раньше from.
 func (s *Service) RollingActive(ctx context.Context, p Params) (RollingActive, error) {
+	defer s.track(ReportRollingActive)()
 	from, to := civil(p.Period.From), civil(p.Period.To)
 	window := p
 	window.Period = Period{From: from.AddDate(0, 0, -(rollingDays - 1)), To: to}
@@ -421,6 +488,7 @@ func (s *Service) RollingActive(ctx context.Context, p Params) (RollingActive, e
 
 // AudienceBreakdown — метрика по значениям измерения: count DESC, value ASC, не больше q.Limit строк.
 func (s *Service) AudienceBreakdown(ctx context.Context, p Params, q BreakdownQuery) (Breakdown, error) {
+	defer s.track(ReportAudienceBreakdown)()
 	query, err := breakdownSQL(q.Dimension, q.Metric)
 	if err != nil {
 		return Breakdown{}, err

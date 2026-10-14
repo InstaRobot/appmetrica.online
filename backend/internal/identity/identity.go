@@ -61,6 +61,27 @@ const (
             concat('u:', e.user_id),
             if(l.linked_user != '', concat('u:', l.linked_user), concat('i:', toString(e.install_id)))))`
 
+	// Склейка после предагрегации — то же, что PersonKeyExpr, но links присоединяется не к каждому событию,
+	// а к уже свёрнутым анонимным установкам. UserPersonKeyExpr — человек события events AS e с user_id
+	// (unit=persons). AnonPersonKeyExpr — человек установки a.install_id, присоединённой AnonLinksJoin: первый
+	// владелец или сама установка; при unit=installs связка не присоединяется и ключ — всегда установка.
+	UserPersonKeyExpr = `concat('u:', e.user_id)`
+	AnonLinksJoin     = `LEFT JOIN links AS l ON l.install_id = a.install_id AND {unit:String} = 'persons'`
+	AnonPersonKeyExpr = `if(l.linked_user != '', concat('u:', l.linked_user), concat('i:', toString(a.install_id)))`
+
+	// InstallFirstSeenSQL — first_seen установок приложения в environment: строки (install_id, first_seen).
+	InstallFirstSeenSQL = `SELECT install_id, min(first_seen) AS first_seen
+            FROM install_first_seen
+            WHERE app_id = {app_id:UUID} AND environment = {env:String}
+            GROUP BY install_id`
+
+	// UserFirstSeenSQL — first_seen людей u:<user_id> по их явным событиям: строки (person_key, first_seen);
+	// при unit=installs строк нет.
+	UserFirstSeenSQL = `SELECT concat('u:', user_id) AS person_key, min(first_seen) AS first_seen
+        FROM user_first_seen
+        WHERE app_id = {app_id:UUID} AND environment = {env:String} AND {unit:String} = 'persons'
+        GROUP BY user_id`
+
 	// PersonsFirstCTE — first_seen человека в environment: для u:X минимум из user_first_seen[X] и
 	// install_first_seen установок с первым владельцем X, для i:I — install_first_seen[I]. Требует LinksCTE.
 	PersonsFirstCTE = `persons_first AS (
@@ -71,17 +92,11 @@ const (
                   concat('u:', l.linked_user)) AS person_key,
                f.first_seen AS first_seen
         FROM (
-            SELECT install_id, min(first_seen) AS first_seen
-            FROM install_first_seen
-            WHERE app_id = {app_id:UUID} AND environment = {env:String}
-            GROUP BY install_id
+            ` + InstallFirstSeenSQL + `
         ) AS f
         LEFT JOIN links AS l ON l.install_id = f.install_id
         UNION ALL
-        SELECT concat('u:', user_id) AS person_key, min(first_seen) AS first_seen
-        FROM user_first_seen
-        WHERE app_id = {app_id:UUID} AND environment = {env:String} AND {unit:String} = 'persons'
-        GROUP BY user_id
+        ` + UserFirstSeenSQL + `
     )
     GROUP BY person_key
 )`

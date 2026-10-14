@@ -17,8 +17,9 @@ import (
 
 // Service — отчёты по ClickHouse.
 type Service struct {
-	conn  driver.Conn
-	clock clock.Clock
+	conn    driver.Conn
+	clock   clock.Clock
+	observe QueryObserver // nil — длительности не наблюдаются (ObserveQueries)
 }
 
 func NewService(conn driver.Conn, c clock.Clock) *Service {
@@ -79,31 +80,6 @@ type SparklinePoint struct {
 
 // Запросы портфеля (05-data-model.md §10.4, QPortfolio*). Люди и сессии — только uniqExact (OQ-042).
 const (
-	// qPortfolioDate — метрики даты по событиям периода date − 7 … date ({date:Date}): активные за date и
-	// date − 7, новые за date, когорты D1 (date − 1) и D7 (date − 7) и вернувшиеся из них в date. Когорта —
-	// люди с first_seen в день когорты, активные в этот день (как cohort_f в QRetentionDay).
-	qPortfolioDate = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + evCTE + `,
-pp AS (
-    SELECT person_key,
-           max(toDate(event_time, {tz:String}) = {date:Date}) AS on_date,
-           max(toDate(event_time, {tz:String}) = subtractDays({date:Date}, 1)) AS on_d1,
-           max(toDate(event_time, {tz:String}) = subtractDays({date:Date}, 7)) AS on_d7
-    FROM ev GROUP BY person_key
-),
-ppf AS (
-    SELECT pp.person_key AS person_key, pp.on_date AS on_date, pp.on_d1 AS on_d1, pp.on_d7 AS on_d7,
-           toDate(pf.first_seen, {tz:String}) AS first_day
-    FROM pp LEFT JOIN persons_first AS pf ON pf.person_key = pp.person_key
-)
-SELECT uniqExactIf(person_key, on_date) AS active_date,
-       uniqExactIf(person_key, on_d7) AS active_same_day_prev_week,
-       uniqExactIf(person_key, on_date AND first_day = {date:Date}) AS new_date,
-       uniqExactIf(person_key, on_d1 AND first_day = subtractDays({date:Date}, 1)) AS cohort_d1,
-       uniqExactIf(person_key, on_d1 AND on_date AND first_day = subtractDays({date:Date}, 1)) AS returned_d1,
-       uniqExactIf(person_key, on_d7 AND first_day = subtractDays({date:Date}, 7)) AS cohort_d7,
-       uniqExactIf(person_key, on_d7 AND on_date AND first_day = subtractDays({date:Date}, 7)) AS returned_d7
-FROM ppf`
-
 	// qPortfolioSessions — сессии периода по session_start (unit не влияет).
 	qPortfolioSessions = `SELECT uniqExactIf(e.session_id, e.name = 'session_start') AS sessions_date
 FROM events AS e
@@ -121,9 +97,28 @@ WHERE app_id = {app_id:UUID} AND environment = {env:String} AND unit = {unit:Str
 ORDER BY day`
 )
 
+// qPortfolioDate — метрики даты по событиям периода date − 7 … date ({date:Date}): активные за date и date − 7,
+// новые за date, когорты D1 (date − 1) и D7 (date − 7) и вернувшиеся из них в date. Когорта — люди с first_seen
+// в день когорты, активные в этот день (как в QRetentionDay).
+var qPortfolioDate = `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(
+	flag("toDate(e.event_time, {tz:String}) = {date:Date}", "on_date"),
+	flag("toDate(e.event_time, {tz:String}) = subtractDays({date:Date}, 1)", "on_d1"),
+	flag("toDate(e.event_time, {tz:String}) = subtractDays({date:Date}, 7)", "on_d7"),
+) + `,
+ppf AS (SELECT person_key, on_date, on_d1, on_d7, toDate(first_seen, {tz:String}) AS first_day FROM people)
+SELECT uniqExactIf(person_key, on_date) AS active_date,
+       uniqExactIf(person_key, on_d7) AS active_same_day_prev_week,
+       uniqExactIf(person_key, on_date AND first_day = {date:Date}) AS new_date,
+       uniqExactIf(person_key, on_d1 AND first_day = subtractDays({date:Date}, 1)) AS cohort_d1,
+       uniqExactIf(person_key, on_d1 AND on_date AND first_day = subtractDays({date:Date}, 1)) AS returned_d1,
+       uniqExactIf(person_key, on_d7 AND first_day = subtractDays({date:Date}, 7)) AS cohort_d7,
+       uniqExactIf(person_key, on_d7 AND on_date AND first_day = subtractDays({date:Date}, 7)) AS returned_d7
+FROM ppf`
+
 // Portfolio считает строки портфеля на дату: до portfolioParallelism приложений одновременно, первая ошибка
 // отменяет остальные.
 func (s *Service) Portfolio(ctx context.Context, q PortfolioQuery) (Portfolio, error) {
+	defer s.track(ReportPortfolio)()
 	now := s.clock.Now()
 	day := civil(q.Date)
 	if q.Date.IsZero() {

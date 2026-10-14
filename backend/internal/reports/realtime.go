@@ -110,6 +110,7 @@ type RecentEvent struct {
 // Realtime — срез приложения p.AppID в environment p.Env ("" — production) на текущий момент часов сервиса.
 // Период, unit и фильтры p не используются: realtime всегда считает людей приложения без фильтров.
 func (s *Service) Realtime(ctx context.Context, p Params) (Realtime, error) {
+	defer s.track(ReportRealtime)()
 	now := s.clock.Now().UTC()
 	env := p.Env
 	if env == "" {

@@ -109,6 +109,7 @@ type hourVersionRow struct {
 // ErrUnsupported) на текущий момент часов сервиса: события всех environment, часы — в TZ p.Location.
 // Период, environment, unit и фильтры p не используются.
 func (s *Service) IntegrationHealth(ctx context.Context, p Params, hours int) (IntegrationHealth, error) {
+	defer s.track(ReportIntegrationHealth)()
 	if hours < 1 || hours > MaxIntegrationHours {
 		return IntegrationHealth{}, fmt.Errorf("%w: hours", ErrUnsupported)
 	}

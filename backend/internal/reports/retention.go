@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -50,57 +51,35 @@ type cohortPeriod struct {
 	period int
 }
 
-// Запросы retention (05-data-model.md §10.4, QRetentionDay / QRetentionWeek). Когорта — люди с first_seen в
-// [{start_utc}, {c_end_utc}), активные в день (неделю) когорты; act — дни активности людей с {start_utc} до
-// {end_utc} = min(конец последнего периода, сейчас). Фильтры eventsFilter действуют и на событие когорты, и на
-// возвраты. Люди — только uniqExact (OQ-042).
-const (
-	qRetentionActivity = `act AS (
-    SELECT DISTINCT ` + identity.PersonKeyExpr + ` AS person_key, toDate(e.event_time, {tz:String}) AS day
-    FROM events AS e
-    LEFT JOIN links AS l ON l.install_id = e.install_id
-    WHERE ` + eventsFilter + `
-)`
-
-	qRetentionDay = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + qRetentionActivity + `,
+// Запрос retention (05-data-model.md §10.4, QRetentionDay / QRetentionWeek). Когорта — люди с first_seen в
+// [{start_utc}, {c_end_utc}), активные в день (неделю) когорты; активность — дни (понедельники недель) $UNIT
+// событий людей с {start_utc} до {end_utc} = min(конец последнего периода, сейчас), по массиву на человека
+// (peopleFirstCTE). Период N — intDiv(дней от начала когорты, $STEP). Фильтры eventsFilter действуют и на
+// событие когорты, и на возвраты. Люди — только uniqExact (OQ-042).
+const qRetention = `WITH ` + identity.LinksCTE + `, $PEOPLE,
 cohort AS (
-    SELECT pf.person_key AS person_key, toDate(pf.first_seen, {tz:String}) AS cohort_start
-    FROM persons_first AS pf
-    WHERE pf.first_seen >= {start_utc:DateTime64(3)} AND pf.first_seen < {c_end_utc:DateTime64(3)}
-),
-cohort_f AS (
-    SELECT c.person_key AS person_key, c.cohort_start AS cohort_start
-    FROM cohort AS c INNER JOIN act AS a0 ON a0.person_key = c.person_key AND a0.day = c.cohort_start
+    SELECT person_key, $UNIT(first_seen, {tz:String}) AS cohort_start,
+           arrayDistinct(arrayMap(u -> intDiv(dateDiff('day', cohort_start, u), $STEP),
+               arrayFilter(u -> u >= cohort_start, units))) AS periods
+    FROM people
+    WHERE first_seen >= {start_utc:DateTime64(3)} AND first_seen < {c_end_utc:DateTime64(3)}
 )
-SELECT c.cohort_start AS cohort_start,
-       toUInt16(dateDiff('day', c.cohort_start, a.day)) AS period,
-       uniqExact(c.person_key) AS persons
-FROM cohort_f AS c
-INNER JOIN act AS a ON a.person_key = c.person_key
-WHERE a.day >= c.cohort_start AND dateDiff('day', c.cohort_start, a.day) <= {periods:UInt16}
+SELECT cohort_start, toUInt16(period) AS period, uniqExact(person_key) AS persons
+FROM cohort ARRAY JOIN periods AS period
+WHERE has(periods, 0) AND period <= {periods:UInt16}
 GROUP BY cohort_start, period
 ORDER BY cohort_start, period`
 
-	qRetentionWeek = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + qRetentionActivity + `,
-cohort AS (
-    SELECT pf.person_key AS person_key, toMonday(pf.first_seen, {tz:String}) AS cohort_start
-    FROM persons_first AS pf
-    WHERE pf.first_seen >= {start_utc:DateTime64(3)} AND pf.first_seen < {c_end_utc:DateTime64(3)}
-),
-cohort_f AS (
-    SELECT DISTINCT c.person_key AS person_key, c.cohort_start AS cohort_start
-    FROM cohort AS c INNER JOIN act AS a0 ON a0.person_key = c.person_key
-    WHERE toMonday(a0.day) = c.cohort_start
+var (
+	qRetentionDay  = retentionSQL("toDate", "1")
+	qRetentionWeek = retentionSQL("toMonday", "7")
 )
-SELECT c.cohort_start AS cohort_start,
-       toUInt16(intDiv(dateDiff('day', c.cohort_start, toMonday(a.day)), 7)) AS period,
-       uniqExact(c.person_key) AS persons
-FROM cohort_f AS c
-INNER JOIN act AS a ON a.person_key = c.person_key
-WHERE a.day >= c.cohort_start AND intDiv(dateDiff('day', c.cohort_start, toMonday(a.day)), 7) <= {periods:UInt16}
-GROUP BY cohort_start, period
-ORDER BY cohort_start, period`
-)
+
+// retentionSQL — qRetention с функцией начала периода unit (toDate | toMonday) и его длиной step в днях.
+func retentionSQL(unit, step string) string {
+	people := peopleFirstCTE(uniqValues(unit+"(e.event_time, {tz:String})", "units"))
+	return strings.NewReplacer("$PEOPLE", people, "$UNIT", unit, "$STEP", step).Replace(qRetention)
+}
 
 // withDefaults — granularity day и periods по умолчанию для granularity.
 func (q RetentionQuery) withDefaults() RetentionQuery {
@@ -132,6 +111,7 @@ func retentionSpec(g Granularity) (query string, step, maxPeriods int, err error
 // ISO-недели, содержащие from и to, целиком. Активность читается до конца последнего периода, но не позже
 // текущего момента; незавершённые к сегодняшнему дню периоды — nil.
 func (s *Service) Retention(ctx context.Context, p Params, q RetentionQuery) (Retention, error) {
+	defer s.track(ReportRetention)()
 	q = q.withDefaults()
 	query, step, maxPeriods, err := retentionSpec(q.Granularity)
 	if err != nil {

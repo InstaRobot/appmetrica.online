@@ -9,6 +9,7 @@ package reports
 import (
 	"context"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -42,6 +43,105 @@ const evCTE = `ev AS (
     LEFT JOIN links AS l ON l.install_id = e.install_id
     WHERE ` + eventsFilter + `
 )`
+
+// agg — свёртка событий человека в CTE people: выражение по events AS e и его псевдоним; для peopleFirstCTE —
+// ещё значение у строк first_seen (empty) и агрегат, сливающий строки человека (merge).
+type agg struct{ expr, alias, empty, merge string }
+
+// flag — 1, если у человека есть событие с условием cond.
+func flag(cond, alias string) agg {
+	return agg{expr: "max(" + cond + ")", alias: alias, empty: "0", merge: "max"}
+}
+
+// uniqValues — различные значения expr событий человека.
+func uniqValues(expr, alias string) agg {
+	return agg{expr: "groupUniqArray(" + expr + ")", alias: alias, empty: "[]", merge: "groupUniqArrayArray"}
+}
+
+// firstSeenNone — first_seen строк событий в peopleFirstCTE: больше любого настоящего, поэтому min() его не
+// выбирает, а у человека без first_seen он не попадает ни в один период.
+const firstSeenNone = `toDateTime64('2299-12-31 23:59:59.999', 3, 'UTC')`
+
+// aggList — список SELECT "f(a) AS alias" по свёрткам aggs.
+func aggList(aggs []agg, f func(agg) string) string {
+	out := make([]string, len(aggs))
+	for i, a := range aggs {
+		out[i] = f(a) + " AS " + a.alias
+	}
+	return strings.Join(out, ", ")
+}
+
+// peopleCTE — people (person_key и свёртки aggs) по событиям eventsFilter. Склейка после предагрегации: события
+// с user_id сворачиваются по user_id, анонимные — по install_id, и links присоединяется только к свёрнутым
+// анонимным установкам (identity.AnonLinksJoin); при unit=installs все события сворачиваются по install_id.
+// Человек может занимать несколько строк — свои события и анонимные события его установок, поэтому
+// потребители считают uniqExact(person_key) или сворачивают строки по person_key. Требует identity.LinksCTE.
+func peopleCTE(aggs ...agg) string {
+	evs := aggList(aggs, func(a agg) string { return a.expr })
+	return `people AS (
+    SELECT ` + identity.UserPersonKeyExpr + ` AS person_key, ` + evs + `
+    FROM events AS e
+    WHERE ` + eventsFilter + `
+      AND {unit:String} = 'persons' AND e.user_id != ''
+    GROUP BY e.user_id
+    UNION ALL
+    SELECT ` + identity.AnonPersonKeyExpr + ` AS person_key, ` + aggList(aggs, func(a agg) string { return "a." + a.alias }) + `
+    FROM (
+        SELECT e.install_id AS install_id, ` + evs + `
+        FROM events AS e
+        WHERE ` + eventsFilter + `
+          AND ({unit:String} = 'installs' OR e.user_id = '')
+        GROUP BY e.install_id
+    ) AS a
+    ` + identity.AnonLinksJoin + `
+)`
+}
+
+// peopleFirstCTE — people: строка на человека — свёртки aggs его событий eventsFilter (empty у людей без событий
+// периода) и first_seen человека (определение identity.PersonsFirstCTE; нет — firstSeenNone). first_seen
+// сливается в те же GROUP BY, что и события, без отдельного persons_first и JOIN по строковому ключу:
+// установки — до присоединения links (анонимные события и install_first_seen), люди — по person_key (события с
+// user_id, user_first_seen и установки). Требует identity.LinksCTE.
+func peopleFirstCTE(aggs ...agg) string {
+	evs := aggList(aggs, func(a agg) string { return a.expr })
+	empty := aggList(aggs, func(a agg) string { return a.empty })
+	merged := aggList(aggs, func(a agg) string { return a.merge + "(" + a.alias + ")" })
+	return `inst AS (
+    SELECT install_id, ` + merged + `, min(first_seen) AS first_seen
+    FROM (
+        SELECT e.install_id AS install_id, ` + evs + `, ` + firstSeenNone + ` AS first_seen
+        FROM events AS e
+        WHERE ` + eventsFilter + `
+          AND ({unit:String} = 'installs' OR e.user_id = '')
+        GROUP BY e.install_id
+        UNION ALL
+        SELECT install_id, ` + empty + `, first_seen FROM (
+            ` + identity.InstallFirstSeenSQL + `
+        )
+    )
+    GROUP BY install_id
+),
+people AS (
+    SELECT person_key, ` + merged + `, min(first_seen) AS first_seen
+    FROM (
+        SELECT ` + identity.UserPersonKeyExpr + ` AS person_key, ` + evs + `, ` + firstSeenNone + ` AS first_seen
+        FROM events AS e
+        WHERE ` + eventsFilter + `
+          AND {unit:String} = 'persons' AND e.user_id != ''
+        GROUP BY e.user_id
+        UNION ALL
+        SELECT person_key, ` + empty + `, first_seen FROM (
+            ` + identity.UserFirstSeenSQL + `
+        )
+        UNION ALL
+        SELECT ` + identity.AnonPersonKeyExpr + ` AS person_key, ` + aggList(aggs, func(a agg) string { return "a." + a.alias }) + `,
+               a.first_seen AS first_seen
+        FROM inst AS a
+        ` + identity.AnonLinksJoin + `
+    )
+    GROUP BY person_key
+)`
+}
 
 const (
 	paramDateTime = "2006-01-02 15:04:05.000"

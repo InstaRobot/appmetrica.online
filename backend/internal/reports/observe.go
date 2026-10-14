@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -19,21 +20,40 @@ const (
 	ReportIntegrationHealth  = "integration_health"
 )
 
-// QueryObserver получает время, которое ClickHouse отвечал на отчёт report.
+// QueryObserver получает время, которое ClickHouse отвечал на отчёт report: от первого запроса вызова до
+// последнего, включая неудачные вызовы.
 type QueryObserver func(report string, d time.Duration)
 
-// ObserveQueries — заглушка: наблюдатель пока не подключается.
-func (s *Service) ObserveQueries(QueryObserver) {}
+// ObserveQueries подключает наблюдателя длительности отчётов; nil отключает его. Вызывается до первого отчёта.
+func (s *Service) ObserveQueries(o QueryObserver) {
+	s.observe = o
+}
 
-// track — заглушка замера отчёта.
-func (s *Service) track(string) func() { return func() {} }
-
-// parallel — заглушка: выполняет fns по очереди до первой ошибки.
-func parallel(ctx context.Context, fns ...func(ctx context.Context) error) error {
-	for _, fn := range fns {
-		if err := fn(ctx); err != nil {
-			return err
-		}
+// track начинает замер отчёта report: defer s.track(report)().
+func (s *Service) track(report string) func() {
+	if s.observe == nil {
+		return func() {}
 	}
-	return nil
+	start := s.clock.Now()
+	return func() { s.observe(report, s.clock.Now().Sub(start)) }
+}
+
+// parallel выполняет fns одновременно; первая ошибка отменяет контекст остальных и возвращается.
+func parallel(ctx context.Context, fns ...func(ctx context.Context) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg       sync.WaitGroup
+		once     sync.Once
+		firstErr error
+	)
+	for _, fn := range fns {
+		wg.Go(func() {
+			if err := fn(ctx); err != nil {
+				once.Do(func() { firstErr = err; cancel() })
+			}
+		})
+	}
+	wg.Wait()
+	return firstErr
 }

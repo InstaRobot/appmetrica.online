@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -19,20 +20,37 @@ type metrics struct {
 	duration *prometheus.HistogramVec
 }
 
+// durationBuckets — корзины длительностей: пороги NFR-003 (1 с, 1,5 с) — границы корзин.
+var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2.5, 5, 10}
+
 // RegisterMetrics подключает api_request_duration_seconds{operation,status}: время операций api.yaml от разбора
 // параметров до записи ответа. Отказы аутентификации и CSRF до операции не попадают — их считает auth.
-// Вызывается до Register.
+// С отчётами (WithReports) — и api_clickhouse_query_duration_seconds{report}: время ClickHouse на отчёт
+// (reports.Report*). Вызывается после WithReports и до Register.
 func (s *Server) RegisterMetrics(reg prometheus.Registerer, c clock.Clock) error {
 	m := &metrics{
 		clock: c,
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "api_request_duration_seconds",
 			Help:    "Длительность операций Read API и admin API по operationId и HTTP-статусу.",
-			Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2.5, 5, 10},
+			Buckets: durationBuckets,
 		}, []string{"operation", "status"}),
 	}
 	if err := reg.Register(m.duration); err != nil {
 		return fmt.Errorf("api: register metrics: %w", err)
+	}
+	if s.reports != nil {
+		queries := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "api_clickhouse_query_duration_seconds",
+			Help:    "Время ClickHouse на отчёт Read API: все запросы одного вызова отчёта.",
+			Buckets: durationBuckets,
+		}, []string{"report"})
+		if err := reg.Register(queries); err != nil {
+			return fmt.Errorf("api: register metrics: %w", err)
+		}
+		s.reports.ObserveQueries(func(report string, d time.Duration) {
+			queries.WithLabelValues(report).Observe(d.Seconds())
+		})
 	}
 	s.metrics = m
 	return nil
