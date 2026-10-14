@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <Providers>
       <SkipLink />
-      <Suspense fallback={<div className="h-14 border-b border-border bg-card" />}>
+      <Suspense fallback={<div className="h-16 border-b border-border bg-header" />}>
         <AppHeader />
       </Suspense>
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1600px] px-8 pt-6 pb-12 outline-none">

@@ -9,13 +9,15 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { useTheme } from "@/hooks/use-theme";
 
-// Тёмной темы нет (14-ux-ui-spec.md §2.2), поэтому next-themes не используется: тема всегда light.
+// Тема тостов следует атрибуту <html data-theme> (lib/theme.ts); next-themes не используется.
 // Тосты — справа внизу, 3 с (§8.4).
 const Toaster = ({ ...props }: ToasterProps) => {
+  const theme = useTheme();
   return (
     <Sonner
-      theme="light"
+      theme={theme}
       position="bottom-right"
       duration={3000}
       className="toaster group"

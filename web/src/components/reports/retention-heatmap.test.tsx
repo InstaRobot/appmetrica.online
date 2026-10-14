@@ -100,7 +100,7 @@ describe("RetentionHeatmap", () => {
     expect(cell(first, 1)).not.toHaveAttribute("data-step");
     expect(cell(first, 1)).toHaveClass("bg-subtle", "text-fg-muted");
     expect(cell(first, 2)).toHaveAttribute("data-step", "4");
-    expect(cell(first, 2)).toHaveClass("bg-ret-4", "text-white");
+    expect(cell(first, 2)).toHaveClass("bg-ret-4", "text-(--ret-fg-4)");
     expect(cell(first, 3)).toHaveAttribute("data-step", "3");
     expect(cell(second, 3)).toHaveAttribute("data-step", "0");
     expect(cell(second, 3)).toHaveTextContent(/^5\s%$/);

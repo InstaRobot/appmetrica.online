@@ -17,6 +17,7 @@ import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { cn } from "@/lib/utils";
 import { parseAppPath } from "./app-tabs";
 import { Logo } from "./logo";
+import { ThemeToggle } from "./theme-toggle";
 
 // AppSwitcher (Radix Popover) и меню пользователя (Radix DropdownMenu) — отдельные чанки: их HTML
 // приходит с сервера, а код догружается сразу после первой загрузки страницы (бюджет initial JS
@@ -35,7 +36,7 @@ const NAV: NavItem[] = [
   { href: "/settings", label: "Настройки", icon: Settings, active: within("/settings") },
 ];
 
-// Шапка дашборда (14-ux-ui-spec.md §6.1): 56 px, sticky. Список приложений для AppSwitcher
+// Шапка дашборда (14-ux-ui-spec.md §6.1, макет «Dashboard v2»): 64 px, sticky, полупрозрачная с размытием. Список приложений для AppSwitcher
 // загружается на клиенте, чтобы после создания или архивации приложения обновляться без перезагрузки.
 export function AppHeader() {
   const pathname = usePathname();
@@ -44,7 +45,7 @@ export function AppHeader() {
   const apps = data?.status === 200 ? data.data.items : [];
 
   return (
-    <header className="sticky top-0 z-sticky h-14 border-b border-border bg-card">
+    <header className="sticky top-0 z-sticky h-16 border-b border-border bg-header backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-[1600px] items-center gap-4 px-8">
         <Link href="/" aria-label="appmetrica.online — в портфель" className="rounded-md">
           <Logo />
@@ -83,6 +84,7 @@ export function AppHeader() {
             })}
           </ul>
         </nav>
+        <ThemeToggle />
         <Suspense
           fallback={
             <span

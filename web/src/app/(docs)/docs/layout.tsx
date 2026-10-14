@@ -16,7 +16,7 @@ import "../docs.css";
 export default function DocsShell({ children }: LayoutProps<"/docs">) {
   return (
     <Providers>
-      <Suspense fallback={<div className="h-14 border-b border-border bg-card" />}>
+      <Suspense fallback={<div className="h-16 border-b border-border bg-header" />}>
         <RootProvider
           theme={{ enabled: false }}
           search={{ options: { api: "/docs/search" } }}

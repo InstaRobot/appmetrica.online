@@ -27,8 +27,8 @@
   --sidebar-primary-foreground: var(--color-neutral-0);
   --sidebar-ring: var(--ring-focus);
 
-  /* Шапка дашборда (56 px) над layout Fumadocs. */
-  --fd-banner-height: 3.5rem;
+  /* Шапка дашборда (64 px) над layout Fumadocs. */
+  --fd-banner-height: 4rem;
 }
 
 /* Метки HTTP-методов и кодов ответа fumadocs-openapi (text-*-600) на белом фоне не дотягивают

@@ -2,67 +2,82 @@
 @import "tw-animate-css";
 @import "./shadcn.css";
 
+/* Тёмная тема — атрибут <html data-theme="dark"> (lib/theme.ts), а не системный медиа-запрос. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @source "../../content";
 
 :root {
-  /* raw palette */
-  --color-primary-50: oklch(0.97 0.015 256);
-  --color-primary-100: oklch(0.93 0.035 256);
-  --color-primary-200: oklch(0.87 0.07 256);
-  --color-primary-300: oklch(0.78 0.11 256);
-  --color-primary-400: oklch(0.68 0.16 256);
-  --color-primary-500: oklch(0.58 0.19 256);
-  --color-primary-600: oklch(0.51 0.19 256);
-  --color-primary-700: oklch(0.44 0.17 257);
-  --color-primary-800: oklch(0.36 0.13 258);
-  --color-primary-900: oklch(0.28 0.09 259);
-  --color-primary-950: oklch(0.2 0.06 260);
+  /* Палитра по макету «Dashboard v2» (Claude Design), значения подобраны под WCAG 2.2 AA:
+     контраст пар токенов проверяет globals.test.ts для обеих тем. */
+  color-scheme: light;
 
-  --color-neutral-0: oklch(1 0 0);
-  --color-neutral-50: oklch(0.985 0.002 256);
-  --color-neutral-100: oklch(0.967 0.004 256);
-  --color-neutral-200: oklch(0.92 0.006 256);
-  --color-neutral-300: oklch(0.87 0.008 256);
-  --color-neutral-400: oklch(0.71 0.012 256);
-  --color-neutral-500: oklch(0.52 0.014 256);
-  --color-neutral-600: oklch(0.45 0.014 256);
-  --color-neutral-700: oklch(0.37 0.014 256);
-  --color-neutral-800: oklch(0.28 0.012 256);
-  --color-neutral-900: oklch(0.21 0.01 256);
-  --color-neutral-950: oklch(0.15 0.008 256);
+  /* raw palette — light */
+  --color-primary-50: #edf2fe;
+  --color-primary-100: #dbe5fd;
+  --color-primary-200: #c3d3fb;
+  --color-primary-300: #98b4f9;
+  --color-primary-400: #6f96f9;
+  --color-primary-500: #4f7cf5;
+  --color-primary-600: #3b68e2;
+  --color-primary-700: #2d55c7;
+  --color-primary-800: #2442a0;
+  --color-primary-900: #1b3277;
+  --color-primary-950: #121f4a;
 
-  --color-success-50: oklch(0.97 0.03 155);
-  --color-success-500: oklch(0.65 0.16 155);
-  --color-success-600: oklch(0.56 0.15 155);
-  --color-success-700: oklch(0.48 0.13 155);
-  --color-warning-50: oklch(0.98 0.04 85);
-  --color-warning-500: oklch(0.78 0.16 75);
-  --color-warning-600: oklch(0.66 0.15 65);
-  --color-warning-700: oklch(0.52 0.13 60);
-  --color-danger-50: oklch(0.97 0.02 25);
-  --color-danger-500: oklch(0.63 0.21 27);
-  --color-danger-600: oklch(0.56 0.21 27);
-  --color-danger-700: oklch(0.5 0.19 27);
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f7f8fc;
+  --color-neutral-100: #eceff6;
+  --color-neutral-200: #e7eaf2;
+  --color-neutral-300: #d9dee9;
+  --color-neutral-400: #b0b7c6;
+  --color-neutral-500: #7b8396;
+  --color-neutral-600: #5c6476;
+  --color-neutral-700: #3d4455;
+  --color-neutral-800: #262c3a;
+  --color-neutral-900: #131722;
+  --color-neutral-950: #0b0e15;
 
-  --ret-0: oklch(0.97 0.015 256);
-  --ret-1: oklch(0.92 0.04 256);
-  --ret-2: oklch(0.85 0.08 256);
-  --ret-3: oklch(0.74 0.13 256);
-  --ret-4: oklch(0.54 0.19 256);
-  --ret-5: oklch(0.42 0.17 258);
+  --color-success-50: #e5f6ed;
+  --color-success-500: #2fb67a;
+  --color-success-600: #1e8a5a;
+  --color-success-700: #187a4e;
+  --color-warning-50: #fdf4df;
+  --color-warning-500: #f0a43c;
+  --color-warning-600: #c27c14;
+  --color-warning-700: #8f5c0b;
+  --color-danger-50: #fdeeee;
+  --color-danger-500: #ef6b6b;
+  --color-danger-600: #d9444a;
+  --color-danger-700: #c4383c;
+
+  /* Тепловая шкала retention и цвет текста её ячеек (зависит от темы). */
+  --ret-0: var(--color-neutral-50);
+  --ret-1: #e3eafd;
+  --ret-2: #c3d3fb;
+  --ret-3: #98b4f9;
+  --ret-4: #3f66d6;
+  --ret-5: #2b4fb6;
+  --ret-fg-0: var(--fg-base);
+  --ret-fg-1: var(--fg-base);
+  --ret-fg-2: var(--fg-base);
+  --ret-fg-3: var(--fg-base);
+  --ret-fg-4: #ffffff;
+  --ret-fg-5: #ffffff;
 
   /* semantic aliases */
-  --bg-page: var(--color-neutral-100);
+  --bg-page: #f3f5fa;
   --bg-base: var(--color-neutral-0);
   --bg-subtle: var(--color-neutral-50);
   --bg-muted: var(--color-neutral-100);
   --bg-selected: var(--color-primary-50);
   --bg-inverse: var(--color-neutral-900);
+  --bg-header: rgb(255 255 255 / 0.78);
   --fg-base: var(--color-neutral-900);
   --fg-muted: var(--color-neutral-600);
-  --fg-subtle: var(--color-neutral-500);
+  --fg-subtle: #666e81;
   --fg-inverse: var(--color-neutral-0);
-  --fg-link: var(--color-primary-600);
+  --fg-link: var(--color-primary-700);
   --fg-positive: var(--color-success-700);
   --fg-negative: var(--color-danger-700);
   --fg-warning: var(--color-warning-700);
@@ -70,8 +85,21 @@
   --border-strong: var(--color-neutral-300);
   --ring-focus: var(--color-primary-500);
 
+  /* Основная кнопка: вертикальный градиент primary-top → primary, мягкая цветная тень. */
+  --primary-top: #426de4;
+  --primary-hover: #2f58cf;
+  --code-bg: #141927;
+  --code-fg: #e9edf6;
+  --glow: rgb(79 124 245 / 0.16);
+  --shadow-card: 0 1px 2px rgb(19 23 34 / 0.04), 0 12px 32px -20px rgb(19 23 34 / 0.16);
+  --shadow-card-hover: 0 1px 2px rgb(19 23 34 / 0.04), 0 16px 36px -18px rgb(79 124 245 / 0.4);
+  --shadow-popover: 0 12px 32px -12px rgb(19 23 34 / 0.22);
+  --shadow-primary: 0 4px 12px -4px rgb(79 124 245 / 0.55);
+  --shadow-inset: inset 0 1px 2px rgb(19 23 34 / 0.06);
+  --overlay: rgb(19 23 34 / 0.45);
+
   /* shadcn variables (Radix base, style radix-nova) */
-  --radius: 8px;
+  --radius: 9px;
   --background: var(--bg-page);
   --foreground: var(--fg-base);
   --card: var(--bg-base);
@@ -79,30 +107,124 @@
   --popover: var(--bg-base);
   --popover-foreground: var(--fg-base);
   --primary: var(--color-primary-600);
-  --primary-foreground: var(--color-neutral-0);
+  --primary-foreground: #ffffff;
   --secondary: var(--color-neutral-100);
   --secondary-foreground: var(--fg-base);
   --muted: var(--color-neutral-100);
   --muted-foreground: var(--fg-muted);
   --accent: var(--color-primary-50);
   --accent-foreground: var(--color-primary-800);
-  --destructive: var(--color-danger-600);
+  --destructive: var(--color-danger-700);
   --border: var(--border-base);
   --input: var(--border-strong);
   --ring: var(--ring-focus);
-  --chart-1: oklch(0.58 0.19 256);
-  --chart-2: oklch(0.7 0.15 45);
-  --chart-3: oklch(0.62 0.14 160);
+  --chart-1: #4f7cf5;
+  --chart-2: #f08a3c;
+  --chart-3: #2fb67a;
   --chart-4: oklch(0.58 0.2 300);
   --chart-5: oklch(0.66 0.13 200);
   --chart-6: oklch(0.62 0.2 15);
   --chart-7: oklch(0.55 0.06 256);
   --chart-8: oklch(0.74 0.15 115);
-  --chart-compare: var(--color-neutral-400);
+  /* Пунктир «прошлый период»: ≥ 3:1 к фону карточки (WCAG 1.4.11). */
+  --chart-compare: #848da0;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* raw palette — dark: шкалы «по силе текста», поэтому -700 остаются цветом текста/акцента. */
+  --color-primary-50: #1a2642;
+  --color-primary-100: #1f2e52;
+  --color-primary-200: #223463;
+  --color-primary-300: #2d4a90;
+  --color-primary-400: #3e64c6;
+  --color-primary-500: #6f97ff;
+  --color-primary-600: #4169d0;
+  --color-primary-700: #aac1ff;
+  --color-primary-800: #c6d5ff;
+  --color-primary-900: #dfe8ff;
+  --color-primary-950: #eef3ff;
+
+  --color-neutral-0: #141923;
+  --color-neutral-50: #191f2b;
+  --color-neutral-100: #1f2634;
+  --color-neutral-200: #232b3a;
+  --color-neutral-300: #303a4c;
+  --color-neutral-400: #505a71;
+  --color-neutral-500: #7f8899;
+  --color-neutral-600: #a4acbe;
+  --color-neutral-700: #c3c9d6;
+  --color-neutral-800: #dde1ea;
+  --color-neutral-900: #eef1f7;
+  --color-neutral-950: #f7f8fb;
+
+  --color-success-50: #132e22;
+  --color-success-500: #4fd38f;
+  --color-success-600: #3fb878;
+  --color-success-700: #4fd38f;
+  --color-warning-50: #382c11;
+  --color-warning-500: #f2b655;
+  --color-warning-600: #d99a35;
+  --color-warning-700: #f2b655;
+  --color-danger-50: #38191d;
+  --color-danger-500: #ef6b6b;
+  --color-danger-600: #e05252;
+  --color-danger-700: #ff7f7f;
+
+  --ret-0: var(--color-neutral-50);
+  --ret-1: #1a2440;
+  --ret-2: #223463;
+  --ret-3: #2d4a90;
+  --ret-4: #3e64c6;
+  --ret-5: #5f8af6;
+  --ret-fg-0: var(--fg-base);
+  --ret-fg-1: var(--fg-base);
+  --ret-fg-2: var(--fg-base);
+  --ret-fg-3: var(--fg-base);
+  --ret-fg-4: var(--fg-base);
+  --ret-fg-5: #0d1017;
+
+  --bg-page: #0d1017;
+  --bg-base: var(--color-neutral-0);
+  --bg-subtle: var(--color-neutral-50);
+  --bg-muted: var(--color-neutral-100);
+  --bg-selected: var(--color-primary-50);
+  --bg-inverse: var(--color-neutral-900);
+  --bg-header: rgb(13 16 23 / 0.75);
+  --fg-base: var(--color-neutral-900);
+  --fg-muted: var(--color-neutral-600);
+  --fg-subtle: #8a93a5;
+  --fg-inverse: var(--color-neutral-0);
+  --fg-link: var(--color-primary-700);
+  --fg-positive: var(--color-success-700);
+  --fg-negative: var(--color-danger-700);
+  --fg-warning: var(--color-warning-700);
+  --border-base: var(--color-neutral-200);
+  --border-strong: var(--color-neutral-300);
+  --ring-focus: var(--color-primary-500);
+
+  --primary: var(--color-primary-600);
+  --primary-top: #4870d6;
+  --primary-hover: #3a5fc0;
+  --code-bg: #0a0d13;
+  --code-fg: #e9edf6;
+  --glow: rgb(95 138 246 / 0.2);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -20px rgb(0 0 0 / 0.5);
+  --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 36px -18px rgb(111 151 255 / 0.45);
+  --shadow-popover: 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-primary: 0 4px 12px -4px rgb(95 138 246 / 0.6);
+  --shadow-inset: inset 0 1px 2px rgb(0 0 0 / 0.4);
+  --overlay: rgb(0 0 0 / 0.6);
+
+  --chart-1: #5f8af6;
+  --chart-2: #f5a05a;
+  --chart-3: #4fd38f;
+  --chart-compare: #727b90;
 }
 
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
   /* font-heading используют компоненты shadcn radix-nova (CardTitle, DialogTitle …) */
   --font-heading: var(--font-sans);
@@ -136,6 +258,9 @@
   --color-chart-compare: var(--chart-compare);
 
   --color-page: var(--bg-page);
+  --color-header: var(--bg-header);
+  --color-code: var(--code-bg);
+  --color-code-foreground: var(--code-fg);
   --color-subtle: var(--bg-subtle);
   --color-selected: var(--bg-selected);
   --color-fg-muted: var(--fg-muted);
@@ -175,10 +300,10 @@
   --text-5xl--line-height: 60px;
 
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-md: 7px;
+  --radius-lg: 9px;
   --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-2xl: 18px;
 
   --shadow-xs: 0 1px 2px 0 oklch(0.21 0.01 256 / 0.05);
   --shadow-sm: 0 1px 3px 0 oklch(0.21 0.01 256 / 0.08), 0 1px 2px -1px oklch(0.21 0.01 256 / 0.08);
@@ -205,34 +330,35 @@
 }
 
 @utility text-kpi-xl {
-  font-size: var(--text-5xl);
-  line-height: 1.1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 @utility text-kpi-lg {
-  font-size: var(--text-3xl);
+  font-size: 32px;
   line-height: 1.1;
-  font-weight: 600;
+  font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 @utility text-heading-1 {
-  font-size: var(--text-2xl);
-  line-height: 1.25;
-  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
   letter-spacing: -0.02em;
 }
 @utility text-heading-2 {
   font-size: var(--text-xl);
   line-height: 1.25;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 @utility text-heading-3 {
   font-size: var(--text-lg);
   line-height: 1.25;
-  font-weight: 600;
+  font-weight: 700;
 }
 @utility text-body-md {
   font-size: var(--text-base);
@@ -247,12 +373,12 @@
 @utility text-label-md {
   font-size: var(--text-sm);
   line-height: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 @utility text-label-sm {
   font-size: var(--text-xs);
   line-height: 16px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -290,13 +416,13 @@
 }
 
 @layer base {
-  html {
-    color-scheme: light;
-  }
   body {
     min-width: 1280px;
-    background: var(--bg-page);
+    background:
+      radial-gradient(1000px 420px at 50% -160px, var(--glow), transparent 70%) no-repeat,
+      var(--bg-page);
     color: var(--fg-base);
+    font-feature-settings: "tnum" 1;
     font-size: var(--text-base);
     line-height: 20px;
   }
