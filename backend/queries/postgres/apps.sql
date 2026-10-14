@@ -33,4 +33,4 @@ RETURNING id, name, platform, timezone, status, created_at, updated_at, archived
 DELETE FROM apps WHERE id = sqlc.arg(id);
 
 -- name: ListAppsForJobs :many
-SELECT id, name, timezone, status FROM apps ORDER BY id;
+SELECT id, name, timezone, status, created_at FROM apps ORDER BY id;

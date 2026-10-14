@@ -135,14 +135,15 @@ func (q *Queries) ListApps(ctx context.Context, includeArchived bool) ([]App, er
 }
 
 const listAppsForJobs = `-- name: ListAppsForJobs :many
-SELECT id, name, timezone, status FROM apps ORDER BY id
+SELECT id, name, timezone, status, created_at FROM apps ORDER BY id
 `
 
 type ListAppsForJobsRow struct {
-	ID       uuid.UUID
-	Name     string
-	Timezone string
-	Status   AppStatus
+	ID        uuid.UUID
+	Name      string
+	Timezone  string
+	Status    AppStatus
+	CreatedAt time.Time
 }
 
 func (q *Queries) ListAppsForJobs(ctx context.Context) ([]ListAppsForJobsRow, error) {
@@ -159,6 +160,7 @@ func (q *Queries) ListAppsForJobs(ctx context.Context) ([]ListAppsForJobsRow, er
 			&i.Name,
 			&i.Timezone,
 			&i.Status,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
