@@ -13,6 +13,7 @@ import {
   serializeAudienceSearch,
   serializeRetentionSearch,
   useAudienceState,
+  useRealtimeState,
   useRetentionState,
 } from "./url-state";
 
@@ -259,5 +260,31 @@ describe("retention url-state", () => {
 
     await act(() => result.current.update({ cohort: "day" }));
     expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios");
+  });
+});
+
+describe("realtime url-state", () => {
+  it("reads the environment shared with other tabs and ignores report filters", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const { result } = renderHook(() => useRealtimeState(), {
+      wrapper: withNuqsTestingAdapter({
+        searchParams: "?period=30d&platform=ios&env=development",
+        hasMemory: true,
+        onUrlUpdate,
+      }),
+    });
+    expect(result.current.env).toBe("development");
+
+    await act(() => result.current.setEnv("production"));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?period=30d&platform=ios");
+    expect(onUrlUpdate.mock.lastCall?.[0].options.history).toBe("push");
+    expect(result.current.env).toBe("production");
+  });
+
+  it("defaults to production for unknown environments", () => {
+    const { result } = renderHook(() => useRealtimeState(), {
+      wrapper: withNuqsTestingAdapter({ searchParams: "?env=staging" }),
+    });
+    expect(result.current.env).toBe("production");
   });
 });

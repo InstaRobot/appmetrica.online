@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatBucket,
+  formatClock,
   formatDate,
   formatDateRange,
   formatDateShort,
@@ -10,6 +11,7 @@ import {
   formatPercent,
   formatWeekdayDate,
   formatWeekRange,
+  shortId,
 } from "./format";
 
 const NBSP = " ";
@@ -115,5 +117,22 @@ describe("report ranges and buckets", () => {
     expect(formatBucket("2026-01-01T00:00:00+03:00", "month", "Europe/Moscow")).toBe("янв 2026");
     expect(formatBucket("2026-10-12T14:00:00+03:00", "hour", "Mars/Base")).toBe("12 окт, 11:00");
     expect(formatBucket("nope", "day", "UTC")).toBe("—");
+  });
+});
+
+describe("realtime formatting", () => {
+  it("formats clock time with seconds in the app time zone", () => {
+    expect(formatClock("2026-10-13T11:32:05Z", "Europe/Moscow")).toBe("14:32:05");
+    expect(formatClock("2026-10-13T00:00:09Z", "UTC")).toBe("00:00:09");
+    expect(formatClock("2026-10-13T11:32:05Z", "Nope/Zone")).toBe("11:32:05");
+    expect(formatClock("nope", "UTC")).toBe("—");
+  });
+
+  it("shortens long ids to the first and last four characters", () => {
+    expect(shortId("5d8e0000-0000-4000-8000-00000a3f4e5f")).toBe("5d8e…4e5f");
+    expect(shortId("u:42")).toBe("u:42");
+    expect(shortId("123456789")).toBe("123456789");
+    expect(shortId("1234567890")).toBe("1234…7890");
+    expect(shortId("")).toBe("—");
   });
 });
