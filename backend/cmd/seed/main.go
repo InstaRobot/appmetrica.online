@@ -1,7 +1,8 @@
 // Команда seed заливает в локальные Postgres и ClickHouse демо-данные (`make seed`, 12-dev-runbook.md §4.3):
-// приложения «Seed iOS», «Seed Android», «Seed Site» (TZ Europe/Moscow), write-ключ --write-key для «Seed iOS»
-// и события за --days дней по вчерашний день: --daily-installs новых установок в день, удержание D1≈35 %,
-// D7≈15 %, 20 % установок с user_id, 5 % — второе устройство того же user_id.
+// приложения «Seed iOS», «Seed Android», «Seed Site» и «Seed Notes» на iOS, Android и Web (TZ Europe/Moscow),
+// write-ключ --write-key для «Seed iOS» и события за --days дней по вчерашний день: около --daily-installs
+// новых установок в день, удержание D1≈35 %, D7≈15 %, 20 % установок с user_id, 5 % — второе устройство того
+// же user_id на той же платформе. У «Seed Notes» около 5 % людей — с одним user_id на iOS и Web.
 //
 // События пишутся в ClickHouse напрямую, минуя ingest и окно приёма 7 дней. Генератор детерминирован
 // (seed RNG + дата запуска): повторный запуск в тот же день вставляет те же строки, и ReplacingMergeTree
@@ -20,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -40,6 +42,7 @@ const (
 	retentionD7 = 0.15
 	userShare   = 0.20 // доля установок с user_id
 	secondShare = 0.05 // из них — второе устройство уже известного user_id
+	crossShare  = 0.05 // доля людей мультиплатформенного приложения с установками на iOS и Web
 )
 
 // retentionDecay — показатель степенной кривой p(n) = D1·n^(−b), проходящей через D1 и D7.
@@ -48,14 +51,25 @@ var retentionDecay = math.Log(retentionD1/retentionD7) / math.Log(7)
 var writeKeyRe = regexp.MustCompile(`^pk_[A-Za-z0-9]{32}$`)
 
 type appSpec struct {
-	Name     string
-	Platform sqlc.AppPlatform
+	Name      string
+	Platforms []sqlc.AppPlatform
 }
 
 var appSpecs = []appSpec{
-	{"Seed iOS", sqlc.AppPlatformIos},
-	{"Seed Android", sqlc.AppPlatformAndroid},
-	{"Seed Site", sqlc.AppPlatformWeb},
+	{"Seed iOS", []sqlc.AppPlatform{sqlc.AppPlatformIos}},
+	{"Seed Android", []sqlc.AppPlatform{sqlc.AppPlatformAndroid}},
+	{"Seed Site", []sqlc.AppPlatform{sqlc.AppPlatformWeb}},
+	{"Seed Notes", []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid, sqlc.AppPlatformWeb}},
+}
+
+// platformWeights — доли установок мультиплатформенного приложения по платформам (накопленные).
+var platformWeights = []struct {
+	cum      float64
+	platform string
+}{
+	{0.45, "ios"},
+	{0.85, "android"},
+	{1.00, "web"},
 }
 
 type options struct {
@@ -69,7 +83,7 @@ type options struct {
 // seedApp — приложение в Postgres, для которого генерируются события.
 type seedApp struct {
 	ID         uuid.UUID
-	Platform   string
+	Platforms  []string
 	WriteKeyID uuid.UUID // uuid.Nil у приложений без ключа
 }
 
@@ -105,7 +119,7 @@ func parseOptions(args []string, stderr io.Writer) (options, bool) {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var o options
-	fs.IntVar(&o.Apps, "apps", len(appSpecs), "число приложений (1..3)")
+	fs.IntVar(&o.Apps, "apps", len(appSpecs), fmt.Sprintf("число приложений (1..%d)", len(appSpecs)))
 	fs.IntVar(&o.Days, "days", 35, "дней истории по вчерашний день")
 	fs.IntVar(&o.DailyInstalls, "daily-installs", 400, "новых установок в день на приложение")
 	fs.StringVar(&o.WriteKey, "write-key", "", "write-ключ pk_ для «Seed iOS» (DEV_WRITE_KEY)")
@@ -192,12 +206,16 @@ func ensureApps(ctx context.Context, q *sqlc.Queries, opts options) ([]seedApp, 
 	for _, spec := range appSpecs[:opts.Apps] {
 		a, ok := byName[strings.ToLower(spec.Name)]
 		if !ok {
-			a, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: spec.Name, Platforms: []sqlc.AppPlatform{spec.Platform}, Timezone: seedTimezone})
+			a, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: spec.Name, Platforms: spec.Platforms, Timezone: seedTimezone})
 			if err != nil {
 				return nil, fmt.Errorf("create app %q: %w", spec.Name, err)
 			}
 		}
-		out = append(out, seedApp{ID: a.ID, Platform: string(a.Platform)})
+		platforms := make([]string, len(a.Platforms))
+		for i, p := range a.Platforms {
+			platforms[i] = string(p)
+		}
+		out = append(out, seedApp{ID: a.ID, Platforms: platforms})
 	}
 	keyID, err := ensureWriteKey(ctx, q, out[0].ID, opts.WriteKey)
 	if err != nil {
@@ -267,42 +285,29 @@ var (
 	}
 )
 
-// generateApp строит события одного приложения: idx различает поток RNG приложений.
+// generateApp строит события одного приложения: idx различает поток RNG приложений. У приложения с одной
+// платформой каждая установка на ней; у мультиплатформенного платформа установки — по platformWeights,
+// а доля crossShare людей ставит приложение и на iOS, и на Web под одним user_id.
 func generateApp(cfg genConfig, idx int, app seedApp) []chstore.EventRow {
 	rng := rand.New(rand.NewPCG(cfg.Seed, uint64(idx)+1)) //nolint:gosec // демо-данные, не криптография
 	y, m, d := cfg.Today.In(cfg.Location).Date()
 	today := time.Date(y, m, d, 0, 0, 0, 0, cfg.Location)
-	models := devices[app.Platform]
-	if len(models) == 0 {
-		models = devices["web"]
-	}
+	multi := len(app.Platforms) > 1
+	cross := multi && slices.Contains(app.Platforms, "ios") && slices.Contains(app.Platforms, "web")
 
 	var (
-		rows  []chstore.EventRow
-		users []string
+		rows   []chstore.EventRow
+		people int
+		users  = map[string][]string{} // user_id по платформам: второе устройство — на той же платформе
 	)
+	newUser := func() string {
+		people++
+		return fmt.Sprintf("seed-%05d", people)
+	}
 	for back := cfg.Days; back >= 1; back-- {
 		first := today.AddDate(0, 0, -back)
-		for range cfg.DailyInstalls {
-			dev := models[rng.IntN(len(models))]
-			dev.appVersion = appVersions[rng.IntN(len(appVersions))]
-			g := rng.Float64()
-			for _, geo := range geos {
-				if g < geo.cum {
-					dev.country, dev.region, dev.city = geo.country, geo.region, geo.city
-					break
-				}
-			}
-			var user string
-			switch r := rng.Float64(); {
-			case r < secondShare && len(users) > 0:
-				user = users[rng.IntN(len(users))]
-			case r < userShare:
-				user = fmt.Sprintf("seed-%05d", len(users)+1)
-				users = append(users, user)
-			}
-			in := install{id: newUUID(rng), user: user, dev: dev}
-
+		addInstall := func(platform, user string) {
+			in := install{id: newUUID(rng), user: user, platform: platform, dev: newDevice(rng, platform)}
 			rows = in.sessions(rows, rng, app, first, 1+rng.IntN(3))
 			for n := 1; n < back; n++ {
 				if rng.Float64() < retentionD1*math.Pow(float64(n), -retentionDecay) {
@@ -310,14 +315,64 @@ func generateApp(cfg genConfig, idx int, app seedApp) []chstore.EventRow {
 				}
 			}
 		}
+		for range cfg.DailyInstalls {
+			if cross && rng.Float64() < crossShare {
+				user := newUser()
+				addInstall("ios", user)
+				addInstall("web", user)
+				continue
+			}
+			platform := app.Platforms[0]
+			if multi {
+				platform = pickPlatform(rng.Float64(), app.Platforms)
+			}
+			var user string
+			switch r := rng.Float64(); {
+			case r < secondShare && len(users[platform]) > 0:
+				user = users[platform][rng.IntN(len(users[platform]))]
+			case r < userShare:
+				user = newUser()
+				users[platform] = append(users[platform], user)
+			}
+			addInstall(platform, user)
+		}
 	}
 	return rows
 }
 
+// pickPlatform — платформа установки по platformWeights среди платформ приложения.
+func pickPlatform(r float64, platforms []string) string {
+	for _, w := range platformWeights {
+		if r < w.cum && slices.Contains(platforms, w.platform) {
+			return w.platform
+		}
+	}
+	return platforms[0]
+}
+
+// newDevice — устройство платформы со случайными версией приложения и географией.
+func newDevice(rng *rand.Rand, platform string) device {
+	models := devices[platform]
+	if len(models) == 0 {
+		models = devices["web"]
+	}
+	dev := models[rng.IntN(len(models))]
+	dev.appVersion = appVersions[rng.IntN(len(appVersions))]
+	g := rng.Float64()
+	for _, geo := range geos {
+		if g < geo.cum {
+			dev.country, dev.region, dev.city = geo.country, geo.region, geo.city
+			break
+		}
+	}
+	return dev
+}
+
 type install struct {
-	id   uuid.UUID
-	user string
-	dev  device
+	id       uuid.UUID
+	user     string
+	platform string
+	dev      device
 }
 
 // sessions добавляет count пар session_start/session_end в день day (полночь в TZ приложения).
@@ -350,7 +405,7 @@ func (in install) row(app seedApp, name string, at, sent time.Time, session uuid
 		SessionID:   session,
 		DurationMs:  durationMs,
 		Environment: "production",
-		Platform:    app.Platform,
+		Platform:    in.platform,
 		OSName:      in.dev.osName,
 		OSVersion:   in.dev.osVersion,
 		AppVersion:  in.dev.appVersion,
