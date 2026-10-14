@@ -129,7 +129,7 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 		w, err := config.LoadWorker()
 		require.NoError(t, err)
 		require.Equal(t, ":8082", w.ListenAddr)
-		require.Equal(t, []string{"system_check", "digest", "close_day", "deletion", "session_cleanup"}, w.JobsEnabled)
+		require.Equal(t, []string{"system_check", "digest", "close_day", "deletion", "session_cleanup", "app_merge"}, w.JobsEnabled)
 		require.Equal(t, 20, w.DiskFreeAlertPct)
 		require.Empty(t, w.TelegramBotToken)
 		require.Equal(t, "http://localhost:3000", w.PublicBaseURL)
@@ -166,7 +166,7 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 
 		w, err := config.LoadWorker()
 		require.NoError(t, err)
-		require.Equal(t, []string{"system_check", "digest", "close_day", "deletion", "session_cleanup"}, w.JobsEnabled)
+		require.Equal(t, []string{"system_check", "digest", "close_day", "deletion", "session_cleanup", "app_merge"}, w.JobsEnabled)
 	})
 }
 
@@ -182,6 +182,28 @@ func TestLoad_AppEnvE2E(t *testing.T) {
 	api, err := config.LoadAPI()
 	require.NoError(t, err)
 	require.Equal(t, config.Env("e2e"), api.AppEnv)
+}
+
+// AC-008.4: job app_merge включён по умолчанию и разрешён в WORKER_JOBS_ENABLED; неизвестное имя — ошибка.
+func TestJobsIncludeAppMerge(t *testing.T) {
+	require.Contains(t, config.Jobs, "app_merge")
+
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		"POSTGRES_URL":    "postgres://u:p@localhost:5432/db",
+		"KEY_HASH_PEPPER": devPepper,
+	})
+	w, err := config.LoadWorker()
+	require.NoError(t, err)
+	require.Contains(t, w.JobsEnabled, "app_merge")
+
+	setEnv(t, map[string]string{"WORKER_JOBS_ENABLED": "app_merge,deletion"})
+	w, err = config.LoadWorker()
+	require.NoError(t, err)
+	require.Equal(t, []string{"app_merge", "deletion"}, w.JobsEnabled)
+
+	setEnv(t, map[string]string{"WORKER_JOBS_ENABLED": "app_merge,app_merges"})
+	require.ErrorContains(t, loadWorker(), `WORKER_JOBS_ENABLED: unknown job "app_merges"`)
 }
 
 // api читает те же TELEGRAM_BOT_TOKEN и BACKUP_API_URL, что и worker: тестовое сообщение и статус бэкапа.
