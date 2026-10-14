@@ -58,8 +58,15 @@ describe("proxy", () => {
     },
   );
 
-  it("keeps the docs behind the login in demo mode", () => {
-    expect(proxy(request("/docs", "am_demo=1")).status).toBe(307);
+  it.each(["/docs", "/docs/recipes/ios-swift", "/docs/search?query=events"])(
+    "lets anonymous visitors read the public docs at %s",
+    (path) => {
+      expect(passesThrough(proxy(request(path)))).toBe(true);
+    },
+  );
+
+  it("lets demo visitors read the docs", () => {
+    expect(passesThrough(proxy(request("/docs", "am_demo=1")))).toBe(true);
   });
 
   it("lets requests with am_session through without validating it", () => {
@@ -73,6 +80,7 @@ describe("proxy", () => {
   it("does not treat lookalike paths as public", () => {
     expect(proxy(request("/loginx")).status).toBe(307);
     expect(proxy(request("/setupx/abc")).status).toBe(307);
+    expect(proxy(request("/docsx")).status).toBe(307);
   });
 
   it("excludes static assets via matcher", () => {

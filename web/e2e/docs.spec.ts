@@ -6,26 +6,37 @@ import { expectNoA11yViolations } from "./helpers/a11y";
 test.describe("without session", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  // AC-047.2: без cookie proxy отправляет на вход и сохраняет адрес страницы в next.
-  test("docs require login", async ({ page }) => {
-    await page.goto("/docs/recipes/ios-swift");
+  // Документация публичная (решение владельца от 2026-10-14): гость читает её без входа,
+  // а в шапке видит «Войти» вместо меню дашборда.
+  test("docs are public", async ({ page }) => {
+    const res = await page.goto("/docs/recipes/ios-swift");
 
-    await expect(page).toHaveURL(/\/login\?next=%2Fdocs%2Frecipes%2Fios-swift$/);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Вход в appmetrica.online" }),
-    ).toBeVisible();
+    expect(res?.status()).toBe(200);
+    await expect(page).toHaveURL(/\/docs\/recipes\/ios-swift$/);
+    await expect(page.getByRole("heading", { level: 1, name: "iOS (Swift)" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("link", { name: "Войти" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
     await expectNoA11yViolations(page);
   });
 
-  // Cookie есть, но сессия недействительна: proxy пропускает, layout доков проверяет её через API.
-  test("docs reject an invalid session cookie", async ({ page, context, baseURL }) => {
+  // Недействительная cookie сессии не уводит на вход: гость видит ту же документацию.
+  test("docs ignore an invalid session cookie", async ({ page, context, baseURL }) => {
     await context.addCookies([{ name: "am_session", value: "invalid", url: baseURL ?? "" }]);
 
     await page.goto("/docs/api-reference/ingest/ingest-events");
 
-    await expect(page).toHaveURL(/\/login\?next=(%2F|\/)docs$/);
-    await expect(page.getByText("Ingestion API")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/docs\/api-reference\/ingest\/ingest-events$/);
+    await expect(page.locator("#nd-page").getByText("/v1/events").first()).toBeVisible();
     await expectNoA11yViolations(page);
+  });
+
+  test("docs search works without a session", async ({ request }) => {
+    const res = await request.get("/docs/search?query=session_start");
+
+    expect(res.status()).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
   });
 });
 
