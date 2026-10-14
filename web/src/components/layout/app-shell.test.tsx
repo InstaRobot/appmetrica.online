@@ -1,8 +1,8 @@
 import { screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
-import { describe, expect, it, vi } from "vitest";
-import { errorBody, app as makeApp } from "@/test/factories";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
 import { AppShell } from "./app-shell";
@@ -14,6 +14,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => `/apps/${APP_ID}`,
   useSearchParams: () => new URLSearchParams("period=30d&metric=new"),
 }));
+
+beforeEach(() => {
+  server.use(http.get(`*/admin/v1/apps/${APP_ID}/merges`, () => HttpResponse.json({ items: [] })));
+});
 
 function renderShell(searchParams = "") {
   return renderWithClient(
@@ -75,6 +79,22 @@ describe("AppShell", () => {
     );
     renderShell();
     expect(await screen.findByText(/Приложение в архиве/)).toBeInTheDocument();
+  });
+
+  it("shows the progress of a merge into the app", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () => HttpResponse.json(makeApp({ id: APP_ID }))),
+      http.get(`*/admin/v1/apps/${APP_ID}/merges`, () =>
+        HttpResponse.json({
+          items: [appMerge({ target_app_id: APP_ID, status: "running", step: "wait_keys" })],
+        }),
+      ),
+    );
+    renderShell();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Объединение с «Notes Android»: ждём, пока приём событий перечитает ключи (до 17 мин)",
+    );
+    expect(screen.getByText("Отчёт")).toBeInTheDocument();
   });
 
   it("shows not found instead of the report for an unknown app", async () => {

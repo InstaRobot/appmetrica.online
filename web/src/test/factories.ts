@@ -3,8 +3,10 @@ import type {
   Error as ApiErrorBody,
   ApiKey,
   App,
+  AppMerge,
   AppSummary,
   DeletionRequest,
+  MergePreview,
   Passkey,
   PortfolioRow,
   Profile,
@@ -41,6 +43,39 @@ export function app(overrides: Partial<App> = {}): App {
     created_at: "2026-09-01T10:00:00Z",
     updated_at: "2026-09-01T10:00:00Z",
     archived_at: null,
+    ...overrides,
+  };
+}
+
+export function appMerge(overrides: Partial<AppMerge> = {}): AppMerge {
+  return {
+    id: faker.string.uuid(),
+    target_app_id: faker.string.uuid(),
+    source_app_id: faker.string.uuid(),
+    source_name: "Notes Android",
+    source_platforms: ["android"],
+    status: "pending",
+    step: "move_keys",
+    copied_events: 0,
+    total_events: 1_204_331,
+    error: null,
+    created_at: "2026-10-14T10:00:00Z",
+    started_at: null,
+    finished_at: null,
+    ...overrides,
+  };
+}
+
+export function mergePreview(overrides: Partial<MergePreview> = {}): MergePreview {
+  return {
+    source: appSummary({ name: "Notes Android", platform: "android", platforms: ["android"] }),
+    events: 1_204_331,
+    first_day: "2026-03-02",
+    last_day: "2026-10-13",
+    write_keys: 2,
+    timezone_differs: false,
+    target_timezone: "Europe/Moscow",
+    source_timezone: "Europe/Moscow",
     ...overrides,
   };
 }

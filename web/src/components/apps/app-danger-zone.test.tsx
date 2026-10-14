@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
-import { errorBody, app as makeApp } from "@/test/factories";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
 import { AppDangerZone } from "./app-danger-zone";
@@ -22,6 +22,10 @@ vi.mock("next/navigation", () => ({
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
+
+beforeEach(() => {
+  server.use(http.get(`*/admin/v1/apps/${APP_ID}/merges`, () => HttpResponse.json({ items: [] })));
+});
 
 function mockActions(deleteResponse?: () => Response) {
   const calls: string[] = [];
@@ -136,5 +140,39 @@ describe("AppDangerZone", () => {
     await waitFor(() =>
       expect(toasts.error).toHaveBeenCalledWith("Ошибка сервера. Повторите через минуту."),
     );
+  });
+
+  it("opens the merge dialog", async () => {
+    renderWithClient(<AppDangerZone app={ACTIVE} />);
+
+    expect(screen.getByText("Объединить с другим приложением")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Объединить…" }));
+
+    expect(await screen.findByRole("dialog", { name: "Объединить приложения" })).toHaveTextContent(
+      "Данные выбранного приложения переедут в «Notes iOS».",
+    );
+  });
+
+  it("disables dangerous actions while a merge is active", async () => {
+    server.use(
+      http.get(`*/admin/v1/apps/${APP_ID}/merges`, () =>
+        HttpResponse.json({
+          items: [appMerge({ target_app_id: APP_ID, status: "failed", step: "copy" })],
+        }),
+      ),
+    );
+    renderWithClient(<AppDangerZone app={ACTIVE} />);
+
+    expect(await screen.findByText("Идёт объединение — дождитесь завершения")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Объединить…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Архивировать" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Удалить навсегда" })).toBeDisabled();
+  });
+
+  it("does not merge into an archived app", async () => {
+    renderWithClient(<AppDangerZone app={ARCHIVED} />);
+
+    expect(screen.getByRole("button", { name: "Объединить…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Вернуть из архива" })).toBeEnabled();
   });
 });
