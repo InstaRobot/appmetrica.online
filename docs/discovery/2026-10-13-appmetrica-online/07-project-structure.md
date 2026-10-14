@@ -179,7 +179,7 @@ web/src/lib/
 **Правила**:
 - `lib/` — чистые функции и клиенты. JSX здесь нет.
 - Каждый модуль `lib/*.ts` (кроме `api/gen`) покрыт unit-тестом `*.test.ts`; порог покрытия Vitest — 70 % строк.
-- Переменные окружения web читаются только в `next.config.ts` и `src/lib/api/fetcher.ts` (`API_INTERNAL_URL`), а также в `src/lib/snippets.ts` (`NEXT_PUBLIC_INGEST_URL`, `NEXT_PUBLIC_API_URL`).
+- Переменные окружения web читаются только в `next.config.ts` и `src/lib/api/fetcher.ts` (`API_INTERNAL_URL`), а также в `src/lib/snippets.ts` (`NEXT_PUBLIC_INGEST_URL`, `NEXT_PUBLIC_API_URL`) и `src/lib/copy-as-curl.ts` (`NEXT_PUBLIC_API_URL`).
 
 ---
 

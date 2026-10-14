@@ -119,3 +119,51 @@ export function formatWeekdayDate(value: string, timeZone?: string): string {
   const p = dateParts(value, timeZone);
   return p ? `${WEEKDAYS[p.weekday]}${NBSP}${p.day}${NBSP}${MONTHS[p.month - 1]}` : DASH;
 }
+
+// Период отчёта: «6–12 окт 2026», «28 сен – 5 окт 2026», «28 дек 2025 – 3 янв 2026», «12 окт 2026».
+export function formatDateRange(from: string, to: string): string {
+  const a = dateParts(from);
+  const b = dateParts(to);
+  if (!a || !b) return DASH;
+  if (from === to) return formatDate(from);
+  const end = `${b.day}${NBSP}${MONTHS[b.month - 1]}${NBSP}${b.year}`;
+  if (a.year !== b.year) return `${formatDate(from)} – ${end}`;
+  if (a.month !== b.month) return `${a.day}${NBSP}${MONTHS[a.month - 1]} – ${end}`;
+  return `${a.day}–${end}`;
+}
+
+const timeFormats = new Map<string, Intl.DateTimeFormat>();
+
+function timeFormat(timeZone: string): Intl.DateTimeFormat {
+  let format = timeFormats.get(timeZone);
+  if (!format) {
+    let zone = timeZone;
+    try {
+      new Intl.DateTimeFormat("ru-RU", { timeZone: zone });
+    } catch {
+      zone = "UTC";
+    }
+    format = new Intl.DateTimeFormat("ru-RU", {
+      timeZone: zone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    timeFormats.set(timeZone, format);
+  }
+  return format;
+}
+
+// Подпись корзины ряда (начало корзины с offset TZ приложения): «12 окт, 14:00», «12 окт», «окт 2026».
+export function formatBucket(
+  ts: string,
+  granularity: "hour" | "day" | "week" | "month",
+  timeZone: string,
+): string {
+  const p = dateParts(ts, timeZone);
+  if (!p) return DASH;
+  if (granularity === "month") return `${MONTHS[p.month - 1]}${NBSP}${p.year}`;
+  const day = `${p.day}${NBSP}${MONTHS[p.month - 1]}`;
+  if (granularity !== "hour") return day;
+  return `${day}, ${timeFormat(timeZone).format(new Date(ts))}`;
+}

@@ -62,8 +62,8 @@ describe("PeriodPicker", () => {
     await user.click(screen.getByRole("button", { name: "Выбрать даты" }));
     const apply = screen.getByRole("button", { name: "Применить" });
     expect(apply).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /1 октября 2026/ }));
-    await user.click(screen.getByRole("button", { name: /5 октября 2026/ }));
+    await user.click(screen.getByRole("button", { name: /(^|\s)1 октября 2026/ }));
+    await user.click(screen.getByRole("button", { name: /(^|\s)5 октября 2026/ }));
     await user.click(apply);
 
     expect(onChange).toHaveBeenCalledWith({

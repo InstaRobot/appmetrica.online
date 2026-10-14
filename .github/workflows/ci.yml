@@ -181,12 +181,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
 
-      - name: Infrastructure (ClickHouse 26.8, Postgres 18.6), migrations, geo-db
+      - name: Infrastructure (ClickHouse 26.8, Postgres 18.6), migrations, geo-db, seed
         run: |
           cp .env.example .env
           make dev-infra
           make migrate-up
           make geo-db
+          # Демо-данные для отчётных спек (audience.spec.ts открывает «Seed iOS»).
+          make seed
 
       - name: Start ingest and api
         run: |
@@ -194,7 +196,8 @@ jobs:
           cd backend
           go build -o ../bin/appmetrica ./cmd/appmetrica
           METRICS_LISTEN_ADDR=:9091 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica ingest > ../ingest.log 2>&1 &
-          METRICS_LISTEN_ADDR=:9092 CLICKHOUSE_USER=appmetrica_ro CLICKHOUSE_PASSWORD="$CLICKHOUSE_RO_PASSWORD" ../bin/appmetrica api > ../api.log 2>&1 &
+          # APP_ENV=e2e открывает /internal/e2e/* для global-setup (сброс владельца и ссылка на passkey).
+          APP_ENV=e2e METRICS_LISTEN_ADDR=:9092 CLICKHOUSE_USER=appmetrica_ro CLICKHOUSE_PASSWORD="$CLICKHOUSE_RO_PASSWORD" ../bin/appmetrica api > ../api.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080/ready >/dev/null && curl -fsS http://localhost:8081/ready >/dev/null; then echo "backend ready"; exit 0; fi
             sleep 1

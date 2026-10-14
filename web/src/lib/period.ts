@@ -45,28 +45,68 @@ export function yesterdayIn(timeZone: string, now: Date = new Date()): string {
   return addDays(todayIn(timeZone, now), -1);
 }
 
-// TODO(T-038): заглушки периодов отчётов.
+// Периоды отчётов S-05 (14-ux-ui-spec.md S-05, §16.7): пресеты заканчиваются сегодняшним днём в TZ приложения
+// включительно, как «Неделя» в AppMetrica; custom — произвольные from…to.
 export const PERIOD_PRESETS = ["today", "yesterday", "7d", "30d", "90d", "custom"] as const;
 export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 export type PeriodValue = { preset: PeriodPreset; from: string; to: string };
+
 export const GRANULARITIES = ["hour", "day", "week", "month"] as const;
 export type Granularity = (typeof GRANULARITIES)[number];
 
-export function presetPeriod(
-  _preset: Exclude<PeriodPreset, "custom">,
-  _today: string,
-): PeriodValue {
-  throw new Error("not implemented");
+// Пределы API (06-api-contracts.md §2.4.4, OQ-042): период до 366 дней, почасовой — до 7 дней.
+export const MAX_RANGE_DAYS = 366;
+export const MAX_HOUR_RANGE_DAYS = 7;
+const MIN_MONTH_RANGE_DAYS = 60;
+
+const PRESET_DAYS = { "7d": 7, "30d": 30, "90d": 90 } as const;
+
+export function presetPeriod(preset: Exclude<PeriodPreset, "custom">, today: string): PeriodValue {
+  if (preset === "today") return { preset, from: today, to: today };
+  if (preset === "yesterday") {
+    const day = addDays(today, -1);
+    return { preset, from: day, to: day };
+  }
+  return { preset, from: addDays(today, 1 - PRESET_DAYS[preset]), to: today };
 }
 
-export function rangeDays(_from: string, _to: string): number {
-  throw new Error("not implemented");
+// rangeDays — длина from…to в днях включительно; 0, если from позже to.
+export function rangeDays(from: string, to: string): number {
+  const days = Math.round((parse(to).getTime() - parse(from).getTime()) / 86_400_000) + 1;
+  return Math.max(days, 0);
 }
 
-export function allowedGranularities(_period: PeriodValue): Granularity[] {
-  throw new Error("not implemented");
+// Детализация, доступная для периода (14-ux-ui-spec.md S-05).
+export function allowedGranularities(period: PeriodValue): Granularity[] {
+  switch (period.preset) {
+    case "today":
+    case "yesterday":
+      return ["hour"];
+    case "7d":
+      return ["hour", "day"];
+    case "30d":
+      return ["day", "week"];
+    case "90d":
+      return ["day", "week", "month"];
+    case "custom": {
+      const days = rangeDays(period.from, period.to);
+      return GRANULARITIES.filter(
+        (g) =>
+          (g !== "hour" || days <= MAX_HOUR_RANGE_DAYS) &&
+          (g !== "month" || days >= MIN_MONTH_RANGE_DAYS),
+      );
+    }
+  }
 }
 
-export function coerceGranularity(_value: Granularity, _allowed: Granularity[]): Granularity {
-  throw new Error("not implemented");
+// Ближайшая допустимая детализация; при равном расстоянии — более мелкая.
+export function coerceGranularity(value: Granularity, allowed: Granularity[]): Granularity {
+  if (allowed.includes(value)) return value;
+  const rank = GRANULARITIES.indexOf(value);
+  let best = allowed[0] ?? "day";
+  for (const g of allowed) {
+    const d = Math.abs(GRANULARITIES.indexOf(g) - rank);
+    if (d < Math.abs(GRANULARITIES.indexOf(best) - rank)) best = g;
+  }
+  return best;
 }

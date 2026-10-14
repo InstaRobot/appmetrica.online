@@ -37,11 +37,11 @@ describe("KpiCard", () => {
         secondary="медиана 2 мин 5 с"
       />,
     );
-    expect(screen.getByRole("button")).toHaveTextContent(/4\sмин\s12\sс/);
+    expect(screen.getByRole("button", { pressed: false })).toHaveTextContent(/4\sмин\s12\sс/);
     expect(screen.getByText("медиана 2 мин 5 с")).toBeInTheDocument();
 
     rerender(<KpiCard label="D1" definition="…" value={0.381} format="percent" />);
-    expect(screen.getByRole("button")).toHaveTextContent(/38,1\s%/);
+    expect(screen.getByRole("button", { pressed: false })).toHaveTextContent(/38,1\s%/);
   });
 
   it("renders missing values and deltas neutrally", () => {
@@ -54,7 +54,7 @@ describe("KpiCard", () => {
         deltaPct={null}
       />,
     );
-    expect(screen.getByRole("button")).toHaveTextContent("—");
+    expect(screen.getByRole("button", { pressed: false })).toHaveTextContent("—");
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.queryByText(/Тренд/)).not.toBeInTheDocument();
   });

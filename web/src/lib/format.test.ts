@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatBucket,
   formatDate,
+  formatDateRange,
   formatDateShort,
   formatDelta,
   formatDuration,
@@ -84,5 +86,26 @@ describe("format", () => {
     expect(formatDate("2026-09-20T22:30:00Z", "Europe/Moscow")).toBe(`21${NBSP}сен${NBSP}2026`);
     expect(formatDate("2026-09-20T22:30:00Z", "UTC")).toBe(`20${NBSP}сен${NBSP}2026`);
     expect(formatDate("garbage")).toBe("—");
+  });
+});
+
+describe("report ranges and buckets", () => {
+  it("formats date ranges compactly", () => {
+    expect(formatDateRange("2026-10-06", "2026-10-12")).toBe("6–12 окт 2026");
+    expect(formatDateRange("2026-09-28", "2026-10-05")).toBe("28 сен – 5 окт 2026");
+    expect(formatDateRange("2025-12-28", "2026-01-03")).toBe("28 дек 2025 – 3 янв 2026");
+    expect(formatDateRange("2026-10-12", "2026-10-12")).toBe("12 окт 2026");
+    expect(formatDateRange("bad", "2026-10-12")).toBe("—");
+  });
+
+  it("labels series buckets in the app time zone", () => {
+    const ts = "2026-10-12T14:00:00+03:00";
+    expect(formatBucket(ts, "hour", "Europe/Moscow")).toBe("12 окт, 14:00");
+    expect(formatBucket(ts, "hour", "UTC")).toBe("12 окт, 11:00");
+    expect(formatBucket(ts, "day", "Europe/Moscow")).toBe("12 окт");
+    expect(formatBucket(ts, "week", "Europe/Moscow")).toBe("12 окт");
+    expect(formatBucket("2026-01-01T00:00:00+03:00", "month", "Europe/Moscow")).toBe("янв 2026");
+    expect(formatBucket("2026-10-12T14:00:00+03:00", "hour", "Mars/Base")).toBe("12 окт, 11:00");
+    expect(formatBucket("nope", "day", "UTC")).toBe("—");
   });
 });
