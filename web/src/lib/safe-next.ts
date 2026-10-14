@@ -1,5 +1,6 @@
 // Проверка параметра `next` после входа (защита от open redirect): допускается только путь того же
-// origin. Абсолютные URL, protocol-relative `//host`, `/\\host`, схемы и управляющие символы → "/".
+// origin. Абсолютные URL, protocol-relative `//host` (в том числе после нормализации `/..//host`),
+// `/\\host`, схемы и управляющие символы → "/".
 const ORIGIN = "http://appmetrica.invalid";
 
 // Пробелы и управляющие символы браузеры вырезают при разборе URL: "/\t/evil" превращается в "//evil".
@@ -21,6 +22,9 @@ export function safeNext(next: string | string[] | null | undefined): string {
     return "/";
   }
   if (url.origin !== ORIGIN) return "/";
+  // Нормализация точек-сегментов: "/..//evil" и "/%2e%2e//evil" дают pathname "//evil" при том же
+  // origin, а браузер прочитает такой Location как protocol-relative URL.
+  if (url.pathname.startsWith("//")) return "/";
   // Возврат на /login после входа зациклил бы редирект.
   if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return "/";
   return `${url.pathname}${url.search}${url.hash}`;

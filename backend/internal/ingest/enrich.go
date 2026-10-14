@@ -101,29 +101,52 @@ func NewEventRow(b *Batch, ev *Event) chstore.EventRow {
 }
 
 // PayloadSample — rejected_events.payload_sample: JSON события или тела батча без context.ip
-// (верхний уровень и events[i]) длиной не больше MaxPayloadSampleBytes, обрезанный по границе символа.
-// Если JSON не разбирается (invalid_json, обрезанное тело), значения всех ключей "ip" затираются
-// по шаблону.
+// (верхний уровень и events[i]) и без user_id, похожих на email или телефон (AC-1.5.2 — такие значения
+// заменяются на "[redacted]" и при batch-ошибке, когда до проверки событий дело не дошло), длиной не
+// больше MaxPayloadSampleBytes, обрезанный по границе символа. Если JSON не разбирается (invalid_json,
+// обрезанное тело), значения ключей "ip" и PII-подобных "user_id" затираются по шаблону.
 func PayloadSample(raw []byte) string {
 	if sample, ok := stripContextIP(raw); ok {
 		return truncateUTF8(sample, MaxPayloadSampleBytes)
 	}
 	// Берём запас, чтобы пара "ip": "…" на границе обрезки попала под шаблон целиком.
 	head := []byte(truncateUTF8(raw, 2*MaxPayloadSampleBytes))
-	return truncateUTF8(ipValueRe.ReplaceAll(head, []byte(`"ip":null`)), MaxPayloadSampleBytes)
+	head = ipValueRe.ReplaceAll(head, []byte(`"ip":null`))
+	head = userIDValueRe.ReplaceAllFunc(head, redactPIIUserIDMatch)
+	return truncateUTF8(head, MaxPayloadSampleBytes)
 }
 
 // ipValueRe — пара "ip": значение, включая незакрытую строку в конце обрезанного тела.
 var ipValueRe = regexp.MustCompile(`(?i)"ip"\s*:\s*(?:"(?:[^"\\]|\\.)*"?|[^,}\]\s]*)`)
 
-// stripContextIP удаляет ip из context объекта и из context каждого элемента events. ok=false — raw
-// не JSON-объект. Без изменений возвращается исходный raw (форматирование клиента сохраняется).
+// userIDValueRe — пара "user_id": "строка", включая незакрытую строку в конце обрезанного тела.
+var userIDValueRe = regexp.MustCompile(`(?i)"user_id"\s*:\s*"((?:[^"\\]|\\.)*)"?`)
+
+// redactPIIUserIDMatch заменяет найденную по шаблону пару на "user_id":"[redacted]", если значение
+// (как есть, с JSON-экранированием) похоже на email или телефон. Незакрытая строка в конце обрезанного
+// тела может быть началом email или телефона — она затирается всегда. Иначе пара остаётся как есть.
+func redactPIIUserIDMatch(match []byte) []byte {
+	sub := userIDValueRe.FindSubmatch(match)
+	if len(sub) < 2 {
+		return match
+	}
+	closed := bytes.HasSuffix(match, append(append([]byte(`"`), sub[1]...), '"'))
+	if closed && !LooksLikePII(string(sub[1])) {
+		return match
+	}
+	return []byte(`"user_id":"` + redactedUserID + `"`)
+}
+
+// stripContextIP удаляет ip из context объекта и из context каждого элемента events и заменяет
+// PII-подобные user_id (объекта и каждого события) на "[redacted]". ok=false — raw не JSON-объект.
+// Без изменений возвращается исходный raw (форматирование клиента сохраняется).
 func stripContextIP(raw []byte) (out []byte, ok bool) {
 	var obj map[string]json.RawMessage
 	if json.Unmarshal(raw, &obj) != nil || obj == nil {
 		return nil, false
 	}
 	changed := dropContextIP(obj)
+	changed = redactPIIUserID(obj) || changed
 	for k, v := range obj {
 		if !strings.EqualFold(k, "events") {
 			continue
@@ -135,7 +158,11 @@ func stripContextIP(raw []byte) (out []byte, ok bool) {
 		eventsChanged := false
 		for i, ev := range events {
 			var evObj map[string]json.RawMessage
-			if json.Unmarshal(ev, &evObj) == nil && evObj != nil && dropContextIP(evObj) {
+			if json.Unmarshal(ev, &evObj) != nil || evObj == nil {
+				continue
+			}
+			ipDropped := dropContextIP(evObj)
+			if redactPIIUserID(evObj) || ipDropped {
 				events[i] = marshalCompact(evObj)
 				eventsChanged = true
 			}
@@ -174,6 +201,24 @@ func dropContextIP(obj map[string]json.RawMessage) bool {
 			obj[k] = marshalCompact(ctx)
 			changed = true
 		}
+	}
+	return changed
+}
+
+// redactPIIUserID заменяет строковые значения ключей user_id объекта, похожие на email или телефон,
+// на "[redacted]" (AC-1.5.2). Регистр ключа не важен, как и в dropContextIP.
+func redactPIIUserID(obj map[string]json.RawMessage) bool {
+	changed := false
+	for k, v := range obj {
+		if !strings.EqualFold(k, "user_id") {
+			continue
+		}
+		var s string
+		if json.Unmarshal(v, &s) != nil || !LooksLikePII(s) {
+			continue
+		}
+		obj[k] = json.RawMessage(`"` + redactedUserID + `"`)
+		changed = true
 	}
 	return changed
 }

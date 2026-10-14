@@ -74,7 +74,7 @@ rsync -a --exclude README.md docs/discovery/2026-10-13-appmetrica-online/00-boot
 ln -s AGENTS.md CLAUDE.md
 mkdir -p contracts/openapi backend/cmd/appmetrica backend/cmd/seed backend/internal \
   backend/migrations/postgres backend/migrations/clickhouse backend/queries/postgres backend/testdata/fixtures \
-  web/src/app web/src/components web/src/hooks web/src/lib/api/gen web/src/test web/content/docs web/public web/e2e \
+  web/src/app web/src/components web/src/hooks web/src/lib/api/gen web/src/test web/content/docs web/e2e \
   deploy/dokploy docs/adr docs/plans
 ```
 

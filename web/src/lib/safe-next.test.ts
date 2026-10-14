@@ -27,6 +27,10 @@ describe("safeNext", () => {
     ["newline inside", "/\n/evil.example"],
     ["leading space", " /apps/1"],
     ["login loop", "/login?next=%2Fapps"],
+    ["dot segments to protocol-relative", "/..//evil.example"],
+    ["nested dot segments to protocol-relative", "/a/..//evil.example"],
+    ["encoded dot segments to protocol-relative", "/%2e%2e//evil.example"],
+    ["dot segments to backslash host", "/..//\\evil.example"],
   ])("falls back to / for %s", (_name, value) => {
     expect(safeNext(value)).toBe("/");
   });

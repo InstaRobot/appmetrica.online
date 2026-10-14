@@ -436,7 +436,8 @@ AC-1.3.4 (error path — insert_id не UUID):
   отсутствии — `RemoteAddr`. Lookup — geoip2-golang v2.5.0 `City(netip.Addr)` по DB-IP City Lite.
 - **Запись**: `country` = ISO 3166-1 alpha-2 (верхний регистр) или `''`; `region` = `Subdivisions[0].Names["en"]` или
   `''`; `city` = `City.Names["en"]` или `''`. **IP не попадает ни в одну колонку, ни в лог, ни в метрики, ни в
-  `rejected_events.payload_sample`** (`context.ip` вырезается из сэмпла до записи).
+  `rejected_events.payload_sample`** (`context.ip` вырезается из сэмпла до записи; `user_id`, похожие на email или
+  телефон, заменяются на `"[redacted]"` и в сэмпле тела батча при batch-ошибке — AC-1.5.2 действует до проверки событий).
 
 **Acceptance criteria (TDD — Given/When/Then, executable)**:
 

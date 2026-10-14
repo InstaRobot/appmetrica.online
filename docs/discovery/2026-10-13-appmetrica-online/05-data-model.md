@@ -437,7 +437,7 @@ Skip-индексы: `idx_user_id`, `idx_session_id`, `idx_install_id` — `bloo
 | event_name | LowCardinality(String) | '' для batch-уровня |
 | app_version | LowCardinality(String) | Из context, если удалось разобрать |
 | platform | LowCardinality(String) | |
-| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча); `context.ip` вырезается до записи |
+| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча); `context.ip` вырезается до записи, `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` (и при batch-ошибке, до проверки событий) |
 
 `daily_stats` — `ReplacingMergeTree(closed_at)`, `ORDER BY (app_id, environment, unit, day)`, **без TTL**:
 
@@ -1523,7 +1523,7 @@ type RejectedRow struct {
 	EventName     string    `ch:"event_name"`
 	AppVersion    string    `ch:"app_version"`
 	Platform      string    `ch:"platform"`
-	PayloadSample string    `ch:"payload_sample"` // ≤ 4096 байт, без context.ip
+	PayloadSample string    `ch:"payload_sample"` // ≤ 4096 байт, без context.ip и PII-подобных user_id
 }
 ```
 
@@ -2050,3 +2050,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-13 | 1.1 | `TouchWriteKeysLastUsed`: `unnest(a, b)` заменён на подзапрос с двумя `unnest` — sqlc 1.31.1 не поддерживает многоаргументный `unnest` (T-004) |
 | 2026-10-14 | 1.2 | §10.4: эквивалентная форма запросов в коде для NFR-003 — склейка после предагрегации, first_seen в общем GROUP BY, rolling через префиксные суммы, retention по массивам дней; определения метрик и golden-фикстуры не менялись (Task 32a) |
 | 2026-10-14 | 1.3 | §2.9: `invalid_app_key` исключён из batch-кодов `rejected_events` — отозванный ключ не резолвится в приложение (кэш ключей держит только действующие), как решено в OQ-033 (3) |
+| 2026-10-14 | 1.4 | §2.9: `payload_sample` batch-ошибок тоже без PII — `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` до записи (ревью MVP, OQ-070) |

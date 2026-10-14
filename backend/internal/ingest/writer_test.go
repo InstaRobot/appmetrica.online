@@ -287,3 +287,50 @@ func TestKeyCache_Peek(t *testing.T) {
 	require.NoError(t, h.cache.FlushLastUsed(t.Context()))
 	require.Empty(t, h.store.touchCalls(), "Peek не обновляет last_used_at")
 }
+
+// TestRejectedLogger_BatchSampleRedactsPII — user_id, похожий на email или телефон, не попадает в сэмпл
+// тела батча при batch-ошибке (AC-1.5.2 действует и до проверки событий); обычный user_id сохраняется.
+func TestRejectedLogger_BatchSampleRedactsPII(t *testing.T) {
+	t.Run("json body", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		ok, _ := h.limits.Apps.Allow(appA, 4000)
+		require.True(t, ok)
+		body := batchBody(t, "2026-10-13T09:15:02.000Z", nil,
+			eventJSON(t, map[string]any{"user_id": "ivan@example.com"}),
+			eventJSON(t, map[string]any{"user_id": "+7 (916) 123-45-67"}),
+			eventJSON(t, map[string]any{"user_id": "user_42"}))
+		requireError(t, h.postBody(t, body), http.StatusTooManyRequests, "app_rate_limited")
+		logged := h.sink.logged()
+		require.Len(t, logged, 1)
+		sample := logged[0].PayloadSample
+		require.NotContains(t, sample, "ivan@example.com")
+		require.NotContains(t, sample, "916")
+		require.Equal(t, 2, strings.Count(sample, `"user_id":"[redacted]"`))
+		require.Contains(t, sample, `"user_id":"user_42"`)
+	})
+
+	t.Run("invalid_batch", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		body := []byte(`{"events":[{"name":"session_start","user_id":"ivan@example.com"}]}`)
+		rec := h.do(t, request{contentType: "application/json", header: testKey, body: body})
+		requireError(t, rec, http.StatusBadRequest, "invalid_batch")
+		logged := h.sink.logged()
+		require.Len(t, logged, 1)
+		require.NotContains(t, logged[0].PayloadSample, "ivan@example.com")
+		require.Contains(t, logged[0].PayloadSample, `"user_id":"[redacted]"`)
+	})
+
+	t.Run("invalid_json", func(t *testing.T) {
+		h := newPipelineHarness(t)
+		body := []byte(`{"sent_at":"2026-10-13T09:15:02Z","events":[{"user_id":"ivan@example.com"},{"User_Id": "+79161234567"},{"user_id":"user_42"},{"user_id":"anna@exam`)
+		rec := h.do(t, request{contentType: "application/json", header: testKey, body: body})
+		requireError(t, rec, http.StatusBadRequest, "invalid_json")
+		logged := h.sink.logged()
+		require.Len(t, logged, 1)
+		sample := logged[0].PayloadSample
+		require.NotContains(t, sample, "ivan@example.com")
+		require.NotContains(t, sample, "79161234567")
+		require.NotContains(t, sample, "anna@exam")
+		require.Contains(t, sample, `"user_id":"user_42"`)
+	})
+}
