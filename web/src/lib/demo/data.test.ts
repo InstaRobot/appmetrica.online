@@ -622,6 +622,188 @@ describe("demo integration health", () => {
   });
 });
 
+describe("demo stories", () => {
+  const breakdownUrl = (id: string, params: Record<string, string | string[]>) =>
+    `/v1/apps/${id}/audience/breakdown?${query({ limit: "50", ...params })}`;
+
+  function shareOf(b: Breakdown, value: string): number {
+    return b.rows.find((r) => r.value === value)?.share ?? 0;
+  }
+
+  function mean(xs: readonly number[]): number {
+    return xs.reduce((s, x) => s + x, 0) / xs.length;
+  }
+
+  async function daily(id: string, from: string, to: string, params = {}): Promise<number[]> {
+    const ts = await get<TimeSeries>(
+      `/v1/apps/${id}/audience/timeseries?${query({ from, to, compare: "none", ...params })}`,
+    );
+    return values(ts.points);
+  }
+
+  async function hourly(id: string, day: string, params = {}): Promise<number[]> {
+    const ts = await get<TimeSeries>(
+      `/v1/apps/${id}/audience/timeseries?${query({ from: day, to: day, granularity: "hour", compare: "none", ...params })}`,
+    );
+    return values(ts.points);
+  }
+
+  it("new versions replace old ones", async () => {
+    const versions = (day: string) =>
+      get<Breakdown>(
+        breakdownUrl(NOTES, { from: day, to: day, dimension: "app_version", platform: "ios" }),
+      );
+    const oct13 = await versions("2026-10-13");
+    expect(shareOf(oct13, "3.5.0")).toBeGreaterThanOrEqual(0.6);
+    expect(shareOf(oct13, "3.3.0")).toBeLessThanOrEqual(0.05);
+    const oct7 = await versions("2026-10-07");
+    expect(shareOf(oct7, "3.5.0")).toBeGreaterThan(0);
+    expect(shareOf(oct7, "3.5.0")).toBeLessThanOrEqual(0.25);
+    // До выхода версии её нет в отчёте; хотфикс быстро вытесняет 3.4.0.
+    const sep20 = await versions("2026-09-20");
+    expect(sep20.rows.map((r) => r.value)).not.toContain("3.5.0");
+    expect(shareOf(sep20, "3.4.1")).toBeGreaterThan(shareOf(sep20, "3.4.0"));
+    const aug1 = await versions("2026-08-01");
+    expect(aug1.rows.map((r) => r.value)).not.toContain("3.3.0");
+    // Веб обновляется при перезагрузке страницы: через день после релиза почти все на новой версии.
+    const web = await get<Breakdown>(
+      breakdownUrl(NOTES, {
+        from: "2026-10-08",
+        to: "2026-10-08",
+        dimension: "app_version",
+        platform: "web",
+      }),
+    );
+    expect(shareOf(web, "3.5.0")).toBeGreaterThan(0.8);
+  });
+
+  it("the outage shows up hourly", async () => {
+    const incident = await hourly(NOTES, "2026-09-23");
+    const usual = await hourly(NOTES, "2026-09-16");
+    expect(incident).toHaveLength(24);
+    for (const h of [10, 11, 12, 13]) {
+      expect(incident[h] ?? 1, `${h}:00`).toBeLessThan(0.05 * (usual[h] ?? 0));
+    }
+    // Офлайн-очередь досылает события после восстановления приёма.
+    for (const h of [14, 15]) expect(incident[h] ?? 0, `${h}:00`).toBeGreaterThan(usual[h] ?? 0);
+    for (const h of [8, 9, 17, 18]) {
+      expect(Math.abs((incident[h] ?? 0) / (usual[h] ?? 1) - 1), `${h}:00`).toBeLessThan(0.2);
+    }
+    // Ingest недоступен для всех приложений: у бота (UTC+5) те же моменты — 12:00–15:00.
+    const bot = await hourly(BOT, "2026-09-23", { metric: "sessions" });
+    const botUsual = await hourly(BOT, "2026-09-16", { metric: "sessions" });
+    for (const h of [12, 13, 14, 15]) {
+      expect(bot[h] ?? 1, `bot ${h}:00`).toBeLessThan(0.05 * (botUsual[h] ?? 0));
+    }
+    // Здоровье интеграции видит провал принятых событий.
+    const health = await get<IntegrationHealth>(
+      `/v1/apps/${NOTES}/integration/health?hours=24`,
+      new Date("2026-09-23T20:30:00Z"),
+    );
+    const accepted = (hour: string) =>
+      health.hourly.find((x) => x.hour === `2026-09-23T${hour}:00:00+03:00`)?.accepted ?? -1;
+    expect(accepted("11")).toBeLessThan(0.05 * accepted("09"));
+    expect(accepted("14")).toBeGreaterThan(accepted("09"));
+  });
+
+  it("campaign cohorts retain worse", async () => {
+    const android = { platform: "android", metric: "new" };
+    const before = await daily(NOTES, "2026-05-13", "2026-05-19", android);
+    const campaign = await daily(NOTES, "2026-05-20", "2026-05-24", android);
+    expect(mean(campaign)).toBeGreaterThanOrEqual(1.4 * mean(before));
+    // Кампания в RU не меняет новых из других стран.
+    const kzBefore = await daily(NOTES, "2026-05-13", "2026-05-19", { ...android, country: "KZ" });
+    const kzCampaign = await daily(NOTES, "2026-05-20", "2026-05-24", {
+      ...android,
+      country: "KZ",
+    });
+    expect(mean(kzCampaign)).toBeLessThan(1.2 * mean(kzBefore));
+
+    const m = await get<RetentionMatrix>(
+      `/v1/apps/${NOTES}/retention?from=2026-05-13&to=2026-05-31&periods=7&platform=android`,
+    );
+    const d = (from: string, to: string, n: number) =>
+      mean(
+        m.cohorts
+          .filter((c) => c.cohort_start >= from && c.cohort_start <= to)
+          .map((c) => c.values[n] ?? 0),
+      );
+    const neighbours = (n: number) =>
+      (d("2026-05-13", "2026-05-19", n) + d("2026-05-25", "2026-05-31", n)) / 2;
+    expect(d("2026-05-20", "2026-05-24", 7)).toBeLessThanOrEqual(0.7 * neighbours(7));
+    expect(d("2026-05-20", "2026-05-24", 1)).toBeLessThanOrEqual(0.7 * neighbours(1));
+
+    // Кампания в Казахстане на iOS: новые из KZ резко растут.
+    const kz = { platform: "ios", country: "KZ", metric: "new" };
+    const kzIosBefore = await daily(NOTES, "2026-09-08", "2026-09-14", kz);
+    const kzIos = await daily(NOTES, "2026-09-15", "2026-09-19", kz);
+    expect(mean(kzIos)).toBeGreaterThan(2 * mean(kzIosBefore));
+  });
+
+  it("the buggy release is visible", async () => {
+    const health = (now: string) =>
+      get<IntegrationHealth>(`/v1/apps/${NOTES}/integration/health?hours=96`, new Date(now));
+    const invalidShare = (h: IntegrationHealth) =>
+      (h.reasons.find((r) => r.code === "invalid_field")?.count ?? 0) / h.accepted_total;
+    const buggy = await health("2026-09-12T09:00:00Z"); // окно 2026-09-08…2026-09-12 MSK
+    const fixed = await health("2026-09-16T09:00:00Z");
+    expect(invalidShare(buggy)).toBeGreaterThan(3 * invalidShare(fixed));
+    const invalid = buggy.reasons.find((r) => r.code === "invalid_field");
+    expect(invalid?.example_message).toContain("context.app_version");
+    const payload = JSON.parse(invalid?.example_payload ?? "{}") as {
+      context?: { app_version?: unknown };
+    };
+    expect(typeof payload.context?.app_version).not.toBe("string");
+    expect(buggy.versions.find((v) => v.app_version === "3.4.0")?.rejected).toBeGreaterThan(0);
+
+    // Сессии 3.4.0 до хотфикса короче на 25–35 %, у хотфикса — как обычно.
+    const avg = async (from: string, to: string, version: string) =>
+      (await summary(NOTES, { from, to, platform: ["ios"], app_version: [version] }))
+        .avg_duration_ms ?? 0;
+    const bug =
+      (await avg("2026-09-08", "2026-09-11", "3.4.0")) /
+      (await avg("2026-09-08", "2026-09-11", "3.3.0"));
+    expect(bug).toBeGreaterThanOrEqual(0.65);
+    expect(bug).toBeLessThanOrEqual(0.75);
+    const hotfix =
+      (await avg("2026-09-13", "2026-09-17", "3.4.1")) /
+      (await avg("2026-09-13", "2026-09-17", "3.3.0"));
+    expect(Math.abs(hotfix - 1)).toBeLessThan(0.1);
+
+    // Всплеск отказов у site.ru 2026-10-02.
+    const site = (now: string) =>
+      get<IntegrationHealth>(`/v1/apps/${SITE}/integration/health?hours=24`, new Date(now));
+    expect(invalidShare(await site("2026-10-02T20:30:00Z"))).toBeGreaterThan(
+      5 * invalidShare(await site("2026-10-05T20:30:00Z")),
+    );
+  });
+
+  it("seasons and the Kazakhstan launch shape the year", async () => {
+    const android = { platform: "android" };
+    const july = mean(await daily(NOTES, "2026-07-06", "2026-07-26", android));
+    const autumn = mean(await daily(NOTES, "2026-09-21", "2026-10-11", android));
+    expect(july).toBeLessThan(0.92 * autumn);
+    const newYear = mean(await daily(NOTES, "2025-12-31", "2026-01-06", android));
+    const december = mean(await daily(NOTES, "2025-12-10", "2025-12-16", android));
+    expect(newYear).toBeGreaterThan(1.08 * december);
+    const may = mean(await daily(NOTES, "2026-05-04", "2026-05-10", android));
+    const april = mean(await daily(NOTES, "2026-04-20", "2026-04-26", android));
+    expect(may).toBeLessThan(0.95 * april);
+
+    const countries = (day: string) =>
+      get<Breakdown>(
+        breakdownUrl(NOTES, { from: day, to: day, dimension: "country", platform: "ios" }),
+      );
+    expect((await countries("2026-05-25")).rows.map((r) => r.value)).not.toContain("KZ");
+    const ramp = shareOf(await countries("2026-06-10"), "KZ");
+    const settled = shareOf(await countries("2026-08-10"), "KZ");
+    expect(ramp).toBeGreaterThan(0);
+    expect(ramp).toBeLessThan(settled);
+    expect(settled).toBeGreaterThanOrEqual(0.07);
+    expect(settled).toBeLessThanOrEqual(0.1);
+  });
+});
+
 describe("demo profiles", () => {
   it("exports a few searchable examples per active app", async () => {
     for (const id of [NOTES, SITE, BOT]) {
