@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GITHUB_URL, LandingPage } from "./landing-page";
 
 // S-00 Лендинг (макет «Dashboard v2», решение владельца): публичная страница на «/».
@@ -77,6 +77,16 @@ describe("LandingPage", () => {
     expect(snippet).toHaveTextContent("https://i.appmetrica.online/v1/events");
     expect(snippet).toHaveTextContent("X-App-Key: $AM_PK");
     expect(snippet.textContent).not.toMatch(/pk_[A-Za-z0-9]{8,}/);
+  });
+
+  it("uses the ingest URL of this installation in the snippet", () => {
+    vi.stubEnv("NEXT_PUBLIC_INGEST_URL", "https://i.analytics.example.com");
+    render(<LandingPage />);
+
+    const snippet = screen.getByLabelText("Пример запроса на приём событий");
+    expect(snippet).toHaveTextContent("https://i.analytics.example.com/v1/events");
+    expect(snippet).not.toHaveTextContent("i.appmetrica.online");
+    vi.unstubAllEnvs();
   });
 
   it("promises passkey-only sign-in and keeps the DB-IP attribution", () => {
