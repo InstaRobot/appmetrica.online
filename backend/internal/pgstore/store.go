@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -28,6 +29,9 @@ func Open(ctx context.Context, url string) (*Store, error) {
 		// pgx может процитировать строку подключения целиком — исходную ошибку не оборачиваем.
 		return nil, errors.New("pgstore: invalid POSTGRES_URL")
 	}
+	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
+		return true, registerTypes(ctx, conn)
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgstore: create pool: %w", err)
@@ -37,6 +41,31 @@ func Open(ctx context.Context, url string) (*Store, error) {
 		return nil, fmt.Errorf("pgstore: ping: %w", err)
 	}
 	return &Store{pool: pool, queries: sqlc.New(pool)}, nil
+}
+
+// customTypes — enum-ы, которые pgx должен знать по имени: без регистрации массив app_platform[] не кодируется
+// и не сканируется в []sqlc.AppPlatform («unknown type»). Массив идёт после элемента.
+var customTypes = []string{"app_platform", "_app_platform"}
+
+// registerTypes регистрирует customTypes на соединении один раз. Пул может открыться до миграций
+// (migrate up, MIGRATE_ON_START): пока типов в базе нет, регистрация откладывается до следующего Acquire.
+func registerTypes(ctx context.Context, conn *pgx.Conn) error {
+	if _, ok := conn.TypeMap().TypeForName(customTypes[len(customTypes)-1]); ok {
+		return nil
+	}
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT to_regtype($1) IS NOT NULL`, customTypes[0]).Scan(&exists); err != nil {
+		return fmt.Errorf("pgstore: check types: %w", err)
+	}
+	if !exists {
+		return nil
+	}
+	types, err := conn.LoadTypes(ctx, customTypes)
+	if err != nil {
+		return fmt.Errorf("pgstore: load types: %w", err)
+	}
+	conn.TypeMap().RegisterTypes(types)
+	return nil
 }
 
 func (s *Store) Close() { s.pool.Close() }

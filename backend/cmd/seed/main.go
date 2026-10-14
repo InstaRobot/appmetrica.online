@@ -192,7 +192,7 @@ func ensureApps(ctx context.Context, q *sqlc.Queries, opts options) ([]seedApp, 
 	for _, spec := range appSpecs[:opts.Apps] {
 		a, ok := byName[strings.ToLower(spec.Name)]
 		if !ok {
-			a, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: spec.Name, Platform: spec.Platform, Timezone: seedTimezone})
+			a, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: spec.Name, Platforms: []sqlc.AppPlatform{spec.Platform}, Timezone: seedTimezone})
 			if err != nil {
 				return nil, fmt.Errorf("create app %q: %w", spec.Name, err)
 			}

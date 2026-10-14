@@ -12,10 +12,63 @@ import (
 	"github.com/google/uuid"
 )
 
+const absorbAppForMerge = `-- name: AbsorbAppForMerge :one
+WITH merged AS (
+    SELECT ARRAY(
+        SELECT p
+        FROM unnest(t.platforms || $4::app_platform[]) AS p
+        GROUP BY p
+        ORDER BY p
+    ) AS platforms
+    FROM apps AS t
+    WHERE t.id = $3
+)
+UPDATE apps AS t
+SET platforms = merged.platforms,
+    platform = merged.platforms[1],
+    created_at = least(t.created_at, $1),
+    updated_at = $2
+FROM merged
+WHERE t.id = $3
+RETURNING t.id, t.name, t.platform, t.timezone, t.status, t.created_at, t.updated_at, t.archived_at, t.platforms
+`
+
+type AbsorbAppForMergeParams struct {
+	SourceCreatedAt time.Time
+	Now             time.Time
+	TargetID        uuid.UUID
+	SourcePlatforms []AppPlatform
+}
+
+// Шаг move_keys: цель получает объединение платформ и самый ранний created_at.
+// ORDER BY p для enum сортирует по порядку объявления ('ios','android','web',…), поэтому platforms[1]
+// у цели может смениться; CHECK apps_platform_first_chk требует platform = platforms[1] — ставим обе.
+func (q *Queries) AbsorbAppForMerge(ctx context.Context, arg AbsorbAppForMergeParams) (App, error) {
+	row := q.db.QueryRow(ctx, absorbAppForMerge,
+		arg.SourceCreatedAt,
+		arg.Now,
+		arg.TargetID,
+		arg.SourcePlatforms,
+	)
+	var i App
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.Timezone,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.Platforms,
+	)
+	return i, err
+}
+
 const archiveApp = `-- name: ArchiveApp :one
 UPDATE apps SET status = 'archived', archived_at = $1, updated_at = $1
 WHERE id = $2 AND status = 'active'
-RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at
+RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms
 `
 
 type ArchiveAppParams struct {
@@ -35,23 +88,26 @@ func (q *Queries) ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }
 
 const createApp = `-- name: CreateApp :one
-INSERT INTO apps (name, platform, timezone) VALUES ($1, $2, $3)
-RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at
+INSERT INTO apps (name, platform, platforms, timezone)
+VALUES ($1, ($2::app_platform[])[1], $2::app_platform[], $3)
+RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms
 `
 
 type CreateAppParams struct {
-	Name     string
-	Platform AppPlatform
-	Timezone string
+	Name      string
+	Platforms []AppPlatform
+	Timezone  string
 }
 
+// platforms нормализован сервисом (без дублей, порядок enum); platform = platforms[1] (expand-фаза).
 func (q *Queries) CreateApp(ctx context.Context, arg CreateAppParams) (App, error) {
-	row := q.db.QueryRow(ctx, createApp, arg.Name, arg.Platform, arg.Timezone)
+	row := q.db.QueryRow(ctx, createApp, arg.Name, arg.Platforms, arg.Timezone)
 	var i App
 	err := row.Scan(
 		&i.ID,
@@ -62,6 +118,7 @@ func (q *Queries) CreateApp(ctx context.Context, arg CreateAppParams) (App, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }
@@ -79,7 +136,7 @@ func (q *Queries) DeleteApp(ctx context.Context, id uuid.UUID) (int64, error) {
 }
 
 const getApp = `-- name: GetApp :one
-SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at FROM apps WHERE id = $1
+SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms FROM apps WHERE id = $1
 `
 
 func (q *Queries) GetApp(ctx context.Context, id uuid.UUID) (App, error) {
@@ -94,12 +151,13 @@ func (q *Queries) GetApp(ctx context.Context, id uuid.UUID) (App, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }
 
 const getAppForUpdate = `-- name: GetAppForUpdate :one
-SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at FROM apps WHERE id = $1 FOR UPDATE
+SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms FROM apps WHERE id = $1 FOR UPDATE
 `
 
 // Блокировка строки на транзакцию: deleteApp, createWriteKey и unarchiveApp сериализуются, иначе ключ,
@@ -116,12 +174,13 @@ func (q *Queries) GetAppForUpdate(ctx context.Context, id uuid.UUID) (App, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }
 
 const listApps = `-- name: ListApps :many
-SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at
+SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms
 FROM apps
 WHERE $1::boolean OR status = 'active'
 ORDER BY lower(name)
@@ -145,6 +204,7 @@ func (q *Queries) ListApps(ctx context.Context, includeArchived bool) ([]App, er
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ArchivedAt,
+			&i.Platforms,
 		); err != nil {
 			return nil, err
 		}
@@ -197,7 +257,7 @@ func (q *Queries) ListAppsForJobs(ctx context.Context) ([]ListAppsForJobsRow, er
 const unarchiveApp = `-- name: UnarchiveApp :one
 UPDATE apps SET status = 'active', archived_at = NULL, updated_at = $1
 WHERE id = $2 AND status = 'archived'
-RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at
+RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms
 `
 
 type UnarchiveAppParams struct {
@@ -217,6 +277,7 @@ func (q *Queries) UnarchiveApp(ctx context.Context, arg UnarchiveAppParams) (App
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }
@@ -225,22 +286,26 @@ const updateApp = `-- name: UpdateApp :one
 UPDATE apps
 SET name = coalesce($1, name),
     timezone = coalesce($2, timezone),
-    updated_at = $3
-WHERE id = $4
-RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at
+    platforms = coalesce($3::app_platform[], platforms),
+    platform = coalesce(($3::app_platform[])[1], platform),
+    updated_at = $4
+WHERE id = $5
+RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at, platforms
 `
 
 type UpdateAppParams struct {
-	Name     *string
-	Timezone *string
-	Now      time.Time
-	ID       uuid.UUID
+	Name      *string
+	Timezone  *string
+	Platforms []AppPlatform
+	Now       time.Time
+	ID        uuid.UUID
 }
 
 func (q *Queries) UpdateApp(ctx context.Context, arg UpdateAppParams) (App, error) {
 	row := q.db.QueryRow(ctx, updateApp,
 		arg.Name,
 		arg.Timezone,
+		arg.Platforms,
 		arg.Now,
 		arg.ID,
 	)
@@ -254,6 +319,7 @@ func (q *Queries) UpdateApp(ctx context.Context, arg UpdateAppParams) (App, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.Platforms,
 	)
 	return i, err
 }

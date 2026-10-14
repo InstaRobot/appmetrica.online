@@ -295,6 +295,24 @@ func (q *Queries) MarkDayClosed(ctx context.Context, arg MarkDayClosedParams) er
 	return err
 }
 
+const reopenClosedDays = `-- name: ReopenClosedDays :execrows
+DELETE FROM closed_days WHERE app_id = $1 AND day >= $2
+`
+
+type ReopenClosedDaysParams struct {
+	AppID   uuid.UUID
+	FromDay pgtype.Date
+}
+
+// Шаг reclose: close_day закроет эти дни заново с данными источника.
+func (q *Queries) ReopenClosedDays(ctx context.Context, arg ReopenClosedDaysParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reopenClosedDays, arg.AppID, arg.FromDay)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const startJobRun = `-- name: StartJobRun :one
 INSERT INTO job_runs (job, started_at) VALUES ($1, $2) RETURNING id
 `

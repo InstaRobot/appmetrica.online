@@ -117,7 +117,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (sqlc.App, sqlc.Wr
 		wk  sqlc.WriteKey
 	)
 	err = s.store.InTx(ctx, func(q *sqlc.Queries) error {
-		app, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: name, Platform: platform, Timezone: tz})
+		app, err = q.CreateApp(ctx, sqlc.CreateAppParams{Name: name, Platforms: []sqlc.AppPlatform{platform}, Timezone: tz})
 		switch {
 		case isNameTaken(err):
 			return ErrNameTaken

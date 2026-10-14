@@ -100,7 +100,12 @@ func (c *KeyCache) Refresh(ctx context.Context) error {
 	}
 	keys := make(map[string]KeyInfo, len(rows))
 	for _, r := range rows {
-		keys[r.Key] = KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus, AppPlatform: r.AppPlatform}
+		info := KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus}
+		// Пока платформа события берётся из основной платформы приложения (platforms[1], CHECK в схеме).
+		if len(r.AppPlatforms) > 0 {
+			info.AppPlatform = r.AppPlatforms[0]
+		}
+		keys[r.Key] = info
 	}
 	c.snap.Store(&keySnapshot{keys: keys, loadedAt: now})
 	c.cfg.Metrics.KeyCacheSize.Set(float64(len(keys)))

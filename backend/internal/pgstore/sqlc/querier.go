@@ -13,18 +13,28 @@ import (
 )
 
 type Querier interface {
+	// Шаг move_keys: цель получает объединение платформ и самый ранний created_at.
+	// ORDER BY p для enum сортирует по порядку объявления ('ios','android','web',…), поэтому platforms[1]
+	// у цели может смениться; CHECK apps_platform_first_chk требует platform = platforms[1] — ставим обе.
+	AbsorbAppForMerge(ctx context.Context, arg AbsorbAppForMergeParams) (App, error)
+	// Слияние, которое блокирует операции с приложением (как цель или как источник).
+	ActiveMergeForApp(ctx context.Context, appID uuid.UUID) (AppMerge, error)
+	AddCopiedPartition(ctx context.Context, arg AddCopiedPartitionParams) error
 	// Есть ли невыполненная заявка на удаление самого приложения (createWriteKey и unarchiveApp отвечают 409).
 	AppDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error)
 	// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
 	AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
+	ClaimNextAppMerge(ctx context.Context) (AppMerge, error)
 	// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
 	// снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
 	ClaimNextDeletionRequest(ctx context.Context, arg ClaimNextDeletionRequestParams) (DeletionRequest, error)
 	CompleteDeletionRequest(ctx context.Context, arg CompleteDeletionRequestParams) error
 	CountPasskeys(ctx context.Context) (int64, error)
 	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (CreateApiKeyRow, error)
+	// platforms нормализован сервисом (без дублей, порядок enum); platform = platforms[1] (expand-фаза).
 	CreateApp(ctx context.Context, arg CreateAppParams) (App, error)
+	CreateAppMerge(ctx context.Context, arg CreateAppMergeParams) (AppMerge, error)
 	CreateCeremony(ctx context.Context, arg CreateCeremonyParams) (uuid.UUID, error)
 	CreateDeletionRequest(ctx context.Context, arg CreateDeletionRequestParams) (DeletionRequest, error)
 	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (CreatePasskeyRow, error)
@@ -43,7 +53,9 @@ type Querier interface {
 	// Только для стека E2E (auth.ResetForE2E): каскадно удаляет церемонии setup-ссылок.
 	DeleteSetupTokens(ctx context.Context) error
 	DeleteSpentSetupTokens(ctx context.Context, now time.Time) (int64, error)
+	FailAppMerge(ctx context.Context, arg FailAppMergeParams) error
 	FailDeletionRequest(ctx context.Context, arg FailDeletionRequestParams) error
+	FinishAppMerge(ctx context.Context, arg FinishAppMergeParams) error
 	// details дополняет записанное задачей по ходу цикла (AppendDeletedAppToJobRun), а не заменяет.
 	FinishJobRun(ctx context.Context, arg FinishJobRunParams) error
 	GetActiveApiKeyByHash(ctx context.Context, keyHash []byte) (GetActiveApiKeyByHashRow, error)
@@ -54,6 +66,7 @@ type Querier interface {
 	// Блокировка строки на транзакцию: deleteApp, createWriteKey и unarchiveApp сериализуются, иначе ключ,
 	// выпущенный параллельно с заявкой на удаление, остался бы активным.
 	GetAppForUpdate(ctx context.Context, id uuid.UUID) (App, error)
+	GetAppMerge(ctx context.Context, arg GetAppMergeParams) (AppMerge, error)
 	GetDeletionRequest(ctx context.Context, arg GetDeletionRequestParams) (DeletionRequest, error)
 	// Запуски digest с начала суток владельца: отправлен ли дайджест (ok с details.sent_on) и неудачные попытки;
 	// без неудач last_failed_at = since.
@@ -69,6 +82,7 @@ type Querier interface {
 	IsDayClosed(ctx context.Context, arg IsDayClosedParams) (bool, error)
 	ListAlertStates(ctx context.Context) ([]AlertState, error)
 	ListApiKeys(ctx context.Context) ([]ListApiKeysRow, error)
+	ListAppMerges(ctx context.Context, targetAppID uuid.UUID) ([]AppMerge, error)
 	ListApps(ctx context.Context, includeArchived bool) ([]App, error)
 	ListAppsForJobs(ctx context.Context) ([]ListAppsForJobsRow, error)
 	ListDeletionRequests(ctx context.Context, appID *uuid.UUID) ([]DeletionRequest, error)
@@ -85,16 +99,23 @@ type Querier interface {
 	LockSetupToken(ctx context.Context, tokenHash []byte) (LockSetupTokenRow, error)
 	MarkDayClosed(ctx context.Context, arg MarkDayClosedParams) error
 	MarkSetupTokenUsed(ctx context.Context, arg MarkSetupTokenUsedParams) (int64, error)
+	// Шаг move_keys: ключи источника переходят в цель; ключ без платформы получает default_platform
+	// (единственная платформа источника) или остаётся NULL, если у источника несколько платформ.
+	MoveWriteKeys(ctx context.Context, arg MoveWriteKeysParams) (int64, error)
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (RenamePasskeyRow, error)
+	// Шаг reclose: close_day закроет эти дни заново с данными источника.
+	ReopenClosedDays(ctx context.Context, arg ReopenClosedDaysParams) (int64, error)
 	// Зависший running (worker упал посреди удаления) возвращается в очередь; с исчерпанными попытками — failed:
 	// следующий claim нарушил бы CHECK attempts ≤ 5.
 	RequeueStuckDeletionRequests(ctx context.Context, staleBefore time.Time) (int64, error)
+	RetryAppMerge(ctx context.Context, arg RetryAppMergeParams) (AppMerge, error)
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) (RevokeApiKeyRow, error)
 	// deleteApp: все активные ключи приложения отзываются вместе с заявкой на удаление — со следующим снимком
 	// ingest не знает их (401 invalid_app_key) и ничего не пишет для приложения ни в events, ни в rejected_events.
 	RevokeAppWriteKeys(ctx context.Context, arg RevokeAppWriteKeysParams) error
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
 	RevokeWriteKey(ctx context.Context, arg RevokeWriteKeyParams) (WriteKey, error)
+	SetAppMergeStep(ctx context.Context, arg SetAppMergeStepParams) error
 	StartJobRun(ctx context.Context, arg StartJobRunParams) (uuid.UUID, error)
 	TakeCeremony(ctx context.Context, arg TakeCeremonyParams) (TakeCeremonyRow, error)
 	TouchApiKeyLastUsed(ctx context.Context, arg TouchApiKeyLastUsedParams) error

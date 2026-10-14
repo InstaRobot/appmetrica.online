@@ -1,15 +1,16 @@
 -- name: ListWriteKeys :many
-SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 FROM write_keys WHERE app_id = sqlc.arg(app_id) ORDER BY created_at DESC;
 
 -- name: CreateWriteKey :one
-INSERT INTO write_keys (app_id, key, label) VALUES (sqlc.arg(app_id), sqlc.arg(key), sqlc.arg(label))
-RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at;
+INSERT INTO write_keys (app_id, key, label, platform)
+VALUES (sqlc.arg(app_id), sqlc.arg(key), sqlc.arg(label), sqlc.narg(platform))
+RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at, platform;
 
 -- name: RevokeWriteKey :one
 UPDATE write_keys SET revoked_at = sqlc.arg(now)
 WHERE id = sqlc.arg(id) AND app_id = sqlc.arg(app_id) AND revoked_at IS NULL
-RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at;
+RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at, platform;
 
 -- name: RevokeAppWriteKeys :exec
 -- deleteApp: все активные ключи приложения отзываются вместе с заявкой на удаление — со следующим снимком
@@ -17,14 +18,15 @@ RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at;
 UPDATE write_keys SET revoked_at = sqlc.arg(now) WHERE app_id = sqlc.arg(app_id) AND revoked_at IS NULL;
 
 -- name: GetWriteKey :one
-SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 FROM write_keys WHERE id = sqlc.arg(id) AND app_id = sqlc.arg(app_id);
 
 -- name: LoadWriteKeyCache :many
 -- Ключи приложения с ожидающей заявкой на удаление (deleteApp) в снимок не попадают, даже если выпущены или
 -- приложение разархивировано после заявки (гонка с отзывом в deleteApp): ingest отвечает на них
 -- 401 invalid_app_key и не пишет для приложения ничего ни до purge, ни после.
-SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status, a.platform AS app_platform
+SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status,
+       k.platform AS key_platform, a.platforms AS app_platforms
 FROM write_keys AS k
 JOIN apps AS a ON a.id = k.app_id
 WHERE k.revoked_at IS NULL
@@ -32,6 +34,14 @@ WHERE k.revoked_at IS NULL
     SELECT 1 FROM deletion_requests AS d
     WHERE d.app_id = k.app_id AND d.subject_type = 'app' AND d.status IN ('pending', 'running')
   );
+
+-- name: MoveWriteKeys :execrows
+-- Шаг move_keys: ключи источника переходят в цель; ключ без платформы получает default_platform
+-- (единственная платформа источника) или остаётся NULL, если у источника несколько платформ.
+UPDATE write_keys
+SET app_id = sqlc.arg(target_id),
+    platform = coalesce(platform, sqlc.narg(default_platform))
+WHERE app_id = sqlc.arg(source_id);
 
 -- name: TouchWriteKeysLastUsed :exec
 UPDATE write_keys AS k

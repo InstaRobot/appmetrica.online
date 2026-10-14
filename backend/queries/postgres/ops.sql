@@ -70,6 +70,10 @@ ON CONFLICT (app_id, day) DO NOTHING;
 -- name: GetLastClosedDay :one
 SELECT coalesce(max(day), DATE '1970-01-01')::date AS day FROM closed_days WHERE app_id = sqlc.arg(app_id);
 
+-- name: ReopenClosedDays :execrows
+-- Шаг reclose: close_day закроет эти дни заново с данными источника.
+DELETE FROM closed_days WHERE app_id = sqlc.arg(app_id) AND day >= sqlc.arg(from_day);
+
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM auth_sessions
 WHERE expires_at < sqlc.arg(now)::timestamptz

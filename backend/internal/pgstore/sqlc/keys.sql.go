@@ -60,18 +60,25 @@ func (q *Queries) CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (Cre
 }
 
 const createWriteKey = `-- name: CreateWriteKey :one
-INSERT INTO write_keys (app_id, key, label) VALUES ($1, $2, $3)
-RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at
+INSERT INTO write_keys (app_id, key, label, platform)
+VALUES ($1, $2, $3, $4)
+RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 `
 
 type CreateWriteKeyParams struct {
-	AppID uuid.UUID
-	Key   string
-	Label string
+	AppID    uuid.UUID
+	Key      string
+	Label    string
+	Platform *AppPlatform
 }
 
 func (q *Queries) CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) (WriteKey, error) {
-	row := q.db.QueryRow(ctx, createWriteKey, arg.AppID, arg.Key, arg.Label)
+	row := q.db.QueryRow(ctx, createWriteKey,
+		arg.AppID,
+		arg.Key,
+		arg.Label,
+		arg.Platform,
+	)
 	var i WriteKey
 	err := row.Scan(
 		&i.ID,
@@ -81,6 +88,7 @@ func (q *Queries) CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) 
 		&i.CreatedAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.Platform,
 	)
 	return i, err
 }
@@ -141,7 +149,7 @@ func (q *Queries) GetApiKey(ctx context.Context, id uuid.UUID) (GetApiKeyRow, er
 }
 
 const getWriteKey = `-- name: GetWriteKey :one
-SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 FROM write_keys WHERE id = $1 AND app_id = $2
 `
 
@@ -161,6 +169,7 @@ func (q *Queries) GetWriteKey(ctx context.Context, arg GetWriteKeyParams) (Write
 		&i.CreatedAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.Platform,
 	)
 	return i, err
 }
@@ -211,7 +220,7 @@ func (q *Queries) ListApiKeys(ctx context.Context) ([]ListApiKeysRow, error) {
 }
 
 const listWriteKeys = `-- name: ListWriteKeys :many
-SELECT id, app_id, key, label, created_at, revoked_at, last_used_at
+SELECT id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 FROM write_keys WHERE app_id = $1 ORDER BY created_at DESC
 `
 
@@ -232,6 +241,7 @@ func (q *Queries) ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]WriteKe
 			&i.CreatedAt,
 			&i.RevokedAt,
 			&i.LastUsedAt,
+			&i.Platform,
 		); err != nil {
 			return nil, err
 		}
@@ -244,7 +254,8 @@ func (q *Queries) ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]WriteKe
 }
 
 const loadWriteKeyCache = `-- name: LoadWriteKeyCache :many
-SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status, a.platform AS app_platform
+SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status,
+       k.platform AS key_platform, a.platforms AS app_platforms
 FROM write_keys AS k
 JOIN apps AS a ON a.id = k.app_id
 WHERE k.revoked_at IS NULL
@@ -255,11 +266,12 @@ WHERE k.revoked_at IS NULL
 `
 
 type LoadWriteKeyCacheRow struct {
-	WriteKeyID  uuid.UUID
-	Key         string
-	AppID       uuid.UUID
-	AppStatus   AppStatus
-	AppPlatform AppPlatform
+	WriteKeyID   uuid.UUID
+	Key          string
+	AppID        uuid.UUID
+	AppStatus    AppStatus
+	KeyPlatform  *AppPlatform
+	AppPlatforms []AppPlatform
 }
 
 // Ключи приложения с ожидающей заявкой на удаление (deleteApp) в снимок не попадают, даже если выпущены или
@@ -279,7 +291,8 @@ func (q *Queries) LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow
 			&i.Key,
 			&i.AppID,
 			&i.AppStatus,
-			&i.AppPlatform,
+			&i.KeyPlatform,
+			&i.AppPlatforms,
 		); err != nil {
 			return nil, err
 		}
@@ -289,6 +302,29 @@ func (q *Queries) LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveWriteKeys = `-- name: MoveWriteKeys :execrows
+UPDATE write_keys
+SET app_id = $1,
+    platform = coalesce(platform, $2)
+WHERE app_id = $3
+`
+
+type MoveWriteKeysParams struct {
+	TargetID        uuid.UUID
+	DefaultPlatform *AppPlatform
+	SourceID        uuid.UUID
+}
+
+// Шаг move_keys: ключи источника переходят в цель; ключ без платформы получает default_platform
+// (единственная платформа источника) или остаётся NULL, если у источника несколько платформ.
+func (q *Queries) MoveWriteKeys(ctx context.Context, arg MoveWriteKeysParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveWriteKeys, arg.TargetID, arg.DefaultPlatform, arg.SourceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeApiKey = `-- name: RevokeApiKey :one
@@ -347,7 +383,7 @@ func (q *Queries) RevokeAppWriteKeys(ctx context.Context, arg RevokeAppWriteKeys
 const revokeWriteKey = `-- name: RevokeWriteKey :one
 UPDATE write_keys SET revoked_at = $1
 WHERE id = $2 AND app_id = $3 AND revoked_at IS NULL
-RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at
+RETURNING id, app_id, key, label, created_at, revoked_at, last_used_at, platform
 `
 
 type RevokeWriteKeyParams struct {
@@ -367,6 +403,7 @@ func (q *Queries) RevokeWriteKey(ctx context.Context, arg RevokeWriteKeyParams) 
 		&i.CreatedAt,
 		&i.RevokedAt,
 		&i.LastUsedAt,
+		&i.Platform,
 	)
 	return i, err
 }

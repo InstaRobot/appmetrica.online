@@ -14,6 +14,140 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AppMergeStatus string
+
+const (
+	AppMergeStatusPending AppMergeStatus = "pending"
+	AppMergeStatusRunning AppMergeStatus = "running"
+	AppMergeStatusDone    AppMergeStatus = "done"
+	AppMergeStatusFailed  AppMergeStatus = "failed"
+)
+
+func (e *AppMergeStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AppMergeStatus(s)
+	case string:
+		*e = AppMergeStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AppMergeStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAppMergeStatus struct {
+	AppMergeStatus AppMergeStatus
+	Valid          bool // Valid is true if AppMergeStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAppMergeStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AppMergeStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AppMergeStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAppMergeStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AppMergeStatus), nil
+}
+
+func (e AppMergeStatus) Valid() bool {
+	switch e {
+	case AppMergeStatusPending,
+		AppMergeStatusRunning,
+		AppMergeStatusDone,
+		AppMergeStatusFailed:
+		return true
+	}
+	return false
+}
+
+func AllAppMergeStatusValues() []AppMergeStatus {
+	return []AppMergeStatus{
+		AppMergeStatusPending,
+		AppMergeStatusRunning,
+		AppMergeStatusDone,
+		AppMergeStatusFailed,
+	}
+}
+
+type AppMergeStep string
+
+const (
+	AppMergeStepMoveKeys    AppMergeStep = "move_keys"
+	AppMergeStepWaitKeys    AppMergeStep = "wait_keys"
+	AppMergeStepCopy        AppMergeStep = "copy"
+	AppMergeStepPurgeSource AppMergeStep = "purge_source"
+	AppMergeStepReclose     AppMergeStep = "reclose"
+	AppMergeStepDone        AppMergeStep = "done"
+)
+
+func (e *AppMergeStep) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AppMergeStep(s)
+	case string:
+		*e = AppMergeStep(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AppMergeStep: %T", src)
+	}
+	return nil
+}
+
+type NullAppMergeStep struct {
+	AppMergeStep AppMergeStep
+	Valid        bool // Valid is true if AppMergeStep is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAppMergeStep) Scan(value interface{}) error {
+	if value == nil {
+		ns.AppMergeStep, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AppMergeStep.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAppMergeStep) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AppMergeStep), nil
+}
+
+func (e AppMergeStep) Valid() bool {
+	switch e {
+	case AppMergeStepMoveKeys,
+		AppMergeStepWaitKeys,
+		AppMergeStepCopy,
+		AppMergeStepPurgeSource,
+		AppMergeStepReclose,
+		AppMergeStepDone:
+		return true
+	}
+	return false
+}
+
+func AllAppMergeStepValues() []AppMergeStep {
+	return []AppMergeStep{
+		AppMergeStepMoveKeys,
+		AppMergeStepWaitKeys,
+		AppMergeStepCopy,
+		AppMergeStepPurgeSource,
+		AppMergeStepReclose,
+		AppMergeStepDone,
+	}
+}
+
 type AppPlatform string
 
 const (
@@ -400,6 +534,7 @@ const (
 	JobNameSystemCheck    JobName = "system_check"
 	JobNameDeletion       JobName = "deletion"
 	JobNameSessionCleanup JobName = "session_cleanup"
+	JobNameAppMerge       JobName = "app_merge"
 )
 
 func (e *JobName) Scan(src interface{}) error {
@@ -443,7 +578,8 @@ func (e JobName) Valid() bool {
 		JobNameDigest,
 		JobNameSystemCheck,
 		JobNameDeletion,
-		JobNameSessionCleanup:
+		JobNameSessionCleanup,
+		JobNameAppMerge:
 		return true
 	}
 	return false
@@ -456,6 +592,7 @@ func AllJobNameValues() []JobName {
 		JobNameSystemCheck,
 		JobNameDeletion,
 		JobNameSessionCleanup,
+		JobNameAppMerge,
 	}
 }
 
@@ -549,6 +686,28 @@ type App struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	ArchivedAt *time.Time
+	Platforms  []AppPlatform
+}
+
+type AppMerge struct {
+	ID               uuid.UUID
+	TargetAppID      uuid.UUID
+	SourceAppID      *uuid.UUID
+	SourceName       string
+	SourcePlatforms  []AppPlatform
+	SourceTimezone   string
+	Status           AppMergeStatus
+	Step             AppMergeStep
+	KeysMovedAt      *time.Time
+	FirstSourceDay   pgtype.Date
+	CopiedPartitions []int32
+	CopiedEvents     int64
+	TotalEvents      int64
+	Attempts         int32
+	Error            *string
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	FinishedAt       *time.Time
 }
 
 type AuthSession struct {
@@ -650,4 +809,5 @@ type WriteKey struct {
 	CreatedAt  time.Time
 	RevokedAt  *time.Time
 	LastUsedAt *time.Time
+	Platform   *AppPlatform
 }
