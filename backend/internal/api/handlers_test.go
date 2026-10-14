@@ -169,6 +169,34 @@ func TestCreateWriteKeyRejectsUnknownPlatform(t *testing.T) {
 	require.Equal(t, gen.PlatformWeb, platform)
 }
 
+// AC-1.4: набор платформ меняет только владелец — без cookie 401, без X-Requested-With 403; набор не меняется.
+func TestUpdateAppPlatformsRequiresSession(t *testing.T) {
+	e := newPortfolioEnv(t)
+	cookie := ownerCookie(t, e)
+	id := testutil.ScenarioApps[0].ID
+	path := "/admin/v1/apps/" + id.String()
+	body := map[string]any{"platforms": []string{"web"}}
+	platforms := func() []string {
+		var got []string
+		require.NoError(t, e.env.PG.Pool().QueryRow(t.Context(),
+			`SELECT platforms::text[] FROM apps WHERE id = $1`, id).Scan(&got))
+		return got
+	}
+	before := platforms()
+	require.NotEqual(t, []string{"web"}, before)
+
+	anonymous := func(r *http.Request) { r.Header.Set("X-Requested-With", auth.RequestedWith) }
+	requireEnvelope(t, e.call(t, http.MethodPatch, path, body, anonymous), http.StatusUnauthorized, "unauthenticated")
+	noCSRF := func(r *http.Request) { r.AddCookie(cookie) }
+	requireEnvelope(t, e.call(t, http.MethodPatch, path, body, noCSRF), http.StatusForbidden, "csrf_check_failed")
+	require.Equal(t, before, platforms())
+
+	// С сессией и заголовком тот же запрос проходит.
+	rec := e.call(t, http.MethodPatch, path, body, asOwner(cookie))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, []string{"web"}, platforms())
+}
+
 func TestReadAPI_SameResultForCookieAndBearer(t *testing.T) {
 	e := newPortfolioEnv(t)
 	cookie := ownerCookie(t, e)
