@@ -279,8 +279,9 @@
 }
 
 /* Статусная палитра для утилит bg-success-500, bg-warning-50 и т.п. Значения — в :root и в тёмной
-   теме выше; reference не выводит переменные повторно (иначе цикл --color-x: var(--color-x)). */
-@theme inline reference {
+   теме выше; reference не выводит переменные повторно (иначе цикл --color-x: var(--color-x)),
+   утилита ссылается на переменную :root. Одна опция: Biome не разбирает «inline reference». */
+@theme reference {
   --color-success-50: var(--color-success-50);
   --color-success-500: var(--color-success-500);
   --color-success-600: var(--color-success-600);
