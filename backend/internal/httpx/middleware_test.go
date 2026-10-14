@@ -446,10 +446,46 @@ func TestAccessLog_RoutePatternInsteadOfPath(t *testing.T) {
 	require.Len(t, lines, 1)
 	require.Equal(t, "/admin/v1/auth/setup/{token}/begin", lines[0]["path"])
 
-	// Маршрут не совпал — пишется сырой путь: параметров маршрута в нём нет.
+	// Маршрут не совпал — сырой путь не пишется: при 404/405 ServeMux не заполняет Pattern, а в пути
+	// может стоять секрет (тот же токен ссылки регистрации с другим методом или лишним слэшем).
 	buf.Reset()
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
-	require.Equal(t, "/nope", decodeLogLines(t, &buf)[0]["path"])
+	require.Equal(t, httpx.UnmatchedPath, decodeLogLines(t, &buf)[0]["path"])
+}
+
+// Запрос с другим методом на маршрут с параметром получает 405 от ServeMux без Pattern:
+// сырой путь с токеном ссылки регистрации passkey не должен попасть в access-лог.
+func TestAccessLog_UnmatchedRouteHidesPath(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/begin", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		status int
+	}{
+		{name: "method mismatch 405", method: http.MethodGet, path: "/admin/v1/auth/setup/SECRET-TOKEN/begin", status: http.StatusMethodNotAllowed},
+		{name: "head 405", method: http.MethodHead, path: "/admin/v1/auth/setup/SECRET-TOKEN/begin", status: http.StatusMethodNotAllowed},
+		{name: "trailing slash 404", method: http.MethodPost, path: "/admin/v1/auth/setup/SECRET-TOKEN/begin/", status: http.StatusNotFound},
+		{name: "near miss 404", method: http.MethodPost, path: "/admin/v1/auth/setup/SECRET-TOKEN", status: http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			h := stack(newLogger(&buf), mux)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, nil))
+			require.Equal(t, tt.status, rec.Code)
+			require.NotContains(t, buf.String(), "SECRET-TOKEN")
+			lines := decodeLogLines(t, &buf)
+			require.Len(t, lines, 1)
+			require.Equal(t, httpx.UnmatchedPath, lines[0]["path"])
+			require.EqualValues(t, tt.status, lines[0]["status"])
+		})
+	}
 }
 
 // Два заголовка Content-Encoding — не identity и не один gzip: 400 unsupported_content_encoding.
