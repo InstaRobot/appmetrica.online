@@ -174,3 +174,39 @@ export function useAudienceState(timezone: string, today: string = todayIn(timez
     update: (patch: AudienceSearchPatch) => setSearch(patch),
   };
 }
+
+export const retentionSearchParams = {
+  cohort: parseAsStringLiteral(["day", "week"] as const).withDefault("day"),
+};
+
+export type RetentionSearch = inferParserType<typeof retentionSearchParams>;
+export type RetentionSearchPatch = { [K in keyof RetentionSearch]?: RetentionSearch[K] | null };
+
+export const loadRetentionSearch = createLoader(retentionSearchParams);
+export const serializeRetentionSearch = createSerializer(retentionSearchParams);
+
+export type RetentionState = {
+  cohort: "day" | "week";
+  period: PeriodValue;
+  periods: number;
+  filters: Filters;
+  env: Environment;
+  unit: Unit;
+};
+
+export function resolveRetentionState(_search: RetentionSearch, _today: string): RetentionState {
+  throw new Error("not implemented");
+}
+
+export function retentionParams(_state: RetentionState): Record<string, unknown> {
+  throw new Error("not implemented");
+}
+
+export function useRetentionState(_timezone: string, _today?: string) {
+  throw new Error("not implemented");
+  // biome-ignore lint/correctness/noUnreachable: заглушка до реализации
+  return {
+    state: {} as RetentionState,
+    update: (_patch: RetentionSearchPatch) => Promise.resolve(),
+  };
+}

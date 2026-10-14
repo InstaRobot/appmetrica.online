@@ -88,6 +88,30 @@ describe("PeriodPicker", () => {
     expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Слишком большой период");
   });
+
+  it("offers only the given presets", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PeriodPicker
+        value={{ preset: "custom", from: "2026-09-13", to: "2026-10-12" }}
+        onChange={onChange}
+        timezone="Europe/Moscow"
+        presets={["7d", "30d", "90d"]}
+      />,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Период" })).toHaveTextContent(
+      "7 дней30 дней90 дней",
+    );
+    expect(screen.queryByRole("radio", { name: "Сегодня" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "90 дней" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      preset: "90d",
+      from: "2026-07-16",
+      to: "2026-10-13",
+    });
+  });
 });
 
 describe("GranularitySelect", () => {

@@ -9,6 +9,7 @@ import {
   formatInt,
   formatPercent,
   formatWeekdayDate,
+  formatWeekRange,
 } from "./format";
 
 const NBSP = " ";
@@ -90,6 +91,13 @@ describe("format", () => {
 });
 
 describe("report ranges and buckets", () => {
+  it("labels ISO week cohorts by their days without a year", () => {
+    expect(formatWeekRange("2026-09-08")).toBe(`8–14${NBSP}сен`);
+    expect(formatWeekRange("2026-09-28")).toBe(`28${NBSP}сен – 4${NBSP}окт`);
+    expect(formatWeekRange("2025-12-29")).toBe(`29${NBSP}дек – 4${NBSP}янв`);
+    expect(formatWeekRange("bad")).toBe("—");
+  });
+
   it("formats date ranges compactly", () => {
     expect(formatDateRange("2026-10-06", "2026-10-12")).toBe("6–12 окт 2026");
     expect(formatDateRange("2026-09-28", "2026-10-05")).toBe("28 сен – 5 окт 2026");

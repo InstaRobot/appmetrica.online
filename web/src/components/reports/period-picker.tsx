@@ -26,6 +26,7 @@ type PeriodPickerProps = {
   maxRangeDays?: number;
   /** Текст range_too_large — inline под выбором периода. */
   error?: string | undefined;
+  presets?: Exclude<PeriodPreset, "custom">[];
 };
 
 type Preset = Exclude<PeriodPreset, "custom">;

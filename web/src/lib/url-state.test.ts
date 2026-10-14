@@ -4,11 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type AudienceState,
   loadAudienceSearch,
+  loadRetentionSearch,
   periodSearch,
   reportParams,
   resolveAudienceState,
+  resolveRetentionState,
+  retentionParams,
   serializeAudienceSearch,
+  serializeRetentionSearch,
   useAudienceState,
+  useRetentionState,
 } from "./url-state";
 
 const TODAY = "2026-10-13";
@@ -170,5 +175,89 @@ describe("url-state", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+const resolveRetention = (search: string) =>
+  resolveRetentionState(loadRetentionSearch(search), TODAY);
+
+describe("retention url-state", () => {
+  it("defaults to the last 30 day cohorts ending yesterday", () => {
+    const state = resolveRetention("");
+    expect(state.cohort).toBe("day");
+    expect(state.periods).toBe(30);
+    expect(state.period).toEqual({ preset: "custom", from: "2026-09-13", to: "2026-10-12" });
+    expect(retentionParams(state)).toEqual({
+      from: "2026-09-13",
+      to: "2026-10-12",
+      cohort_granularity: "day",
+      periods: 30,
+      environment: "production",
+      unit: "persons",
+    });
+  });
+
+  it("defaults to the last 12 complete ISO weeks for week cohorts", () => {
+    // 2026-10-13 — вторник: последняя завершённая неделя 5–11 окт.
+    const state = resolveRetention("?cohort=week");
+    expect(state.cohort).toBe("week");
+    expect(state.periods).toBe(12);
+    expect(state.period).toEqual({ preset: "custom", from: "2026-07-20", to: "2026-10-11" });
+    expect(resolveRetentionState(loadRetentionSearch("?cohort=week"), "2026-10-12").period).toEqual(
+      { preset: "custom", from: "2026-07-20", to: "2026-10-11" },
+    );
+  });
+
+  it("keeps period presets, custom ranges and filters shared with other tabs", () => {
+    expect(resolveRetention("?period=30d").period).toEqual({
+      preset: "30d",
+      from: "2026-09-14",
+      to: TODAY,
+    });
+    const url =
+      "?cohort=week&from=2026-08-01&to=2026-09-30&platform=ios&env=development&unit=installs";
+    const search = loadRetentionSearch(url);
+    const state = resolveRetentionState(search, TODAY);
+    expect(state.period).toEqual({ preset: "custom", from: "2026-08-01", to: "2026-09-30" });
+    expect(retentionParams(state)).toEqual({
+      from: "2026-08-01",
+      to: "2026-09-30",
+      cohort_granularity: "week",
+      periods: 12,
+      environment: "development",
+      unit: "installs",
+      platform: ["ios"],
+    });
+    expect(serializeRetentionSearch(search)).toBe(url);
+  });
+
+  it("falls back to the default cohorts for one-day presets and invalid values", () => {
+    expect(resolveRetention("?period=today").period).toEqual(resolveRetention("").period);
+    expect(resolveRetention("?period=yesterday&cohort=month").period).toEqual(
+      resolveRetention("").period,
+    );
+    expect(resolveRetention("?cohort=month").cohort).toBe("day");
+    expect(resolveRetention("?from=2026-10-10&to=2026-10-01").period).toEqual(
+      resolveRetention("").period,
+    );
+  });
+
+  it("writes cohort granularity to the URL with push history", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const { result } = renderHook(() => useRetentionState("Europe/Moscow", TODAY), {
+      wrapper: withNuqsTestingAdapter({
+        searchParams: "?platform=ios",
+        hasMemory: true,
+        onUrlUpdate,
+      }),
+    });
+
+    await act(() => result.current.update({ cohort: "week" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?cohort=week&platform=ios");
+    expect(onUrlUpdate.mock.lastCall?.[0].options.history).toBe("push");
+    expect(result.current.state.periods).toBe(12);
+
+    await act(() => result.current.update({ cohort: "day" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios");
   });
 });

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { KpiSkeleton } from "./kpi-skeleton";
+import { RetentionSkeleton } from "./retention-skeleton";
 import { TableSkeleton } from "./table-skeleton";
 
 describe("skeletons", () => {
@@ -16,5 +17,12 @@ describe("skeletons", () => {
 
     expect(screen.getByRole("status", { name: "Загрузка…" })).toBeInTheDocument();
     expect(container.querySelectorAll("[data-skeleton-kpi]")).toHaveLength(4);
+  });
+
+  it("renders a 10 × 12 retention grid with the chart placeholder", () => {
+    const { container } = render(<RetentionSkeleton />);
+
+    expect(screen.getAllByRole("status", { name: "Загрузка…" })).not.toHaveLength(0);
+    expect(container.querySelectorAll("[data-skeleton-cell]")).toHaveLength(120);
   });
 });

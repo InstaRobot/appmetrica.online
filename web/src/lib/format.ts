@@ -167,3 +167,7 @@ export function formatBucket(
   if (granularity !== "hour") return day;
   return `${day}, ${timeFormat(timeZone).format(new Date(ts))}`;
 }
+
+export function formatWeekRange(_start: string): string {
+  return DASH;
+}
