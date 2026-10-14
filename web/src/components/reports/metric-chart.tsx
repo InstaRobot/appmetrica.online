@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, Line, Tooltip, XAxis, YAxis } from "recharts";
+import { platformChartVar } from "@/components/common/platform-icon";
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
-import type { TimeSeries } from "@/lib/api/gen/model";
+import type { TimeSeriesPoint } from "@/lib/api/gen/model";
 import {
   formatBucket,
   formatDateRange,
@@ -16,8 +17,19 @@ import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
 import { type Granularity, todayIn } from "@/lib/period";
 import type { ChartMetric } from "@/lib/url-state";
 
+export type MetricChartSeries = {
+  /** "total" — итог, иначе значение events.platform. */
+  key: string;
+  /** «Итог» или название платформы. */
+  label: string;
+  points: TimeSeriesPoint[];
+  /** Ряд предыдущего периода — только у итога. */
+  compare?: TimeSeriesPoint[];
+};
+
 type MetricChartProps = {
-  series: TimeSeries;
+  /** Итог — одна серия "total"; режим «По платформам» — серия на платформу (04-ux-diff.md §6.2). */
+  series: MetricChartSeries[];
   granularity: Granularity;
   metric: ChartMetric;
   /** TZ приложения — для подписей часов и дней. */
@@ -39,7 +51,13 @@ const BY: Record<Granularity, string> = {
   month: "по месяцам",
 };
 
-type Datum = { ts: string; label: string; value: number | null; compare: number | null };
+// Значения серий лежат под ключами s0…sN: значение events.platform может совпасть с полями точки.
+type Datum = { ts: string; label: string; compare: number | null } & Record<
+  `s${number}`,
+  number | null
+>;
+
+type SeriesLine = { dataKey: `s${number}`; label: string; color: string };
 
 export const formatMetric = (metric: ChartMetric, value: number | null | undefined): string =>
   metric === "avg_duration_ms" ? formatDuration(value) : formatInt(value);
@@ -75,19 +93,38 @@ type TipProps = {
   payload?: ReadonlyArray<{ payload?: Datum }>;
   metric: ChartMetric;
   compare: boolean;
+  /** Линии режима «По платформам»; в итоге — undefined. */
+  lines?: SeriesLine[];
 };
 
-function ChartTip({ active, payload, metric, compare }: TipProps) {
+function ChartTip({ active, payload, metric, compare, lines }: TipProps) {
   const d = payload?.[0]?.payload;
   if (!active || !d) return null;
+  if (lines) {
+    return (
+      <div className="flex flex-col gap-1 rounded-md border border-border bg-popover px-3 py-2 text-body-sm shadow-md">
+        <span className="text-fg-muted">{d.label}</span>
+        {lines.map((l) => (
+          <span key={l.dataKey} className="flex items-center gap-2">
+            <Swatch color={l.color} />
+            {l.label}
+            <span className="ml-auto pl-3 font-medium tabular-nums">
+              {formatMetric(metric, d[l.dataKey])}
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+  const value = d.s0 ?? null;
   const delta =
-    compare && d.value !== null && d.compare !== null && d.compare !== 0
-      ? ((d.value - d.compare) / d.compare) * 100
+    compare && value !== null && d.compare !== null && d.compare !== 0
+      ? ((value - d.compare) / d.compare) * 100
       : null;
   return (
     <div className="flex flex-col gap-1 rounded-md border border-border bg-popover px-3 py-2 text-body-sm shadow-md">
       <span className="text-fg-muted">{d.label}</span>
-      <span className="font-medium tabular-nums">{formatMetric(metric, d.value)}</span>
+      <span className="font-medium tabular-nums">{formatMetric(metric, value)}</span>
       {compare ? (
         <span className="text-fg-muted tabular-nums">
           Предыдущий период: {formatMetric(metric, d.compare)}
@@ -98,8 +135,55 @@ function ChartTip({ active, payload, metric, compare }: TipProps) {
   );
 }
 
-// График метрики S-05 (14-ux-ui-spec.md §16.6): область текущего периода и пунктир предыдущего.
-// Для скринридеров — role="img" с кратким описанием и таблица точек по кнопке.
+function Swatch({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-2.5 shrink-0 rounded-full"
+      style={{ background: color }}
+    />
+  );
+}
+
+// Точки серий по корзинам: ряды API покрывают одну сетку периода, корзина отсутствующей точки — null.
+function chartData(series: MetricChartSeries[], granularity: Granularity, timezone: string) {
+  const rows = new Map<string, Datum>();
+  const row = (ts: string): Datum => {
+    const existing = rows.get(ts);
+    if (existing) return existing;
+    const d: Datum = { ts, label: formatBucket(ts, granularity, timezone), compare: null };
+    series.forEach((_, i) => {
+      d[`s${i}`] = null;
+    });
+    rows.set(ts, d);
+    return d;
+  };
+  series.forEach((s, i) => {
+    for (const p of s.points) row(p.ts)[`s${i}`] = p.value;
+  });
+  // Ряд предыдущего периода сопоставляется с текущим по номеру корзины.
+  const compare = series[0]?.compare;
+  if (compare) {
+    series[0]?.points.forEach((p, i) => {
+      row(p.ts).compare = compare[i]?.value ?? null;
+    });
+  }
+  return [...rows.values()];
+}
+
+// Максимум серии для описания графика; нулевые и пустые корзины не в счёт.
+function seriesMax(data: Datum[], key: `s${number}`): Datum | undefined {
+  let max: Datum | undefined;
+  for (const d of data) {
+    const v = d[key] ?? null;
+    if (v !== null && v > 0 && (!max || v > (max[key] ?? 0))) max = d;
+  }
+  return max;
+}
+
+// График метрики S-05 (14-ux-ui-spec.md §16.6): область текущего периода и пунктир предыдущего, в режиме
+// «По платформам» — линия на платформу с легендой (04-ux-diff.md §5.5). Для скринридеров — role="img"
+// с кратким описанием и таблица точек по кнопке.
 export function MetricChart({
   series,
   granularity,
@@ -108,34 +192,55 @@ export function MetricChart({
   height = 360,
 }: MetricChartProps) {
   const [showTable, setShowTable] = useState(false);
-  const compare = series.compare_points !== undefined;
-  const data: Datum[] = series.points.map((p, i) => ({
-    ts: p.ts,
-    label: formatBucket(p.ts, granularity, timezone),
-    value: p.value,
-    compare: series.compare_points?.[i]?.value ?? null,
+  const split = series.some((s) => s.key !== "total");
+  const compare = !split && series[0]?.compare !== undefined;
+  const data = chartData(series, granularity, timezone);
+  const lines: SeriesLine[] = series.map((s, i) => ({
+    dataKey: `s${i}`,
+    label: split ? s.label : METRIC_DEFINITIONS[metric].label,
+    color: split ? platformChartVar(s.key) : "var(--chart-1)",
   }));
 
-  let max: Datum | undefined;
-  for (const d of data) {
-    if (d.value !== null && d.value > 0 && (!max || d.value > (max.value ?? 0))) max = d;
-  }
+  const maxes = lines.map((l) => seriesMax(data, l.dataKey));
+  const max = (i: number) => {
+    const d = maxes[i];
+    return d ? `максимум ${formatMetric(metric, d[`s${i}`])} ${d.label}` : "нет событий";
+  };
   const range = seriesRange(
     data.map((d) => d.ts),
     timezone,
   );
-  const summary = max ? `максимум ${formatMetric(metric, max.value)} ${max.label}` : "нет событий";
-  const description = [`${TITLES[metric]} ${BY[granularity]}`, range, summary]
+  const hasEvents = maxes.some(Boolean);
+  const summary =
+    split && hasEvents ? lines.map((l, i) => `${l.label}: ${max(i)}`).join(", ") : max(0);
+  const description = [
+    `${TITLES[metric]} ${BY[granularity]}${split ? " по платформам" : ""}`,
+    range,
+    summary,
+  ]
     .filter(Boolean)
     .join(", ");
 
-  const config = {
-    value: { label: METRIC_DEFINITIONS[metric].label, color: "var(--chart-1)" },
+  const config: ChartConfig = {
     compare: { label: "Предыдущий период", color: "var(--chart-compare)" },
-  } satisfies ChartConfig;
+  };
+  for (const l of lines) config[l.dataKey] = { label: l.label, color: l.color };
 
   return (
     <figure className="flex flex-col gap-2">
+      {split ? (
+        <ul
+          aria-label="Легенда графика"
+          className="flex flex-wrap gap-x-4 gap-y-1 text-body-sm text-fg-muted"
+        >
+          {lines.map((l) => (
+            <li key={l.dataKey} className="flex items-center gap-1.5">
+              <Swatch color={l.color} />
+              {l.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div role="img" aria-label={description} style={{ height }}>
         <ChartContainer config={config} className="aspect-auto h-full w-full">
           <AreaChart
@@ -151,16 +256,34 @@ export function MetricChart({
               axisLine={false}
               tickFormatter={(v: number) => formatMetric(metric, v)}
             />
-            <Tooltip content={<ChartTip metric={metric} compare={compare} />} />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="var(--color-value)"
-              fill="var(--color-value)"
-              fillOpacity={0.12}
-              strokeWidth={2}
-              isAnimationActive={false}
+            <Tooltip
+              content={<ChartTip metric={metric} compare={compare} {...(split ? { lines } : {})} />}
             />
+            {split
+              ? lines.map((l) => (
+                  <Line
+                    key={l.dataKey}
+                    type="monotone"
+                    dataKey={l.dataKey}
+                    name={l.label}
+                    stroke={`var(--color-${l.dataKey})`}
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))
+              : lines.map((l) => (
+                  <Area
+                    key={l.dataKey}
+                    type="monotone"
+                    dataKey={l.dataKey}
+                    stroke={`var(--color-${l.dataKey})`}
+                    fill={`var(--color-${l.dataKey})`}
+                    fillOpacity={0.12}
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  />
+                ))}
             {compare ? (
               <Line
                 type="monotone"
@@ -175,7 +298,7 @@ export function MetricChart({
           </AreaChart>
         </ChartContainer>
       </div>
-      {max ? null : (
+      {hasEvents ? null : (
         <figcaption className="text-body-sm text-fg-muted">
           Нет событий за выбранный период
         </figcaption>
@@ -189,9 +312,11 @@ export function MetricChart({
               <th scope="col" className="py-2 font-medium">
                 Период
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
-                {METRIC_DEFINITIONS[metric].label}
-              </th>
+              {lines.map((l) => (
+                <th key={l.dataKey} scope="col" className="py-2 text-right font-medium">
+                  {l.label}
+                </th>
+              ))}
               {compare ? (
                 <th scope="col" className="py-2 text-right font-medium">
                   Предыдущий период
@@ -205,7 +330,11 @@ export function MetricChart({
                 <th scope="row" className="py-1.5 text-left font-normal">
                   {d.label}
                 </th>
-                <td className="py-1.5 text-right tabular-nums">{formatMetric(metric, d.value)}</td>
+                {lines.map((l) => (
+                  <td key={l.dataKey} className="py-1.5 text-right tabular-nums">
+                    {formatMetric(metric, d[l.dataKey])}
+                  </td>
+                ))}
                 {compare ? (
                   <td className="py-1.5 text-right tabular-nums">
                     {formatMetric(metric, d.compare)}

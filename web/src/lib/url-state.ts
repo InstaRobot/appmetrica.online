@@ -1,5 +1,5 @@
-// URL-состояние экрана S-05 (14-ux-ui-spec.md S-05, nuqs): период, детализация, сравнение, метрики,
-// разбивка, фильтры, окружение и сервисный unit. Значения по умолчанию в URL не пишутся; неизвестные
+// URL-состояние экрана S-05 (14-ux-ui-spec.md S-05, nuqs): период, детализация, сравнение, режим графика,
+// метрики, разбивка, фильтры, окружение и сервисный unit. Значения по умолчанию в URL не пишутся; неизвестные
 // и некорректные значения игнорируются и заменяются умолчаниями.
 import {
   createParser,
@@ -81,6 +81,8 @@ export const audienceSearchParams = {
   to: isoDate,
   g: parseAsStringLiteral(GRANULARITIES).withDefault("day"),
   compare: flag.withDefault(false),
+  // `split=platform` — график «По платформам» (04-ux-diff.md §5.5).
+  split: parseAsStringLiteral(["platform"]),
   metric: parseAsStringLiteral(Object.values(TimeSeriesMetric)).withDefault("active"),
   dim: parseAsStringLiteral(Object.values(BreakdownDimension)).withDefault("app_version"),
   bmetric: parseAsStringLiteral(Object.values(BreakdownMetric)).withDefault("active"),
@@ -97,6 +99,8 @@ export type AudienceState = {
   /** Детализация из URL недопустима для периода и заменена ближайшей. */
   granularityAdjusted: boolean;
   compare: boolean;
+  /** Режим «По платформам» запрошен в URL; применяется при «Все» и 2+ платформах. */
+  split: boolean;
   metric: ChartMetric;
   dim: BreakdownDim;
   bmetric: BreakdownMetricKey;
@@ -143,6 +147,7 @@ export function resolveAudienceState(search: AudienceSearch, today: string): Aud
     granularity,
     granularityAdjusted: granularity !== search.g,
     compare: search.compare,
+    split: search.split === "platform",
     metric: search.metric,
     dim: search.dim,
     bmetric: search.bmetric,

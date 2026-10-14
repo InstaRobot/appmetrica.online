@@ -20,6 +20,26 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   other: "Другое",
 };
 
+// Цвет платформы на графиках (04-ux-diff.md §7): один и тот же в легенде, на полосе долей и в tooltip.
+export const PLATFORM_CHART_VAR: Record<Platform, string> = {
+  ios: "var(--chart-1)",
+  macos: "var(--chart-1)",
+  android: "var(--chart-3)",
+  web: "var(--chart-2)",
+  bot: "var(--chart-4)",
+  server: "var(--chart-4)",
+  windows: "var(--chart-5)",
+  linux: "var(--chart-5)",
+  other: "var(--chart-6)",
+};
+
+// Цвет значения events.platform: неизвестное — как «Другое».
+export function platformChartVar(platform: string): string {
+  return Object.hasOwn(PLATFORM_CHART_VAR, platform)
+    ? PLATFORM_CHART_VAR[platform as Platform]
+    : PLATFORM_CHART_VAR.other;
+}
+
 const GLYPHS: Record<Platform, (props: PlatformGlyphProps) => React.JSX.Element> = {
   ios: AppleIcon,
   macos: AppleIcon,

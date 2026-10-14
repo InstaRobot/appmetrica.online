@@ -5,6 +5,7 @@ import { Copy, PlugZap } from "lucide-react";
 import type { Route } from "next";
 import { useParams } from "next/navigation";
 import { lazy, Suspense } from "react";
+import { platformLabel } from "@/components/common/platform-icon";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { AudienceKpis } from "@/components/reports/audience-kpis";
@@ -13,8 +14,9 @@ import { EnvironmentSwitch } from "@/components/reports/environment-switch";
 import { FilterBar } from "@/components/reports/filter-bar";
 import { GRANULARITY_LABELS, GranularitySelect } from "@/components/reports/granularity-select";
 import { MetricChart, RollingActiveChart } from "@/components/reports/lazy-charts";
+import type { MetricChartSeries } from "@/components/reports/metric-chart";
 import { PeriodPicker } from "@/components/reports/period-picker";
-import { PlatformSwitcher } from "@/components/reports/platform-switcher";
+import { PlatformSwitcher, platformOptions } from "@/components/reports/platform-switcher";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,7 +34,13 @@ import {
   useGetRollingActive,
 } from "@/lib/api/gen/endpoints/audience/audience";
 import { useGetIntegrationHealth } from "@/lib/api/gen/endpoints/integration/integration";
-import { type App, Platform, TimeSeriesMetric, type TimeSeriesPoint } from "@/lib/api/gen/model";
+import {
+  type App,
+  Platform,
+  type TimeSeries,
+  TimeSeriesMetric,
+  type TimeSeriesPoint,
+} from "@/lib/api/gen/model";
 import { audienceCurl } from "@/lib/copy-as-curl";
 import { API_ERRORS } from "@/lib/errors";
 import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
@@ -73,6 +81,28 @@ const apiError = (q: { error: unknown }) => q.error as ApiError | null;
 
 const isRangeError = (q: { error: unknown }) => apiError(q)?.code === "range_too_large";
 
+const COMPARE_IN_SPLIT = "Сравнение недоступно в режиме по платформам";
+
+// Серии графика: итог с рядом предыдущего периода или линия на каждую платформу из splits. Без splits (нет
+// событий за период) — итоговый ряд, чтобы график показал период и «Нет событий».
+function chartSeries(data: TimeSeries, split: boolean): MetricChartSeries[] {
+  if (split && data.splits && data.splits.length > 0) {
+    return data.splits.map((s) => ({
+      key: s.platform,
+      label: platformLabel(s.platform),
+      points: s.points,
+    }));
+  }
+  return [
+    {
+      key: "total",
+      label: "Итог",
+      points: data.points,
+      ...(data.compare_points ? { compare: data.compare_points } : {}),
+    },
+  ];
+}
+
 // Ошибка карточки: range_too_large показывается один раз под выбором периода.
 function cardError(q: { isError: boolean; error: unknown; refetch: () => unknown }) {
   const error = apiError(q);
@@ -91,6 +121,12 @@ function AudienceReport({ app }: { app: App }) {
   const today = todayIn(app.timezone);
   const { state, update } = useAudienceState(app.timezone, today);
   const params = reportParams(state);
+  const observedPlatforms = useObservedPlatforms(app.id, params);
+  const platform = state.filters.platform?.[0] ?? null;
+  // «По платформам» — только при «Все» и 2+ платформах переключателя (04-ux-diff.md §5.5).
+  const canSplit =
+    platform === null && platformOptions(app.platforms, observedPlatforms, null).length > 1;
+  const split = canSplit && state.split;
 
   // Каждая карточка грузится своим запросом и не ждёт остальные.
   const summary = useGetAudienceSummary(app.id, { ...params, compare: "previous_period" }, keep);
@@ -100,7 +136,9 @@ function AudienceReport({ app }: { app: App }) {
       ...params,
       granularity: state.granularity,
       metric: state.metric,
-      compare: state.compare ? "previous_period" : "none",
+      ...(split
+        ? { split: "platform", compare: "none" }
+        : { compare: state.compare ? "previous_period" : "none" }),
     },
     keep,
   );
@@ -123,7 +161,6 @@ function AudienceReport({ app }: { app: App }) {
     keep,
   );
   const filterOptions = useFilterOptions(app.id, params, REPORT_FILTER_DIMENSIONS);
-  const observedPlatforms = useObservedPlatforms(app.id, params);
 
   const summaryData = summary.data?.status === 200 ? summary.data.data : undefined;
   // Пустое приложение отличается от пустого периода только наличием первого события.
@@ -154,8 +191,9 @@ function AudienceReport({ app }: { app: App }) {
     void update({ ...periodSearch(next), ...(g !== state.granularity ? { g } : {}) });
   };
   const changeFilters = (filters: Filters) => void update(filtersSearch(filters));
-  const changePlatform = (platform: Platform | null) =>
-    void update({ platform: platform ? [platform] : null });
+  // Выбор платформы выключает режим «По платформам»: он имеет смысл только при «Все».
+  const changePlatform = (next: Platform | null) =>
+    void update(next ? { platform: [next], split: null } : { platform: null });
   const addFilter = (value: string) => {
     const dim = state.dim;
     if (dim === "platform") {
@@ -194,6 +232,7 @@ function AudienceReport({ app }: { app: App }) {
             <CompareToggle
               checked={state.compare}
               onCheckedChange={(compare) => void update({ compare })}
+              {...(split ? { disabledReason: COMPARE_IN_SPLIT } : {})}
             />
           </div>
           <Button
@@ -210,7 +249,7 @@ function AudienceReport({ app }: { app: App }) {
           <PlatformSwitcher
             appPlatforms={app.platforms}
             observed={observedPlatforms}
-            value={state.filters.platform?.[0] ?? null}
+            value={platform}
             onChange={changePlatform}
           />
           <FilterBar
@@ -272,11 +311,31 @@ function AudienceReport({ app }: { app: App }) {
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
+              {canSplit ? (
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  aria-label="Режим графика"
+                  value={split ? "platform" : "total"}
+                  onValueChange={(next) => {
+                    if (next) void update({ split: next === "platform" ? "platform" : null });
+                  }}
+                >
+                  <ToggleGroupItem value="total" className="px-3">
+                    Итог
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="platform" className="px-3">
+                    По платформам
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              ) : null}
             </div>
             {cardError(chart) ??
               (chartData ? (
                 <MetricChart
-                  series={chartData}
+                  series={chartSeries(chartData, split)}
                   granularity={state.granularity}
                   metric={state.metric}
                   timezone={app.timezone}
