@@ -3,6 +3,7 @@ import { isTimezone } from "@/components/common/timezone-select";
 import { CreateAppBody } from "@/lib/api/gen/zod/admin-apps/admin-apps.zod";
 import {
   CreateApiKeyBody,
+  CreateWriteKeyBody,
   createWriteKeyBodyLabelMax,
 } from "@/lib/api/gen/zod/admin-keys/admin-keys.zod";
 
@@ -23,9 +24,10 @@ export const appSettingsSchema = zod.object({
   timezone: zod.string().refine(isTimezone),
 });
 
-// F-3: метка write-ключа необязательна, до 64 символов.
+// F-3: метка write-ключа необязательна, до 64 символов; без платформы — ключ для любой платформы.
 export const writeKeySchema = zod.object({
   label: zod.string().trim().max(createWriteKeyBodyLabelMax),
+  platform: CreateWriteKeyBody.shape.platform,
 });
 
 // F-4: метка 1–64 после trim, хотя бы одно право; «Все приложения» — без app_id.

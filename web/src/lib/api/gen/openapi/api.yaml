@@ -1635,6 +1635,9 @@ components:
       additionalProperties: false
       properties:
         label: { type: string, maxLength: 64, default: '' }
+        platform:
+          allOf: [{ $ref: '#/components/schemas/Platform' }]
+          description: Платформа событий без context.platform; без поля — любая платформа.
     CreateAppResult:
       type: object
       required: [app, write_keys]

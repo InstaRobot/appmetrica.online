@@ -33,10 +33,17 @@ func (s *Server) ListWriteKeys(ctx context.Context, req gen.ListWriteKeysRequest
 
 func (s *Server) CreateWriteKey(ctx context.Context, req gen.CreateWriteKeyRequestObject) (gen.CreateWriteKeyResponseObject, error) {
 	var label string
-	if req.Body != nil && req.Body.Label != nil {
-		label = *req.Body.Label
+	var platform *string
+	if req.Body != nil {
+		if req.Body.Label != nil {
+			label = *req.Body.Label
+		}
+		if req.Body.Platform != nil {
+			p := string(*req.Body.Platform)
+			platform = &p
+		}
 	}
-	key, err := s.apps.CreateWriteKey(ctx, req.AppId, label)
+	key, err := s.apps.CreateWriteKey(ctx, req.AppId, label, platform)
 	var verr *apps.ValidationError
 	switch {
 	case errors.As(err, &verr):

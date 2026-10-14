@@ -10,8 +10,11 @@
  *
  * OpenAPI spec version: 1.1.0
  */
+import type { Platform } from "./platform";
 
 export interface CreateWriteKeyBody {
   /** @maxLength 64 */
   label?: string;
+  /** Платформа событий без context.platform; без поля — любая платформа. */
+  platform?: Platform;
 }

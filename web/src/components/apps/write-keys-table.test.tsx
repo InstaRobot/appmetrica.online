@@ -67,7 +67,9 @@ function mockKeys(items: WriteKey[] | { status: number }) {
 describe("WriteKeysTable", () => {
   it("lists active and revoked keys", async () => {
     mockKeys([ACTIVE, REVOKED]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     const table = await screen.findByRole("table", { name: "Write-ключи" });
     const rows = within(table).getAllByRole("row").slice(1);
@@ -88,7 +90,9 @@ describe("WriteKeysTable", () => {
 
   it("creates a key and shows it with a copy button", async () => {
     const calls = mockKeys([ACTIVE]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Создать ключ" }));
@@ -112,12 +116,14 @@ describe("WriteKeysTable", () => {
 
   it("creates a key for a platform", async () => {
     const calls = mockKeys([ACTIVE, REVOKED]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Создать ключ" }));
     const dialog = screen.getByRole("dialog", { name: "Новый write-ключ" });
-    const platform = within(dialog).getByRole("combobox", { name: "Платформа" });
+    const platform = await within(dialog).findByRole("combobox", { name: "Платформа" });
     expect(platform).toHaveTextContent("Любая платформа");
     await user.type(within(dialog).getByRole("textbox", { name: "Метка" }), "Android 1.x");
     await user.click(platform);
@@ -142,7 +148,7 @@ describe("WriteKeysTable", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Создать ключ" }));
     const dialog = screen.getByRole("dialog", { name: "Новый write-ключ" });
-    await user.click(within(dialog).getByRole("combobox", { name: "Платформа" }));
+    await user.click(await within(dialog).findByRole("combobox", { name: "Платформа" }));
     const options = await screen.findAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual([
       "Любая платформа",
@@ -160,7 +166,9 @@ describe("WriteKeysTable", () => {
 
   it("limits the label to 64 characters", async () => {
     const calls = mockKeys([]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Создать ключ" }));
@@ -174,7 +182,9 @@ describe("WriteKeysTable", () => {
 
   it("revokes a key after confirmation", async () => {
     const calls = mockKeys([ACTIVE]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Отозвать ключ pk_7Hq2…Ab0" }));
@@ -191,14 +201,18 @@ describe("WriteKeysTable", () => {
 
   it("shows an error state with retry when keys fail to load", async () => {
     mockKeys({ status: 500 });
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
   });
 
   it("says when there are no keys", async () => {
     mockKeys([]);
-    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
 
     expect(await screen.findByText("Ключей нет — создайте первый.")).toBeInTheDocument();
   });

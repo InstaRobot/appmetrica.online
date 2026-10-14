@@ -30,7 +30,7 @@ export async function registerPasskey(page: Page, name: string): Promise<void> {
   await page.goto(await createSetupLink());
   await page.getByLabel("Название устройства").fill(name);
   await page.getByRole("button", { name: "Создать passkey" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/portfolio");
 }
 
 // saveOwnerSession сбрасывает auth, регистрирует владельца с нуля и сохраняет cookie в OWNER_STATE

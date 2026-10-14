@@ -62,6 +62,10 @@ export const createWriteKeyBodyLabelMax = 64;
 
 export const CreateWriteKeyBody = zod.object({
   label: zod.string().max(createWriteKeyBodyLabelMax).default(createWriteKeyBodyLabelDefault),
+  platform: zod
+    .enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"])
+    .optional()
+    .describe("Платформа событий без context.platform; без поля — любая платформа."),
 });
 
 export const createWriteKeyResponseKeyRegExp = new RegExp("^pk_[A-Za-z0-9]{32}$");

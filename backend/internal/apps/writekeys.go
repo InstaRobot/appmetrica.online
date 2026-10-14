@@ -33,11 +33,20 @@ func (s *Service) ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]sqlc.Wr
 
 // CreateWriteKey выпускает ещё один write-ключ: активных ключей у приложения может быть несколько,
 // чтобы ротировать ключ без поломки старых версий клиентов. Label обрезается по краям, 0..64 символа.
-// Приложению с ожидающей заявкой на удаление ключ не выпускается — ErrDeletionPending.
-func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label string) (sqlc.WriteKey, error) {
+// platform — платформа событий без context.platform, nil — любая платформа; в набор платформ приложения
+// она входить не обязана. Приложению с ожидающей заявкой на удаление ключ не выпускается — ErrDeletionPending.
+func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label string, platform *string) (sqlc.WriteKey, error) {
 	label = strings.TrimSpace(label)
 	if utf8.RuneCountInString(label) > writeKeyLabelMaxLen || !utf8.ValidString(label) {
 		return sqlc.WriteKey{}, &ValidationError{Field: "label", Message: "Название ключа — не длиннее 64 символов"}
+	}
+	var keyPlatform *sqlc.AppPlatform
+	if platform != nil {
+		p := sqlc.AppPlatform(*platform)
+		if !p.Valid() {
+			return sqlc.WriteKey{}, &ValidationError{Field: "platform", Message: "Неизвестная платформа"}
+		}
+		keyPlatform = &p
 	}
 	key, err := newWriteKey()
 	if err != nil {
@@ -48,7 +57,9 @@ func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label str
 		if err := s.lockNotDeleting(ctx, q, appID); err != nil {
 			return err
 		}
-		wk, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: appID, Key: key, Label: label})
+		wk, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{
+			AppID: appID, Key: key, Label: label, Platform: keyPlatform,
+		})
 		if err != nil {
 			return fmt.Errorf("apps: create write key: %w", err)
 		}

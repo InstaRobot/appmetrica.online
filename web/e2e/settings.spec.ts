@@ -96,7 +96,7 @@ test("settings tabs switch with the keyboard and keep ?tab=", async ({ page }) =
   await expect(page.getByRole("tabpanel", { name: "Удаления" })).toBeVisible();
 });
 
-test("app settings create and revoke a write key", async ({ page }) => {
+test("app settings create a write key for a platform and revoke it", async ({ page }) => {
   const appId = await seedAppId(page);
   await page.goto(`/apps/${appId}/settings`);
   await expect(page.getByRole("textbox", { name: /Название/ })).toHaveValue("Seed iOS");
@@ -107,6 +107,11 @@ test("app settings create and revoke a write key", async ({ page }) => {
   await page.getByRole("button", { name: "Создать ключ" }).click();
   const dialog = page.getByRole("dialog", { name: "Новый write-ключ" });
   await dialog.getByRole("textbox", { name: "Метка" }).fill(label);
+  const platform = dialog.getByRole("combobox", { name: "Платформа" });
+  await expect(platform).toHaveText("Любая платформа");
+  await expectNoA11yViolations(page);
+  await platform.click();
+  await page.getByRole("option", { name: "Android" }).click();
   await dialog.getByRole("button", { name: "Создать" }).click();
   await expect(dialog.getByRole("textbox", { name: "write-ключ" })).toHaveValue(
     /^pk_[A-Za-z0-9]{32}$/,
@@ -114,6 +119,7 @@ test("app settings create and revoke a write key", async ({ page }) => {
   await dialog.getByRole("button", { name: "Готово" }).click();
 
   const row = page.getByRole("table", { name: "Write-ключи" }).getByRole("row", { name: label });
+  await expect(row).toContainText("Android");
   await row.getByRole("button", { name: /Отозвать ключ/ }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Отозвать" }).click();
   await expect(row).toContainText("Отозван");

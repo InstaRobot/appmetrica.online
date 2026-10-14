@@ -2,9 +2,17 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Plus } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { CopyField } from "@/components/common/copy-field";
 import { FieldError } from "@/components/common/form-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/common/lazy-select";
+import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { ErrorState } from "@/components/feedback/error-state";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import {
@@ -45,7 +53,7 @@ import {
   revokeWriteKey,
   useListWriteKeys,
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
-import type { WriteKey } from "@/lib/api/gen/model";
+import { Platform, type WriteKey } from "@/lib/api/gen/model";
 import { copyText } from "@/lib/clipboard";
 import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -60,15 +68,24 @@ export function shortKey(key: string): string {
 // F-3: метка необязательна, до 64 символов.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.writeKeySchema);
 
-function CreateWriteKeyForm({ appId }: { appId: string }) {
+// Значение Select для ключа без платформы: пустую строку Radix Select не принимает.
+const ANY_PLATFORM = "any";
+const ANY_PLATFORM_LABEL = "Любая платформа";
+
+// Опции платформы ключа (04-ux-diff.md §5.2): «Любая платформа», платформы приложения, остальные.
+function platformOptions(appPlatforms: Platform[]): Platform[] {
+  return [...appPlatforms, ...Object.values(Platform).filter((p) => !appPlatforms.includes(p))];
+}
+
+function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Platform[] }) {
   const queryClient = useQueryClient();
   const [created, setCreated] = useState<WriteKey | null>(null);
   const form = useZodForm(schema, {
-    defaultValues: { label: "" },
+    defaultValues: { label: "", platform: undefined },
     messages: { label: "Не длиннее 64 символов" },
-    onSubmit: async ({ label }) => {
+    onSubmit: async ({ label, platform }) => {
       try {
-        const res = await createWriteKey(appId, { label });
+        const res = await createWriteKey(appId, platform ? { label, platform } : { label });
         if (res.status !== 201) return;
         setCreated(res.data);
         void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
@@ -98,6 +115,7 @@ function CreateWriteKeyForm({ appId }: { appId: string }) {
   }
 
   const label = form.field("label");
+  const platform = form.field("platform");
   return (
     <form noValidate onSubmit={form.handleSubmit} className="grid gap-4">
       <div className="flex flex-col gap-1.5">
@@ -111,6 +129,42 @@ function CreateWriteKeyForm({ appId }: { appId: string }) {
           onBlur={() => form.blur("label")}
         />
         <FieldError id={form.errorId("label")} message={form.errors.label} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={platform.id}>Платформа</Label>
+        <Suspense fallback={<div className="h-8 w-full rounded-lg border border-input" />}>
+          <Select
+            name="platform"
+            value={form.values.platform ?? ANY_PLATFORM}
+            onValueChange={(value) =>
+              form.setValue("platform", value === ANY_PLATFORM ? undefined : (value as Platform))
+            }
+          >
+            <SelectTrigger
+              {...platform}
+              aria-describedby={platform["aria-describedby"] ?? "write-key-platform-hint"}
+              className="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            {/* Список в диалоге: z-dropdown ниже затемнения z-overlay, клики уходили бы в него. */}
+            <SelectContent className="z-modal">
+              <SelectItem value={ANY_PLATFORM}>{ANY_PLATFORM_LABEL}</SelectItem>
+              {platformOptions(platforms).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PLATFORM_LABELS[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Suspense>
+        {form.errors.platform ? (
+          <FieldError id={form.errorId("platform")} message={form.errors.platform} />
+        ) : (
+          <p id="write-key-platform-hint" className="text-caption text-fg-muted">
+            Подставляется в события без context.platform.
+          </p>
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>
@@ -183,7 +237,7 @@ function WriteKeyRows({
   if (keys.length === 0) {
     return (
       <TableRow>
-        <TableCell colSpan={5} className="py-6 text-center text-fg-muted">
+        <TableCell colSpan={6} className="py-6 text-center text-fg-muted">
           Ключей нет — создайте первый.
         </TableCell>
       </TableRow>
@@ -211,6 +265,7 @@ function WriteKeyRows({
           </span>
         </TableCell>
         <TableCell>{key.label || "—"}</TableCell>
+        <TableCell>{key.platform ? PLATFORM_LABELS[key.platform] : ANY_PLATFORM_LABEL}</TableCell>
         <TableCell>{formatDate(key.created_at, timezone)}</TableCell>
         <TableCell>{key.last_used_at ? formatDateTime(key.last_used_at, timezone) : "—"}</TableCell>
         <TableCell className="text-right">
@@ -230,10 +285,10 @@ function WriteKeyRows({
   });
 }
 
-type WriteKeysTableProps = { appId: string; timezone: string };
+type WriteKeysTableProps = { appId: string; platforms: Platform[]; timezone: string };
 
 // Карточка «Write-ключи» S-11 (FR-010): несколько активных ключей, создание с показом ключа и отзыв.
-export function WriteKeysTable({ appId, timezone }: WriteKeysTableProps) {
+export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTableProps) {
   const query = useListWriteKeys(appId);
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<WriteKey | null>(null);
@@ -265,6 +320,7 @@ export function WriteKeysTable({ appId, timezone }: WriteKeysTableProps) {
               <TableRow>
                 <TableHead>Ключ</TableHead>
                 <TableHead>Метка</TableHead>
+                <TableHead>Платформа</TableHead>
                 <TableHead>Создан</TableHead>
                 <TableHead>Использован</TableHead>
                 <TableHead>
@@ -285,7 +341,7 @@ export function WriteKeysTable({ appId, timezone }: WriteKeysTableProps) {
             <DialogTitle>Новый write-ключ</DialogTitle>
             <DialogDescription>Ключ для отправки событий в ingest.</DialogDescription>
           </DialogHeader>
-          <CreateWriteKeyForm appId={appId} />
+          <CreateWriteKeyForm appId={appId} platforms={platforms} />
         </DialogContent>
       </Dialog>
       <RevokeWriteKeyDialog appId={appId} writeKey={revoking} onClose={() => setRevoking(null)} />

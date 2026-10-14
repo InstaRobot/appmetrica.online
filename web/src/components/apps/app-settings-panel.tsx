@@ -15,7 +15,7 @@ export function AppSettingsPanel({ appId }: { appId: string }) {
   return (
     <div className="flex max-w-[720px] flex-col gap-6">
       <AppSettingsForm key={app.id} app={app} />
-      <WriteKeysTable appId={app.id} timezone={app.timezone} />
+      <WriteKeysTable appId={app.id} platforms={app.platforms} timezone={app.timezone} />
       <AppDangerZone app={app} />
     </div>
   );
