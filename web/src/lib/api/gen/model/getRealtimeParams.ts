@@ -11,7 +11,9 @@
  * OpenAPI spec version: 1.1.0
  */
 import type { EnvironmentQParameter } from "./environmentQParameter";
+import type { FilterPlatformParameter } from "./filterPlatformParameter";
 
 export type GetRealtimeParams = {
   environment?: EnvironmentQParameter;
+  platform?: FilterPlatformParameter;
 };

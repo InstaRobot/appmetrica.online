@@ -301,8 +301,12 @@ paths:
       tags: [Realtime]
       operationId: getRealtime
       x-required-scope: read
+      description: >-
+        Срез «прямо сейчас»: люди с открытой сессией, старты сессий за 30 минут и последние события.
+        Фильтр platform сужает все три части; остальные фильтры отчётов не применяются.
       parameters:
         - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/FilterPlatform'
       responses:
         '200':
           description: Realtime-срез

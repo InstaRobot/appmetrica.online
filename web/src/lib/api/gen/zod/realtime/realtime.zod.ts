@@ -12,6 +12,9 @@
  */
 import * as zod from "zod";
 
+/**
+ * Срез «прямо сейчас»: люди с открытой сессией, старты сессий за 30 минут и последние события. Фильтр platform сужает все три части; остальные фильтры отчётов не применяются.
+ */
 export const GetRealtimeParams = zod.object({
   app_id: zod.uuid(),
 });
@@ -20,6 +23,11 @@ export const getRealtimeQueryEnvironmentDefault = `production`;
 
 export const GetRealtimeQueryParams = zod.object({
   environment: zod.enum(["production", "development"]).default(getRealtimeQueryEnvironmentDefault),
+  platform: zod
+    .array(
+      zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+    )
+    .optional(),
 });
 
 export const getRealtimeResponsePerMinuteMin = 30;

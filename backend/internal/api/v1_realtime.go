@@ -7,8 +7,8 @@ import (
 	"appmetrica.online/backend/internal/reports"
 )
 
-// GetRealtime — срез «прямо сейчас» приложения (FR-015): минуты — с offset TZ приложения, время событий —
-// UTC (06-api-contracts.md §1).
+// GetRealtime — срез «прямо сейчас» приложения (FR-015), при platform — только этих платформ: минуты — с offset
+// TZ приложения, время событий — UTC (06-api-contracts.md §1).
 func (s *Server) GetRealtime(ctx context.Context, req gen.GetRealtimeRequestObject) (gen.GetRealtimeResponseObject, error) {
 	loc, ok, err := s.appLocation(ctx, req.AppId)
 	if err != nil {
@@ -21,8 +21,13 @@ func (s *Server) GetRealtime(ctx context.Context, req gen.GetRealtimeRequestObje
 	if perr != nil {
 		return gen.GetRealtime400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
 	}
+	// Из фильтров отчётов realtime принимает только platform (переключатель платформ дашборда).
+	filters, perr := parseFilters(commonParams{Platform: req.Params.Platform})
+	if perr != nil {
+		return gen.GetRealtime400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
+	}
 
-	r, err := s.reports.Realtime(ctx, reports.Params{AppID: req.AppId, Location: loc, Env: env})
+	r, err := s.reports.Realtime(ctx, reports.Params{AppID: req.AppId, Location: loc, Env: env, Filters: filters})
 	if err != nil {
 		return nil, err
 	}

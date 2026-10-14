@@ -20,7 +20,8 @@ const (
 )
 
 // Запросы realtime (05-data-model.md §10.4, QRealtimeActiveNow / QRealtimePerMinute / QRealtimeRecentEvents).
-// unit всегда persons, фильтры отчётов не применяются. Отличия от канонического текста (OQ-046):
+// unit всегда persons, из фильтров отчётов применяется только platform ({f_platform}, пустой — все платформы).
+// Отличия от канонического текста (OQ-046):
 //   - active_now: признаки начала и конца сессии — max(name = …), а не countIf по events (OQ-042);
 //   - per_minute: 30 полных минут [{m_from_utc}, {m_to_utc}), текущая неполная минута не входит
 //     (06-api-contracts.md §2.4.6);
@@ -37,6 +38,7 @@ s AS (
       AND e.event_date BETWEEN {d_lo:Date} AND {d_hi:Date}
       AND e.event_time >= {from_utc:DateTime64(3)}
       AND e.event_time <= {future_utc:DateTime64(3)}
+      AND (empty({f_platform:Array(String)}) OR e.platform IN {f_platform:Array(String)})
     GROUP BY e.session_id
 )
 SELECT uniqExact(` + identity.PersonKeyExpr + `) AS active_now
@@ -49,6 +51,7 @@ WHERE e.app_id = {app_id:UUID} AND e.environment = {env:String} AND e.name = 'se
   AND e.event_date BETWEEN {d_lo:Date} AND {d_hi:Date}
   AND e.event_time >= {m_from_utc:DateTime64(3)}
   AND e.event_time < {m_to_utc:DateTime64(3)}
+  AND (empty({f_platform:Array(String)}) OR e.platform IN {f_platform:Array(String)})
 GROUP BY minute
 ORDER BY minute`
 
@@ -63,6 +66,7 @@ WHERE e.app_id = {app_id:UUID} AND e.environment = {env:String}
   AND e.event_date >= {late_d_lo:Date}
   AND e.received_at >= {from_utc:DateTime64(3)}
   AND e.received_at <= {now_utc:DateTime64(3)}
+  AND (empty({f_platform:Array(String)}) OR e.platform IN {f_platform:Array(String)})
 ORDER BY e.received_at DESC, e.event_time DESC, e.insert_id
 LIMIT 1 BY insert_id
 LIMIT 50` // RecentEventsLimit
@@ -108,7 +112,7 @@ type RecentEvent struct {
 }
 
 // Realtime — срез приложения p.AppID в environment p.Env ("" — production) на текущий момент часов сервиса.
-// Период, unit и фильтры p не используются: realtime всегда считает людей приложения без фильтров.
+// Период и unit p не используются: realtime всегда считает людей; из фильтров p — только Platform.
 func (s *Service) Realtime(ctx context.Context, p Params) (Realtime, error) {
 	defer s.track(ReportRealtime)()
 	now := s.clock.Now().UTC()
@@ -133,6 +137,7 @@ func (s *Service) Realtime(ctx context.Context, p Params) (Realtime, error) {
 			"d_lo":       mFrom.Format(time.DateOnly), // mFrom ≤ from
 			"d_hi":       future.Format(time.DateOnly),
 			"late_d_lo":  now.Add(-realtimeLateWindow).Format(time.DateOnly),
+			"f_platform": arrayParam(p.Filters.Platform),
 		}),
 		clickhouse.WithSettings(clickhouse.Settings{"session_timezone": "UTC"}),
 	)

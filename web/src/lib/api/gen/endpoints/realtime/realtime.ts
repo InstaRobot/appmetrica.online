@@ -113,6 +113,15 @@ export const getGetRealtimeUrl = (appId: string, params?: GetRealtimeParams) => 
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["platform"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? "null" : String(v));
+      });
+      return;
+    }
+
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? "null" : String(value));
     }
@@ -125,6 +134,9 @@ export const getGetRealtimeUrl = (appId: string, params?: GetRealtimeParams) => 
     : `/v1/apps/${appId}/realtime`;
 };
 
+/**
+ * Срез «прямо сейчас»: люди с открытой сессией, старты сессий за 30 минут и последние события. Фильтр platform сужает все три части; остальные фильтры отчётов не применяются.
+ */
 export const getRealtime = async (
   appId: string,
   params?: GetRealtimeParams,
