@@ -191,7 +191,16 @@ func isAPIKeySecret(v string) bool {
 	return true
 }
 
-type apiKeyAppKey struct{}
+type (
+	apiKeyAppKey struct{}
+	apiKeyIDKey  struct{}
+)
+
+// APIKeyIDFrom — id Bearer-ключа запроса (api_keys.id). false — запрос по cookie владельца.
+func APIKeyIDFrom(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(apiKeyIDKey{}).(uuid.UUID)
+	return id, ok
+}
 
 // APIKeyAppFrom — приложение, которым ограничен Bearer-ключ запроса (api_keys.app_id). false — запрос
 // по cookie владельца или ключом без ограничения.
@@ -261,13 +270,15 @@ func (s *Service) authorizeBearer(w http.ResponseWriter, r *http.Request, writeE
 		writeError(w, r, http.StatusTooManyRequests, "rate_limited", "Слишком много запросов с этим ключом, повторите позже")
 		return nil, false
 	}
+	ctx = context.WithValue(ctx, apiKeyIDKey{}, key.ID)
 	if key.AppID != nil {
 		if id, err := uuid.Parse(r.PathValue("app_id")); err == nil && id != *key.AppID {
 			writeError(w, r, http.StatusNotFound, "app_not_found", "Приложение не найдено")
 			return nil, false
 		}
-		r = r.WithContext(context.WithValue(ctx, apiKeyAppKey{}, *key.AppID))
+		ctx = context.WithValue(ctx, apiKeyAppKey{}, *key.AppID)
 	}
+	r = r.WithContext(ctx)
 	if !slices.ContainsFunc(scopes, func(sc string) bool { return slices.Contains(key.Scopes, sc) }) {
 		s.metrics.authFailures.WithLabelValues(failureInsufficientScope).Inc()
 		writeError(w, r, http.StatusForbidden, "insufficient_scope", "У API-ключа нет прав на эту операцию")

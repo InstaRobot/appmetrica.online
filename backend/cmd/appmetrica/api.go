@@ -17,6 +17,7 @@ import (
 	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
+	"appmetrica.online/backend/internal/deletion"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/pgstore"
 	"appmetrica.online/backend/internal/reports"
@@ -72,6 +73,7 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	srv := api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).
 		WithReports(reports.NewService(ch.Conn(), c), pg.Queries()).
+		WithDeletion(deletion.NewService(pg, c, logger)).
 		WithReadyChecks(
 			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return pg.Pool().Ping(ctx) }},
 			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},

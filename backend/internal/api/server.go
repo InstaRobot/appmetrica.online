@@ -117,10 +117,13 @@ func (s *Server) Register(mux *http.ServeMux) {
 	owner("PATCH /admin/v1/passkeys/{passkey_id}", w.RenamePasskey)
 	owner("DELETE /admin/v1/passkeys/{passkey_id}", w.DeletePasskey)
 
-	// Read API: cookie владельца или Bearer sk_ со scope read. createDeletionRequest (T-045) регистрируется
-	// так же, но со scope delete.
-	read := s.auth.RequireAPIAccess(writeError, auth.ScopeRead)
-	reader := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(read(h))) }
+	// Read API: cookie владельца или Bearer sk_ со scope read; удаление данных — со scope delete,
+	// статус удаления — с любым из двух.
+	apiAccess := func(scopes ...string) func(string, http.HandlerFunc) {
+		access := s.auth.RequireAPIAccess(writeError, scopes...)
+		return func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(access(h))) }
+	}
+	reader := apiAccess(auth.ScopeRead)
 
 	reader("GET /v1/apps", w.ListApps)
 	reader("GET /v1/apps/{app_id}", w.GetApp)
@@ -135,6 +138,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 		reader("GET /v1/apps/{app_id}/profiles", w.SearchProfiles)
 		reader("GET /v1/apps/{app_id}/profiles/{person_key}", w.GetProfile)
 		reader("GET /v1/apps/{app_id}/integration/health", w.GetIntegrationHealth)
+	}
+	if s.deletion != nil {
+		apiAccess(auth.ScopeDelete)("POST /v1/apps/{app_id}/deletion-requests", w.CreateDeletionRequest)
+		apiAccess(auth.ScopeRead, auth.ScopeDelete)("GET /v1/apps/{app_id}/deletion-requests/{request_id}", w.GetDeletionRequest)
+		owner("GET /admin/v1/deletion-requests", w.ListDeletionRequests)
 	}
 
 	owner("POST /admin/v1/apps", w.CreateApp)

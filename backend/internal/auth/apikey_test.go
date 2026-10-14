@@ -21,6 +21,7 @@ import (
 	"appmetrica.online/backend/internal/api"
 	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
+	"appmetrica.online/backend/internal/deletion"
 )
 
 var secretRe = regexp.MustCompile(`^sk_[A-Za-z0-9]{40}$`)
@@ -31,8 +32,7 @@ type keysEnv struct {
 	mux   *http.ServeMux
 	token string
 	reg   *prometheus.Registry
-	// deletion — POST /v1/apps/{app_id}/deletion-requests с проверками api (CSRF для cookie, scope delete);
-	// сам обработчик createDeletionRequest появится в T-045, здесь он отвечает 202 без тела.
+	// deletion — тот же mux: createDeletionRequest с проверками api (CSRF для cookie, scope delete).
 	deletion http.Handler
 }
 
@@ -45,12 +45,10 @@ func (h *harness) keysEnv(t *testing.T) *keysEnv {
 
 	logger := slog.New(slog.DiscardHandler)
 	mux := http.NewServeMux()
-	api.NewServer(h.svc, apps.NewService(h.pg, h.clock, logger), logger, testConfig()).Register(mux)
-	accepted := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
-	deletion := http.NewServeMux()
-	deletion.Handle("POST /v1/apps/{app_id}/deletion-requests",
-		auth.CSRF(testOrigin, writeError)(h.svc.RequireAPIAccess(writeError, auth.ScopeDelete)(accepted)))
-	return &keysEnv{h: h, mux: mux, token: sess.Token, reg: reg, deletion: deletion}
+	api.NewServer(h.svc, apps.NewService(h.pg, h.clock, logger), logger, testConfig()).
+		WithDeletion(deletion.NewService(h.pg, h.clock, logger)).
+		Register(mux)
+	return &keysEnv{h: h, mux: mux, token: sess.Token, reg: reg, deletion: mux}
 }
 
 // do выполняет запрос на handler. body — nil, сырая строка или значение для JSON.
