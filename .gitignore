@@ -48,3 +48,7 @@ web/.pnpm-store/
 backend/perf/reports/latest.json
 # Рабочий отчёт `make perf-reports` (в CI — артефакт job perf-reports)
 backend/perf/reports/reports-latest.json
+
+# ralphex: логи прогресса и worktree-ы цикла
+.ralphex/progress/
+.ralphex/worktrees/
