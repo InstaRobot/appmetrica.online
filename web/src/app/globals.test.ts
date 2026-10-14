@@ -192,6 +192,17 @@ describe("globals.css status palette", () => {
 });
 
 describe("globals.css utilities", () => {
+  // Цвет --color-X порождает утилиты text-X/bg-X: если X совпадает с типографской @utility text-X,
+  // классы сливаются (так text-code однажды получил цвет фона блока кода).
+  it("keeps @theme color names apart from text-* utilities", () => {
+    const utilities = [...css.matchAll(/@utility text-([\w-]+) \{/g)].map((m) => m[1]);
+    for (const name of utilities) {
+      expect(css, `--color-${name} collides with @utility text-${name}`).not.toMatch(
+        new RegExp(`--color-${name}:`),
+      );
+    }
+  });
+
   it.each([
     "text-kpi-xl",
     "text-kpi-lg",
