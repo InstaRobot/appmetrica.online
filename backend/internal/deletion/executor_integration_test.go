@@ -72,7 +72,7 @@ func (h *harness) executor(purger deletion.Purger) *deletion.Executor {
 	if purger == nil {
 		purger = deletion.NewClickHousePurger(h.env.CH.Conn())
 	}
-	return deletion.NewExecutor(h.env.PG, purger, h.clock, h.logger)
+	return deletion.NewExecutor(h.env.PG, purger, h.clock, h.logger, nil)
 }
 
 func (h *harness) status(t *testing.T, appID, id uuid.UUID) sqlc.DeletionRequest {

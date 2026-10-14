@@ -1,6 +1,9 @@
+import { createLoader } from "nuqs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { audienceCurl, buildCurl, READ_API_URL, readApiBaseUrl } from "./copy-as-curl";
-import { loadAudienceSearch, resolveAudienceState } from "./url-state";
+import { audienceSearchParams, resolveAudienceState } from "./url-state";
+
+const loadAudienceSearch = createLoader(audienceSearchParams);
 
 const APP = "0192aaaa-0000-7000-8000-000000000001";
 const AUTH = `-H "Authorization: Bearer $APPMETRICA_SK"`;

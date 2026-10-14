@@ -428,3 +428,41 @@ func TestClientIP(t *testing.T) {
 		})
 	}
 }
+
+// Токен ссылки регистрации passkey стоит в пути: в лог попадает шаблон маршрута, а не сам путь.
+func TestAccessLog_RoutePatternInsteadOfPath(t *testing.T) {
+	var buf bytes.Buffer
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /admin/v1/auth/setup/{token}/begin", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h := stack(newLogger(&buf), mux)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/v1/auth/setup/SECRET-TOKEN/begin", nil))
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.NotContains(t, buf.String(), "SECRET-TOKEN")
+	lines := decodeLogLines(t, &buf)
+	require.Len(t, lines, 1)
+	require.Equal(t, "/admin/v1/auth/setup/{token}/begin", lines[0]["path"])
+
+	// Маршрут не совпал — пишется сырой путь: параметров маршрута в нём нет.
+	buf.Reset()
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
+	require.Equal(t, "/nope", decodeLogLines(t, &buf)[0]["path"])
+}
+
+// Два заголовка Content-Encoding — не identity и не один gzip: 400 unsupported_content_encoding.
+func TestGzip_RejectsRepeatedHeader(t *testing.T) {
+	h := httpx.Chain(echoBody(), httpx.RequestID(clock.NewFixed(fixedNow)), httpx.Gunzip())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", bytes.NewReader(gzipBytes(t, []byte("{}"))))
+	req.Header.Add("Content-Encoding", "gzip")
+	req.Header.Add("Content-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	var env errorEnvelope
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &env))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "unsupported_content_encoding", env.Error.Code)
+}

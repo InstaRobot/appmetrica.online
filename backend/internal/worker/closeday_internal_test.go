@@ -171,14 +171,14 @@ func jobApp(id uuid.UUID, tzName string, created time.Time, status sqlc.AppStatu
 	return sqlc.ListAppsForJobsRow{ID: id, Name: id.String(), Timezone: tzName, Status: status, CreatedAt: created}
 }
 
-func runCloseDay(t *testing.T, store *fakeCloseDayStore, closer *fakeDayCloser, lock *fakeLocker, opts ...CloseDayOption) (Details, error) {
+func runCloseDay(t *testing.T, store *fakeCloseDayStore, closer *fakeDayCloser, lock *fakeLocker, maxDays int) (Details, error) {
 	t.Helper()
-	job := CloseDayJob(store, closer, lock, clock.NewFixed(closeNow), opts...)
+	job := CloseDayJob(store, closer, lock, clock.NewFixed(closeNow), maxDays)
 	return job.Run(t.Context(), uuid.New())
 }
 
 func TestCloseDayJob_Schedule(t *testing.T) {
-	job := CloseDayJob(&fakeCloseDayStore{}, &fakeDayCloser{}, &fakeLocker{ok: true}, clock.NewFixed(closeNow))
+	job := CloseDayJob(&fakeCloseDayStore{}, &fakeDayCloser{}, &fakeLocker{ok: true}, clock.NewFixed(closeNow), DefaultCloseMaxDays)
 	require.Equal(t, "close_day", job.Name)
 	require.Equal(t, 15*time.Minute, job.Every)
 	require.Positive(t, job.Timeout)
@@ -194,7 +194,7 @@ func TestCloseDayJob_ClosesAppsInTheirTimezones(t *testing.T) {
 	closer := &fakeDayCloser{}
 	lock := &fakeLocker{ok: true}
 
-	details, err := runCloseDay(t, store, closer, lock)
+	details, err := runCloseDay(t, store, closer, lock, DefaultCloseMaxDays)
 	require.NoError(t, err)
 	require.Equal(t, []closeCall{
 		{appMSK, "2026-10-13", "Europe/Moscow"},
@@ -219,11 +219,11 @@ func TestCloseDayJob_MaxDaysPerRun(t *testing.T) {
 		jobApp(appMSK, "Europe/Moscow", time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), sqlc.AppStatusActive),
 	}}
 	closer := &fakeDayCloser{}
-	_, err := runCloseDay(t, store, closer, &fakeLocker{ok: true}, WithMaxDaysPerRun(5))
+	_, err := runCloseDay(t, store, closer, &fakeLocker{ok: true}, 5)
 	require.NoError(t, err)
 	require.Equal(t, []string{"2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"}, store.days(appMSK))
 
-	_, err = runCloseDay(t, store, closer, &fakeLocker{ok: true}, WithMaxDaysPerRun(5))
+	_, err = runCloseDay(t, store, closer, &fakeLocker{ok: true}, 5)
 	require.NoError(t, err)
 	require.Len(t, store.days(appMSK), 10)
 	require.Equal(t, "2026-10-10", store.days(appMSK)[9])
@@ -235,7 +235,7 @@ func TestCloseDayJob_SkipsWhenLocked(t *testing.T) {
 		jobApp(appMSK, "Europe/Moscow", time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), sqlc.AppStatusActive),
 	}}
 	closer := &fakeDayCloser{}
-	details, err := runCloseDay(t, store, closer, &fakeLocker{ok: false})
+	details, err := runCloseDay(t, store, closer, &fakeLocker{ok: false}, DefaultCloseMaxDays)
 	require.NoError(t, err)
 	require.Equal(t, Details{"skipped": "locked"}, details)
 	require.Empty(t, closer.calls)
@@ -243,14 +243,14 @@ func TestCloseDayJob_SkipsWhenLocked(t *testing.T) {
 
 func TestCloseDayJob_LockError(t *testing.T) {
 	closer := &fakeDayCloser{}
-	_, err := runCloseDay(t, &fakeCloseDayStore{}, closer, &fakeLocker{err: errors.New("pg down")})
+	_, err := runCloseDay(t, &fakeCloseDayStore{}, closer, &fakeLocker{err: errors.New("pg down")}, DefaultCloseMaxDays)
 	require.ErrorContains(t, err, "pg down")
 	require.Empty(t, closer.calls)
 }
 
 func TestCloseDayJob_ListAppsError(t *testing.T) {
 	lock := &fakeLocker{ok: true}
-	_, err := runCloseDay(t, &fakeCloseDayStore{listErr: errors.New("pg down")}, &fakeDayCloser{}, lock)
+	_, err := runCloseDay(t, &fakeCloseDayStore{listErr: errors.New("pg down")}, &fakeDayCloser{}, lock, DefaultCloseMaxDays)
 	require.ErrorContains(t, err, "pg down")
 	require.Equal(t, 1, lock.released)
 }
@@ -268,7 +268,7 @@ func TestCloseDayJob_AppErrorDoesNotStopOthers(t *testing.T) {
 		}
 		return nil
 	}}
-	details, err := runCloseDay(t, store, closer, &fakeLocker{ok: true})
+	details, err := runCloseDay(t, store, closer, &fakeLocker{ok: true}, DefaultCloseMaxDays)
 	require.ErrorContains(t, err, "clickhouse: connection refused")
 	require.ErrorContains(t, err, appMSK.String())
 	require.ErrorContains(t, err, "2026-10-11")
@@ -283,7 +283,7 @@ func TestCloseDayJob_InvalidTimezone(t *testing.T) {
 		jobApp(appMSK, "Mars/Olympus", time.Date(2026, 10, 12, 21, 0, 0, 0, time.UTC), sqlc.AppStatusActive),
 		jobApp(appNYC, "America/New_York", time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC), sqlc.AppStatusActive),
 	}}
-	_, err := runCloseDay(t, store, &fakeDayCloser{}, &fakeLocker{ok: true})
+	_, err := runCloseDay(t, store, &fakeDayCloser{}, &fakeLocker{ok: true}, DefaultCloseMaxDays)
 	require.ErrorContains(t, err, "Mars/Olympus")
 	require.Empty(t, store.days(appMSK))
 	require.Equal(t, []string{"2026-10-12"}, store.days(appNYC))
@@ -295,7 +295,7 @@ func TestCloseDayJob_MarkError(t *testing.T) {
 		markErr: errors.New("pg down"),
 	}
 	closer := &fakeDayCloser{}
-	_, err := runCloseDay(t, store, closer, &fakeLocker{ok: true})
+	_, err := runCloseDay(t, store, closer, &fakeLocker{ok: true}, DefaultCloseMaxDays)
 	require.ErrorContains(t, err, "pg down")
 	require.Len(t, closer.calls, 1, "после ошибки closed_days следующий день не закрывается")
 }

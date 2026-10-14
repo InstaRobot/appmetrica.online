@@ -8,14 +8,15 @@ import (
 	"mime"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	// MaxBodyBytes — лимит тела запроса после распаковки gzip.
+	// MaxBodyBytes — лимит тела запроса после распаковки gzip по умолчанию (INGEST_MAX_BODY_BYTES).
 	MaxBodyBytes = 1 << 20
-	// MaxBatchEvents — максимум событий в батче.
+	// MaxBatchEvents — максимум событий в батче по умолчанию (INGEST_MAX_EVENTS).
 	MaxBatchEvents = 500
 )
 
@@ -33,6 +34,9 @@ type Batch struct {
 	// ClientIP — адрес клиента из httpx.ClientIP (нулевой, если не определён). Только для гео-поиска
 	// в Enricher: не сохраняется, не логируется и не попадает в ответы и метрики.
 	ClientIP netip.Addr
+
+	// raw — поля батча до validateBatch.
+	raw rawBatch
 }
 
 // rawBatch — верхний уровень EventBatch; неизвестные поля игнорируются.
@@ -52,20 +56,20 @@ func supportedMediaType(contentType string) bool {
 // readBody читает тело, уже ограниченное http.MaxBytesReader поверх распаковки gzip.
 // Любая другая ошибка чтения — обрыв или битый поток gzip — считается невалидным телом.
 // При ошибке возвращается прочитанное начало тела (для сэмпла в rejected_events).
-func readBody(r *http.Request) ([]byte, *Error) {
+func readBody(r *http.Request, limit int64) ([]byte, *Error) {
 	body, err := io.ReadAll(r.Body)
 	if err == nil {
 		return body, nil
 	}
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return body, errPayloadTooLarge
+		return body, payloadTooLarge(limit)
 	}
 	return body, errInvalidJSON
 }
 
-// decodeBatch разбирает тело в порядке 06-api-contracts.md §2.4.1: JSON → ключ → поля батча.
-// headerKey — значение заголовка X-App-Key; ключ из query string не читается никогда. Ошибка полей
-// батча возвращается вместе с Batch, в котором заполнен только AppKey.
+// decodeBatch разбирает тело в порядке 06-api-contracts.md §2.4.1: JSON → ключ. Поля батча проверяет
+// validateBatch уже после проверки ключа: отозванный ключ получает 401, а не 400 invalid_batch.
+// headerKey — значение заголовка X-App-Key; ключ из query string не читается никогда.
 func decodeBatch(body []byte, headerKey string) (*Batch, *Error) {
 	var raw rawBatch
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -82,19 +86,24 @@ func decodeBatch(body []byte, headerKey string) (*Batch, *Error) {
 	if e != nil {
 		return nil, e
 	}
-	sentAt, e := sentAt(raw.SentAt)
+	return &Batch{AppKey: key, raw: raw}, nil
+}
+
+// validateBatch проверяет sent_at и events (1..maxEvents) и заполняет SentAt, Events и Context.
+func validateBatch(b *Batch, maxEvents int) *Error {
+	sentAt, e := sentAt(b.raw.SentAt)
 	if e != nil {
-		return &Batch{AppKey: key}, e
+		return e
 	}
-	events, e := events(raw.Events)
+	events, e := events(b.raw.Events, maxEvents)
 	if e != nil {
-		return &Batch{AppKey: key}, e
+		return e
 	}
-	b := &Batch{AppKey: key, SentAt: sentAt, Events: events}
-	if !isNull(raw.Context) {
-		b.Context = raw.Context
+	b.SentAt, b.Events = sentAt, events
+	if !isNull(b.raw.Context) {
+		b.Context = b.raw.Context
 	}
-	return b, nil
+	return nil
 }
 
 // appKey выбирает ключ из заголовка или тела. Оба заданы и различаются — invalid_batch:
@@ -135,7 +144,7 @@ func sentAt(raw json.RawMessage) (time.Time, *Error) {
 	return t, nil
 }
 
-func events(raw json.RawMessage) ([]json.RawMessage, *Error) {
+func events(raw json.RawMessage, maxEvents int) ([]json.RawMessage, *Error) {
 	if isNull(raw) {
 		return nil, invalidBatch("events", issueRequired, "Поле events обязательно.")
 	}
@@ -143,11 +152,12 @@ func events(raw json.RawMessage) ([]json.RawMessage, *Error) {
 	if err := json.Unmarshal(raw, &events); err != nil {
 		return nil, invalidBatch("events", issueType, "events должен быть массивом событий.")
 	}
+	rangeMsg := "events: от 1 до " + strconv.Itoa(maxEvents) + " событий."
 	switch {
 	case len(events) == 0:
-		return nil, invalidBatch("events", issueMinItems, "events: от 1 до 500 событий.")
-	case len(events) > MaxBatchEvents:
-		return nil, invalidBatch("events", issueMaxItems, "events: от 1 до 500 событий.")
+		return nil, invalidBatch("events", issueMinItems, rangeMsg)
+	case len(events) > maxEvents:
+		return nil, invalidBatch("events", issueMaxItems, rangeMsg)
 	}
 	return events, nil
 }

@@ -313,7 +313,7 @@ backend/
 | `cmd/appmetrica` | любой `internal/*` | — |
 | `internal/api` | `gen/api`, `auth`, `apps`, `reports`, `deletion`, `identity`, `pgstore`, `chstore`, `httpx`, `clock`, `config` | `ingest`, `worker` |
 | `internal/ingest` | `gen/ingestapi`, `geo`, `ratelimit`, `chstore`, `pgstore`, `httpx`, `clock`, `config` | `api`, `reports`, `auth`, `worker` |
-| `internal/worker` | `reports`, `deletion`, `telegram`, `chstore`, `pgstore`, `clock`, `config` | `api`, `ingest` |
+| `internal/worker` | `reports`, `deletion`, `telegram`, `identity`, `chstore`, `pgstore`, `clock`, `config` | `api`, `ingest` |
 | `internal/reports` | `chstore`, `identity`, `clock` | `pgstore`, `api`, `ingest`, `worker` |
 | `internal/deletion` | `chstore`, `pgstore`, `identity`, `clock` | `api`, `ingest`, `worker` |
 | `internal/auth`, `internal/apps` | `pgstore`, `clock`, `config` | `chstore`, `reports`, `api` |
@@ -414,7 +414,7 @@ web/
 | TS-клиент | `make gen-web` | `pnpm gen:api` (orval 8.42.0): `contracts/openapi/api.yaml` → `web/src/lib/api/gen/{endpoints,model,zod}` |
 | Проверка актуальности | `make gen-check` | `make gen` + `git diff --exit-code` по трём каталогам (то же в CI) |
 | Миграции | `make migrate-up` / `make migrate-status` | `go run ./cmd/appmetrica migrate up|status` (goose, embed.FS, оба диалекта) |
-| Демо-данные | `make seed` | `go run ./cmd/seed --apps 3 --days 35 --daily-installs 400 --write-key $DEV_WRITE_KEY` |
+| Демо-данные | `make seed` | `go run ./cmd/seed --apps 3 --days 35 --daily-installs 400 --write-key $DEV_WRITE_KEY [--seed 1]` |
 | Гео-база локально | `make geo-db` | скачивает DB-IP City Lite текущего (или прошлого) месяца в `backend/.geo/` |
 | Ссылка passkey | `make passkey-link` | `go run ./cmd/appmetrica admin passkey-link` |
 | Тестовые данные | `go run ./testdata/gen [-seed 42 \| geo]` | `testdata/fixtures/scenario.ndjson` и `testdata/geo/test-city.mmdb` |
@@ -582,3 +582,4 @@ web/content/docs/                              # пользовательска�
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial project structure (monorepo backend + web + contracts + deploy) |
 | 2026-10-14 | 1.1 | Сверка с кодом после MVP (Task 52): каталоги `scripts/`, `docs/reconciliation/`, `contracts/http/`, `.ralphex/`; вместо `docs/adr/` — ADR в 03-architecture §5; страницы с `*-view.tsx`; компоненты по 14-ux-ui-spec §4 плюс оболочки (`app-shell`, `user-menu`, `audience-kpis`, `realtime-panel`, `app-settings-panel`, `app-danger-zone`, `tab-header`) и ленивые обёртки `lazy-*`; `lib/` (`url-state` вместо `search-params`, `forms/`, `docs/`, `errors`, `rejection-codes` и др.), хуки — только два; backend: `keycache.go` в `internal/ingest` (снимок в atomic.Pointer, last_used_at раз в 5 мин), три миграции ClickHouse 00001–00003, пакет `docscheck`, `perf/`, `testdata/{geo,gen}`; правила archtest для тестовых пакетов; фикстуры `smoke`/`scenario` + golden; E2E-спеки и a11y в каждой спеке; таблица `scripts/`; «куда положить» — имена хендлеров `v1_<report>.go` / `<area>_handlers.go` и задач worker |
+| 2026-10-14 | 1.2 | Ревью MVP: `internal/worker` может импортировать `identity` (лист без зависимостей; алиас `reports.UnitPersons` убран); экранирование параметров ClickHouse — общее в `chstore/params.go`; флаг `--seed` у `cmd/seed` |

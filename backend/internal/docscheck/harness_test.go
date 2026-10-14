@@ -33,7 +33,6 @@ func ingestHandler(t *testing.T, keys ingest.KeyStore, events ingest.EventWriter
 
 	rl := ingest.RejectedLogger{Sink: rejected, Keys: cache, Metrics: metrics}
 	p := ingest.NewPipeline(ingest.PipelineConfig{
-		Keys: cache,
 		Limits: ingest.RateLimits{
 			Apps:     ratelimit.NewAppLimiter(2000, 4000, clk),
 			Installs: ratelimit.NewInstallLimiter(100, 1000, clk),
@@ -48,6 +47,6 @@ func ingestHandler(t *testing.T, keys ingest.KeyStore, events ingest.EventWriter
 		Metrics:  metrics,
 	})
 	return httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
-		Processor: p, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
+		Processor: p, Keys: cache, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
 	}), httpx.CORS(), httpx.RequestID(clk))
 }

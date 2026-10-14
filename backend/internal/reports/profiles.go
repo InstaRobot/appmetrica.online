@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 
+	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/identity"
 )
 
@@ -292,7 +292,7 @@ func (s *Service) userInstalls(ctx context.Context, appID uuid.UUID, user string
 	var rows []struct {
 		InstallID uuid.UUID `ch:"install_id"`
 	}
-	ctx = profileContext(ctx, clickhouse.Parameters{"app_id": appID.String(), "user_id": user})
+	ctx = profileContext(ctx, clickhouse.Parameters{"app_id": appID.String(), "user_id": chstore.StringParam(user)})
 	if err := s.conn.Select(ctx, &rows, qProfileUserInstalls); err != nil {
 		return nil, fmt.Errorf("reports: profile user installs: %w", err)
 	}
@@ -305,15 +305,11 @@ func (s *Service) userInstalls(ctx context.Context, appID uuid.UUID, user string
 
 // personParameters — {app_id}, {unit}, {person_key} и {install_ids} запросов человека.
 func personParameters(appID uuid.UUID, key identity.PersonKey, installs []uuid.UUID) clickhouse.Parameters {
-	ids := make([]string, 0, len(installs))
-	for _, id := range installs {
-		ids = append(ids, "'"+id.String()+"'")
-	}
 	return clickhouse.Parameters{
 		"app_id":      appID.String(),
 		"unit":        string(identity.Persons),
-		"person_key":  key.String(),
-		"install_ids": "[" + strings.Join(ids, ",") + "]",
+		"person_key":  chstore.StringParam(key.String()),
+		"install_ids": chstore.UUIDArrayParam(installs),
 	}
 }
 

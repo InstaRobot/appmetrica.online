@@ -211,7 +211,7 @@ test-web: ## Unit-тесты web (Vitest)
 	cd $(WEB) && pnpm test
 
 .PHONY: e2e
-e2e: ## E2E Playwright (требует запущенных ingest, api с APP_ENV=e2e и worker: `make dev-infra migrate-up` + run-ingest/run-api-e2e/run-worker)
+e2e: ## E2E Playwright (требует запущенных ingest, api с APP_ENV=e2e и worker: `make dev-infra migrate-up geo-db seed` + run-ingest/run-api-e2e/run-worker)
 	cd $(WEB) && pnpm build && pnpm e2e
 
 .PHONY: lint

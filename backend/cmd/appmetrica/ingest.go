@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -71,21 +70,7 @@ func runIngest(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var wg sync.WaitGroup
-	for _, run := range srv.background {
-		wg.Go(func() { run(ctx) })
-	}
-	wg.Go(func() {
-		if serveHTTP(ctx, logger, cfg.MetricsListenAddr, metricsHandler(reg)) != 0 {
-			cancel()
-		}
-	})
-	code := serveHTTP(ctx, logger, cfg.ListenAddr, srv.handler)
-	cancel()
-	wg.Wait() // фоновые задачи сбрасывают last_used_at и rejected_events до закрытия соединений
-	return code
+	return serveProcess(ctx, logger, cfg.ListenAddr, srv.handler, cfg.MetricsListenAddr, metricsHandler(reg), srv.background...)
 }
 
 // ingestDeps — внешние зависимости ingest; в production — Postgres, ClickHouse и mmdb DB-IP.
@@ -130,7 +115,6 @@ func newIngestServer(cfg config.Ingest, deps ingestDeps, reg prometheus.Register
 	})
 	rejected := ingest.RejectedLogger{Sink: rejectedLog, Keys: keys, Metrics: metrics}
 	pipeline := ingest.NewPipeline(ingest.PipelineConfig{
-		Keys:     keys,
 		Limits:   limits,
 		Enricher: ingest.Enricher{Geo: deps.Geo, AcceptDevelopment: cfg.AcceptDevelopment},
 		Time:     ingest.TimeConfig{FutureTolerance: cfg.FutureTolerance, LateWindow: cfg.LateWindow},
@@ -142,7 +126,8 @@ func newIngestServer(cfg config.Ingest, deps ingestDeps, reg prometheus.Register
 	})
 	// CORS отвечает на preflight сам, поэтому OPTIONS до хендлера не доходит.
 	events := httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
-		Processor: pipeline, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rejected,
+		Processor: pipeline, Keys: keys, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rejected,
+		MaxBodyBytes: cfg.MaxBodyBytes, MaxEvents: cfg.MaxEvents,
 	}), httpx.CORS())
 	ready := ingest.NewReadyHandler(append([]ingest.ReadyCheck{keys.ReadyCheck()}, deps.Ready...)...)
 	h := newRouter(logger, clk, func(mux *http.ServeMux) {

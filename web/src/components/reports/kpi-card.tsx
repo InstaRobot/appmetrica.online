@@ -4,7 +4,7 @@ import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatDelta, formatDuration, formatInt, formatPercent } from "@/lib/format";
+import { formatDelta, formatDuration, formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Delta } from "./delta";
 import { Sparkline } from "./sparkline";
@@ -14,7 +14,7 @@ export type KpiCardProps = {
   /** Текст tooltip из METRIC_DEFINITIONS. */
   definition: string;
   value: number | null;
-  format: "number" | "duration" | "percent";
+  format: "number" | "duration";
   /** Из AudienceSummary.compare.delta_pct; undefined/null — дельта не показывается. */
   deltaPct?: number | null | undefined;
   /** «медиана 2 мин 5 с». */
@@ -26,7 +26,7 @@ export type KpiCardProps = {
   loading?: boolean;
 };
 
-const FORMATS = { number: formatInt, duration: formatDuration, percent: formatPercent };
+const FORMATS = { number: formatInt, duration: formatDuration };
 
 // deltaLabel — дельта словами для скринридеров: «рост на 4,1 % к предыдущему периоду».
 export function deltaLabel(value: number | null): string | null {

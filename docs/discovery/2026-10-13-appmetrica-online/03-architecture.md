@@ -778,7 +778,7 @@ Docker обходит UFW, поэтому фильтрация выполняе�
 **Metrics**
 - Provider: Prometheus-формат на `METRICS_LISTEN_ADDR` (:9090) каждого Go-процесса, без внешнего хранилища; worker читает метрики ingest для `system_check`.
 - Business (из ClickHouse, на экранах): DAU, новые, сессии, retention по приложениям; на S-10 — accepted/rejected за 24 ч.
-- System: `ingest_events_total{result=accepted|rejected}`, `ingest_rejections_total{code}`, `ingest_batch_duration_seconds` (histogram), `clickhouse_insert_errors_total`, `key_cache_age_seconds`, `geo_db_loaded`, `http_requests_total{service,route,status}`, `http_request_duration_seconds`, `report_query_duration_seconds{report}`, `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}`.
+- System: `ingest_requests_total{status}`, `ingest_events_accepted_total{app_id}`, `ingest_events_rejected_total{code}`, `ingest_warnings_total{code}`, `ingest_batch_duration_seconds` (histogram), `ingest_clickhouse_insert_duration_seconds`, `ingest_clickhouse_insert_errors_total`, `ingest_rate_limited_total{scope}`, `ingest_key_cache_size`, `ingest_key_cache_last_refresh_timestamp_seconds`, `ingest_key_cache_refresh_errors_total`, `api_request_duration_seconds{operation,status}`, `api_clickhouse_query_duration_seconds{report}`, `api_auth_failures_total{reason}`, `api_rate_limited_total`, `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}`, `worker_alerts_firing{key}`, `worker_telegram_send_errors_total` (полный список — 02-tech-spec.md §Metrics).
 
 **Traces**
 - `# Deviation`: OpenTelemetry tracing не внедряется (три процесса, один сервер, один владелец). Корреляция — сквозной `request_id` (заголовок `X-Request-Id`, проброс web → api, логирование во всех сервисах). Триггер пересмотра — второй сервер или межсервисные цепочки длиннее двух хопов.
@@ -817,3 +817,4 @@ Docker обходит UFW, поэтому фильтрация выполняе�
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial architecture после discovery: C4 L1/L2/L3, 8 потоков, ADR-001…ADR-014, топология Hetzner AX102-1 + Dokploy |
 | 2026-10-14 | 1.1 | §L3 backend: KeyCache перенесён из `apps/` в `ingest/keycache.go` — как в коде и по правилам импорта 07-project-structure §5 |
+| 2026-10-14 | 1.2 | Observability: список системных метрик приведён к именам в коде (`ingest_events_accepted_total`/`ingest_events_rejected_total` вместо `ingest_events_total`/`ingest_rejections_total`, `ingest_key_cache_last_refresh_timestamp_seconds` вместо `key_cache_age_seconds`, без `geo_db_loaded`/`http_requests_total`/`report_query_duration_seconds`) |

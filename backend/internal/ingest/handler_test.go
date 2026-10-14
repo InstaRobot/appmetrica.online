@@ -492,7 +492,7 @@ func labelCounts(t *testing.T, reg *prometheus.Registry, name, label string) map
 	return out
 }
 
-// newRateHarness — конвейер Authenticate → RateLimits.LimitApp → fakeProcessor; fakeProcessor стоит
+// newRateHarness — проверка ключа в хендлере, затем RateLimits.LimitApp → fakeProcessor; fakeProcessor стоит
 // на месте записи в ClickHouse. Ключ testKey принадлежит appA, otherKey — appB.
 func newRateHarness(t *testing.T, eventsPerSec float64, burst int) (*keyHarness, ingest.RateLimits) {
 	t.Helper()
@@ -504,7 +504,7 @@ func newRateHarness(t *testing.T, eventsPerSec float64, burst int) (*keyHarness,
 		Installs: ratelimit.NewInstallLimiter(100, 1000, h.clock),
 		Metrics:  h.metrics,
 	}
-	h.setPipeline(ingest.Authenticate(h.cache, limits.LimitApp(h.proc)))
+	h.setPipeline(limits.LimitApp(h.proc))
 	return h, limits
 }
 
@@ -758,4 +758,47 @@ func TestIngestHandler_UnknownFieldsIgnored(t *testing.T) {
 
 func installKey(app uuid.UUID, installID string) ratelimit.InstallKey {
 	return ratelimit.InstallKey{AppID: app, InstallID: uuid.MustParse(installID)}
+}
+
+// 06-api-contracts.md §2.4.1: ключ проверяется до полей батча — неизвестный ключ и архив получают 401/403,
+// даже если батч невалиден; с рабочим ключом тот же батч — 400 invalid_batch.
+func TestIngestHandler_KeyCheckedBeforeBatchFields(t *testing.T) {
+	h := newKeyHarness(t, ingest.KeyCacheConfig{})
+	h.store.set(keyRow(wk1, testKey, appA, sqlc.AppStatusActive), keyRow(wk2, otherKey, appB, sqlc.AppStatusArchived))
+	require.NoError(t, h.cache.Refresh(t.Context()))
+	malformed := []byte(`{"events":[]}`)
+	post := func(key string) *httptest.ResponseRecorder {
+		return h.do(t, request{contentType: "application/json", header: key, body: malformed})
+	}
+
+	requireError(t, post("pk_unknownunknownunknownunknownun"), http.StatusUnauthorized, "invalid_app_key")
+	requireError(t, post(otherKey), http.StatusForbidden, "app_archived")
+	env := requireError(t, post(testKey), http.StatusBadRequest, "invalid_batch")
+	require.Equal(t, "sent_at", env.Error.Details["field"])
+	require.Empty(t, h.proc.calls())
+}
+
+// INGEST_MAX_EVENTS и INGEST_MAX_BODY_BYTES: лимиты хендлера и тексты ошибок берутся из конфига.
+func TestIngestHandler_ConfiguredLimits(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics, err := ingest.NewMetrics(reg)
+	require.NoError(t, err)
+	h := &harness{proc: &fakeProcessor{}, reg: reg, logs: &bytes.Buffer{}}
+	c := clock.NewFixed(receivedAt)
+	h.handler = httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
+		Processor: h.proc, Clock: c, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)), Metrics: metrics,
+		MaxEvents: 2, MaxBodyBytes: 2048,
+	}), httpx.RequestID(c))
+	post := func(body []byte) *httptest.ResponseRecorder {
+		return h.do(t, request{contentType: "application/json", header: testKey, body: body})
+	}
+
+	requireAccepted(t, post([]byte(batchWithEvents(2))), 2)
+	env := requireError(t, post([]byte(batchWithEvents(3))), http.StatusBadRequest, "invalid_batch")
+	require.Equal(t, "max_items", env.Error.Details["issue"])
+	require.Contains(t, env.Error.Message, "от 1 до 2 событий")
+
+	env = requireError(t, post(paddedBatch(t, 2049)), http.StatusRequestEntityTooLarge, "payload_too_large")
+	require.Contains(t, env.Error.Message, "больше 2 048 байт")
+	require.Len(t, h.proc.calls(), 1)
 }

@@ -20,11 +20,6 @@ describe("Delta", () => {
     render(<Delta value={null} />);
     expect(screen.getByText("—")).toHaveClass("text-fg-muted");
   });
-
-  it("inverts tones for metrics where growth is bad", () => {
-    render(<Delta value={2.5} invert />);
-    expect(screen.getByText(`+2,5${NBSP}%`)).toHaveClass("text-negative");
-  });
 });
 
 describe("Sparkline", () => {

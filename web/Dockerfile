@@ -27,10 +27,13 @@ RUN pnpm build
 
 FROM ${NODE_IMAGE} AS run
 WORKDIR /app
+# API_INTERNAL_URL читается и во время работы (server components, /docs): ENV стадии build в образ не попадает.
+ARG API_INTERNAL_URL=http://appmetrica-api:8080
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    API_INTERNAL_URL=${API_INTERNAL_URL}
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public

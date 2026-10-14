@@ -49,7 +49,6 @@ func realtimeIngest(t *testing.T, env *testutil.Env) (http.Handler, uuid.UUID) {
 	require.NoError(t, cache.Refresh(ctx))
 	rl := ingest.RejectedLogger{Sink: chstore.NewRejectedLog(chstore.RejectedLogConfig{Inserter: env.CH}), Keys: cache, Metrics: metrics}
 	p := ingest.NewPipeline(ingest.PipelineConfig{
-		Keys: cache,
 		Limits: ingest.RateLimits{
 			Apps:     ratelimit.NewAppLimiter(2000, 4000, clk),
 			Installs: ratelimit.NewInstallLimiter(100, 1000, clk),
@@ -64,7 +63,7 @@ func realtimeIngest(t *testing.T, env *testutil.Env) (http.Handler, uuid.UUID) {
 		Metrics:  metrics,
 	})
 	h := httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
-		Processor: p, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
+		Processor: p, Keys: cache, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
 	}), httpx.RequestID(clk))
 	return h, app.ID
 }

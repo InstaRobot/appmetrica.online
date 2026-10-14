@@ -30,14 +30,6 @@ type Locker interface {
 	TryAdvisoryLock(ctx context.Context, key string) (release func(), ok bool, err error)
 }
 
-// CloseDayOption настраивает CloseDayJob.
-type CloseDayOption func(*closeDay)
-
-// WithMaxDaysPerRun — сколько дней одного приложения закрывается за запуск.
-func WithMaxDaysPerRun(n int) CloseDayOption {
-	return func(c *closeDay) { c.maxDays = n }
-}
-
 // closedRange — дни from … to приложения, закрытые запуском (job_runs.details.apps).
 type closedRange struct {
 	AppID uuid.UUID `json:"app_id"`
@@ -55,24 +47,22 @@ type closeDay struct {
 
 // CloseDayJob — job close_day раз в 15 минут (FR-022): для каждого приложения, включая архивные, закрывает
 // дни до D = сегодня − 8 в его TZ, как только там наступило 03:30. Первый запуск закрывает дни с apps.created_at,
-// дальше — с дня после последнего закрытого, не больше WithMaxDaysPerRun дней приложения за запуск. День
+// дальше — с дня после последнего закрытого, не больше maxDays дней приложения за запуск (DefaultCloseMaxDays). День
 // закрывается записью daily_stats, затем closed_days: сбой между ними безопасен, повтор перезапишет строки.
 // Ошибка приложения останавливает только его дни; остальные приложения закрываются, запуск — failed.
-func CloseDayJob(store CloseDayStore, stats DayCloser, lock Locker, c clock.Clock, opts ...CloseDayOption) Job {
-	cd := &closeDay{store: store, stats: stats, lock: lock, clock: c, maxDays: defaultCloseMaxDays}
-	for _, o := range opts {
-		o(cd)
-	}
+func CloseDayJob(store CloseDayStore, stats DayCloser, lock Locker, c clock.Clock, maxDays int) Job {
+	cd := &closeDay{store: store, stats: stats, lock: lock, clock: c, maxDays: maxDays}
 	return Job{Name: "close_day", Every: closeDayEvery, Timeout: closeDayTimeout, Run: cd.run}
 }
+
+// DefaultCloseMaxDays — дней одного приложения за запуск close_day в production (02-tech-spec.md FR-022).
+const DefaultCloseMaxDays = 400
 
 const (
 	closeDayEvery = 15 * time.Minute
 	// closeDayTimeout — запуск с догоняющим закрытием длиннее тика; следующий ждёт его окончания.
 	closeDayTimeout = 14 * time.Minute
-	// defaultCloseMaxDays — дней приложения за запуск (02-tech-spec.md FR-022).
-	defaultCloseMaxDays = 400
-	closeDayLockKey     = "close_day"
+	closeDayLockKey = "close_day"
 	// closeAfterMinutes — 03:30: к этому времени по TZ приложения день D − 8 закрывается.
 	closeAfterMinutes = 3*60 + 30
 )

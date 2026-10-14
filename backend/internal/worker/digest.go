@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"appmetrica.online/backend/internal/clock"
+	"appmetrica.online/backend/internal/identity"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 	"appmetrica.online/backend/internal/reports"
 )
@@ -108,7 +109,7 @@ func (d *digest) run(ctx context.Context, _ uuid.UUID) (Details, error) {
 		return Details{"skipped": "no_apps", "sent_on": sentOn}, nil
 	}
 
-	q := reports.PortfolioQuery{OwnerLocation: loc, Env: reports.EnvProduction, Unit: reports.UnitPersons}
+	q := reports.PortfolioQuery{OwnerLocation: loc, Env: reports.EnvProduction, Unit: identity.Persons}
 	for _, app := range apps {
 		appLoc, err := time.LoadLocation(app.Timezone)
 		if err != nil {

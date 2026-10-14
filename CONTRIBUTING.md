@@ -41,7 +41,7 @@ appmetrica.online — внутренняя система аналитики п�
 4. Если меняется HTTP-контракт: сначала правишь `contracts/openapi/*.yaml`, затем `make gen`, затем код и тесты.
 5. Если меняется схема БД: новая миграция goose (`backend/migrations/{postgres,clickhouse}/NNNNN_snake_case.sql`), старые миграции не редактируются никогда.
 6. Перед коммитом выполни Validation Commands (раздел 4). Все должны пройти.
-7. Коммит по Conventional Commits: `<type>(<scope>): <subject>` на английском, scope — имя пакета или экрана (`feat(ingest): reject events older than late window`). Типы: feat, fix, refactor, test, docs, chore, ci, build, perf, revert. В теле — ID тикета (`Refs: T-012`).
+7. Коммит по Conventional Commits: `<type>(<scope>): <subject>` на английском, scope — имя пакета или экрана (`feat(ingest): reject events older than late window`). Типы: feat, fix, refactor, test, docs, chore, ci, build, perf, revert. В теле — ID тикета (`Refs: T-012`). Тест и реализация — разными коммитами: сначала `test(<scope>): …`, потом `feat`/`fix`. CI-job `tdd-order` (`scripts/check-tdd-order.sh`) падает, если первый коммит с кодом пакета раньше первого коммита с его тестом; локально — `make tdd-order BASE=origin/main`. Метку `tdd-exception` (hotfix) ставит только владелец.
 8. Один тикет — одна ветка `feat/T-012-short-slug` — один PR не больше ~500 строк диффа (без сгенерированного кода).
 
 ## 4. Validation Commands (выполнять перед каждым коммитом)
@@ -52,13 +52,15 @@ cd backend && go test -race -count=1 ./... && golangci-lint run ./... && cd ..
 cd web && pnpm biome check . && pnpm typecheck && pnpm test && cd ..
 ```
 
+Короткая форма всего набора — `make check` (gen-check + линтеры, включая `scripts/reconcile`, + unit-тесты Go, web и скриптов). Если тикет трогает `scripts/**` — обязательно `make test-scripts` (bash-тесты CI-скриптов и деплоя, `go test` в `scripts/reconcile`); если трогает PII-guard ingest — `make fuzz` (CI гоняет 30 с).
+
 Если тикет затрагивает SQL ClickHouse или Postgres — дополнительно интеграционные тесты (нужен Docker):
 
 ```bash
 cd backend && go test -race -count=1 -tags=integration ./... && cd ..
 ```
 
-Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e`. Цель собирает web и запускает Playwright, а сервисы должны быть уже запущены: `make dev-infra migrate-up`, затем `make run-ingest`, `make run-api-e2e` (`APP_ENV=e2e`, сбрасывает владельца и passkey в базе!) и `make run-worker` (см. `12-dev-runbook.md`).
+Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e`. Цель собирает web и запускает Playwright, а сервисы должны быть уже запущены: `make dev-infra migrate-up geo-db seed` (демо-данные нужны `audience.spec.ts`, `retention.spec.ts`, `realtime.spec.ts`), затем `make run-ingest`, `make run-api-e2e` (`APP_ENV=e2e`, сбрасывает владельца и passkey в базе!) и `make run-worker` (см. `12-dev-runbook.md`).
 
 Если тикет добавляет клиентский код или зависимость в web — дополнительно бюджет initial JS: `cd web && pnpm build && pnpm check:bundle` (≤ 250 KB gzip на страницу дашборда).
 

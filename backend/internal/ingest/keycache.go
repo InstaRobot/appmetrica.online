@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 
 	"appmetrica.online/backend/internal/clock"
-	"appmetrica.online/backend/internal/gen/ingestapi"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
@@ -102,9 +101,6 @@ func (c *KeyCache) Refresh(ctx context.Context) error {
 	c.cfg.Metrics.KeyCacheLastRefresh.Set(float64(now.Unix()))
 	return nil
 }
-
-// Loaded сообщает, была ли хотя бы одна успешная загрузка.
-func (c *KeyCache) Loaded() bool { return c.snap.Load() != nil }
 
 // fresh возвращает снимок, если он загружен и не старше KeyCacheMaxAge.
 func (c *KeyCache) fresh() (*keySnapshot, bool) {
@@ -216,26 +212,6 @@ func (c *KeyCache) ReadyCheck() ReadyCheck {
 		}
 		return nil
 	}}
-}
-
-// Authenticate — шаг конвейера: находит ключ батча в кэше, кладёт KeyInfo в Batch.Key и передаёт
-// батч дальше. Батч с отклонённым ключом до next не доходит.
-func Authenticate(keys *KeyCache, next Processor) Processor {
-	return authenticator{keys: keys, next: next}
-}
-
-type authenticator struct {
-	keys *KeyCache
-	next Processor
-}
-
-func (a authenticator) Process(ctx context.Context, b *Batch) (ingestapi.IngestResult, error) {
-	info, err := a.keys.Lookup(b.AppKey)
-	if err != nil {
-		return ingestapi.IngestResult{}, err
-	}
-	b.Key = info
-	return a.next.Process(ctx, b)
 }
 
 var (

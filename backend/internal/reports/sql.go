@@ -23,9 +23,6 @@ const (
 	EnvDevelopment = "development"
 )
 
-// UnitPersons — identity.Persons для пакетов, которым identity не разрешён (worker, правила internal/archtest).
-const UnitPersons = identity.Persons
-
 // eventsFilter — условия по events AS e: приложение, отсечение партиций по UTC-датам, период в UTC,
 // environment и фильтры (OR внутри параметра — IN по массиву, AND между параметрами, пустой массив — без фильтра).
 const eventsFilter = `e.app_id = {app_id:UUID}

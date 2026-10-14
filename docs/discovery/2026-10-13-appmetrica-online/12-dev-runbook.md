@@ -124,9 +124,9 @@ make env        # копирует .env.example → .env, если .env ещё �
 
 ### 3.2. Что значит каждая группа (полный список — `.env.example`)
 - **Общие Go**: `APP_ENV`, `LOG_LEVEL`, `METRICS_LISTEN_ADDR`, `POSTGRES_URL`, `CLICKHOUSE_ADDR`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_MIGRATE_USER`, `CLICKHOUSE_MIGRATE_PASSWORD`.
-- **ingest**: `INGEST_LISTEN_ADDR`, `GEOIP_DB_PATH`, `INGEST_MAX_BODY_BYTES`, `INGEST_MAX_EVENTS`, `INGEST_LATE_WINDOW`, `INGEST_FUTURE_TOLERANCE`, `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST`, `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST`, `KEY_CACHE_REFRESH`.
-- **api**: `API_LISTEN_ADDR`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_ORIGINS`, `WEBAUTHN_RP_NAME`, `SESSION_TTL`, `SESSION_IDLE_TTL`, `KEY_HASH_PEPPER`, `MIGRATE_ON_START`.
-- **worker**: `WORKER_LISTEN_ADDR`, `PUBLIC_BASE_URL` (ссылка в дайджесте), `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`.
+- **ingest**: `INGEST_LISTEN_ADDR`, `GEOIP_DB_PATH`, `INGEST_MAX_BODY_BYTES`, `INGEST_MAX_EVENTS`, `INGEST_LATE_WINDOW`, `INGEST_FUTURE_TOLERANCE`, `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST`, `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST`, `KEY_CACHE_REFRESH`, `INGEST_ACCEPT_DEVELOPMENT` (kill switch для `environment=development`).
+- **api**: `API_LISTEN_ADDR`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_ORIGINS`, `WEBAUTHN_RP_NAME`, `SESSION_TTL`, `SESSION_IDLE_TTL`, `KEY_HASH_PEPPER`, `MIGRATE_ON_START`, `API_PUBLIC_BEARER_ENABLED` (kill switch Bearer `sk_`), `TELEGRAM_BOT_TOKEN` (кнопка «Отправить тест» на S-12), `BACKUP_API_URL` (блок бэкапа в статусе системы S-12).
+- **worker**: `WORKER_LISTEN_ADDR`, `WORKER_JOBS_ENABLED`, `PUBLIC_BASE_URL` (ссылка в дайджесте), `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`.
 - **web**: `API_INTERNAL_URL`, `NEXT_PUBLIC_INGEST_URL`, `NEXT_PUBLIC_API_URL`.
 - **Инфраструктура**: `CLICKHOUSE_ADMIN_PASSWORD`, `CLICKHOUSE_RW_PASSWORD`, `CLICKHOUSE_RO_PASSWORD`, `POSTGRES_PASSWORD`; clickhouse-backup: `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `CLICKHOUSE_USERNAME`, `BACKUPS_TO_KEEP_REMOTE`, `WATCH_INTERVAL`, `FULL_INTERVAL`.
 - **Только локально**: `DEV_WRITE_KEY` (write-ключ, который создаёт `make seed`).
@@ -142,9 +142,9 @@ make env        # копирует .env.example → .env, если .env ещё �
 | `CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` | `appmetrica_ro` | `appmetrica_rw` | `appmetrica_rw` | — | — |
 | `CLICKHOUSE_MIGRATE_USER`/`CLICKHOUSE_MIGRATE_PASSWORD`, `MIGRATE_ON_START=true` | ✓ | — | — | — | — |
 | Группа ingest | — | ✓ | — | — | — |
-| Группа api (`PUBLIC_BASE_URL=https://appmetrica.online`, `WEBAUTHN_RP_ID=appmetrica.online`, `WEBAUTHN_RP_ORIGINS=https://appmetrica.online`) | ✓ | — | — | — | — |
+| Группа api (`PUBLIC_BASE_URL=https://appmetrica.online`, `WEBAUTHN_RP_ID=appmetrica.online`, `WEBAUTHN_RP_ORIGINS=https://appmetrica.online`, `TELEGRAM_BOT_TOKEN`, `BACKUP_API_URL=http://clickhouse-backup:7171`) | ✓ | — | — | — | — |
 | Группа worker (`PUBLIC_BASE_URL=https://appmetrica.online`, `INGEST_HEALTH_URL=http://appmetrica-ingest:8081/health`, `API_HEALTH_URL=http://appmetrica-api:8080/health`, `INGEST_METRICS_URL=http://appmetrica-ingest:9090/metrics`, `BACKUP_API_URL=http://clickhouse-backup:7171`) | — | — | ✓ | — | — |
-| `API_INTERNAL_URL` (build-arg, уже зашит в образ) | — | — | — | ✓ | — |
+| `API_INTERNAL_URL` (build-arg; `web/Dockerfile` задаёт его и как ENV для `next start` — переопределять в Environment не нужно) | — | — | — | ✓ | — |
 | Пароли ClickHouse, S3, `CLICKHOUSE_USERNAME`, `BACKUPS_TO_KEEP_REMOTE`, `WATCH_INTERVAL`, `FULL_INTERVAL` | — | — | — | — | ✓ |
 
 ---
@@ -171,10 +171,11 @@ make migrate-status   # таблицы goose_db_version в Postgres и ClickHous
 ```
 Создать новую миграцию:
 ```bash
+# NNNNN — следующий номер после последнего файла в каталоге (сейчас Postgres 00002, ClickHouse 00004)
 # Postgres
-printf -- '-- +goose Up\n\n-- +goose Down\n' > backend/migrations/postgres/00002_<change>.sql
+printf -- '-- +goose Up\n\n-- +goose Down\n' > backend/migrations/postgres/NNNNN_<change>.sql
 # ClickHouse (каждый DDL — отдельный блок; без транзакций)
-printf -- '-- +goose NO TRANSACTION\n-- +goose Up\n-- +goose StatementBegin\n\n-- +goose StatementEnd\n\n-- +goose Down\n-- +goose StatementBegin\n\n-- +goose StatementEnd\n' > backend/migrations/clickhouse/00002_<change>.sql
+printf -- '-- +goose NO TRANSACTION\n-- +goose Up\n-- +goose StatementBegin\n\n-- +goose StatementEnd\n\n-- +goose Down\n-- +goose StatementBegin\n\n-- +goose StatementEnd\n' > backend/migrations/clickhouse/NNNNN_<change>.sql
 make gen-sqlc         # если менялась схема Postgres
 ```
 **Правило**: миграции только expand/contract — новая колонка добавляется с DEFAULT, старая удаляется отдельной миграцией
@@ -188,7 +189,7 @@ make seed
 `backend/cmd/seed` создаёт в Postgres 3 приложения («Seed iOS» ios, «Seed Android» android, «Seed Site» web, TZ
 `Europe/Moscow`), write-ключ `DEV_WRITE_KEY` для «Seed iOS» и пишет в ClickHouse напрямую (минуя ingest и окно 7 дней)
 35 дней событий: ~400 новых установок в день, сессии по кривой удержания D1≈35 %, D7≈15 %, 20 % установок с `user_id`,
-5 % установок со вторым устройством того же `user_id`. Повторный запуск идемпотентен (детерминированный seed RNG).
+5 % установок со вторым устройством того же `user_id`. Повторный запуск идемпотентен (детерминированный seed RNG; флаг `--seed <uint64>`, по умолчанию 1). Остальные флаги — `--apps`, `--days`, `--daily-installs`, `--write-key`.
 
 ---
 
@@ -201,11 +202,12 @@ make seed
 make dev
 ```
 `make dev` = `dev-infra` → `migrate-up` → `geo-db` → параллельно `run-ingest`, `run-api`, `run-worker`, `run-web`.
-Ожидаемый вывод:
+Ожидаемый вывод (в `APP_ENV=development` логи текстовые, в production — JSON; у каждого процесса ещё одна строка `listening` для порта метрик):
 ```
-{"level":"INFO","msg":"ingest listening","addr":":8081"}
-{"level":"INFO","msg":"api listening","addr":":8080"}
-{"level":"INFO","msg":"worker started","jobs":["system_check","digest","close_day","deletion","session_cleanup"]}
+time=… level=INFO msg=listening process=ingest version=dev addr=[::]:8081
+time=… level=INFO msg=listening process=api version=dev addr=[::]:8080
+time=… level=INFO msg="jobs enabled" process=worker version=dev jobs=system_check,digest,close_day,deletion,session_cleanup
+time=… level=INFO msg=listening process=worker version=dev addr=[::]:8082
 ▲ Next.js 16.4.0
 - Local:    http://localhost:3000
 ✓ Ready in 2.1s
@@ -476,8 +478,11 @@ gh workflow run deploy.yml -f tag=<prev_sha>   # образ должен быт�
 
 ### 10.2. Метрики
 Каждый Go-процесс отдаёт Prometheus-метрики на `:9090/metrics` (внутри сети Dokploy, наружу не публикуется). Ключевые:
-`ingest_events_total{result="accepted|rejected",code}`, `ingest_request_duration_seconds`, `ingest_clickhouse_insert_errors_total`,
-`api_request_duration_seconds{operation}`, `worker_job_runs_total{job,status}`. Worker читает метрики ingest для алерта `insert_errors`.
+`ingest_requests_total{status}`, `ingest_events_accepted_total{app_id}`, `ingest_events_rejected_total{code}`, `ingest_warnings_total{code}`,
+`ingest_batch_duration_seconds`, `ingest_clickhouse_insert_duration_seconds`, `ingest_clickhouse_insert_errors_total`, `ingest_rate_limited_total{scope}`,
+`ingest_key_cache_size`, `ingest_key_cache_last_refresh_timestamp_seconds`, `api_request_duration_seconds{operation}`, `api_clickhouse_query_duration_seconds`,
+`api_auth_failures_total{reason}`, `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}`, `worker_alerts_firing{key}`,
+`worker_telegram_send_errors_total`. Worker читает метрики ingest для алерта `insert_errors`.
 Локально: `curl -s localhost:9091/metrics | grep ingest_`.
 
 ### 10.3. Logs
@@ -553,7 +558,7 @@ passkey (телефон + ноутбук) в S-12 → Passkeys; удалить �
 | `make gen-sqlc`: `permission denied` на `internal/pgstore/sqlc` | Контейнер sqlc запускается с `-u $(id -u):$(id -g)`; удали каталог, созданный ранее от root: `sudo rm -rf backend/internal/pgstore/sqlc` |
 | `pnpm install`: `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` | pnpm 12 не ставит версии моложе 24 часов. Подожди сутки после релиза или выбери предыдущую версию; политику не отключать |
 | `pnpm install`: `ERR_PNPM_IGNORED_BUILDS` | Новая зависимость со скриптом сборки: проверь пакет и добавь `<name>: true` в `allowBuilds` (`web/pnpm-workspace.yaml`) |
-| В production дашборд ходит на `localhost:8080` | `rewrites` зашиваются при `next build`: образ web собран без `API_INTERNAL_URL=http://appmetrica-api:8080` — пересобрать (CI передаёт build-arg) |
+| В production дашборд ходит на `localhost:8080` | `API_INTERNAL_URL` нужен и при `next build` (`rewrites`), и при `next start` (server components, `/docs`): образ web собран без `--build-arg API_INTERNAL_URL=http://appmetrica-api:8080` — пересобрать (CI передаёт build-arg, `web/Dockerfile` прокидывает его в ENV стадии run) |
 | `make test-integration`: `Cannot connect to the Docker daemon` | Запусти Docker Desktop/OrbStack; для Colima: `export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` |
 | В событиях пустые `country`/`city` локально | Нет гео-базы: `make geo-db`; `GEOIP_DB_PATH=.geo/dbip-city-lite.mmdb` — путь относительно `backend/`. Приватные IP (`10.*`, `192.168.*`) страну не дают — передай `context.ip` с публичным адресом |
 | Отчёт падает `Memory limit exceeded` (`appmetrica_ro`, 8 ГБ) | Сузить период (≤ 366 дней) или фильтр; проверить, что запрос фильтрует по `app_id` и `event_date` (первые ключи сортировки). Подробно — [21-ops-runbooks.md](./21-ops-runbooks.md) |

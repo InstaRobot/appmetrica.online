@@ -122,7 +122,6 @@ func newPipelineHarness(t *testing.T, opts ...func(*ingest.PipelineConfig)) *pip
 		Metrics:  kh.metrics,
 	}
 	cfg := ingest.PipelineConfig{
-		Keys:     kh.cache,
 		Limits:   h.limits,
 		Enricher: ingest.Enricher{Geo: openGeo(t), AcceptDevelopment: true},
 		Time:     ingest.DefaultTimeConfig,
@@ -137,6 +136,7 @@ func newPipelineHarness(t *testing.T, opts ...func(*ingest.PipelineConfig)) *pip
 	}
 	h.handler = httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
 		Processor:   ingest.NewPipeline(cfg),
+		Keys:        kh.cache,
 		Clock:       kh.clock,
 		Logger:      kh.logger,
 		Metrics:     kh.metrics,

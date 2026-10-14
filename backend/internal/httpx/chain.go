@@ -14,15 +14,15 @@ func Chain(h http.Handler, mws ...Middleware) http.Handler {
 	return h
 }
 
-// statusWriter запоминает статус и число записанных байт ответа.
-type statusWriter struct {
+// StatusWriter запоминает статус и число записанных байт ответа; используется и middleware вне httpx.
+type StatusWriter struct {
 	http.ResponseWriter
 	status      int
 	bytes       int64
 	wroteHeader bool
 }
 
-func (w *statusWriter) WriteHeader(code int) {
+func (w *StatusWriter) WriteHeader(code int) {
 	if !w.wroteHeader {
 		w.status = code
 		w.wroteHeader = true
@@ -30,7 +30,7 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-func (w *statusWriter) Write(b []byte) (int, error) {
+func (w *StatusWriter) Write(b []byte) (int, error) {
 	if !w.wroteHeader {
 		w.status = http.StatusOK
 		w.wroteHeader = true
@@ -40,16 +40,13 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// StatusWriter — writer, запоминающий статус ответа, для middleware вне httpx.
-type StatusWriter = statusWriter
-
 // NewStatusWriter оборачивает w; статус по умолчанию — 200 (обработчик ничего не записал явно).
 func NewStatusWriter(w http.ResponseWriter) *StatusWriter {
-	return &statusWriter{ResponseWriter: w, status: http.StatusOK}
+	return &StatusWriter{ResponseWriter: w, status: http.StatusOK}
 }
 
 // Status — записанный статус ответа.
-func (w *statusWriter) Status() int { return w.status }
+func (w *StatusWriter) Status() int { return w.status }
 
 // Unwrap даёт http.ResponseController доступ к Flush и дедлайнам исходного writer.
-func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *StatusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

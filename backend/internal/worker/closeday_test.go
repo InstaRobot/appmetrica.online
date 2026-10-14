@@ -53,7 +53,7 @@ type harness struct {
 	logger *slog.Logger
 }
 
-func newHarness(t *testing.T, opts ...worker.CloseDayOption) *harness {
+func newHarness(t *testing.T, maxDays int) *harness {
 	t.Helper()
 	env := testutil.Start(t)
 	env.LoadNDJSON(t, testutil.ScenarioPath())
@@ -63,7 +63,7 @@ func newHarness(t *testing.T, opts ...worker.CloseDayOption) *harness {
 	return &harness{
 		env: env, clock: clk, stats: stats, logger: logger,
 		sched: worker.NewScheduler(env.PG.Queries(), clk, logger, []string{"close_day"},
-			worker.CloseDayJob(env.PG.Queries(), stats, env.PG, clk, opts...)),
+			worker.CloseDayJob(env.PG.Queries(), stats, env.PG, clk, maxDays)),
 	}
 }
 
@@ -158,7 +158,7 @@ func (h *harness) physicalRows(t *testing.T, appID uuid.UUID) uint64 {
 // AC-050.1 (AC-8.3.1): в 03:31 по Москве закрывается 2026-10-13 — 4 строки daily_stats, значения равны
 // live-расчёту getAudienceSummary за этот день, строка closed_days.
 func TestCloseDay_WritesFourRows(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, worker.DefaultCloseMaxDays)
 	msk := testutil.ScenarioApps[0]
 	h.addApp(t, msk, "2026-10-13", false)
 
@@ -197,7 +197,7 @@ func TestCloseDay_WritesFourRows(t *testing.T) {
 // AC-050.2 (AC-8.3.2): в 03:31 по Москве (20:31 накануне в Нью-Йорке) из двух приложений закрыто только
 // московское; архивное приложение (Токио, 09:31) тоже закрывается; Нью-Йорк закрывается после 03:30 по своей TZ.
 func TestCloseDay_RespectsAppTimezone(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, worker.DefaultCloseMaxDays)
 	msk, nyc, tyo := testutil.ScenarioApps[0], testutil.ScenarioApps[1], testutil.ScenarioApps[2]
 	h.addApp(t, msk, "2026-10-13", false)
 	h.addApp(t, nyc, "2026-10-13", false)
@@ -225,7 +225,7 @@ func TestCloseDay_RespectsAppTimezone(t *testing.T) {
 // AC-050.3 (AC-8.3.3): повторный запуск по закрытому дню не добавляет строк closed_days, в daily_stats после
 // FINAL — 4 строки; сбой между записью daily_stats и closed_days тоже не плодит строк.
 func TestCloseDay_Idempotent(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, worker.DefaultCloseMaxDays)
 	msk := testutil.ScenarioApps[0]
 	h.addApp(t, msk, "2026-10-13", false)
 
@@ -249,7 +249,7 @@ func TestCloseDay_Idempotent(t *testing.T) {
 // AC-050.4 (AC-8.3.4): первая попытка упала на ClickHouse — closed_days не записан, job_runs failed; следующий
 // цикл закрывает день, в job_runs — failed и ok.
 func TestCloseDay_RetriesAfterFailure(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, worker.DefaultCloseMaxDays)
 	msk := testutil.ScenarioApps[0]
 	h.addApp(t, msk, "2026-10-13", false)
 	h.stats.failures = 1
@@ -272,7 +272,7 @@ func TestCloseDay_RetriesAfterFailure(t *testing.T) {
 // FR-022: первый запуск закрывает дни с apps.created_at (в TZ приложения), не больше лимита за проход;
 // следующие запуски продолжают с последнего закрытого дня.
 func TestCloseDay_CatchesUpFromCreatedAt(t *testing.T) {
-	h := newHarness(t, worker.WithMaxDaysPerRun(4))
+	h := newHarness(t, 4)
 	msk := testutil.ScenarioApps[0]
 	h.addApp(t, msk, "2026-10-05", false)
 

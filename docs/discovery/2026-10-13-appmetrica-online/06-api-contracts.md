@@ -788,7 +788,7 @@ curl -sS "https://api.appmetrica.online/v1/apps/$APP/retention?from=2026-07-06&t
 |---|---|---|---|
 | golden_day | `from=to=2026-10-01`, `periods=7`, «сегодня» = 2026-10-13 | `size=10`, `values=[1.0,0.4,…,0.2]` как в golden | `backend/internal/reports/retention_test.go::TestRetention_DayGolden` |
 | classic_not_rolling | человек вернулся только на D3 | учитывается в D3, не в D1/D2 | `backend/internal/reports/retention_test.go::TestRetention_ClassicNotRolling` |
-| future_null | когорта 2026-10-10, «сегодня» 2026-10-13 | D4 и далее `null` | `backend/internal/reports/retention_test.go::TestRetention_FuturePeriodsNull` |
+| future_null | когорта 2026-10-10, «сегодня» 2026-10-13 | период N — только если день `cohort_start + N` раньше «сегодня» (OQ-045 (2)): D0…D2 — числа, D3 и далее `null`; когорта в будущем — `size = 0` | `backend/internal/reports/retention_test.go::TestRetention_NullsForFutureAndEmpty` |
 | week | `cohort_granularity=week` | недели ISO с понедельника, golden | `backend/internal/reports/retention_test.go::TestRetention_WeekGolden` |
 | retro_merge | анонимный install в когорте, через 2 дня логин | человек остаётся в одной когорте (по первому дню), D2 засчитан | `backend/internal/reports/retention_test.go::TestRetention_RetroMergeKeepsCohort` |
 | unit_installs | `unit=installs` | когорты по install, golden `retention_installs.golden.json` | `backend/internal/reports/retention_test.go::TestRetention_UnitInstalls` |
@@ -3594,3 +3594,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial API contracts: ingest.yaml (POST /v1/events, health), api.yaml (Read API /v1, Admin API /admin/v1), test vectors, codegen configs |
+| 2026-10-14 | 1.1 | `listApps`, `getApp`, `getRealtime`: добавлен ответ `400 BadRequest` (как в `contracts/openapi/api.yaml` и contract-тестах); вектор `future_null` приведён к правилу «только завершённые периоды» и имени теста |

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -167,4 +169,30 @@ func parseFlags(fs *flag.FlagSet, args []string, stderr io.Writer) bool {
 		return false
 	}
 	return true
+}
+
+// serveProcess — общий цикл процесса: основной HTTP-сервер, сервер метрик и фоновые задачи до отмены ctx.
+// Остановка любого сервера останавливает остальные; код выхода ненулевой, если любой из них завершился
+// с ошибкой — занятый порт метрик не должен выглядеть как штатная остановка.
+func serveProcess(ctx context.Context, logger *slog.Logger, addr string, h http.Handler, metricsAddr string, metrics http.Handler, background ...func(ctx context.Context)) int {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wg sync.WaitGroup
+	for _, run := range background {
+		wg.Go(func() { run(ctx) })
+	}
+	var metricsFailed atomic.Bool
+	wg.Go(func() {
+		if serveHTTP(ctx, logger, metricsAddr, metrics) != 0 {
+			metricsFailed.Store(true)
+			cancel()
+		}
+	})
+	code := serveHTTP(ctx, logger, addr, h)
+	cancel()
+	wg.Wait() // фоновые задачи сбрасывают last_used_at и rejected_events до закрытия соединений
+	if metricsFailed.Load() {
+		return 1
+	}
+	return code
 }

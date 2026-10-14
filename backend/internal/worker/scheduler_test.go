@@ -34,6 +34,8 @@ type fakeJournal struct {
 	mu       sync.Mutex
 	runs     []*journalRun
 	startErr error
+	// finishErr — FinishJobRun падает, строка остаётся running.
+	finishErr error
 }
 
 func (j *fakeJournal) StartJobRun(_ context.Context, arg sqlc.StartJobRunParams) (uuid.UUID, error) {
@@ -50,6 +52,9 @@ func (j *fakeJournal) StartJobRun(_ context.Context, arg sqlc.StartJobRunParams)
 func (j *fakeJournal) FinishJobRun(_ context.Context, arg sqlc.FinishJobRunParams) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.finishErr != nil {
+		return j.finishErr
+	}
 	for _, r := range j.runs {
 		if r.id == arg.ID {
 			r.finished = arg.Now
@@ -292,4 +297,48 @@ func TestScheduler_Metrics(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]bool{"worker_job_failures_total": true, "worker_job_duration_seconds": true}, got)
+}
+
+// job_runs не обновился: при успешной задаче ошибка записи возвращается наружу (строка остаётся running
+// и видна на S-12), при упавшей задаче наружу уходит ошибка самой задачи.
+func TestScheduler_FinishJobRunFails(t *testing.T) {
+	cases := []struct {
+		name    string
+		jobErr  error
+		wantErr string
+	}{
+		{"job ok", nil, "finish deletion: pg down"},
+		{"job failed", errors.New("boom"), "deletion: boom"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			journal := &fakeJournal{finishErr: errors.New("pg down")}
+			s := NewScheduler(journal, clock.NewFixed(testNow), discardLogger(), []string{"deletion"}, Job{
+				Name: "deletion", Every: time.Minute,
+				Run: func(context.Context, uuid.UUID) (Details, error) { return Details{"n": 1}, tc.jobErr },
+			})
+
+			err := s.RunOnce(t.Context(), "deletion")
+			require.ErrorContains(t, err, tc.wantErr)
+			runs := journal.byJob(sqlc.JobNameDeletion)
+			require.Len(t, runs, 1)
+			require.Equal(t, sqlc.JobStatusRunning, runs[0].status)
+			require.Nil(t, runs[0].finished)
+		})
+	}
+}
+
+// Детали, которые нельзя закодировать в JSON, не роняют запись итога: в job_runs уходит {}.
+func TestScheduler_UnencodableDetails(t *testing.T) {
+	journal := &fakeJournal{}
+	s := NewScheduler(journal, clock.NewFixed(testNow), discardLogger(), []string{"deletion"}, Job{
+		Name: "deletion", Every: time.Minute,
+		Run: func(context.Context, uuid.UUID) (Details, error) { return Details{"ch": make(chan int)}, nil },
+	})
+
+	require.NoError(t, s.RunOnce(t.Context(), "deletion"))
+	runs := journal.byJob(sqlc.JobNameDeletion)
+	require.Len(t, runs, 1)
+	require.Equal(t, sqlc.JobStatusOk, runs[0].status)
+	require.Equal(t, map[string]any{}, runs[0].details)
 }

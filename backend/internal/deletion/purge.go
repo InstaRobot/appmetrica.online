@@ -10,6 +10,8 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+
+	"appmetrica.online/backend/internal/chstore"
 )
 
 // Запросы job deletion (05-data-model.md, QDelete*; пользователь appmetrica_rw с ALTER DELETE). Имена таблиц
@@ -70,7 +72,7 @@ func (p chPurger) Ping(ctx context.Context) error {
 // user_first_seen не трогается: пользователь мог быть и на других установках.
 func (p chPurger) PurgeInstall(ctx context.Context, appID, installID uuid.UUID) error {
 	installs := []uuid.UUID{installID}
-	params := clickhouse.Parameters{"app_id": appID.String(), "install_ids": uuidArrayParam(installs)}
+	params := clickhouse.Parameters{"app_id": appID.String(), "install_ids": chstore.UUIDArrayParam(installs)}
 	if err := p.exec(ctx, "events", qDeleteEventsByInstalls, params); err != nil {
 		return err
 	}
@@ -84,7 +86,7 @@ func (p chPurger) PurgeUser(ctx context.Context, appID uuid.UUID, userID string)
 	if err != nil {
 		return err
 	}
-	params := clickhouse.Parameters{"app_id": appID.String(), "user_id": stringParam(userID), "install_ids": uuidArrayParam(installs)}
+	params := clickhouse.Parameters{"app_id": appID.String(), "user_id": chstore.StringParam(userID), "install_ids": chstore.UUIDArrayParam(installs)}
 	if err := p.exec(ctx, "events", qDeleteEventsByUser, params); err != nil {
 		return err
 	}
@@ -106,7 +108,7 @@ func (p chPurger) PurgeApp(ctx context.Context, appID uuid.UUID) error {
 
 // purgeInstallAggregates — install_first_seen, rejected_events (installs и userNeedles) и identity_links.
 func (p chPurger) purgeInstallAggregates(ctx context.Context, appID uuid.UUID, installs []uuid.UUID, users []string) error {
-	params := clickhouse.Parameters{"app_id": appID.String(), "install_ids": uuidArrayParam(installs)}
+	params := clickhouse.Parameters{"app_id": appID.String(), "install_ids": chstore.UUIDArrayParam(installs)}
 	if len(installs) > 0 {
 		if err := p.exec(ctx, "install_first_seen", qDeleteInstallFirstSeen, params); err != nil {
 			return err
@@ -121,11 +123,11 @@ func (p chPurger) purgeInstallAggregates(ctx context.Context, appID uuid.UUID, i
 		rejected := clickhouse.Parameters{"app_id": appID.String()}
 		if len(chunk) > 0 {
 			conds = append(conds, rejectedByInstalls)
-			rejected["install_needles"] = stringArrayParam(chunk)
+			rejected["install_needles"] = chstore.StringArrayParam(chunk)
 		}
 		if i == 0 && len(users) > 0 {
 			conds = append(conds, rejectedByUser)
-			rejected["user_needles"] = stringArrayParam(users)
+			rejected["user_needles"] = chstore.StringArrayParam(users)
 		}
 		query := fmt.Sprintf(qDeleteRejectedMentions, strings.Join(conds, " OR "))
 		if err := p.exec(ctx, "rejected_events", query, rejected); err != nil {
@@ -144,7 +146,7 @@ func (p chPurger) linkedInstalls(ctx context.Context, appID uuid.UUID, userID st
 	var rows []struct {
 		InstallID uuid.UUID `ch:"install_id"`
 	}
-	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{"app_id": appID.String(), "user_id": stringParam(userID)}))
+	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{"app_id": appID.String(), "user_id": chstore.StringParam(userID)}))
 	if err := p.conn.Select(ctx, &rows, qLinkedInstalls); err != nil {
 		return nil, fmt.Errorf("clickhouse: user installs: %w", err)
 	}
@@ -165,39 +167,6 @@ func (p chPurger) exec(ctx context.Context, table, query string, params clickhou
 		return fmt.Errorf("clickhouse: delete from %s: %w", table, err)
 	}
 	return nil
-}
-
-// arrayEscaper — экранирование строки внутри кавычек текстового формата ClickHouse (как в reports).
-var arrayEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\t", `\t`, "\n", `\n`, "\r", `\r`, "\x00", `\0`)
-
-// textEscaper — экранирование значения параметра String: сервер разбирает его как текст формата Escaped,
-// и без этого `\x` в user_id превратился бы в другой символ (clickhouse-go экранирует только кавычки дампа).
-var textEscaper = strings.NewReplacer(`\`, `\\`, "\t", `\t`, "\n", `\n`, "\r", `\r`, "\x00", `\0`)
-
-func stringParam(v string) string { return textEscaper.Replace(v) }
-
-// stringArrayParam — значение параметра Array(String): ['a','b'].
-func stringArrayParam(values []string) string {
-	var b strings.Builder
-	b.WriteByte('[')
-	for i, v := range values {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteByte('\'')
-		b.WriteString(arrayEscaper.Replace(v))
-		b.WriteByte('\'')
-	}
-	b.WriteByte(']')
-	return b.String()
-}
-
-func uuidArrayParam(ids []uuid.UUID) string {
-	values := make([]string, 0, len(ids))
-	for _, id := range ids {
-		values = append(values, id.String())
-	}
-	return stringArrayParam(values)
 }
 
 // userNeedles — user_id так, как он записан JSON-строкой в payload_sample: с кавычками, без

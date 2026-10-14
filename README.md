@@ -5,7 +5,7 @@
 владелец смотрит портфель, аудиторию, retention, realtime и профили в дашборде `https://appmetrica.online`
 (вход по passkey) и читает те же данные через Read API `https://api.appmetrica.online/v1`.
 
-- `backend/` — Go-модуль, один бинарник `appmetrica` (роли `ingest`, `api`, `worker`), ClickHouse 26.8 + PostgreSQL 18.6.
+- `backend/` — Go-модуль, один бинарник `appmetrica` (роли `ingest`, `api`, `worker` и служебные `migrate`, `admin`, `healthcheck`), ClickHouse 26.8 + PostgreSQL 18.6.
 - `web/` — Next.js 16.4: дашборд и документация API за логином.
 - `contracts/openapi/` — OpenAPI-контракты, из них генерируется код Go и TS.
 - `deploy/` — стек ClickHouse + clickhouse-backup для Dokploy.
@@ -13,7 +13,7 @@
 
 ## Запуск за 5 минут
 
-Нужны Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker.
+Нужны Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker; для `make check` — golangci-lint 2.14, для перф-тестов и деплой-скриптов — `jq`.
 
 ```bash
 make env          # .env из .env.example с рабочими dev-значениями
@@ -36,8 +36,8 @@ passkey для первого входа, `make send-test-batch` — тесто�
 make check              # gen-check + линтеры + unit-тесты Go, web и скриптов
 make test-integration   # интеграционные тесты Go (testcontainers, нужен Docker)
 make coverage           # покрытие Go с гейтом ≥ 80 % для ключевых пакетов
-make e2e                # Playwright; сначала run-ingest, run-api-e2e (APP_ENV=e2e) и run-worker
-make perf-ingest        # k6: 500 rps × 10 мин на локальный ingest (NFR-001)
+make e2e                # Playwright; сначала make dev-infra migrate-up geo-db seed, затем run-ingest, run-api-e2e (APP_ENV=e2e) и run-worker
+make perf-ingest        # k6: 500 rps × 10 мин (NFR-001); сначала make seed и make run-ingest-perf (лимит 20 000 событий/с), baseline — backend/perf/reports/baseline.json
 make perf-reports       # отчёты на 100k DAU × 90 дней (NFR-003, ~16 ГБ RAM)
 cd web && pnpm build && pnpm check:bundle   # бюджет initial JS 250 KB gzip (NFR-006)
 ```

@@ -101,3 +101,22 @@ func TestCSRF_Rules(t *testing.T) {
 		t.Run(name, func(t *testing.T) { requireCSRFPassed(t, in) })
 	}
 }
+
+// Два заголовка Origin, один из них свой, — отказ: принимается ровно одно значение.
+func TestCSRF_MultipleOriginHeaders(t *testing.T) {
+	reached := false
+	h := auth.CSRF(csrfBaseURL, func(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+		httpx.WriteError(w, r, status, code, message, nil)
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/v1/apps", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})
+	req.Header.Set("X-Requested-With", "appmetrica-web")
+	req.Header.Add("Origin", csrfBaseURL)
+	req.Header.Add("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	require.False(t, reached)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), `"code":"csrf_check_failed"`)
+}

@@ -34,8 +34,8 @@ var rules = map[string][]string{
 		"internal/httpx", "internal/clock", "internal/config",
 	},
 	"internal/worker": {
-		"internal/reports", "internal/deletion", "internal/telegram", "internal/chstore", "internal/pgstore",
-		"internal/clock", "internal/config",
+		"internal/reports", "internal/deletion", "internal/telegram", "internal/identity", "internal/chstore",
+		"internal/pgstore", "internal/clock", "internal/config",
 	},
 	"internal/reports":   {"internal/chstore", "internal/identity", "internal/clock"},
 	"internal/deletion":  {"internal/chstore", "internal/pgstore", "internal/identity", "internal/clock"},

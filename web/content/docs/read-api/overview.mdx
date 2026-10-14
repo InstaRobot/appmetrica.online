@@ -81,6 +81,7 @@ curl -sS -G "https://api.appmetrica.online/v1/apps/$APP_ID/audience/summary" \
 | Эндпоинт | Что возвращает |
 |---|---|
 | [`GET /v1/apps`](/docs/api-reference/read/list-apps) | Приложения; `include_archived=true` — с архивными |
+| [`GET /v1/apps/{app_id}`](/docs/api-reference/read/get-app) | Одно приложение: платформа, часовой пояс, статус |
 | [`GET /v1/portfolio`](/docs/api-reference/read/get-portfolio) | Портфель: DAU и его изменение к тому же дню прошлой недели, новые, сессии, D1, D7 и тренд за 30 дней по каждому приложению |
 | [`GET /v1/apps/{app_id}/audience/summary`](/docs/api-reference/read/get-audience-summary) | Активные, новые, сессии, длительность за период |
 | [`GET /v1/apps/{app_id}/audience/timeseries`](/docs/api-reference/read/get-audience-timeseries) | Ряд метрики по часам, дням, неделям или месяцам |
@@ -92,6 +93,7 @@ curl -sS -G "https://api.appmetrica.online/v1/apps/$APP_ID/audience/summary" \
 | [`GET /v1/apps/{app_id}/profiles/{person_key}`](/docs/api-reference/read/get-profile) | Профиль и лента сессий |
 | [`GET /v1/apps/{app_id}/integration/health`](/docs/api-reference/read/get-integration-health) | Первое событие, принятые и отклонённые события по часам, причины отказов, версии клиентов |
 | [`POST /v1/apps/{app_id}/deletion-requests`](/docs/api-reference/read/create-deletion-request) | Удаление данных человека (scope `delete`) |
+| [`GET /v1/apps/{app_id}/deletion-requests/{request_id}`](/docs/api-reference/read/get-deletion-request) | Статус запроса на удаление (scope `read` или `delete`) |
 
 Сессии в профиле листаются курсором: `sessions_limit` (до 500) и `before` — значение `next_before`
 из предыдущего ответа. Остальные списки отдаются целиком.

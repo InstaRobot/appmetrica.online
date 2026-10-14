@@ -354,3 +354,21 @@ func TestGetProfile_Errors(t *testing.T) {
 	got := profileOf(t, svc, ProfileQuery{PersonKey: "u:U", SessionsLimit: MaxSessionsLimit})
 	require.Len(t, got.Sessions, 3)
 }
+
+// OQ-062 (3): user_id с обратным слешем, кавычками и табуляцией — параметры String экранируются как
+// Escaped-текст, иначе поиск и профиль не находят человека, которого job deletion находит.
+func TestSearch_EscapesUserID(t *testing.T) {
+	const user = "o'brien\\x\t\"42\""
+	svc := profileService(startWith(t, visit(t, 6, user, "2026-10-01T10:00:00Z", time.Minute)))
+
+	got := searchProfiles(t, svc, user)
+	require.Len(t, got, 1)
+	require.Equal(t, identity.UserKey(user), got[0].PersonKey)
+	require.Equal(t, MatchedByUserID, got[0].MatchedBy)
+
+	p := profileOf(t, svc, ProfileQuery{PersonKey: identity.UserKey(user).String()})
+	require.Equal(t, []uuid.UUID{install(6)}, installIDsOf(p))
+	require.Len(t, p.Sessions, 1)
+
+	require.Empty(t, searchProfiles(t, svc, "o'brienx\t\"42\""), "без экранирования \\x читался бы как x")
+}

@@ -1,21 +1,26 @@
 import { act, renderHook } from "@testing-library/react";
+import { createLoader, createSerializer } from "nuqs";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { describe, expect, it, vi } from "vitest";
 import {
   type AudienceState,
-  loadAudienceSearch,
-  loadRetentionSearch,
+  audienceSearchParams,
   periodSearch,
   reportParams,
   resolveAudienceState,
   resolveRetentionState,
   retentionParams,
-  serializeAudienceSearch,
-  serializeRetentionSearch,
+  retentionSearchParams,
   useAudienceState,
   useRealtimeState,
   useRetentionState,
 } from "./url-state";
+
+// Loader и serializer nuqs нужны только тестам: страницы читают состояние через useQueryStates.
+const loadAudienceSearch = createLoader(audienceSearchParams);
+const serializeAudienceSearch = createSerializer(audienceSearchParams);
+const loadRetentionSearch = createLoader(retentionSearchParams);
+const serializeRetentionSearch = createSerializer(retentionSearchParams);
 
 const TODAY = "2026-10-13";
 

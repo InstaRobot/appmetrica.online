@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -90,19 +89,7 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		logger.Error("metrics init failed", slog.Any("error", err))
 		return 1
 	}
-	h := newRouter(logger, c, srv.Register)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		if serveHTTP(ctx, logger, cfg.MetricsListenAddr, metricsHandler(reg)) != 0 {
-			cancel()
-		}
-	})
-	code := serveHTTP(ctx, logger, cfg.ListenAddr, h)
-	cancel()
-	wg.Wait()
-	return code
+	return serveProcess(ctx, logger, cfg.ListenAddr, newRouter(logger, c, srv.Register), cfg.MetricsListenAddr, metricsHandler(reg))
 }
 
 // telegramSender — nil без TELEGRAM_BOT_TOKEN: тестовое сообщение отвечает sent=false с подсказкой.

@@ -63,26 +63,18 @@ type Executor struct {
 	purger   Purger
 	clock    clock.Clock
 	logger   *slog.Logger
-	onFailed func(ctx context.Context, dr sqlc.DeletionRequest, cause string)
+	onFailed OnFailed
 }
 
-type ExecutorOption func(*Executor)
+// OnFailed вызывается, когда запрос исчерпал попытки и стал failed (алерт в Telegram); nil — без уведомления.
+type OnFailed func(ctx context.Context, dr sqlc.DeletionRequest, cause string)
 
-// WithOnFailed — вызывается, когда запрос исчерпал попытки и стал failed (алерт в Telegram).
-func WithOnFailed(f func(ctx context.Context, dr sqlc.DeletionRequest, cause string)) ExecutorOption {
-	return func(e *Executor) { e.onFailed = f }
+func NewExecutor(store *pgstore.Store, purger Purger, c clock.Clock, logger *slog.Logger, onFailed OnFailed) *Executor {
+	return newExecutor(pgQueue{store: store}, purger, c, logger, onFailed)
 }
 
-func NewExecutor(store *pgstore.Store, purger Purger, c clock.Clock, logger *slog.Logger, opts ...ExecutorOption) *Executor {
-	return newExecutor(pgQueue{store: store}, purger, c, logger, opts...)
-}
-
-func newExecutor(q queue, purger Purger, c clock.Clock, logger *slog.Logger, opts ...ExecutorOption) *Executor {
-	e := &Executor{queue: q, purger: purger, clock: c, logger: logger}
-	for _, o := range opts {
-		o(e)
-	}
-	return e
+func newExecutor(q queue, purger Purger, c clock.Clock, logger *slog.Logger, onFailed OnFailed) *Executor {
+	return &Executor{queue: q, purger: purger, clock: c, logger: logger, onFailed: onFailed}
 }
 
 // RunOnce — один цикл job deletion: при доступном ClickHouse возвращает в очередь зависшие запросы

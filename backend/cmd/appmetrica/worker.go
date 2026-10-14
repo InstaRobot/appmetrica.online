@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -63,7 +62,7 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 
 	stats := reports.NewService(ch.Conn(), c)
 	executor := deletion.NewExecutor(pg, deletion.NewClickHousePurger(ch.Conn()), c, logger,
-		deletion.WithOnFailed(worker.DeletionFailedNotifier(pg.Queries(), tg, logger)))
+		worker.DeletionFailedNotifier(pg.Queries(), tg, logger))
 	checkCfg := worker.SystemCheckConfig{
 		Store: pg.Queries(), ClickHouse: ch, Telegram: tg, Lock: pg, Clock: c, Logger: logger,
 		HealthchecksPingURL: cfg.HealthchecksPingURL,
@@ -79,7 +78,7 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
 		check.Job(),
 		worker.DeletionJob(executor),
-		worker.CloseDayJob(pg.Queries(), stats, pg, c),
+		worker.CloseDayJob(pg.Queries(), stats, pg, c, worker.DefaultCloseMaxDays),
 		worker.DigestJob(pg.Queries(), stats, tg, c, logger, cfg.PublicBaseURL),
 		worker.SessionCleanupJob(pg.Queries(), c),
 	)
@@ -89,17 +88,5 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	logger.Info("jobs enabled", slog.String("jobs", strings.Join(sched.Jobs(), ",")))
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var wg sync.WaitGroup
-	wg.Go(func() { sched.Run(ctx) })
-	wg.Go(func() {
-		if serveHTTP(ctx, logger, cfg.MetricsListenAddr, metricsHandler(reg)) != 0 {
-			cancel()
-		}
-	})
-	code := serveHTTP(ctx, logger, cfg.ListenAddr, newRouter(logger, c))
-	cancel()
-	wg.Wait()
-	return code
+	return serveProcess(ctx, logger, cfg.ListenAddr, newRouter(logger, c), cfg.MetricsListenAddr, metricsHandler(reg), sched.Run)
 }

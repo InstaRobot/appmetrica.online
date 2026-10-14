@@ -2,7 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -54,4 +60,44 @@ func TestRun_Version(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	require.Equal(t, 0, run(t.Context(), []string{"--version"}, &stdout, &stderr))
 	require.Equal(t, version+"\n", stdout.String())
+}
+
+// Порт метрик занят: процесс завершается с кодом 1, а не «штатно» с 0, и основной сервер останавливается.
+func TestServeProcess_MetricsListenFailureExitsNonZero(t *testing.T) {
+	var lc net.ListenConfig
+	busy, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = busy.Close() }()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	stopped := make(chan struct{})
+	background := func(ctx context.Context) { <-ctx.Done(); close(stopped) }
+
+	done := make(chan int, 1)
+	go func() {
+		done <- serveProcess(t.Context(), logger, "127.0.0.1:0", http.NotFoundHandler(), busy.Addr().String(), http.NotFoundHandler(), background)
+	}()
+	select {
+	case code := <-done:
+		require.Equal(t, 1, code)
+	case <-time.After(10 * time.Second):
+		t.Fatal("serveProcess не завершился после ошибки сервера метрик")
+	}
+	<-stopped
+}
+
+// Отмена контекста (SIGTERM) — штатная остановка с кодом 0.
+func TestServeProcess_StopsOnContextCancel(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan int, 1)
+	go func() {
+		done <- serveProcess(ctx, logger, "127.0.0.1:0", http.NotFoundHandler(), "127.0.0.1:0", http.NotFoundHandler())
+	}()
+	cancel()
+	select {
+	case code := <-done:
+		require.Equal(t, 0, code)
+	case <-time.After(10 * time.Second):
+		t.Fatal("serveProcess не завершился после отмены контекста")
+	}
 }

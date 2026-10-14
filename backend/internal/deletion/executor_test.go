@@ -164,9 +164,9 @@ type failedCall struct {
 
 func newTestExecutor(q *fakeQueue, p *fakePurger, c clock.Clock, failed *[]failedCall) *Executor {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return newExecutor(q, p, c, logger, WithOnFailed(func(_ context.Context, dr sqlc.DeletionRequest, cause string) {
+	return newExecutor(q, p, c, logger, func(_ context.Context, dr sqlc.DeletionRequest, cause string) {
 		*failed = append(*failed, failedCall{id: dr.ID, cause: cause})
-	}))
+	})
 }
 
 // AC-046.3 / AC-6.2.3: ClickHouse отвечает ошибкой 5 циклов подряд — запрос failed, attempts = 5,
@@ -380,12 +380,6 @@ func TestDeletion_TruncatesError(t *testing.T) {
 	require.True(t, strings.HasSuffix(msg, "…"))
 }
 
-func TestStringArrayParam(t *testing.T) {
-	require.Equal(t, "[]", stringArrayParam(nil))
-	require.Equal(t, `['a','"u-42"']`, stringArrayParam([]string{"a", `"u-42"`}))
-	require.Equal(t, `['o\'b\\r\tx\n']`, stringArrayParam([]string{"o'b\\r\tx\n"}))
-}
-
 func TestRejectedNeedles(t *testing.T) {
 	require.Equal(t, []string{`"u-42"`}, userNeedles("u-42"))
 	require.Equal(t, []string{`"a\"b\\c"`}, userNeedles(`a"b\c`))
@@ -407,11 +401,4 @@ func TestRejectedNeedles(t *testing.T) {
 	require.Equal(t, 450, total)
 	require.Equal(t, ids[0].String(), chunks[0][0])
 	require.Empty(t, needleChunks(nil))
-}
-
-// Значение параметра String сервер разбирает как Escaped-текст: обратный слеш и управляющие символы экранируются.
-func TestStringParam(t *testing.T) {
-	require.Equal(t, "u-42", stringParam("u-42"))
-	require.Equal(t, `o'brien\\x "42"`, stringParam(`o'brien\x "42"`))
-	require.Equal(t, `a\tb\nc\0`, stringParam("a\tb\nc\x00"))
 }

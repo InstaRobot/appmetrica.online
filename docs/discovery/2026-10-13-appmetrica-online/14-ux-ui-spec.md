@@ -692,8 +692,8 @@ Tailwind CSS 4.3.3 настраивается **в CSS** (`@theme`), файла 
 
 | # | Route | Name | Purpose |
 |---|---|---|---|
-| S-14a | `not-found` (`web/src/app/not-found.tsx`, `web/src/app/(dashboard)/apps/[appId]/not-found.tsx`) | Не найдено | Несуществующие пути и `app_not_found` |
-| S-14b | `error` (`web/src/app/(dashboard)/error.tsx`, `web/src/app/global-error.tsx`) | Ошибка | Error boundary для неожиданных исключений и 5xx |
+| S-14a | `not-found` (`web/src/app/not-found.tsx`; `app_not_found` — `EmptyState` внутри `components/layout/app-shell.tsx`) | Не найдено | Несуществующие пути и `app_not_found` |
+| S-14b | `error` (`web/src/app/error.tsx`, `web/src/app/(dashboard)/apps/[appId]/error.tsx`, `web/src/app/global-error.tsx`) | Ошибка | Error boundary для неожиданных исключений и 5xx |
 
 Layouts:
 - `DashboardShell` (`web/src/app/(dashboard)/layout.tsx`): SkipLink + AppHeader + `<main id="main" className="mx-auto max-w-[1600px] px-8 pt-6 pb-12">` + AppFooter.
@@ -904,7 +904,7 @@ Layouts:
 
 **Purpose**: обзор аудитории приложения (FR-013): KPI, график метрики, DAU/WAU/MAU, разбивки.
 
-**Auth**: required. При 404 `app_not_found` рендерится `apps/[appId]/not-found.tsx`.
+**Auth**: required. При 404 `app_not_found` `AppShell` рендерит `EmptyState` «Приложение не найдено» вместо вкладок.
 
 **Layout**: `DashboardShell` + `AppShell`.
 
@@ -954,7 +954,7 @@ Layouts:
 | `empty-period` | Нули за период, но события в целом были | KPI с нулями; график с плоской линией и подписью в карточке «Нет событий за выбранный период» |
 | `loading` | Fetch | Skeleton: 4 KPI-карточки по 132 px, график 360 px, таблица 6 строк. Каждая карточка грузится независимо (свой `useQuery`) |
 | `error` | Ошибка конкретного запроса | `ErrorState variant="inline"` в соответствующей карточке, остальные работают. `range_too_large` → inline под PeriodPicker |
-| `not-found` | 404 `app_not_found` | `apps/[appId]/not-found.tsx` |
+| `not-found` | 404 `app_not_found` | `EmptyState` в `AppShell` (`components/layout/app-shell.tsx`) |
 
 **Data requirements**: `getApp` (в AppShell), `getAudienceSummary` (KPI + compare), `getAudienceTimeseries` (по одному запросу на метрику; спарклайны KPI берутся из timeseries с `g=day`), `getRollingActive`, `getAudienceBreakdown`.
 
@@ -1698,9 +1698,9 @@ func main() {
 
 **S-14a not-found**:
 - Глобальная версия (`web/src/app/not-found.tsx`): `EmptyState` иконка `FileQuestion`, «Страница не найдена», «Проверьте адрес или вернитесь в портфель.», кнопка «В портфель».
-- Внутри приложения (`apps/[appId]/not-found.tsx`): «Приложение не найдено или удалено», кнопка «В портфель».
+- Внутри приложения (`AppShell` при 404/400 `getApp`): `EmptyState` иконка `SearchX`, «Приложение не найдено», «Проверьте адрес или выберите приложение в портфеле.», кнопка «В портфель».
 
-**S-14b error** (`error.tsx`, client component с `reset`): `ErrorState variant="full-page"`. Заголовок «Что-то пошло не так», описание «Произошла непредвиденная ошибка. Попробуйте обновить страницу.», кнопки «Попробовать снова» (`reset()`) и «В портфель». Если ошибка содержит `request_id`, внизу caption «Код запроса: 01J…». `global-error.tsx` повторяет этот текст с минимальной разметкой без шрифтов.
+**S-14b error** (`app/error.tsx` для всего приложения и `apps/[appId]/error.tsx` внутри вкладок приложения — шапка и вкладки остаются; client components с `reset`): `ErrorState variant="full-page"`. Заголовок «Что-то пошло не так», описание «Произошла непредвиденная ошибка. Попробуйте обновить страницу.», кнопки «Попробовать снова» (`reset()`) и «В портфель». Если ошибка содержит `request_id`, внизу caption «Код запроса: 01J…». `global-error.tsx` повторяет этот текст с минимальной разметкой без шрифтов.
 
 **Accessibility**: заголовок `<h1>`, фокус на нём после рендера.
 
@@ -2098,7 +2098,7 @@ flowchart LR
 | 401 | `unauthenticated` | везде | Без текста: `router.replace('/login?next=' + текущий путь)` |
 | 403 | `insufficient_scope` | Read API (в UI не ожидается) | ErrorState «Недостаточно прав для этого действия.» |
 | 403 | `csrf_check_failed` | мутации | Toast «Сессия устарела. Обновите страницу.» с действием «Обновить» (`location.reload()`) |
-| 404 | `app_not_found` | AppShell | Страница `apps/[appId]/not-found.tsx` |
+| 404 | `app_not_found` | AppShell | `EmptyState` «Приложение не найдено» вместо вкладок приложения |
 | 404 | `profile_not_found` | S-09 | EmptyState «Профиль не найден» |
 | 404 | `not_found` | прочее | «Объект не найден или был удалён.» |
 | 409 | `last_passkey` | S-12 | В диалоге: «Нельзя удалить последний passkey — сначала добавьте другой.» |
@@ -2546,3 +2546,4 @@ type ConfirmDeleteDialogProps = {
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Первая версия UX/UI-спецификации после discovery. Стиль AppMetrica, только светлая тема, десктоп ≥ 1280 px, экраны S-01..S-14, токены OKLCH, Tailwind 4 `@theme`, shadcn (Radix) + Recharts |
+| 2026-10-14 | 1.1 | S-14: пути файлов приведены к коду — `app_not_found` обрабатывает `AppShell` (`EmptyState`), отдельного `apps/[appId]/not-found.tsx` нет; error boundary — `app/error.tsx` и `apps/[appId]/error.tsx` вместо `(dashboard)/error.tsx` |

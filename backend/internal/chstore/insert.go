@@ -7,14 +7,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 )
 
-// Inserter — запись ingest; в unit-тестах подменяется фейком для веток 503.
-type Inserter interface {
-	InsertEvents(ctx context.Context, rows []EventRow) error
-	InsertRejected(ctx context.Context, rows []RejectedRow) error
-}
-
-var _ Inserter = (*Store)(nil)
-
 // ackContext включает асинхронную вставку с ожиданием подтверждения: сервер отвечает только после
 // сброса буфера в таблицу, поэтому nil означает, что строки уже видны SELECT (ответ 200 ingest после ack).
 // clickhouse.WithAsync действует только на Exec, для PrepareBatch те же настройки передаются явно.

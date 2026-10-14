@@ -1703,8 +1703,9 @@ AC-5.6.4 (error path — hours вне диапазона):
 
 **Edge cases (дополнительно, с AC-форматом если не покрыто выше)**:
 - Отклонения хранятся 7 дней (TTL `rejected_events`), поэтому `hours` ограничен 168.
-- Батчевые ошибки 401 для известного приложения (ключ отозван) пишутся в `rejected_events` с `code = invalid_app_key`
-  и `app_id` приложения — владелец видит, что старая версия всё ещё шлёт отозванным ключом.
+- Батчевые ошибки 401 (`invalid_app_key`, в том числе отозванный ключ) в `rejected_events` не пишутся: кэш ключей ingest
+  держит только действующие ключи, и отозванный не резолвится в приложение (OQ-033 (3)). Старую сборку с отозванным
+  ключом владелец видит по `last_used_at` ключа и метрике `ingest_events_rejected_total{code}`.
 
 **Non-functional requirements для этой story** (верифицируемые):
 - Latency: P95 ≤ 500 мс.
@@ -2381,16 +2382,18 @@ AC-8.4.4 (UI — вкладки настроек):
 
 #### Metrics
 - Business metrics: `ingest_events_accepted_total{app_id}`, `ingest_events_rejected_total{code}`,
-  `ingest_warnings_total{code}`, `worker_deletion_requests_pending`, `worker_digest_sent_total`.
+  `ingest_warnings_total{code}` (ожидающие удаления и отправленные дайджесты видны в `job_runs.details` и на S-12,
+  отдельных метрик нет — OQ-069).
 - System metrics: `ingest_requests_total{status}`, `ingest_batch_duration_seconds`, `ingest_batch_events`,
   `ingest_clickhouse_insert_duration_seconds`, `ingest_clickhouse_insert_errors_total`,
   `ingest_rate_limited_total{scope}`, `ingest_install_limiters`, `ingest_key_cache_size`,
   `ingest_key_cache_refresh_errors_total`, `ingest_key_cache_last_refresh_timestamp_seconds`,
-  `ingest_geo_lookup_errors_total`, `ingest_rejected_log_dropped_total`, `api_request_duration_seconds{operation,status}`,
-  `api_clickhouse_query_duration_seconds{report}`, `api_postgres_query_duration_seconds`,
-  `api_auth_failures_total{reason}`, `api_rate_limited_total`, `worker_job_runs_total{job,status}`,
-  `worker_job_duration_seconds{job}`, `worker_alerts_firing{key}`, `worker_telegram_send_errors_total`; стандартные
-  `go_*` и `process_*`.
+  `ingest_rejected_log_dropped_total`, `api_request_duration_seconds{operation,status}`,
+  `api_clickhouse_query_duration_seconds{report}`, `api_auth_failures_total{reason}`, `api_rate_limited_total`,
+  `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}` (вместо `worker_job_runs_total{job,status}`:
+  успешные запуски считаются по `worker_job_duration_seconds_count`), `worker_alerts_firing{key}`,
+  `worker_telegram_send_errors_total`; стандартные `go_*` и `process_*`. Гео-ошибки отдельной метрики не имеют:
+  невалидный `context.ip` — warning `geo_ip_invalid` в `ingest_warnings_total`.
 - Alert thresholds: диск ClickHouse < 20 % свободно; доля ошибок вставки > 1 % за 5 мин; бэкап старше 26 ч; ingest/api
   `/health` не 200 два цикла подряд; тишина healthchecks.io > 15 мин; deletion `failed`.
 

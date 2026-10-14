@@ -13,7 +13,7 @@ import (
 func Recover(logger *slog.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sw := &statusWriter{ResponseWriter: w}
+			sw := &StatusWriter{ResponseWriter: w}
 			defer recoverPanic(logger, sw, r)
 			next.ServeHTTP(sw, r)
 		})
@@ -21,7 +21,7 @@ func Recover(logger *slog.Logger) Middleware {
 }
 
 // recoverPanic вызывается через defer напрямую, поэтому recover() в нём перехватывает панику обработчика.
-func recoverPanic(logger *slog.Logger, sw *statusWriter, r *http.Request) {
+func recoverPanic(logger *slog.Logger, sw *StatusWriter, r *http.Request) {
 	v := recover()
 	if v == nil {
 		return

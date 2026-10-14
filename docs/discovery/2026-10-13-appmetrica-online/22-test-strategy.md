@@ -109,7 +109,7 @@ Python stack: N/A — Python в проекте не используется.
 
 | Area | Metric | Target | Rationale |
 |---|---|---|---|
-| Business logic modules | branches + lines | **≥ 90%** | `internal/ingest`, `internal/identity`, `internal/reports`, `internal/deletion`: ошибка здесь = неверные цифры или нарушение GDPR |
+| Business logic modules | lines | **≥ 80%** (гейт `scripts/coverage-gate.sh`, `COVER_MIN`) | `internal/ingest`, `internal/identity`, `internal/reports`, `internal/deletion`, `internal/auth`: ошибка здесь = неверные цифры или нарушение GDPR |
 | API routers / controllers | branches + lines | **≥ 85%** | `internal/api`, `internal/auth`: каждый error path (401/403/404/409/410/422/429) покрыт |
 | UI components | lines | ≥ 70% | `web/src/components/reports`, `integration`, `profiles`; визуал дополнительно защищён скриншотами и axe |
 | Utilities / helpers | lines | ≥ 95% | `web/src/lib` (форматирование, person_key, safe-next, copy-as-curl), `internal/httpx`, `internal/clock` |
@@ -145,7 +145,7 @@ flowchart LR
 
 Проектные уточнения:
 - В «blocks merge» дополнительно входят: codegen drift (`make gen && git diff --exit-code`), contract-тесты, coverage
-  gate (≥ 80 % overall, ≥ 90 % для business logic пакетов — скрипт `scripts/coverage-gate.sh`), govulncheck и
+  gate (≥ 80 % для `internal/{ingest,reports,auth,identity,deletion}` — скрипт `scripts/coverage-gate.sh`, порог `COVER_MIN`), govulncheck и
   `pnpm audit --audit-level high`.
 - «E2E full» совпадает со smoke (9 спецификаций достаточно для одного пользователя) — отдельного набора нет.
 - Perf запускается: еженедельно по cron (`schedule: '0 3 * * 1'`), по label `perf` на PR, и обязательно перед снятием
@@ -457,11 +457,12 @@ Go-именование: `TestSubject_ExpectedOutcomeWhenCondition` (напри�
 
 - Сценарий `backend/perf/ingest-load.js`: `constant-arrival-rate` 500 итераций/с в течение 10 минут, батч 10 событий
   (случайные `install_id` из пула 100 000, `session_start`/`session_end` пары), `X-App-Key` из env `K6_APP_KEY`.
-- Окружение: `make perf-ingest` поднимает docker compose (ingest + ClickHouse 26.8.25.14 + Postgres 18.6) на CI-раннере
-  `ubuntu-latest` или на сервере Hetzner Cloud CCX33 по требованию; базовые цифры фиксируются в
-  `backend/perf/reports/<date>-ingest.json`.
-- Thresholds k6: `http_req_duration{expected_response:true}: ['p(99)<500']`, `http_req_failed: ['rate<0.001']`,
-  `checks: ['rate>0.999']` (проверка `accepted == 10`).
+- Окружение: `make perf-ingest` запускает k6 в Docker против уже работающего локального ingest (`make dev-infra migrate-up seed`,
+  затем `make run-ingest-perf` — лимит приложения 20 000 событий/с); адрес — `INGEST_URL`, нагрузка — `PERF_RATE`, `PERF_DURATION`.
+  Базовые цифры — `backend/perf/reports/baseline.json`, сравнение прогона с ними — `scripts/perf-compare.sh`.
+- Thresholds k6: `http_req_duration{expected_response:true}: ['p(99)<500']`, `http_req_failed: ['rate==0']`,
+  `checks: ['rate>0.999']` (проверка `accepted == 10`), `server_errors_without_retry_after: ['count==0']`,
+  `dropped_iterations` < 1 % от rate (иначе нагрузка ниже заявленной).
 
 ### 11.2 Отчёты (Go, тег `perf`)
 

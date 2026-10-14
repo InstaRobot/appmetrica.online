@@ -38,9 +38,9 @@ type RejectedSink interface {
 	Add(rows ...chstore.RejectedRow) (dropped int)
 }
 
-// PipelineConfig — зависимости конвейера; все поля, кроме InsertTimeout, обязательны.
+// PipelineConfig — зависимости конвейера; все поля, кроме InsertTimeout, обязательны. Ключ батча к этому
+// моменту уже проверен хендлером (Batch.Key заполнен).
 type PipelineConfig struct {
-	Keys          *KeyCache
 	Limits        RateLimits
 	Enricher      Enricher
 	Time          TimeConfig
@@ -52,14 +52,14 @@ type PipelineConfig struct {
 	InsertTimeout time.Duration // 0 — DefaultInsertTimeout
 }
 
-// NewPipeline собирает Processor POST /v1/events (06-api-contracts.md §2.4.1): ключ → лимит приложения →
+// NewPipeline собирает Processor POST /v1/events (06-api-contracts.md §2.4.1, шаги 5–9): лимит приложения →
 // для каждого события валидация, PII-guard, коррекция времени, дедуп insert_id, лимит установки, контекст
 // и гео → вставка принятых в events с ожиданием ack → отказы в rejected_events.
 func NewPipeline(cfg PipelineConfig) Processor {
 	if cfg.InsertTimeout <= 0 {
 		cfg.InsertTimeout = DefaultInsertTimeout
 	}
-	return Authenticate(cfg.Keys, cfg.Limits.LimitApp(&pipeline{cfg: cfg}))
+	return cfg.Limits.LimitApp(&pipeline{cfg: cfg})
 }
 
 type pipeline struct {

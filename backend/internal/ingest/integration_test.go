@@ -58,7 +58,6 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 	rejected := chstore.NewRejectedLog(chstore.RejectedLogConfig{Inserter: env.CH})
 	rl := ingest.RejectedLogger{Sink: rejected, Keys: cache, Metrics: metrics}
 	p := ingest.NewPipeline(ingest.PipelineConfig{
-		Keys: cache,
 		Limits: ingest.RateLimits{
 			Apps:     ratelimit.NewAppLimiter(2000, 4000, clk),
 			Installs: ratelimit.NewInstallLimiter(100, 1000, clk),
@@ -73,7 +72,7 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 		Metrics:  metrics,
 	})
 	h := httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
-		Processor: p, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
+		Processor: p, Keys: cache, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
 	}), httpx.CORS(), httpx.RequestID(clk))
 	return &liveIngest{handler: h, env: env, rejected: rejected, appID: app.ID, keyID: key.ID}
 }

@@ -2,9 +2,7 @@
 // разбивка, фильтры, окружение и сервисный unit. Значения по умолчанию в URL не пишутся; неизвестные
 // и некорректные значения игнорируются и заменяются умолчаниями.
 import {
-  createLoader,
   createParser,
-  createSerializer,
   type inferParserType,
   parseAsNativeArrayOf,
   parseAsString,
@@ -90,9 +88,6 @@ export const audienceSearchParams = {
 
 export type AudienceSearch = inferParserType<typeof audienceSearchParams>;
 export type AudienceSearchPatch = { [K in keyof AudienceSearch]?: AudienceSearch[K] | null };
-
-export const loadAudienceSearch = createLoader(audienceSearchParams);
-export const serializeAudienceSearch = createSerializer(audienceSearchParams);
 
 export type AudienceState = {
   period: PeriodValue;
@@ -220,9 +215,6 @@ export const retentionSearchParams = {
 
 export type RetentionSearch = inferParserType<typeof retentionSearchParams>;
 export type RetentionSearchPatch = { [K in keyof RetentionSearch]?: RetentionSearch[K] | null };
-
-export const loadRetentionSearch = createLoader(retentionSearchParams);
-export const serializeRetentionSearch = createSerializer(retentionSearchParams);
 
 export type RetentionState = {
   cohort: CohortGranularity;

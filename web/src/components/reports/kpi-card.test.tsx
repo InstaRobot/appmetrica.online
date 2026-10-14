@@ -27,8 +27,8 @@ describe("KpiCard", () => {
     expect(screen.getByText("Тренд за период: рост")).toBeInTheDocument();
   });
 
-  it("formats durations and percents and shows the secondary line", () => {
-    const { rerender } = render(
+  it("formats durations and shows the secondary line", () => {
+    render(
       <KpiCard
         label="Ср. длительность"
         definition="…"
@@ -39,9 +39,6 @@ describe("KpiCard", () => {
     );
     expect(screen.getByRole("button", { pressed: false })).toHaveTextContent(/4\sмин\s12\sс/);
     expect(screen.getByText("медиана 2 мин 5 с")).toBeInTheDocument();
-
-    rerender(<KpiCard label="D1" definition="…" value={0.381} format="percent" />);
-    expect(screen.getByRole("button", { pressed: false })).toHaveTextContent(/38,1\s%/);
   });
 
   it("renders missing values and deltas neutrally", () => {

@@ -3,6 +3,7 @@ package ingest
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"appmetrica.online/backend/internal/httpx"
 )
@@ -51,10 +52,6 @@ var (
 		Status: http.StatusUnsupportedMediaType, Code: "unsupported_media_type",
 		Message: "Content-Type должен быть application/json или text/plain.",
 	}
-	errPayloadTooLarge = &Error{
-		Status: http.StatusRequestEntityTooLarge, Code: "payload_too_large",
-		Message: "Тело после распаковки больше 1 048 576 байт. Разбейте батч.",
-	}
 	errInvalidJSON = &Error{
 		Status: http.StatusBadRequest, Code: "invalid_json",
 		Message: "Тело запроса не является корректным JSON.",
@@ -68,3 +65,24 @@ var (
 		Message: "Внутренняя ошибка. Повторите батч позже.",
 	}
 )
+
+// payloadTooLarge — 413 для тела, превысившего limit байт после распаковки.
+func payloadTooLarge(limit int64) *Error {
+	return &Error{
+		Status: http.StatusRequestEntityTooLarge, Code: "payload_too_large",
+		Message: "Тело после распаковки больше " + groupDigits(limit) + " байт. Разбейте батч.",
+	}
+}
+
+// groupDigits — число с разделением разрядов пробелом: 1048576 → «1 048 576».
+func groupDigits(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	var b strings.Builder
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}

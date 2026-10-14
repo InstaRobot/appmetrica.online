@@ -81,7 +81,7 @@ func (s *fakeKeyStore) touchCalls() []sqlc.TouchWriteKeysLastUsedParams {
 	return slices.Clone(s.touches)
 }
 
-// keyHarness — хендлер POST /v1/events, у которого Processor = Authenticate(кэш, fakeProcessor).
+// keyHarness — хендлер POST /v1/events с проверкой ключа через кэш и fakeProcessor вместо конвейера.
 // fakeProcessor стоит на месте записи в ClickHouse: батч, не дошедший до него, не пишет ни одной строки.
 type keyHarness struct {
 	harness
@@ -106,7 +106,7 @@ func newKeyHarness(t *testing.T, cfg ingest.KeyCacheConfig) *keyHarness {
 	h.logger = slog.New(slog.NewJSONHandler(h.logs, nil))
 	cfg.Store, cfg.Clock, cfg.Logger, cfg.Metrics = h.store, h.clock, h.logger, metrics
 	h.cache = ingest.NewKeyCache(cfg)
-	h.setPipeline(ingest.Authenticate(h.cache, h.proc))
+	h.setPipeline(h.proc)
 	return h
 }
 
@@ -114,6 +114,7 @@ func newKeyHarness(t *testing.T, cfg ingest.KeyCacheConfig) *keyHarness {
 func (h *keyHarness) setPipeline(p ingest.Processor) {
 	h.handler = httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
 		Processor: p,
+		Keys:      h.cache,
 		Clock:     h.clock,
 		Logger:    h.logger,
 		Metrics:   h.metrics,

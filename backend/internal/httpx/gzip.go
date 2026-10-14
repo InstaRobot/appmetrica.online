@@ -8,7 +8,8 @@ import (
 )
 
 // Gunzip распаковывает тело с Content-Encoding: gzip. Пустое значение и identity пропускаются как есть,
-// остальные кодировки — 400 unsupported_content_encoding, битый заголовок gzip — 400 invalid_json.
+// остальные кодировки и несколько заголовков Content-Encoding — 400 unsupported_content_encoding,
+// битый заголовок gzip — 400 invalid_json.
 // Размер распакованного тела ограничивает следующий за ним BodyLimit.
 func Gunzip() Middleware {
 	return func(next http.Handler) http.Handler {
@@ -19,6 +20,8 @@ func Gunzip() Middleware {
 				enc = strings.ToLower(strings.TrimSpace(values[0]))
 			}
 			switch {
+			case len(values) > 1:
+				WriteError(w, r, http.StatusBadRequest, "unsupported_content_encoding", "Поддерживается только один заголовок Content-Encoding: gzip.", nil)
 			case len(values) == 0 || enc == "" || enc == "identity":
 				r.Header.Del("Content-Encoding")
 				next.ServeHTTP(w, r)

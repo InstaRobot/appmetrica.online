@@ -431,7 +431,7 @@ Skip-индексы: `idx_user_id`, `idx_session_id`, `idx_install_id` — `bloo
 | received_at | DateTime64(3,'UTC') | |
 | app_id | UUID | nil-UUID `00000000-0000-0000-0000-000000000000`, если ключ не распознан |
 | key_prefix | String | Первые 11 символов присланного ключа (для диагностики 401) |
-| code | LowCardinality(String) | RejectionCode или batch-код (`invalid_json`, `invalid_batch`, `payload_too_large`, `invalid_app_key`, `app_archived`, `app_rate_limited`) |
+| code | LowCardinality(String) | RejectionCode или batch-код (`invalid_json`, `invalid_batch`, `payload_too_large`, `app_archived`, `app_rate_limited`; `invalid_app_key` и `missing_app_key` не пишутся — ключ не привязан к приложению, OQ-033 (3)) |
 | field | String | JSON-путь поля, например `events[3].timestamp` |
 | message | String | Человекочитаемая причина |
 | event_name | LowCardinality(String) | '' для batch-уровня |
@@ -2049,3 +2049,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-13 | 1.0 | Первая версия: Postgres (13 таблиц, 8 enum), ClickHouse (6 таблиц + 3 MV), гранты, sqlc-запросы, канонический SQL отчётов, фикстуры |
 | 2026-10-13 | 1.1 | `TouchWriteKeysLastUsed`: `unnest(a, b)` заменён на подзапрос с двумя `unnest` — sqlc 1.31.1 не поддерживает многоаргументный `unnest` (T-004) |
 | 2026-10-14 | 1.2 | §10.4: эквивалентная форма запросов в коде для NFR-003 — склейка после предагрегации, first_seen в общем GROUP BY, rolling через префиксные суммы, retention по массивам дней; определения метрик и golden-фикстуры не менялись (Task 32a) |
+| 2026-10-14 | 1.3 | §2.9: `invalid_app_key` исключён из batch-кодов `rejected_events` — отозванный ключ не резолвится в приложение (кэш ключей держит только действующие), как решено в OQ-033 (3) |
