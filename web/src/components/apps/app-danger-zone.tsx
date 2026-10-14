@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { GitMerge } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/feedback/confirm-delete-dialog";
 import {
   AlertDialog,
@@ -22,14 +23,24 @@ import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portf
 import type { App } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useActiveMerge } from "./merge-progress-banner";
+
+// Диалог слияния — отдельный чанк: нужен только после клика «Объединить…» (бюджет initial JS).
+const MergeAppsDialog = lazy(() =>
+  import("./merge-apps-dialog").then((m) => ({ default: m.MergeAppsDialog })),
+);
 
 // «Опасная зона» S-11 (FR-009): архивирование (ingest отвечает 403 app_archived), возврат из архива и
 // удаление навсегда вводом точного названия. Удаление выполняет worker, экран сразу уходит в портфель.
+// Слияние другого приложения в это (04-ux-diff.md §5.2); пока оно не завершено, опасные действия недоступны.
 export function AppDangerZone({ app }: { app: App }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [mergeRequested, setMergeRequested] = useState(false);
+  const busy = useActiveMerge(app.id) !== undefined;
 
   const refreshLists = () => {
     void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
@@ -79,6 +90,29 @@ export function AppDangerZone({ app }: { app: App }) {
         <CardTitle>Опасная зона</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {busy ? (
+          <p className="text-body-sm text-fg-subtle">Идёт объединение — дождитесь завершения</p>
+        ) : null}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <p className="text-body-md font-medium">Объединить с другим приложением</p>
+            <p className="text-body-md">
+              История событий и ключи другого приложения переедут сюда, а оно само будет удалено.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            disabled={busy || archived}
+            onClick={() => {
+              setMergeRequested(true);
+              setMerging(true);
+            }}
+          >
+            <GitMerge aria-hidden="true" />
+            Объединить…
+          </Button>
+        </div>
+        <Separator />
         <div className="flex items-center justify-between gap-4">
           <p className="text-body-md">
             {archived
@@ -88,13 +122,13 @@ export function AppDangerZone({ app }: { app: App }) {
           {archived ? (
             <Button
               variant="outline"
-              disabled={unarchive.isPending}
+              disabled={busy || unarchive.isPending}
               onClick={() => unarchive.mutate()}
             >
               {unarchive.isPending ? "Возвращаем…" : "Вернуть из архива"}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => setArchiving(true)}>
+            <Button variant="outline" disabled={busy} onClick={() => setArchiving(true)}>
               Архивировать
             </Button>
           )}
@@ -104,7 +138,12 @@ export function AppDangerZone({ app }: { app: App }) {
           <p className="text-body-md">
             Удалить навсегда — все события и настройки удаляются в фоне.
           </p>
-          <Button variant="outline" className="text-destructive" onClick={() => setDeleting(true)}>
+          <Button
+            variant="outline"
+            className="text-destructive"
+            disabled={busy}
+            onClick={() => setDeleting(true)}
+          >
             Удалить навсегда
           </Button>
         </div>
@@ -127,6 +166,12 @@ export function AppDangerZone({ app }: { app: App }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {mergeRequested ? (
+        <Suspense fallback={null}>
+          <MergeAppsDialog target={app} open={merging} onOpenChange={setMerging} />
+        </Suspense>
+      ) : null}
 
       <ConfirmDeleteDialog
         open={deleting}

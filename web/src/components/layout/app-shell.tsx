@@ -3,6 +3,7 @@
 import { SearchX } from "lucide-react";
 import { useParams } from "next/navigation";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { lazy, Suspense } from "react";
 import { platformLabel } from "@/components/common/platform-icon";
 import { PlatformIcons } from "@/components/common/platform-icons";
 import { ArchivedBanner } from "@/components/feedback/archived-banner";
@@ -19,6 +20,13 @@ import { API_ERRORS } from "@/lib/errors";
 import { AppTabs } from "./app-tabs";
 import { PageHeader } from "./page-header";
 
+// Баннер слияния с опросом Admin API — отдельный чанк: initial JS /apps/[appId] у бюджета 250 KB gz.
+const MergeProgressBanner = lazy(() =>
+  import("@/components/apps/merge-progress-banner").then((m) => ({
+    default: m.MergeProgressBanner,
+  })),
+);
+
 const unitParser = parseAsStringLiteral(Object.values(Unit)).withDefault(Unit.persons);
 
 export function AppShellSkeleton() {
@@ -30,7 +38,8 @@ export function AppShellSkeleton() {
   );
 }
 
-// AppShell (14-ux-ui-spec.md S-05…S-11): вкладки приложения, название с платформами, баннер архива.
+// AppShell (14-ux-ui-spec.md S-05…S-11): вкладки приложения, название с платформами, баннеры архива
+// и слияния в это приложение.
 // Приложение загружается на клиенте (useGetApp); отчёты вкладок берут его из того же кэша запросов.
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { appId } = useParams<{ appId: string }>();
@@ -83,6 +92,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ArchivedBanner />
         </div>
       ) : null}
+      <Suspense fallback={null}>
+        <MergeProgressBanner appId={appId} />
+      </Suspense>
       {children}
     </>
   );

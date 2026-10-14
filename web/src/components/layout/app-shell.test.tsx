@@ -91,7 +91,7 @@ describe("AppShell", () => {
       ),
     );
     renderShell();
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await screen.findByText(/^Объединение с «Notes Android»/)).toHaveTextContent(
       "Объединение с «Notes Android»: ждём, пока приём событий перечитает ключи (до 17 мин)",
     );
     expect(screen.getByText("Отчёт")).toBeInTheDocument();
