@@ -2,6 +2,9 @@
 
 **English** | [Русский](README.ru.md)
 
+**Live demo: [appmetrica.online](https://appmetrica.online)** — open the [read-only demo](https://appmetrica.online/demo)
+on a synthetic dataset, no sign-up needed.
+
 Open-source, self-hosted analytics for mobile apps, websites, bots and backends — **without an SDK**.
 Your apps send `session_start` / `session_end` events with a plain HTTP request; you get a portfolio of all
 apps, audience (DAU/WAU/MAU, new users, sessions, duration, breakdowns), classic retention cohorts, realtime,
@@ -14,7 +17,7 @@ user profiles and a Read API. Users are counted as people, not devices (`install
   not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
   GDPR deletion by API or from the dashboard.
 - **Passkey-only sign-in.** No passwords to leak; the first passkey is registered with a one-time link from the CLI.
-- **Light and dark themes**, a public landing page and a read-only demo mode on a synthetic dataset.
+- **Light and dark themes**, a public landing page and a read-only [demo mode](https://appmetrica.online/demo) on a synthetic dataset.
 - **Fast on one server.** ClickHouse for events, PostgreSQL for metadata, Go services, Next.js dashboard.
 
 > Not affiliated with Yandex. "AppMetrica" is a trademark of its owner; this project is an independent
