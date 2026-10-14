@@ -4,7 +4,7 @@ import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-08/S-09 профили и удаление данных (T-042). Человек создаётся событием в локальный ingest
 // (E2E_INGEST_URL) для «Seed iOS» из `make seed`; user_id со слешем и пробелом проверяет кодирование
-// person_key в URL. Полный цикл до «Удалено» требует worker с job deletion (E2E_WORKER=1).
+// person_key в URL. Полный цикл до «Удалено» выполняет worker стенда (job deletion, раз в минуту).
 
 const INGEST_URL = process.env.E2E_INGEST_URL ?? "http://localhost:8081";
 const WRITE_KEY = process.env.E2E_WRITE_KEY ?? "pk_devseedkey0000000000000000000000";
@@ -113,7 +113,6 @@ test("requests deletion from the profile", async ({ page }) => {
 });
 
 test("deletes user data end to end", async ({ page }) => {
-  test.skip(!process.env.E2E_WORKER, "нужен worker с job deletion (E2E_WORKER=1)");
   test.setTimeout(180_000);
   const { appId, userId } = await openNewProfile(page);
 
