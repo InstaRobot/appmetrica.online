@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -429,6 +430,34 @@ func TestCreateMergeErrors(t *testing.T) {
 	})
 
 	require.Equal(t, 2, e.count(t, "app_merges"), "ошибки не создают записей")
+}
+
+// Встречные заявки T←S и S←T и повтор T←S одновременно: строки apps блокируются в порядке id, поэтому
+// взаимоблокировки нет; проходит ровно одна заявка, остальные видят активное слияние.
+func TestCreateMergeConcurrent(t *testing.T) {
+	e := newEnv(t)
+	a := e.create(t, "Notes iOS", []string{"ios"}, "Europe/Moscow")
+	b := e.create(t, "Notes Android", []string{"android"}, "UTC")
+
+	pairs := [][2]appJSON{{a, b}, {b, a}, {a, b}}
+	recs := make([]*httptest.ResponseRecorder, len(pairs))
+	var wg sync.WaitGroup
+	for i, pr := range pairs {
+		wg.Go(func() { recs[i] = e.createMerge(t, pr[0], pr[1]) })
+	}
+	wg.Wait()
+
+	accepted := 0
+	for _, rec := range recs {
+		switch rec.Code {
+		case http.StatusAccepted:
+			accepted++
+		default:
+			requireAPIError(t, rec, http.StatusConflict, "merge_in_progress")
+		}
+	}
+	require.Equal(t, 1, accepted)
+	require.Equal(t, 1, e.count(t, "app_merges"))
 }
 
 func TestRetryMerge(t *testing.T) {

@@ -220,6 +220,26 @@ describe("AppSettingsForm platforms", () => {
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Платформы сохранены"));
   });
 
+  it("follows the platforms set when the app is refetched", async () => {
+    const bodies = mockUpdate();
+    const { rerender } = renderWithClient(<AppSettingsForm app={OLD_APP} />);
+    const user = userEvent.setup();
+    await user.click(await platforms().findByRole("button", { name: "Веб" }));
+    expect(platforms().getByRole("button", { name: "Сохранить" })).toBeEnabled();
+
+    // Слияние добавило цели платформы источника: карточка показывает набор с сервера, а не черновик.
+    rerender(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios", "android", "linux"] }} />);
+
+    const section = platforms();
+    expect(await section.findByRole("button", { name: "Linux" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(section.getByRole("button", { name: "Веб" })).toHaveAttribute("aria-pressed", "false");
+    expect(section.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+    expect(bodies).toEqual([]);
+  });
+
   it("keeps at least one platform", async () => {
     const bodies = mockUpdate();
     renderWithClient(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />);

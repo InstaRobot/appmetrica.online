@@ -1,6 +1,6 @@
 # Техническое задание (ТЗ): appmetrica.online — внутренняя аналитика приложений без SDK
 
-**Версия**: 1.0 | **Дата**: 2026-10-13
+**Версия**: 1.1 | **Дата**: 2026-10-15
 
 > Этот документ — технический развёрток [01-prd.md](./01-prd.md).
 > Фокус на user stories с acceptance criteria в формате, пригодном для
@@ -2394,7 +2394,9 @@ AC-8.4.4 (UI — вкладки настроек):
 
 #### Metrics
 - Business metrics: `ingest_events_accepted_total{app_id}`, `ingest_events_rejected_total{code}`,
-  `ingest_warnings_total{code}` (ожидающие удаления и отправленные дайджесты видны в `job_runs.details` и на S-12,
+  `ingest_warnings_total{code}`, `ingest_platform_missing_total` (принятые события мультиплатформенного приложения,
+  записанные как `other`: платформу не дали ни `context`, ни ключ), `merge_copied_events_total` (события, скопированные
+  шагом `copy` слияния приложений) (ожидающие удаления и отправленные дайджесты видны в `job_runs.details` и на S-12,
   отдельных метрик нет — OQ-069).
 - System metrics: `ingest_requests_total{status}`, `ingest_batch_duration_seconds`, `ingest_batch_events`,
   `ingest_clickhouse_insert_duration_seconds`, `ingest_clickhouse_insert_errors_total`,
@@ -2404,10 +2406,12 @@ AC-8.4.4 (UI — вкладки настроек):
   `api_clickhouse_query_duration_seconds{report}`, `api_auth_failures_total{reason}`, `api_rate_limited_total`,
   `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}` (вместо `worker_job_runs_total{job,status}`:
   успешные запуски считаются по `worker_job_duration_seconds_count`), `worker_alerts_firing{key}`,
-  `worker_telegram_send_errors_total`; стандартные `go_*` и `process_*`. Гео-ошибки отдельной метрики не имеют:
+  `worker_telegram_send_errors_total`, `merge_step_duration_seconds{step}` (выполненные и упавшие шаги слияния,
+  ожидание `wait_keys` не считается); стандартные `go_*` и `process_*`. Гео-ошибки отдельной метрики не имеют:
   невалидный `context.ip` — warning `geo_ip_invalid` в `ingest_warnings_total`.
 - Alert thresholds: диск ClickHouse < 20 % свободно; доля ошибок вставки > 1 % за 5 мин; бэкап старше 26 ч; ingest/api
-  `/health` не 200 два цикла подряд; тишина healthchecks.io > 15 мин; deletion `failed`.
+  `/health` не 200 два цикла подряд; тишина healthchecks.io > 15 мин; deletion `failed`; `app_merge` `failed`
+  (сообщение «Слияние приложений не выполнено» с шагом и причиной; без автоповтора — кнопка «Повторить» в баннере приложения).
 
 #### Traces
 - Provider: `# Deviation` — распределённая трассировка OpenTelemetry в MVP не включается: три процесса на одном хосте,
@@ -2608,7 +2612,7 @@ Review rejects PR где implementation commit предшествует test com
 |---|---|---|---|
 | `INGEST_ACCEPT_DEVELOPMENT` | `true` | ingest | Kill switch dev-трафика при перегрузке |
 | `API_PUBLIC_BEARER_ENABLED` | `true` | api | Kill switch внешнего Read API |
-| `WORKER_JOBS_ENABLED` | `system_check,digest,close_day,deletion,session_cleanup` | worker | Включённые фоновые задачи |
+| `WORKER_JOBS_ENABLED` | `system_check,digest,close_day,deletion,session_cleanup,app_merge` | worker | Включённые фоновые задачи |
 | `MIGRATE_ON_START` | `true` | api | Автомиграции при старте |
 
 Незавершённая работа в trunk прячется не флагами, а отсутствием ссылки в навигации до готовности экрана
@@ -2651,3 +2655,12 @@ Review rejects PR где implementation commit предшествует test com
 - UX/UI: [14-ux-ui-spec.md](./14-ux-ui-spec.md)
 - Ops runbooks: [21-ops-runbooks.md](./21-ops-runbooks.md)
 - Test strategy: [22-test-strategy.md](./22-test-strategy.md)
+
+---
+
+## Changelog
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-13 | 1.0 | Первая версия ТЗ после discovery |
+| 2026-10-15 | 1.1 | Мультиплатформенные приложения и слияние: `WORKER_JOBS_ENABLED` по умолчанию включает `app_merge`; метрики `ingest_platform_missing_total`, `merge_copied_events_total`, `merge_step_duration_seconds{step}` (§3.4); порог алертов — `app_merge` `failed` |

@@ -691,7 +691,14 @@ Tailwind CSS 4.3.3 настраивается **в CSS** (`@theme`), файла 
 | `SetupPasskeyForm` | `web/src/components/auth/setup-passkey-form.tsx` | Input + Button | Регистрация passkey по ссылке |
 | `CopyField` | `web/src/components/common/copy-field.tsx` | Input readOnly + Button(Copy) | Ключи, ID, ссылки |
 | `CodeBlock` | `web/src/components/common/code-block.tsx` | `<pre>` + shiki (из fumadocs-core) + CopyButton | Подсвеченный код |
-| `PlatformIcon` | `web/src/components/common/platform-icon.tsx` | SVG из `icons/platform/*` | Иконка платформы |
+| `PlatformIcon` | `web/src/components/common/platform-icon.tsx` | SVG из `icons/platform/*` | Иконка платформы; экспортирует `PLATFORM_LABELS` (`server` → «Бэкенд») |
+| `PlatformIcons` | `web/src/components/common/platform-icons.tsx` | PlatformIcon × N + «+N» | Ряд иконок `app.platforms` (до трёх; AppShell, AppSwitcher, портфель, диалог слияния) |
+| `PlatformToggleGroup` | `web/src/components/common/platform-toggle-group.tsx` | ToggleGroup (multi) + PlatformIcon | Выбор набора платформ (S-04, карточка «Платформы» S-11) |
+| `PlatformSwitcher` | `web/src/components/reports/platform-switcher.tsx` | ToggleGroup «Все / платформа…» | Переключатель платформы отчёта (S-05, S-06): явные `app.platforms` + наблюдаемые `events.platform`, одно значение `?platform=` |
+| `PlatformShareBar` | `web/src/components/reports/platform-share-bar.tsx` | stacked bar + Tooltip | Доли активных по платформам (`PortfolioRow.platforms`) в колонке «Платформы» портфеля |
+| `PlatformIntegrationSection` | `web/src/components/integration/platform-integration-section.tsx` | heading + SnippetTabs + CopyField | Секция интеграции на каждую платформу приложения со своим ключом (`activeWriteKeyFor`) |
+| `MergeAppsDialog` | `web/src/components/apps/merge-apps-dialog.tsx` | Dialog + Command (выбор источника) + PlatformIcons + Input (`confirm_name`) | «Объединить приложения»: предпросмотр `getMergePreview`, `createAppMerge` (S-11, опасная зона) |
+| `MergeProgressBanner` | `web/src/components/apps/merge-progress-banner.tsx` | Alert + Button «Повторить» (`useActiveMerge`) | Баннер AppShell: шаг слияния текстом, `retryAppMerge` у упавшего |
 | `TimezoneSelect` | `web/src/components/common/timezone-select.tsx` | Popover + Command | Выбор IANA TZ |
 | `EmptyState` | `web/src/components/feedback/empty-state.tsx` | icon 48px + heading-3 + body-md + Button | Пустые состояния |
 | `ErrorState` | `web/src/components/feedback/error-state.tsx` | Alert + Button + caption | Ошибки загрузки |
@@ -726,7 +733,7 @@ Tailwind CSS 4.3.3 настраивается **в CSS** (`@theme`), файла 
 | S-08 | `/apps/[appId]/profiles` | Профили | Поиск person | yes | DashboardShell + AppShell | idle / searching / results / no-results / error |
 | S-09 | `/apps/[appId]/profiles/[personKey]` | Профиль | Карточка person, удаление | yes | DashboardShell + AppShell | populated / not-found / loading / error / deleting |
 | S-10 | `/apps/[appId]/integration` | Интеграция | Онбординг + здоровье | yes | DashboardShell + AppShell | onboarding / healthy / loading / error |
-| S-11 | `/apps/[appId]/settings` | Настройки приложения | Имя, TZ, ключи, архив, удаление | yes | DashboardShell + AppShell | idle / submitting / error / archived |
+| S-11 | `/apps/[appId]/settings` | Настройки приложения | Имя, TZ, платформы, ключи, объединение, архив, удаление | yes | DashboardShell + AppShell | idle / submitting / error / archived |
 | S-12 | `/settings` | Настройки | Passkeys, API-ключи, Telegram, Система, Удаления | yes | DashboardShell | populated / loading / error |
 | S-13 | `/docs/[[...slug]]` | Документация | Гайды + API reference | yes | DocsShell (Fumadocs) | populated / not-found |
 
@@ -866,7 +873,7 @@ Layouts:
 ```
 
 **Колонки PortfolioTable** (поля `PortfolioRow`):
-1. «Приложение»: `PlatformIcon` (`app.platform`) + `app.name`. Ссылка на `/apps/{app.id}`, вся строка кликабельна.
+1. «Приложение»: `PlatformIcons` (`app.platforms`, до трёх иконок и «+N») + `app.name`. Ссылка на `/apps/{app.id}`, вся строка кликабельна. Отдельная колонка «Платформы» (`PlatformShareBar` по `PortfolioRow.platforms`) не сортируется.
 2. «Сегодня»: `active_today`, live с начала суток в TZ приложения. Цвет `--fg-muted`, tooltip «Неполный день: данные с 00:00 по TZ приложения».
 3. «DAU {дата}»: `active_date`.
 4. «Δ к {день недели} {дата − 7}»: `active_delta_pct` через `Delta`. Значение `null` (не было данных неделю назад) показывается как «—».
@@ -932,7 +939,7 @@ Layouts:
 | `error` | 409 `app_name_taken` → ошибка поля «Название»; 400 `invalid_request` → ошибки полей по `details`; 5xx → toast | — |
 | `success` | 201 | toast «Приложение создано», `router.push('/apps/{id}/integration')` |
 
-Опции платформы (значения `app_platform`): iOS (`ios`), Android (`android`), Веб (`web`), macOS (`macos`), Windows (`windows`), Linux (`linux`), Бот (`bot`), Сервер (`server`), Другое (`other`).
+Опции платформы (значения `app_platform`, `PLATFORM_LABELS`): iOS (`ios`), Android (`android`), Веб (`web`), macOS (`macos`), Windows (`windows`), Linux (`linux`), Бот (`bot`), Бэкенд (`server`), Другое (`other`). Поле `platforms` — `PlatformToggleGroup`, можно выбрать от 1 до 9 платформ (ошибка «Выберите хотя бы одну платформу»); на каждую выбранную создаётся свой write-ключ.
 
 **Data requirements**: `getSettings` (TZ по умолчанию), `createApp`.
 
@@ -1283,7 +1290,7 @@ Write-ключ берётся из `listWriteKeys`: первый неотозв�
 **Сниппеты**: генерируются функцией `buildSnippet(lang, { ingestUrl, writeKey, platform })` из `web/src/lib/snippets.ts`:
 - `ingestUrl` = `process.env.NEXT_PUBLIC_INGEST_URL` + `/v1/events`;
 - `writeKey` — ключ из `listWriteKeys`;
-- `platform` = `app.platform`.
+- `platform` — по секции `PlatformIntegrationSection` на каждую платформу из `app.platforms`; ключ секции — активный ключ этой платформы (`activeWriteKeyFor(keys, platform)`).
 
 Тест `web/src/lib/snippets.test.ts` проверяет, что в каждом сниппете есть точный ключ и URL, а JSON-часть curl валидна. Тексты всех пяти сниппетов для платформы `ios` с ключом-примером приведены ниже. Для других платформ меняются только значения `context` (`platform`, `os_name`, `device_type`).
 
@@ -1590,7 +1597,7 @@ func main() {
 
 #### Screen S-11: `/apps/[appId]/settings`
 
-**Purpose**: настройки приложения (FR-009, FR-010): имя, часовой пояс, write-ключи, архивирование, удаление.
+**Purpose**: настройки приложения (FR-009, FR-010): имя, часовой пояс, набор платформ, write-ключи, объединение с другим приложением, архивирование, удаление.
 
 **Auth**: required. **Layout**: `DashboardShell` + `AppShell`, колонка шириной 720 px.
 
@@ -1599,9 +1606,13 @@ func main() {
 │ Настройки приложения                                                         │
 │ ┌ Card: Основное ────────────────────────────────────────────────────────┐  │
 │ │ Название *     [Notes iOS                    ]                         │  │
-│ │ Платформа      iOS (изменить нельзя)                                   │  │
 │ │ Часовой пояс * [Europe/Moscow (UTC+3)      ▾]  Меняет границы суток   │  │
 │ │                в отчётах; закрытые дни не пересчитываются.             │  │
+│ │                                                        [Сохранить]    │  │
+│ └────────────────────────────────────────────────────────────────────────┘  │
+│ ┌ Card: Платформы (#platforms) ──────────────────────────────────────────┐  │
+│ │ [iOS ✓] [Android ✓] [Веб] [macOS] … [Бэкенд] [Другое]  PlatformToggleGroup│
+│ │ Хотя бы одна платформа; PATCH { platforms }, toast «Платформы сохранены»  │
 │ │                                                        [Сохранить]    │  │
 │ └────────────────────────────────────────────────────────────────────────┘  │
 │ ┌ Card: Write-ключи                                    [+ Создать ключ] ┐  │
@@ -1614,6 +1625,8 @@ func main() {
 │ │ сохраняются.                                         [Архивировать]   │  │
 │ │ Удалить навсегда — все события и настройки удаляются в фоне.          │  │
 │ │                                                   [Удалить навсегда]  │  │
+│ │ Объединить приложения — события и ключи другого приложения переедут   │  │
+│ │ сюда, оно будет удалено.                               [Объединить]   │  │
 │ └────────────────────────────────────────────────────────────────────────┘  │
 ```
 
@@ -1622,8 +1635,8 @@ func main() {
 | State | When | UI |
 |---|---|---|
 | `idle` | Загружено | Форма заполнена текущими значениями. «Сохранить» disabled, пока нет изменений |
-| `submitting` | `updateApp` / `createWriteKey` / `revokeWriteKey` / `archiveApp` / `unarchiveApp` / `deleteApp` | Соответствующая кнопка со spinner |
-| `error` | `app_name_taken` → поле; `confirm_name_mismatch` → поле в диалоге; 5xx → toast | — |
+| `submitting` | `updateApp` / `createWriteKey` / `revokeWriteKey` / `archiveApp` / `unarchiveApp` / `deleteApp` / `createAppMerge` | Соответствующая кнопка со spinner |
+| `error` | `app_name_taken` → поле; `confirm_name_mismatch` → поле в диалоге; `merge_in_progress` → toast (архив/удаление/объединение заблокированы, пока `MergeProgressBanner` показывает незавершённое слияние); 5xx → toast | — |
 | `archived` | `status = archived` | Вместо «Архивировать» кнопка «Вернуть из архива» (`unarchiveApp`); ArchivedBanner вверху |
 
 **Диалоги**:
@@ -1631,8 +1644,9 @@ func main() {
 - «Отозвать ключ»: AlertDialog «Отозвать ключ pk_7Hq2…Ab0?». Описание: «Через 15 секунд все запросы с этим ключом начнут получать 401 invalid_app_key. Установленные версии приложения с этим ключом перестанут отправлять данные.» Кнопка «Отозвать» (destructive).
 - «Архивировать»: AlertDialog с описанием последствий, кнопка «Архивировать».
 - «Удалить навсегда»: `ConfirmDeleteDialog` с вводом точного названия приложения (`confirm_name`). Ответ 202 → toast «Удаление запущено», редирект на `/`.
+- «Объединить приложения»: `MergeAppsDialog` — выбор источника среди других активных приложений (с `PlatformIcons`), предпросмотр `getMergePreview` (события, первый/последний день, активные ключи, предупреждение о другом часовом поясе: «Часовой пояс останется «…»: дни источника пересчитаются»), ввод точного названия источника (`confirm_name`), кнопка «Объединить» / «Объединяем…». Ответ 202 → диалог закрывается, в AppShell появляется `MergeProgressBanner` («Объединение с «<источник>»», шаг текстом); у упавшего слияния — кнопка «Повторить» (`retryAppMerge`).
 
-**Data requirements**: `getApp`, `updateApp`, `listWriteKeys`, `createWriteKey`, `revokeWriteKey`, `archiveApp`, `unarchiveApp`, `deleteApp`.
+**Data requirements**: `getApp`, `updateApp` (в том числе `platforms`), `listWriteKeys`, `createWriteKey`, `revokeWriteKey`, `archiveApp`, `unarchiveApp`, `deleteApp`, `getMergePreview`, `listAppMerges`, `createAppMerge`, `retryAppMerge`.
 
 **Tests**: `web/src/app/(dashboard)/apps/[appId]/settings/app-settings-form.test.tsx`, `write-keys-card.test.tsx`, E2E `web/e2e/app-settings.spec.ts`.
 
@@ -2590,3 +2604,4 @@ type ConfirmDeleteDialogProps = {
 | 2026-10-13 | 1.0 | Первая версия UX/UI-спецификации после discovery. Стиль AppMetrica, только светлая тема, десктоп ≥ 1280 px, экраны S-01..S-14, токены OKLCH, Tailwind 4 `@theme`, shadcn (Radix) + Recharts |
 | 2026-10-14 | 1.1 | S-14: пути файлов приведены к коду — `app_not_found` обрабатывает `AppShell` (`EmptyState`), отдельного `apps/[appId]/not-found.tsx` нет; error boundary — `app/error.tsx` и `apps/[appId]/error.tsx` вместо `(dashboard)/error.tsx` |
 | 2026-10-14 | 1.2 | Ревью макета «Dashboard v2»: светлая и тёмная темы, палитра макета под AA, Manrope, радиусы и тени, шапка 64 px, сегментированные переключатели, зазоры heatmap, KPI «Последнее событие»; новые S-00 (лендинг на `/`) и S-15 (демо-режим), портфель → `/portfolio`. Детали — раздел «Обновление 1.2» |
+| 2026-10-15 | 1.3 | Мультиплатформенные приложения и слияние: компоненты `PlatformIcons`, `PlatformToggleGroup`, `PlatformSwitcher`, `PlatformShareBar`, `PlatformIntegrationSection`, `MergeAppsDialog`, `MergeProgressBanner` (§4.3); S-04 — `platforms` через `PlatformToggleGroup`, подпись `server` → «Бэкенд»; портфель — `PlatformIcons` по `app.platforms` и несортируемая колонка «Платформы»; S-10 — секция интеграции на каждую платформу; S-11 — карточка «Платформы» и «Объединить приложения» |

@@ -27,6 +27,8 @@ type Querier interface {
 	// Копия слияния в details.merged_apps цикла — до удаления строки apps источника (app_merges.source_app_id обнулится).
 	AppendMergedAppToJobRun(ctx context.Context, arg AppendMergedAppToJobRunParams) error
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
+	// Старейшее слияние в очереди. Запросы идут вне транзакции, поэтому строка не блокируется: запуски job
+	// app_merge разделяет advisory lock worker-а (worker.MergeJob), а не блокировка строки.
 	ClaimNextAppMerge(ctx context.Context) (AppMerge, error)
 	// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
 	// снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
@@ -101,6 +103,13 @@ type Querier interface {
 	LockSetupToken(ctx context.Context, tokenHash []byte) (LockSetupTokenRow, error)
 	MarkDayClosed(ctx context.Context, arg MarkDayClosedParams) error
 	MarkSetupTokenUsed(ctx context.Context, arg MarkSetupTokenUsedParams) (int64, error)
+	// Шаг purge_source: ключи Read API, привязанные к источнику, переходят в цель вместе с его данными —
+	// иначе их удалил бы каскад по apps.id.
+	MoveAPIKeysForMerge(ctx context.Context, arg MoveAPIKeysForMergeParams) (int64, error)
+	// Шаг purge_source: заявки на удаление человека или установки из источника переходят в цель — его события
+	// уже скопированы туда, и удаление выполнится в цели. Заявка pending/running, у которой в цели уже есть
+	// такая же активная, остаётся на источнике и уходит каскадом: её субъект удалит заявка цели.
+	MoveDeletionRequestsForMerge(ctx context.Context, arg MoveDeletionRequestsForMergeParams) (int64, error)
 	// Шаг move_keys: ключи источника переходят в цель; ключ без платформы получает default_platform
 	// (единственная платформа источника) или остаётся NULL, если у источника несколько платформ.
 	MoveWriteKeys(ctx context.Context, arg MoveWriteKeysParams) (int64, error)
@@ -118,6 +127,8 @@ type Querier interface {
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
 	RevokeWriteKey(ctx context.Context, arg RevokeWriteKeyParams) (WriteKey, error)
 	SetAppMergeStep(ctx context.Context, arg SetAppMergeStepParams) error
+	// Шаг copy пересчитывает объём источника: за wait_keys источник принимал события по старому снимку ключей.
+	SetAppMergeTotalEvents(ctx context.Context, arg SetAppMergeTotalEventsParams) error
 	StartJobRun(ctx context.Context, arg StartJobRunParams) (uuid.UUID, error)
 	TakeCeremony(ctx context.Context, arg TakeCeremonyParams) (TakeCeremonyRow, error)
 	TouchApiKeyLastUsed(ctx context.Context, arg TouchApiKeyLastUsedParams) error

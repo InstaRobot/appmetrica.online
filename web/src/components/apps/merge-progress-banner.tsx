@@ -10,7 +10,8 @@ import {
   retryAppMerge,
   useListAppMerges,
 } from "@/lib/api/gen/endpoints/admin-apps/admin-apps";
-import { getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
+import { getListWriteKeysQueryKey } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
+import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { AppMerge } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
@@ -49,20 +50,27 @@ function stepText(merge: AppMerge): string {
   return `${source}: перенесено ${formatInt(merge.copied_events)} из ${formatInt(merge.total_events)} событий`;
 }
 
-// Баннер AppShell (04-ux-diff.md §8, §11): шаг слияния текстом, «Повторить» у упавшего. Когда отслеживаемое
-// слияние завершилось, данные цели (приложение, отчёты) и списки приложений перечитываются.
+// Баннер AppShell (04-ux-diff.md §8, §11): шаг слияния текстом, «Повторить» у упавшего. Шаг move_keys
+// переносит ключи источника и расширяет платформы цели — приложение и его write-ключи перечитываются, как
+// только слияние прошло этот шаг. Когда отслеживаемое слияние завершилось, перечитываются данные цели
+// (приложение, отчёты, ключи) и списки приложений.
 export function MergeProgressBanner({ appId }: { appId: string }) {
   const queryClient = useQueryClient();
   const merges = useAppMerges(appId);
   const active = merges.find((m) => RUNNING.has(m.status) || m.status === "failed");
-  const tracked = useRef<string | null>(null);
+  const tracked = useRef<{ id: string; keysMoved: boolean } | null>(null);
 
   useEffect(() => {
     if (active) {
-      tracked.current = active.id;
+      const keysMoved = active.step !== "move_keys";
+      if (tracked.current?.id === active.id && (tracked.current.keysMoved || !keysMoved)) return;
+      tracked.current = { id: active.id, keysMoved };
+      if (!keysMoved) return;
+      void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(appId) });
+      void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
       return;
     }
-    const finished = merges.find((m) => m.id === tracked.current && m.status === "done");
+    const finished = merges.find((m) => m.id === tracked.current?.id && m.status === "done");
     if (!finished) return;
     tracked.current = null;
     toast.success("Приложения объединены");
@@ -70,6 +78,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
       predicate: ({ queryKey }) =>
         typeof queryKey[0] === "string" && queryKey[0].startsWith(`/v1/apps/${appId}`),
     });
+    void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
     void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
     void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
   }, [active, merges, appId, queryClient]);

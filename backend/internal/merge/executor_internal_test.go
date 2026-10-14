@@ -30,6 +30,7 @@ type fakeStore struct {
 	reclErr  error
 	failErr  error
 	addErr   error
+	totalErr error
 	purgeErr error
 	tz       string // часовой пояс цели; "" — UTC
 
@@ -93,6 +94,15 @@ func (s *fakeStore) appTimezone(context.Context, uuid.UUID) (string, error) {
 	return s.tz, nil
 }
 
+func (s *fakeStore) setTotalEvents(_ context.Context, _ uuid.UUID, total int64) error {
+	s.calls = append(s.calls, fmt.Sprintf("set_total:%d", total))
+	if s.totalErr != nil {
+		return s.totalErr
+	}
+	s.merge.TotalEvents = total
+	return nil
+}
+
 func (s *fakeStore) addCopiedPartition(_ context.Context, arg sqlc.AddCopiedPartitionParams) error {
 	s.calls = append(s.calls, fmt.Sprintf("add_partition:%d", arg.Partition))
 	if s.addErr != nil {
@@ -113,10 +123,14 @@ func (s *fakeStore) purgeSource(ctx context.Context, _ sqlc.AppMerge, runID uuid
 	return s.setStep(ctx, sqlc.SetAppMergeStepParams{Step: sqlc.AppMergeStepReclose, Now: now})
 }
 
-func (s *fakeStore) fail(_ context.Context, _ uuid.UUID, msg string) error {
+// fail, как настоящий запрос к Postgres, не выполняется по отменённому ctx.
+func (s *fakeStore) fail(ctx context.Context, _ uuid.UUID, msg string) error {
 	s.calls = append(s.calls, "fail")
 	if s.failErr != nil {
 		return s.failErr
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	s.failed = append(s.failed, msg)
 	s.merge.Status, s.merge.Error = sqlc.AppMergeStatusFailed, &msg
@@ -190,6 +204,7 @@ type failedCall struct {
 	mergeID uuid.UUID
 	step    sqlc.AppMergeStep
 	cause   string
+	ctxErr  error // ctx.Err() на момент вызова: алерт не должен получать отменённый ctx
 }
 
 func pendingMerge() *sqlc.AppMerge {
@@ -206,8 +221,8 @@ func newTestExecutor(s *fakeStore, c clock.Clock, failed *[]failedCall, opts ...
 }
 
 func newTestExecutorWith(s *fakeStore, cp *fakeCopier, p *fakePurger, c clock.Clock, failed *[]failedCall, opts ...Option) *Executor {
-	onFailed := func(_ context.Context, m sqlc.AppMerge, cause string) {
-		*failed = append(*failed, failedCall{m.ID, m.Step, cause})
+	onFailed := func(ctx context.Context, m sqlc.AppMerge, cause string) {
+		*failed = append(*failed, failedCall{m.ID, m.Step, cause, ctx.Err()})
 	}
 	return newExecutor(s, cp, p, c, slog.New(slog.DiscardHandler), onFailed, opts...)
 }
@@ -295,9 +310,10 @@ func TestRunOnceRunsStepsToDone(t *testing.T) {
 	require.Equal(t, Result{MergeID: s.merge.ID, Status: sqlc.AppMergeStatusDone, Step: sqlc.AppMergeStepDone}, res)
 	require.Equal(t, []string{
 		"claim", "set_step:move_keys", "move_keys", "set_step:wait_keys", "set_step:copy",
-		"timezone", "add_partition:202608", "add_partition:202609", "add_partition:202610", "set_step:purge_source",
-		"purge_source", "set_step:reclose", "reclose",
+		"timezone", "set_total:810", "add_partition:202608", "add_partition:202609", "add_partition:202610",
+		"set_step:purge_source", "purge_source", "set_step:reclose", "reclose",
 	}, s.calls)
+	require.Equal(t, int64(810), s.merge.TotalEvents, "объём источника пересчитан на шаге copy")
 	require.Equal(t, []string{"partitions:UTC", "copy:202608", "copy:202609", "copy:202610", "rejected"}, cp.calls)
 	require.Equal(t, []uuid.UUID{source}, p.purged)
 	require.Equal(t, []uuid.UUID{runID}, s.runIDs)
@@ -342,7 +358,9 @@ func TestCopyStepEmptySource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
 	require.Equal(t, []string{"partitions:UTC", "rejected"}, cp.calls)
-	require.NotContains(t, s.calls, "add_partition")
+	for _, call := range s.calls {
+		require.False(t, strings.HasPrefix(call, "add_partition:"), "партиций нет — записывать нечего: %v", s.calls)
+	}
 	require.False(t, s.merge.FirstSourceDay.Valid)
 	require.Zero(t, s.merge.CopiedEvents)
 	require.Empty(t, failed)
@@ -525,7 +543,7 @@ func TestStepFailureMarksMergeFailed(t *testing.T) {
 			require.Equal(t, tc.step, res.Step)
 			require.Len(t, s.failed, 1)
 			require.Contains(t, s.failed[0], "pg down")
-			require.Equal(t, []failedCall{{m.ID, tc.step, s.failed[0]}}, failed)
+			require.Equal(t, []failedCall{{m.ID, tc.step, s.failed[0], nil}}, failed)
 		})
 	}
 }
@@ -570,15 +588,32 @@ func TestCanceledRunKeepsMergeRunning(t *testing.T) {
 	require.Empty(t, failed)
 }
 
-// Таймаут запуска — сбой шага: слияние failed, владелец получает алерт.
+// Таймаут запуска — сбой шага: ctx уже истёк, но слияние записывается как failed и владелец получает алерт,
+// потому что запись итога и алерт идут без отмены ctx.
 func TestDeadlineMarksMergeFailed(t *testing.T) {
 	m := pendingMerge()
 	m.Status = sqlc.AppMergeStatusRunning
-	s := &fakeStore{merge: m, moveErr: context.DeadlineExceeded}
+	s := &fakeStore{merge: m}
 	var failed []failedCall
-	_, err := newTestExecutor(s, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
+	ctx, cancel := context.WithDeadline(t.Context(), execNow.Add(-time.Hour))
+	defer cancel()
+	_, err := newTestExecutor(s, clock.NewFixed(execNow), &failed).RunOnce(ctx, uuid.New())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Equal(t, sqlc.AppMergeStatusFailed, s.merge.Status)
+	require.Equal(t, []string{"context deadline exceeded"}, s.failed)
+	require.Len(t, failed, 1)
+	require.NoError(t, failed[0].ctxErr, "алерт получает ctx без отмены")
+}
+
+// Сбой пересчёта объёма источника — сбой шага copy: партиции не копируются, слияние failed.
+func TestCopyStepTotalEventsError(t *testing.T) {
+	s := &fakeStore{merge: runningAt(sqlc.AppMergeStepCopy), totalErr: errors.New("pg down")}
+	cp := &fakeCopier{parts: sourceParts()}
+	var failed []failedCall
+	res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
+	require.ErrorContains(t, err, "refresh total events: pg down")
+	require.Equal(t, sqlc.AppMergeStatusFailed, res.Status)
+	require.Equal(t, []string{"partitions:UTC"}, cp.calls)
 	require.Len(t, failed, 1)
 }
 

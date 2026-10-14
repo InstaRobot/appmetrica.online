@@ -76,7 +76,7 @@
 | 401 | Нет или неверная аутентификация: `missing_app_key`, `invalid_app_key`, `unauthenticated` |
 | 403 | Аутентифицирован, но нельзя: `app_archived` (ingest), `insufficient_scope`, `csrf_check_failed` |
 | 404 | Не найдено или нет доступа по `app_id` ключа: `app_not_found`, `profile_not_found`, `not_found` |
-| 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch`, `deletion_pending` |
+| 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch`, `deletion_pending`, `merge_in_progress`, `app_archived` |
 | 410 | Ссылка установки passkey истекла или использована: `setup_token_expired` |
 | 413 | Тело больше лимита: `payload_too_large` (ingest > 1 048 576 байт после распаковки; api > 65 536 байт) |
 | 415 | Неподдерживаемый Content-Type: `unsupported_media_type` |
@@ -1075,7 +1075,7 @@ curl -sS "https://api.appmetrica.online/v1/apps/$APP/deletion-requests/0199d6d0-
   ]
 }
 ```
-  `jobs` — последний запуск каждого из 5 jobs (`close_day`, `digest`, `system_check`, `deletion`, `session_cleanup`).
+  `jobs` — последний запуск каждого из 6 jobs (`close_day`, `digest`, `system_check`, `deletion`, `session_cleanup`, `app_merge`).
 - **GET /admin/v1/deletion-requests (listDeletionRequests)** — `app_id` (необязательный фильтр), до 200 последних.
 
 **Test vectors (TDD)**:
@@ -1190,7 +1190,9 @@ HTTP polling, без WebSocket/SSE/Supabase Realtime/Ably. Обосновани�
 
 ### 9.1. Full OpenAPI 3.1 YAML
 
-Используется OpenAPI **3.0.3** (обоснование — §6). Два файла.
+Используется OpenAPI **3.0.3** (обоснование — §6). Два файла. Ниже встроена версия **1.0.0** обоих; изменения
+версии **1.1.0** (мультиплатформенные приложения и слияние) перечислены в §9.1.1 после `api.yaml` — источник истины
+`contracts/openapi/*.yaml` в репозитории.
 
 #### contracts/openapi/ingest.yaml
 
@@ -3417,6 +3419,42 @@ components:
               additionalProperties: true
 ```
 
+#### 9.1.1. Дельта 1.1.0 (мультиплатформенные приложения и слияние)
+
+`info.version: 1.1.0` в обоих файлах. Все изменения — не breaking по §1.1 (новые необязательные параметры, новые поля
+ответов, новые значения enum); `App.platform`/`AppSummary.platform` помечены `deprecated: true` и удаляются в
+contract-фазе (T-MP-021, не раньше 2026-11-07).
+
+`contracts/openapi/ingest.yaml`:
+- `EventContext.platform`: отсутствующее значение берётся из платформы ключа записи, затем из единственной платформы
+  приложения; иначе событие принимается как `other` с новым `WarningCode` `platform_missing`.
+
+`contracts/openapi/api.yaml`:
+- Схема `PlatformList` — `array` из `Platform`, `minItems: 1`, `maxItems: 9`, `uniqueItems`.
+- `App` и `AppSummary`: обязательное поле `platforms: PlatformList`; `platform` — deprecated, равен `platforms[0]`.
+  `CreateAppBody`: `platforms` обязательно вместо `platform`; `UpdateAppBody`: необязательное `platforms`.
+  `CreateAppResult.write_keys` — по ключу на каждую платформу в порядке `platforms`.
+- `WriteKey.platform` (nullable) и `CreateWriteKeyBody.platform` (без поля — любая платформа).
+- `PortfolioRow.platforms[]` (`PlatformActive`: активные за `date` по `events.platform`, по убыванию; человек на двух
+  платформах учитывается в обеих строках).
+- Параметр `Split` (`split=none|platform`, по умолчанию `none`) у `getAudienceTimeseries`: при `platform` в ответе
+  `TimeSeries.splits[]` (`TimeSeriesSplit {platform, points[]}`) — ряд на каждую наблюдаемую платформу, `compare`
+  игнорируется и `compare_points` нет.
+- `getRealtime`: фильтр `platform` (`FilterPlatform`, массив) сужает все три части среза; остальные фильтры отчётов не применяются.
+- Новые Admin-операции (`x-internal`, cookie-сессия, мутации с `X-Requested-With`):
+  `GET /admin/v1/apps/{app_id}/merge-preview?source_app_id=` (`getMergePreview` → `MergePreview`: источник, число
+  событий, первый/последний день, число активных ключей, `timezone_differs`),
+  `GET /admin/v1/apps/{app_id}/merges` (`listAppMerges` → `AppMergeList`, до 20 новых первыми),
+  `POST /admin/v1/apps/{app_id}/merges` (`createAppMerge`, тело `CreateAppMergeBody {source_app_id, confirm_name}` →
+  `202 AppMerge`; `409 merge_in_progress` / `app_archived`),
+  `POST /admin/v1/apps/{app_id}/merges/{merge_id}/retry` (`retryAppMerge` → `200 AppMerge`, только из `failed`).
+  Схемы `AppMerge` (`status: AppMergeStatus`, `step: AppMergeStep`, `source_app_id` null после `purge_source`,
+  `copied_events`/`total_events`, `error`), `AppMergeStatus` (`pending|running|done|failed`),
+  `AppMergeStep` (`move_keys|wait_keys|copy|purge_source|reclose|done`).
+- `Conflict.code`: `merge_in_progress` (приложение — цель или источник незавершённого слияния: `archiveApp`,
+  `unarchiveApp`, `deleteApp`, `createAppMerge`) и `app_archived` (`createAppMerge`: цель в архиве).
+- `JobName`: `app_merge` (в `getSystemStatus.jobs`).
+
 ### 9.2. tRPC router (если используем tRPC)
 
 > **N/A для tRPC.** Причина: бэкенд на Go, контракт — OpenAPI (§5). Вместо tRPC-роутера ниже — готовые конфиги кодогенерации, которые и образуют «типизированный роутер» по обе стороны.
@@ -3576,6 +3614,8 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 409 | `last_passkey` | Нельзя удалить последний passkey. | Admin: удаление единственного passkey |
 | 409 | `app_name_taken` | Приложение с таким именем уже есть. | Admin: дубль `lower(name)` |
 | 409 | `confirm_name_mismatch` | Имя для подтверждения не совпадает. | Admin: `deleteApp` |
+| 409 | `merge_in_progress` | Приложение участвует в незавершённом слиянии. | Admin: `archiveApp`, `unarchiveApp`, `deleteApp`, `createAppMerge` (цель или источник в `app_merges` со статусом `pending`/`running`/`failed`) |
+| 409 | `app_archived` | Приложение в архиве. | Admin: `createAppMerge` — цель в архиве |
 | 410 | `setup_token_expired` | Ссылка устарела. Создайте новую командой на сервере. | Admin: токен использован или старше 15 мин |
 | 413 | `payload_too_large` | Батч слишком большой. / Тело запроса больше 65 536 байт. | Ingest: > 1 048 576 байт после распаковки; API: тело > 65 536 байт (`api.MaxBodyBytes`) |
 | 415 | `unsupported_media_type` | Неверный Content-Type. | Ingest: не `application/json`/`text/plain` |
@@ -3585,7 +3625,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 500 | `internal_error` | Что-то пошло не так. | Необработанная ошибка (паника перехвачена Recoverer) |
 | 503 | `storage_unavailable` | Хранилище временно недоступно. | ClickHouse/Postgres не отвечает или таймаут |
 | 200* | `missing_field`, `invalid_field`, `unknown_event_name`, `event_too_old`, `user_id_looks_like_pii`, `duration_required`, `install_rate_limited` | — (только в `rejected[]`) | Ingest: отклонение отдельного события |
-| 200* | `timestamp_in_future_clamped`, `duplicate_insert_id_in_batch`, `geo_ip_invalid` | — (только в `warnings[]`) | Ingest: событие принято с поправкой |
+| 200* | `timestamp_in_future_clamped`, `duplicate_insert_id_in_batch`, `geo_ip_invalid`, `platform_missing` | — (только в `warnings[]`) | Ingest: событие принято с поправкой (`platform_missing` — записано как `other`) |
 
 ---
 
@@ -3597,3 +3637,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 2026-10-14 | 1.1 | `listApps`, `getApp`, `getRealtime`: добавлен ответ `400 BadRequest` (как в `contracts/openapi/api.yaml` и contract-тестах); вектор `future_null` приведён к правилу «только завершённые периоды» и имени теста |
 | 2026-10-14 | 1.2 | 413 `payload_too_large` и для api: тело любого запроса `/v1`, `/admin/v1` ограничено 65 536 байт (`http.MaxBytesReader`, сквозное правило в `info.description` api.yaml) |
 | 2026-10-14 | 1.3 | `deleteApp` отзывает write-ключи приложения вместе с архивацией: ingest отвечает `401 invalid_app_key`; worker берёт запрос `app` не раньше чем через 16 мин (OQ-073) |
+| 2026-10-15 | 1.4 | Контракт 1.1.0 (§9.1.1, без повторного встраивания YAML): `PlatformList`, `App.platforms`/`AppSummary.platforms` (`platform` deprecated), `PortfolioRow.platforms`, `WriteKey.platform`, параметр `split=none\|platform` с `TimeSeries.splits[]`, фильтр `platform` у `getRealtime`, операции слияния `merge-preview`/`merges`/`merges/{merge_id}/retry`, `JobName` `app_merge`, `Conflict` `merge_in_progress`/`app_archived`, `WarningCode` `platform_missing`; «5 jobs» → 6 в `getSystemStatus` |

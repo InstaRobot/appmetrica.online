@@ -4,6 +4,7 @@ package merge_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -361,6 +362,12 @@ func TestMergeEndToEnd(t *testing.T) {
 	e.seedSource(t, source)
 	require.NoError(t, e.CH.InsertRejected(ctx, []chstore.RejectedRow{rejectedRow(source)}))
 	e.closeDays(t, target, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC))
+	// Ключ Read API, привязанный к источнику, и заявки на удаление его людей: после слияния они у цели.
+	sourceKey := e.createAPIKey(t, source, "Источник")
+	sourceUser := e.createDeletionRequest(t, source, sqlc.DeletionSubjectUser, "u1")
+	sourceInstall := e.createDeletionRequest(t, source, sqlc.DeletionSubjectInstall, "i-1")
+	// У цели уже есть активная заявка на ту же установку: заявка источника не переезжает, а уходит с ним.
+	targetInstall := e.createDeletionRequest(t, target, sqlc.DeletionSubjectInstall, "i-1")
 
 	rec := e.createMerge(t, target, source)
 	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
@@ -373,6 +380,16 @@ func TestMergeEndToEnd(t *testing.T) {
 	res := runToDone(t, e.executor(clock.NewFixed(t0), &failed, merge.WithKeysWait(0)), runID)
 	require.Equal(t, sqlc.AppMergeStepDone, res.Step)
 	require.Empty(t, failed)
+
+	key, err := e.PG.Queries().GetApiKey(ctx, sourceKey)
+	require.NoError(t, err, "ключ Read API источника не удалён каскадом")
+	require.Equal(t, uuid.MustParse(target.ID), *key.AppID)
+	user, err := e.PG.Queries().GetDeletionRequest(ctx, sqlc.GetDeletionRequestParams{ID: sourceUser, AppID: uuid.MustParse(target.ID)})
+	require.NoError(t, err, "заявка на удаление человека выполнится в цели")
+	require.Equal(t, sqlc.DeletionStatusPending, user.Status)
+	_, err = e.PG.Queries().GetDeletionRequest(ctx, sqlc.GetDeletionRequestParams{ID: targetInstall, AppID: uuid.MustParse(target.ID)})
+	require.NoError(t, err)
+	require.Equal(t, 0, e.countWhere(t, "deletion_requests", sourceInstall.String()), "дубликат активной заявки цели ушёл с источником")
 
 	// События и отказы источника — у цели.
 	require.Equal(t, uint64(1800), e.appRows(t, "events", target))
@@ -543,4 +560,26 @@ func (e *env) countWhere(t *testing.T, table, id string) int {
 	var n int
 	require.NoError(t, e.PG.Pool().QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE id = $1", id).Scan(&n))
 	return n
+}
+
+// createAPIKey — ключ Read API со scope read, привязанный к приложению app.
+func (e *env) createAPIKey(t *testing.T, app appJSON, label string) uuid.UUID {
+	t.Helper()
+	hash := sha256.Sum256([]byte(label + app.ID))
+	appID := uuid.MustParse(app.ID)
+	row, err := e.PG.Queries().CreateApiKey(t.Context(), sqlc.CreateApiKeyParams{
+		KeyPrefix: "sk_" + strings.ToLower(app.ID[:8]), KeyHash: hash[:], Label: label, Scopes: []string{"read"}, AppID: &appID,
+	})
+	require.NoError(t, err)
+	return row.ID
+}
+
+// createDeletionRequest — заявка pending на удаление subject из приложения app.
+func (e *env) createDeletionRequest(t *testing.T, app appJSON, subject sqlc.DeletionSubject, value string) uuid.UUID {
+	t.Helper()
+	req, err := e.PG.Queries().CreateDeletionRequest(t.Context(), sqlc.CreateDeletionRequestParams{
+		AppID: uuid.MustParse(app.ID), SubjectType: subject, SubjectValue: value, Source: sqlc.DeletionSourceDashboard, Now: t0,
+	})
+	require.NoError(t, err)
+	return req.ID
 }

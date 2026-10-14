@@ -742,6 +742,11 @@ func TestAppOperationsBlockedDuringMerge(t *testing.T) {
 		})
 	}
 
+	// Настройки цели слияние не блокирует: спека перечисляет только архивацию, удаление и новые ключи.
+	rec := e.call(t, http.MethodPatch, targetPath, map[string]any{"name": "Notes"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "Notes", e.get(t, target.ID).Name)
+
 	// Состояние не изменилось: цель активна, источник в архиве, заявок на удаление и новых ключей нет.
 	require.Equal(t, "active", e.get(t, target.ID).Status)
 	require.Equal(t, "archived", e.get(t, source.ID).Status)

@@ -70,9 +70,10 @@ SELECT id, target_app_id, source_app_id, source_name, source_platforms, source_t
 WHERE status IN ('pending', 'running')
 ORDER BY created_at
 LIMIT 1
-FOR UPDATE SKIP LOCKED
 `
 
+// Старейшее слияние в очереди. Запросы идут вне транзакции, поэтому строка не блокируется: запуски job
+// app_merge разделяет advisory lock worker-а (worker.MergeJob), а не блокировка строки.
 func (q *Queries) ClaimNextAppMerge(ctx context.Context) (AppMerge, error) {
 	row := q.db.QueryRow(ctx, claimNextAppMerge)
 	var i AppMerge
@@ -318,5 +319,20 @@ func (q *Queries) SetAppMergeStep(ctx context.Context, arg SetAppMergeStepParams
 		arg.FirstSourceDay,
 		arg.ID,
 	)
+	return err
+}
+
+const setAppMergeTotalEvents = `-- name: SetAppMergeTotalEvents :exec
+UPDATE app_merges SET total_events = $1::bigint WHERE id = $2
+`
+
+type SetAppMergeTotalEventsParams struct {
+	TotalEvents int64
+	ID          uuid.UUID
+}
+
+// Шаг copy пересчитывает объём источника: за wait_keys источник принимал события по старому снимку ключей.
+func (q *Queries) SetAppMergeTotalEvents(ctx context.Context, arg SetAppMergeTotalEventsParams) error {
+	_, err := q.db.Exec(ctx, setAppMergeTotalEvents, arg.TotalEvents, arg.ID)
 	return err
 }

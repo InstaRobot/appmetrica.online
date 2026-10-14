@@ -163,9 +163,9 @@ flowchart TB
 
 #### Background Jobs
 - **Tech**: `appmetrica worker` (Go), собственный планировщик (тикеры + расписание в TZ), задачи пишут историю в `job_runs`.
-- **Responsibility**: `system_check` (5 мин), `digest` (ежедневно в `settings.digest_time`), `close_day` (проверка каждые 15 мин, закрытие D−8 в 03:30 по TZ приложения), `deletion` (каждую минуту), `session_cleanup` (ежечасно).
+- **Responsibility**: `system_check` (5 мин), `digest` (ежедневно в `settings.digest_time`), `close_day` (проверка каждые 15 мин, закрытие D−8 в 03:30 по TZ приложения), `deletion` (каждую минуту), `session_cleanup` (ежечасно), `app_merge` (каждую минуту, таймаут запуска 30 мин — копирование источника с 10 млн событий; шаги слияния `move_keys` → `wait_keys` → `copy` → `purge_source` → `reclose` из `app_merges`).
 - **Retry policy**: `deletion` — до 5 попыток (`attempts`), между попытками экспонента 1 → 2 → 4 → 8 → 16 мин, затем `failed` + алерт в Telegram; `digest` — 3 попытки через 10 мин; `close_day` — повтор на следующем тике (идемпотентно благодаря ReplacingMergeTree и PK `closed_days`); `system_check` — следующий тик, при исключении — ping `HEALTHCHECKS_PING_URL/fail`.
-- Конкурентность: один экземпляр worker (Swarm replicas=1); `deletion` дополнительно берёт строки `FOR UPDATE SKIP LOCKED`, поэтому кратковременное перекрытие при start-first деплое безопасно.
+- Конкурентность: один экземпляр worker (Swarm replicas=1); `deletion` дополнительно берёт строки `FOR UPDATE SKIP LOCKED`, поэтому кратковременное перекрытие при start-first деплое безопасно. `app_merge` выполняется под advisory lock `app_merge` (`TryAdvisoryLock`; занято — запуск пропускается с `details.skipped=locked`) и тоже берёт слияние `FOR UPDATE SKIP LOCKED`. Retry `app_merge`: без автоповтора — упавшее слияние получает `status=failed` и алерт в Telegram (`MergeFailedNotifier`, если `settings.alerts_enabled` и задан chat_id); владелец нажимает «Повторить» (`retryAppMerge`), и слияние продолжается с сохранённого шага.
 
 #### Postgres (primary DB)
 - **Provider**: Dokploy managed DB, образ `postgres:18.6-trixie`, volume в `/var/lib/postgresql`.
@@ -818,3 +818,4 @@ Docker обходит UFW, поэтому фильтрация выполняе�
 | 2026-10-13 | 1.0 | Initial architecture после discovery: C4 L1/L2/L3, 8 потоков, ADR-001…ADR-014, топология Hetzner AX102-1 + Dokploy |
 | 2026-10-14 | 1.1 | §L3 backend: KeyCache перенесён из `apps/` в `ingest/keycache.go` — как в коде и по правилам импорта 07-project-structure §5 |
 | 2026-10-14 | 1.2 | Observability: список системных метрик приведён к именам в коде (`ingest_events_accepted_total`/`ingest_events_rejected_total` вместо `ingest_events_total`/`ingest_rejections_total`, `ingest_key_cache_last_refresh_timestamp_seconds` вместо `key_cache_age_seconds`, без `geo_db_loaded`/`http_requests_total`/`report_query_duration_seconds`) |
+| 2026-10-15 | 1.3 | Background Jobs: job `app_merge` (раз в минуту, таймаут 30 мин, advisory lock `app_merge`, `failed` → алерт в Telegram + ручной «Повторить» с сохранённого шага) — как в `backend/internal/worker/merge.go` |

@@ -102,7 +102,9 @@ func (s *Service) Preview(ctx context.Context, targetID, sourceID uuid.UUID) (Pr
 // Create ставит слияние источника в цель в очередь worker-а (status pending, step move_keys). Обе строки apps
 // блокируются до конца транзакции, как в apps.Service: архивация, удаление и новые ключи ждут и затем видят
 // активное слияние. Проверки: заявок на удаление нет, цель не в архиве, ни одно из приложений не участвует в
-// другом слиянии pending/running/failed, confirmName совпадает с именем источника.
+// другом слиянии pending/running/failed, confirmName совпадает с именем источника. Объём источника
+// (total_events) считается в ClickHouse до транзакции: он справочный, и держать строки apps заблокированными
+// на время запроса к ClickHouse незачем.
 func (s *Service) Create(ctx context.Context, targetID uuid.UUID, in CreateInput) (sqlc.AppMerge, error) {
 	// Strict-сервер обязательные поля тела не проверяет: без них приходят нулевые значения.
 	switch {
@@ -114,8 +116,20 @@ func (s *Service) Create(ctx context.Context, targetID uuid.UUID, in CreateInput
 	if err := distinctApps(targetID, in.SourceAppID); err != nil {
 		return sqlc.AppMerge{}, err
 	}
+	source, err := getApp(ctx, s.store.Queries(), in.SourceAppID)
+	if err != nil {
+		return sqlc.AppMerge{}, err
+	}
+	parts, err := s.partitions(ctx, source)
+	if err != nil {
+		return sqlc.AppMerge{}, err
+	}
+	var total uint64
+	for _, p := range parts {
+		total += p.Rows
+	}
 	var m sqlc.AppMerge
-	err := s.store.InTx(ctx, func(q *sqlc.Queries) error {
+	err = s.store.InTx(ctx, func(q *sqlc.Queries) error {
 		target, source, err := lockPair(ctx, q, targetID, in.SourceAppID)
 		if err != nil {
 			return err
@@ -139,14 +153,6 @@ func (s *Service) Create(ctx context.Context, targetID uuid.UUID, in CreateInput
 		}
 		if in.ConfirmName != source.Name {
 			return ErrConfirmNameMismatch
-		}
-		parts, err := s.partitions(ctx, source)
-		if err != nil {
-			return err
-		}
-		var total uint64
-		for _, p := range parts {
-			total += p.Rows
 		}
 		m, err = q.CreateAppMerge(ctx, sqlc.CreateAppMergeParams{
 			TargetAppID:     targetID,

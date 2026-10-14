@@ -2,6 +2,7 @@ import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useListWriteKeys } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import type { AppMerge } from "@/lib/api/gen/model";
 import { appMerge, errorBody, app as makeApp } from "@/test/factories";
@@ -20,7 +21,7 @@ function merge(overrides: Partial<AppMerge>): AppMerge {
 }
 
 function mockMerges(list: (n: number) => AppMerge[], retry?: () => Response) {
-  const calls = { list: 0, retry: [] as string[], app: 0 };
+  const calls = { list: 0, retry: [] as string[], app: 0, keys: 0 };
   server.use(
     http.get(`*/admin/v1/apps/${APP_ID}/merges`, () => {
       const n = calls.list;
@@ -36,14 +37,32 @@ function mockMerges(list: (n: number) => AppMerge[], retry?: () => Response) {
       calls.app += 1;
       return HttpResponse.json(makeApp({ id: APP_ID }));
     }),
+    http.get(`*/admin/v1/apps/${APP_ID}/write-keys`, () => {
+      calls.keys += 1;
+      return HttpResponse.json({ items: [] });
+    }),
   );
   return calls;
 }
 
-// Соседний потребитель кэша приложения: по нему видно, что баннер инвалидирует запросы после слияния.
+// Соседние потребители кэша приложения и его ключей: по ним видно, что баннер инвалидирует запросы
+// после переноса ключей и после слияния. Инвалидация запроса без данных, который ещё в полёте, сливается
+// с ним, поэтому тесты монтируют баннер, когда у обоих запросов уже есть данные.
 function AppProbe() {
-  useGetApp(APP_ID);
-  return null;
+  const app = useGetApp(APP_ID);
+  const keys = useListWriteKeys(APP_ID);
+  return app.data && keys.data ? <span>probe: loaded</span> : null;
+}
+
+async function renderWithLoadedProbe() {
+  const { rerender } = renderWithClient(<AppProbe />);
+  await screen.findByText("probe: loaded");
+  rerender(
+    <>
+      <AppProbe />
+      <MergeProgressBanner appId={APP_ID} />
+    </>,
+  );
 }
 
 async function tick(ms: number) {
@@ -103,20 +122,48 @@ describe("MergeProgressBanner", () => {
         ? [merge({ status: "running", step: "reclose", copied_events: 1000, total_events: 1000 })]
         : [merge({ status: "done", step: "done", copied_events: 1000, total_events: 1000 })],
     );
-    renderWithClient(
-      <>
-        <AppProbe />
-        <MergeProgressBanner appId={APP_ID} />
-      </>,
-    );
+    await renderWithLoadedProbe();
 
     await screen.findByRole("status");
-    await waitFor(() => expect(calls.app).toBe(1));
+    // Слияние впервые увидено после move_keys: приложение и ключи перечитаны один раз.
+    await waitFor(() => expect(calls.app).toBe(2));
+    await waitFor(() => expect(calls.keys).toBe(2));
 
     await tick(5000);
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Приложения объединены"));
     expect(screen.queryByRole("status")).toBeNull();
+    await waitFor(() => expect(calls.app).toBe(3));
+    await waitFor(() => expect(calls.keys).toBe(3));
+  });
+
+  it("refreshes the app and its write keys once the keys are moved", async () => {
+    const calls = mockMerges((n) =>
+      n === 0
+        ? [merge({ status: "running", step: "move_keys" })]
+        : [merge({ status: "running", step: "wait_keys" })],
+    );
+    await renderWithLoadedProbe();
+
+    await screen.findByRole("status");
+    expect(calls.app).toBe(1);
+    expect(calls.keys).toBe(1);
+    await tick(1000);
+    // Ключи ещё не перенесены: перечитывать нечего.
+    expect(calls.app).toBe(1);
+    expect(calls.keys).toBe(1);
+
+    await tick(5000);
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("ждём, пока приём событий"),
+    );
     await waitFor(() => expect(calls.app).toBe(2));
+    await waitFor(() => expect(calls.keys).toBe(2));
+
+    // Следующие опросы того же шага ничего не перечитывают.
+    await tick(5000);
+    await waitFor(() => expect(calls.list).toBeGreaterThanOrEqual(3));
+    expect(calls.app).toBe(2);
+    expect(calls.keys).toBe(2);
   });
 
   it("stays hidden and stops polling without an active merge", async () => {

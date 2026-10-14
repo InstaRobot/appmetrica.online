@@ -294,4 +294,35 @@ describe("IntegrationOnboarding", () => {
       expect(params.get("to")).toBe("2026-10-13");
     }
   });
+
+  it("polls platforms every 3 s while one is waiting and every 30 s once all are received", async () => {
+    const waiting = mockApi({
+      platforms: ["ios", "android"],
+      keys: [writeKey()],
+      observed: { production: ["ios"] },
+    });
+    const { unmount } = renderWithClient(<IntegrationPanel appId={APP_ID} />);
+    await screen.findByRole("status", { name: "Статус Android" });
+    await waitFor(() => expect(waiting.breakdown).toHaveLength(2));
+    await tick(3000);
+    await waitFor(() => expect(waiting.breakdown).toHaveLength(4));
+    unmount();
+
+    const received = mockApi({
+      platforms: ["ios", "android"],
+      keys: [writeKey()],
+      observed: { production: ["ios", "android"] },
+    });
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Статус Android" })).toHaveTextContent(
+        "Получено первое событие",
+      ),
+    );
+    await waitFor(() => expect(received.breakdown).toHaveLength(2));
+    await tick(3000);
+    expect(received.breakdown).toHaveLength(2);
+    await tick(27_000);
+    await waitFor(() => expect(received.breakdown).toHaveLength(4));
+  });
 });

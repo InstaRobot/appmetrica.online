@@ -241,7 +241,8 @@ backend/
 │   │   ├── migrate.go            # `appmetrica migrate up|status`
 │   │   ├── admin.go              # `appmetrica admin passkey-link`
 │   │   └── healthcheck.go        # `appmetrica healthcheck --url` (HEALTHCHECK в distroless без curl)
-│   └── seed/main.go              # dev-only: 3 приложения, write-ключ, 35 дней событий напрямую в ClickHouse
+│   └── seed/main.go              # dev-only: 4 приложения (одно мультиплатформенное «Seed Notes»), write-ключ,
+│                                 #   35 дней событий напрямую в ClickHouse
 ├── internal/
 │   ├── config/                   # загрузка и валидация env (stdlib os.LookupEnv), по структуре на процесс
 │   ├── clock/                    # Clock interface { Now() time.Time } + Fixed для тестов
@@ -266,10 +267,14 @@ backend/
 │   ├── apps/                     # приложения (service.go), write-ключи pk_ (writekeys.go), API-ключи sk_ (keys.go)
 │   ├── auth/                     # go-webauthn, setup-токены, сессии, Bearer sk_, scopes, CSRF; e2e.go — сброс для APP_ENV=e2e
 │   ├── deletion/                 # создание запросов (api) и исполнение (worker): lightweight DELETE + мутации
+│   ├── merge/                    # слияние приложений: service.go (preview/create/retry для api), executor.go
+│   │                             #   (шаги move_keys → wait_keys → copy → purge_source → reclose для worker),
+│   │                             #   copy.go (INSERT … SELECT по партициям ClickHouse), metrics.go (merge_*), errors.go
 │   ├── api/                      # реализация StrictServerInterface (gen/api): <area>_handlers.go (Admin API),
 │   │                             #   v1_<report>.go (Read API), errors.go, params.go, metrics.go, e2e_handlers.go
 │   ├── worker/                   # scheduler.go (журнал job_runs) и задачи: jobs.go (deletion),
-│   │                             #   closeday.go, digest.go, systemcheck.go, cleanup.go (session_cleanup)
+│   │                             #   closeday.go, digest.go, systemcheck.go, cleanup.go (session_cleanup),
+│   │                             #   merge.go (app_merge под advisory lock + алерт «Слияние упало»)
 │   ├── telegram/                 # sendMessage через net/http, обработка 429 retry_after
 │   ├── testutil/                 # testcontainers ClickHouse/Postgres, миграции, NDJSON-фикстуры, golden, генератор
 │   │                             #   сценария, тестовая mmdb, программный WebAuthn-аутентификатор, синтетика перф-теста
@@ -280,13 +285,15 @@ backend/
 │       └── api/                  # СГЕНЕРИРОВАНО oapi-codegen: strict std-http server + модели
 ├── migrations/
 │   ├── embed.go                  # //go:embed postgres/*.sql clickhouse/*.sql → goose Provider
-│   ├── postgres/00001_init.sql   # 13 таблиц и enum-ы из 05-data-model
+│   ├── postgres/
+│   │   ├── 00001_init.sql        # 13 таблиц и enum-ы из 05-data-model
+│   │   └── 00002_multi_platform.sql # apps.platforms, write_keys.platform, job_name + app_merge, app_merges
 │   └── clickhouse/
 │       ├── 00001_init.sql        # events
 │       ├── 00002_aggregates.sql  # install_first_seen(+mv), user_first_seen(+mv), identity_links(+mv)
 │       └── 00003_service_tables.sql # rejected_events, daily_stats
 ├── queries/postgres/             # sqlc (05-data-model): owner.sql passkeys.sql auth.sql apps.sql keys.sql
-│                                 #   deletion_requests.sql ops.sql
+│                                 #   deletion_requests.sql merges.sql ops.sql
 ├── perf/
 │   ├── ingest-load.js            # k6-сценарий `make perf-ingest` (NFR-001)
 │   └── reports/baseline.json     # эталон `make perf-reports` (NFR-003); latest-файлы — результат прогона
@@ -296,8 +303,9 @@ backend/
     └── gen/main.go               # генератор scenario.ndjson и test-city.mmdb
 ```
 
-Новых миграций после `00001`–`00003` в MVP нет: ClickHouse-схема разложена на три файла (основная таблица,
-агрегаты с MV, служебные таблицы), Postgres — один `00001_init.sql`. Любое изменение схемы — новый файл со следующим
+ClickHouse-схема разложена на три файла `00001`–`00003` (основная таблица, агрегаты с MV, служебные таблицы);
+Postgres — `00001_init.sql` (схема MVP) и `00002_multi_platform.sql` (мультиплатформенные приложения и слияние:
+`apps.platforms`, `write_keys.platform`, `app_merges`). Любое изменение схемы — новый файл со следующим
 номером; существующие миграции не редактируются (CONTRIBUTING.md §5).
 
 **Почему ingest-хендлер написан руками, а api — сгенерирован.** Strict-сервер oapi-codegen декодирует тело целиком в
@@ -312,11 +320,12 @@ backend/
 | Пакет | Может импортировать (internal) | Не может импортировать |
 |---|---|---|
 | `cmd/appmetrica` | любой `internal/*` | — |
-| `internal/api` | `gen/api`, `auth`, `apps`, `reports`, `deletion`, `identity`, `pgstore`, `chstore`, `httpx`, `clock`, `config` | `ingest`, `worker` |
+| `internal/api` | `gen/api`, `auth`, `apps`, `reports`, `deletion`, `merge`, `identity`, `pgstore`, `chstore`, `httpx`, `clock`, `config` | `ingest`, `worker` |
 | `internal/ingest` | `gen/ingestapi`, `geo`, `ratelimit`, `chstore`, `pgstore`, `httpx`, `clock`, `config` | `api`, `reports`, `auth`, `worker` |
-| `internal/worker` | `reports`, `deletion`, `telegram`, `identity`, `chstore`, `pgstore`, `clock`, `config` | `api`, `ingest` |
+| `internal/worker` | `reports`, `deletion`, `merge`, `telegram`, `identity`, `chstore`, `pgstore`, `clock`, `config` | `api`, `ingest` |
 | `internal/reports` | `chstore`, `identity`, `clock` | `pgstore`, `api`, `ingest`, `worker` |
 | `internal/deletion` | `chstore`, `pgstore`, `identity`, `clock` | `api`, `ingest`, `worker` |
+| `internal/merge` | `pgstore`, `chstore`, `deletion`, `identity`, `clock`, `config` | `api`, `ingest`, `worker`, `reports` |
 | `internal/auth`, `internal/apps` | `pgstore`, `clock`, `config` | `chstore`, `reports`, `api` |
 | `internal/identity`, `internal/clock`, `internal/geo`, `internal/ratelimit`, `internal/telegram` | только stdlib и сторонние библиотеки | любой `internal/*` |
 | `internal/chstore`, `internal/pgstore`, `internal/httpx`, `internal/config` | `clock` | доменные пакеты |
@@ -415,7 +424,7 @@ web/
 | TS-клиент | `make gen-web` | `pnpm gen:api` (orval 8.42.0): `contracts/openapi/api.yaml` → `web/src/lib/api/gen/{endpoints,model,zod}` |
 | Проверка актуальности | `make gen-check` | `make gen` + `git diff --exit-code` по трём каталогам (то же в CI) |
 | Миграции | `make migrate-up` / `make migrate-status` | `go run ./cmd/appmetrica migrate up|status` (goose, embed.FS, оба диалекта) |
-| Демо-данные | `make seed` | `go run ./cmd/seed --apps 3 --days 35 --daily-installs 400 --write-key $DEV_WRITE_KEY [--seed 1]` |
+| Демо-данные | `make seed` | `go run ./cmd/seed --apps 4 --days 35 --daily-installs 400 --write-key $DEV_WRITE_KEY [--seed 1]` |
 | Гео-база локально | `make geo-db` | скачивает DB-IP City Lite текущего (или прошлого) месяца в `backend/.geo/` |
 | Ссылка passkey | `make passkey-link` | `go run ./cmd/appmetrica admin passkey-link` |
 | Тестовые данные | `go run ./testdata/gen [-seed 42 \| geo]` | `testdata/fixtures/scenario.ndjson` и `testdata/geo/test-city.mmdb` |
@@ -585,3 +594,4 @@ web/content/docs/                              # пользовательска�
 | 2026-10-14 | 1.2 | Ревью MVP: `internal/worker` может импортировать `identity` (лист без зависимостей; алиас `reports.UnitPersons` убран); экранирование параметров ClickHouse — общее в `chstore/params.go`; флаг `--seed` у `cmd/seed` |
 | 2026-10-14 | 1.x | Макет «Dashboard v2»: `(public)/page.tsx` (S-00 лендинг), `(dashboard)/portfolio/page.tsx` (портфель на /portfolio), `app/demo/**` и `lib/demo/**` + `lib/demo-mode.ts` (S-15 демо-режим), `components/landing/**`, `lib/theme.ts`, `hooks/use-theme.ts`, `components/layout/{theme-toggle,demo-banner}.tsx` |
 | 2026-10-14 | 1.x | Публичный релиз: `deploy/selfhost/` (docker-compose.yml, .env.example, Caddyfile — установка на любой сервер), `README.md` (EN) и `README.ru.md` (RU), `LICENSE` (AGPL-3.0) |
+| 2026-10-15 | 1.x | Мультиплатформенные приложения и слияние: пакет `internal/merge` (строка в §5, импортируется `api` и `worker`), `worker/merge.go` (`app_merge`), `migrations/postgres/00002_multi_platform.sql`, `queries/postgres/merges.sql`; seed — 4 приложения (`--apps 4`), у Postgres больше не одна миграция |

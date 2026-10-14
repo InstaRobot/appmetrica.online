@@ -109,7 +109,7 @@ Python stack: N/A — Python в проекте не используется.
 
 | Area | Metric | Target | Rationale |
 |---|---|---|---|
-| Business logic modules | lines | **≥ 80%** (гейт `scripts/coverage-gate.sh`, `COVER_MIN`) | `internal/ingest`, `internal/identity`, `internal/reports`, `internal/deletion`, `internal/auth`: ошибка здесь = неверные цифры или нарушение GDPR |
+| Business logic modules | lines | **≥ 80%** (гейт `scripts/coverage-gate.sh`, `COVER_MIN`) | `internal/ingest`, `internal/identity`, `internal/reports`, `internal/deletion`, `internal/auth`, `internal/merge`: ошибка здесь = неверные цифры, нарушение GDPR или потеря событий при слиянии приложений |
 | API routers / controllers | branches + lines | **≥ 85%** | `internal/api`, `internal/auth`: каждый error path (401/403/404/409/410/422/429) покрыт |
 | UI components | lines | ≥ 70% | `web/src/components/reports`, `integration`, `profiles`; визуал дополнительно защищён скриншотами и axe |
 | Utilities / helpers | lines | ≥ 95% | `web/src/lib` (форматирование, person_key, safe-next, copy-as-curl), `internal/httpx`, `internal/clock` |
@@ -145,7 +145,7 @@ flowchart LR
 
 Проектные уточнения:
 - В «blocks merge» дополнительно входят: codegen drift (`make gen && git diff --exit-code`), contract-тесты, coverage
-  gate (≥ 80 % для `internal/{ingest,reports,auth,identity,deletion}` — скрипт `scripts/coverage-gate.sh`, порог `COVER_MIN`), govulncheck и
+  gate (≥ 80 % для `internal/{ingest,reports,auth,identity,deletion,merge}` — `COVER_PKGS` в Makefile и `scripts/coverage-gate.sh`, порог `COVER_MIN`), govulncheck и
   `pnpm audit --audit-level high`.
 - «E2E full» совпадает со smoke (9 спецификаций достаточно для одного пользователя) — отдельного набора нет.
 - Perf запускается: еженедельно по cron (`schedule: '0 3 * * 1'`), по label `perf` на PR, и обязательно перед снятием
@@ -729,3 +729,12 @@ export async function setupOwner(page: Page, baseURL: string): Promise<void> {
 - API test vectors: `06-api-contracts.md §9-examples`
 - Ops drills и восстановление: [21-ops-runbooks.md](./21-ops-runbooks.md)
 - Dev-окружение и команды `make`: [12-dev-runbook.md](./12-dev-runbook.md)
+
+---
+
+## Changelog
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-13 | 1.0 | Первая версия стратегии тестирования после discovery |
+| 2026-10-15 | 1.1 | Coverage gate: пакет `internal/merge` добавлен в `COVER_PKGS` (Makefile) и `scripts/coverage-gate.sh` (§4, §5) |

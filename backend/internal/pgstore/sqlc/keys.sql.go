@@ -304,6 +304,25 @@ func (q *Queries) LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow
 	return items, nil
 }
 
+const moveAPIKeysForMerge = `-- name: MoveAPIKeysForMerge :execrows
+UPDATE api_keys SET app_id = $1::uuid WHERE app_id = $2::uuid
+`
+
+type MoveAPIKeysForMergeParams struct {
+	TargetID uuid.UUID
+	SourceID uuid.UUID
+}
+
+// Шаг purge_source: ключи Read API, привязанные к источнику, переходят в цель вместе с его данными —
+// иначе их удалил бы каскад по apps.id.
+func (q *Queries) MoveAPIKeysForMerge(ctx context.Context, arg MoveAPIKeysForMergeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveAPIKeysForMerge, arg.TargetID, arg.SourceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const moveWriteKeys = `-- name: MoveWriteKeys :execrows
 UPDATE write_keys
 SET app_id = $1,

@@ -112,7 +112,7 @@ make env        # копирует .env.example → .env, если .env ещё �
 - **Общие Go**: `APP_ENV`, `LOG_LEVEL`, `METRICS_LISTEN_ADDR`, `POSTGRES_URL`, `CLICKHOUSE_ADDR`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_MIGRATE_USER`, `CLICKHOUSE_MIGRATE_PASSWORD`.
 - **ingest**: `INGEST_LISTEN_ADDR`, `GEOIP_DB_PATH`, `INGEST_MAX_BODY_BYTES`, `INGEST_MAX_EVENTS`, `INGEST_LATE_WINDOW`, `INGEST_FUTURE_TOLERANCE`, `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST`, `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST`, `KEY_CACHE_REFRESH`, `INGEST_ACCEPT_DEVELOPMENT` (kill switch для `environment=development`).
 - **api**: `API_LISTEN_ADDR`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_ORIGINS`, `WEBAUTHN_RP_NAME`, `SESSION_TTL`, `SESSION_IDLE_TTL`, `KEY_HASH_PEPPER`, `MIGRATE_ON_START`, `API_PUBLIC_BEARER_ENABLED` (kill switch Bearer `sk_`), `TELEGRAM_BOT_TOKEN` (кнопка «Отправить тест» на S-12), `BACKUP_API_URL` (блок бэкапа в статусе системы S-12).
-- **worker**: `WORKER_LISTEN_ADDR`, `WORKER_JOBS_ENABLED`, `PUBLIC_BASE_URL` (ссылка в дайджесте), `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`.
+- **worker**: `WORKER_LISTEN_ADDR`, `WORKER_JOBS_ENABLED`, `PUBLIC_BASE_URL` (ссылка в дайджесте), `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`; только для E2E-стенда — `MERGE_KEYS_WAIT` (ожидание шага `wait_keys` слияния приложений вместо `deletion.AppPurgeDelay`; допустима лишь при `APP_ENV=e2e`, иначе процесс не стартует; `make run-worker-e2e` задаёт `0`).
 - **web**: `API_INTERNAL_URL`, `NEXT_PUBLIC_INGEST_URL`, `NEXT_PUBLIC_API_URL`.
 - **Инфраструктура**: `CLICKHOUSE_ADMIN_PASSWORD`, `CLICKHOUSE_RW_PASSWORD`, `CLICKHOUSE_RO_PASSWORD`, `POSTGRES_PASSWORD`; clickhouse-backup: `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `CLICKHOUSE_USERNAME`, `BACKUPS_TO_KEEP_REMOTE`, `WATCH_INTERVAL`, `FULL_INTERVAL`.
 - **Только локально**: `DEV_WRITE_KEY` (write-ключ, который создаёт `make seed`).
@@ -192,7 +192,7 @@ make dev
 ```
 time=… level=INFO msg=listening process=ingest version=dev addr=[::]:8081
 time=… level=INFO msg=listening process=api version=dev addr=[::]:8080
-time=… level=INFO msg="jobs enabled" process=worker version=dev jobs=system_check,digest,close_day,deletion,session_cleanup
+time=… level=INFO msg="jobs enabled" process=worker version=dev jobs=system_check,digest,close_day,deletion,session_cleanup,app_merge
 time=… level=INFO msg=listening process=worker version=dev addr=[::]:8082
 ▲ Next.js 16.4.0
 - Local:    http://localhost:3000
@@ -462,9 +462,10 @@ gh workflow run deploy.yml -f tag=<prev_sha>   # образ должен быт�
 Каждый Go-процесс отдаёт Prometheus-метрики на `:9090/metrics` (внутри сети Dokploy, наружу не публикуется). Ключевые:
 `ingest_requests_total{status}`, `ingest_events_accepted_total{app_id}`, `ingest_events_rejected_total{code}`, `ingest_warnings_total{code}`,
 `ingest_batch_duration_seconds`, `ingest_clickhouse_insert_duration_seconds`, `ingest_clickhouse_insert_errors_total`, `ingest_rate_limited_total{scope}`,
+`ingest_platform_missing_total` (события мультиплатформенного приложения без платформы, записанные как `other`),
 `ingest_key_cache_size`, `ingest_key_cache_last_refresh_timestamp_seconds`, `api_request_duration_seconds{operation}`, `api_clickhouse_query_duration_seconds`,
 `api_auth_failures_total{reason}`, `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}`, `worker_alerts_firing{key}`,
-`worker_telegram_send_errors_total`. Worker читает метрики ingest для алерта `insert_errors`.
+`worker_telegram_send_errors_total`, `merge_copied_events_total` и `merge_step_duration_seconds{step}` (job `app_merge`). Worker читает метрики ingest для алерта `insert_errors`.
 Локально: `curl -s localhost:9091/metrics | grep ingest_`.
 
 ### 10.3. Logs
@@ -577,3 +578,12 @@ passkey (телефон + ноутбук) в S-12 → Passkeys; удалить �
 → правила разработки (TDD, проверки перед коммитом, запреты) — [CONTRIBUTING.md](../../../CONTRIBUTING.md);
 → установка на сервер через Docker Compose — [README.ru.md](../../../README.ru.md);
 → эксплуатация после запуска (бэкапы, восстановление, диск, инциденты) — [21-ops-runbooks.md](./21-ops-runbooks.md).
+
+---
+
+## Changelog
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-13 | 1.0 | Первая версия runbook после discovery |
+| 2026-10-15 | 1.1 | Мультиплатформенные приложения и слияние: переменная worker `MERGE_KEYS_WAIT` (только `APP_ENV=e2e`, §3), `app_merge` в логе `jobs enabled` (§5), метрики `ingest_platform_missing_total`, `merge_copied_events_total`, `merge_step_duration_seconds{step}` (§10.2) |

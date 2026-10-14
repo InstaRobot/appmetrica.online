@@ -16,6 +16,18 @@ SELECT EXISTS (
     WHERE app_id = sqlc.arg(app_id) AND subject_type = 'app' AND status IN ('pending', 'running')
 )::boolean AS pending;
 
+-- name: MoveDeletionRequestsForMerge :execrows
+-- Шаг purge_source: заявки на удаление человека или установки из источника переходят в цель — его события
+-- уже скопированы туда, и удаление выполнится в цели. Заявка pending/running, у которой в цели уже есть
+-- такая же активная, остаётся на источнике и уходит каскадом: её субъект удалит заявка цели.
+UPDATE deletion_requests AS d
+SET app_id = sqlc.arg(target_id)
+WHERE d.app_id = sqlc.arg(source_id) AND d.subject_type <> 'app'
+  AND NOT (d.status IN ('pending', 'running') AND EXISTS (
+      SELECT 1 FROM deletion_requests AS t
+      WHERE t.app_id = sqlc.arg(target_id) AND t.subject_type = d.subject_type AND t.subject_value = d.subject_value
+        AND t.status IN ('pending', 'running')));
+
 -- name: ListDeletionRequests :many
 SELECT id, app_id, subject_type, subject_value, status, source, api_key_id, requested_at, started_at, completed_at, attempts, error
 FROM deletion_requests

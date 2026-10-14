@@ -13,6 +13,12 @@ import (
 // ключу (app_id первый в ORDER BY); materialized views пересобирают install_first_seen, user_first_seen и
 // identity_links цели из вставленных строк. Повтор недокопированной партиции даёт строки с тем же ключом
 // сортировки — их схлопывает ReplacingMergeTree(received_at), отчёты считают людей через uniqExact.
+//
+// copyPartitionMaxSeconds — предел одной копии партиции. Профиль appmetrica_rw ограничивает запрос 600 с
+// (deploy/clickhouse/users.d/appmetrica.xml), а бюджет запуска job app_merge — 30 минут: партиция, не
+// уложившаяся в 10 минут, падала бы на каждом повторе, хотя в бюджет запуска она помещается.
+const copyPartitionMaxSeconds = 1500
+
 const (
 	// qSourcePartitions — месячные партиции событий источника: число строк и первый и последний день
 	// в часовом поясе tz. Партиция — единица копирования шага copy.
@@ -33,7 +39,8 @@ SELECT {target:UUID}, event_date, event_time, client_time, sent_at, received_at,
        app_version, app_build, device_model, device_type, locale, country, region, city, write_key_id
 FROM events
 WHERE app_id = {source:UUID} AND toYYYYMM(event_date) = {partition:UInt32}
-SETTINGS async_insert = 0, max_memory_usage = 2000000000, max_insert_threads = 2`
+SETTINGS async_insert = 0, max_memory_usage = 2000000000, max_insert_threads = 2,
+         max_execution_time = {max_seconds:UInt32}`
 
 	// qCopyRejected — журнал отказов источника (TTL 7 дней). rejected_events — MergeTree без схлопывания:
 	// строки, уже скопированные прошлой попыткой шага, пропускаются.
@@ -84,9 +91,10 @@ func (c chCopier) partitions(ctx context.Context, sourceID uuid.UUID, tz string)
 
 func (c chCopier) copyPartition(ctx context.Context, sourceID, targetID uuid.UUID, partition uint32) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
-		"source":    sourceID.String(),
-		"target":    targetID.String(),
-		"partition": fmt.Sprint(partition),
+		"source":      sourceID.String(),
+		"target":      targetID.String(),
+		"partition":   fmt.Sprint(partition),
+		"max_seconds": fmt.Sprint(copyPartitionMaxSeconds),
 	}))
 	if err := c.conn.Exec(ctx, qCopyPartition); err != nil {
 		return fmt.Errorf("clickhouse: insert into events: %w", err)

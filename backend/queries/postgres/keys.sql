@@ -43,6 +43,11 @@ SET app_id = sqlc.arg(target_id),
     platform = coalesce(platform, sqlc.narg(default_platform))
 WHERE app_id = sqlc.arg(source_id);
 
+-- name: MoveAPIKeysForMerge :execrows
+-- Шаг purge_source: ключи Read API, привязанные к источнику, переходят в цель вместе с его данными —
+-- иначе их удалил бы каскад по apps.id.
+UPDATE api_keys SET app_id = sqlc.arg(target_id)::uuid WHERE app_id = sqlc.arg(source_id)::uuid;
+
 -- name: TouchWriteKeysLastUsed :exec
 UPDATE write_keys AS k
 SET last_used_at = u.last_used_at

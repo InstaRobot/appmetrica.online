@@ -214,6 +214,32 @@ func (q *Queries) ListDeletionRequests(ctx context.Context, appID *uuid.UUID) ([
 	return items, nil
 }
 
+const moveDeletionRequestsForMerge = `-- name: MoveDeletionRequestsForMerge :execrows
+UPDATE deletion_requests AS d
+SET app_id = $1
+WHERE d.app_id = $2 AND d.subject_type <> 'app'
+  AND NOT (d.status IN ('pending', 'running') AND EXISTS (
+      SELECT 1 FROM deletion_requests AS t
+      WHERE t.app_id = $1 AND t.subject_type = d.subject_type AND t.subject_value = d.subject_value
+        AND t.status IN ('pending', 'running')))
+`
+
+type MoveDeletionRequestsForMergeParams struct {
+	TargetID uuid.UUID
+	SourceID uuid.UUID
+}
+
+// Шаг purge_source: заявки на удаление человека или установки из источника переходят в цель — его события
+// уже скопированы туда, и удаление выполнится в цели. Заявка pending/running, у которой в цели уже есть
+// такая же активная, остаётся на источнике и уходит каскадом: её субъект удалит заявка цели.
+func (q *Queries) MoveDeletionRequestsForMerge(ctx context.Context, arg MoveDeletionRequestsForMergeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveDeletionRequestsForMerge, arg.TargetID, arg.SourceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const requeueStuckDeletionRequests = `-- name: RequeueStuckDeletionRequests :execrows
 UPDATE deletion_requests
 SET status = CASE WHEN attempts >= 5 THEN 'failed'::deletion_status ELSE 'pending'::deletion_status END,

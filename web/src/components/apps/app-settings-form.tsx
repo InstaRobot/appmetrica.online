@@ -36,12 +36,13 @@ const messages = {
 };
 
 // Карточки S-11: «Основное» (FR-009) и «Платформы» (04-ux-diff.md §5.2). У каждой своя кнопка
-// «Сохранить» и свой PATCH.
+// «Сохранить» и свой PATCH. Ключ карточки платформ — набор с сервера: когда он меняется извне (слияние
+// добавило платформы источника), чипы показывают новый набор, а не устаревший черновик.
 export function AppSettingsForm({ app }: { app: App }) {
   return (
     <>
       <AppBasicsCard app={app} />
-      <AppPlatformsCard app={app} />
+      <AppPlatformsCard key={app.platforms.join(",")} app={app} />
     </>
   );
 }

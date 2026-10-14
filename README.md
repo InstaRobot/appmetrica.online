@@ -59,9 +59,9 @@ Under [Dokploy](#deploying-with-dokploy), Dokploy's Traefik takes Caddy's place.
 | `web` | Next.js dashboard, public landing page, public API documentation, demo mode |
 | `api` | Dashboard API and public Read API; applies database migrations on start |
 | `ingest` | Event ingestion: validation, clock correction, deduplication, geo lookup, rate limits |
-| `worker` | Background jobs: closing days into aggregates, Telegram digest and alerts, GDPR deletions, cleanup |
+| `worker` | Background jobs: closing days into aggregates, Telegram digest and alerts, GDPR deletions, app merges, cleanup |
 | `clickhouse` | Event storage (raw events kept 25 months, daily aggregates forever) |
-| `postgres` | Metadata: apps, write/read keys, passkeys, sessions, settings, deletion requests |
+| `postgres` | Metadata: apps, write/read keys, passkeys, sessions, settings, deletion requests, app merges |
 | `clickhouse-backup` | Optional: incremental ClickHouse backups to any S3-compatible storage |
 
 `api`, `ingest` and `worker` are one Go binary (`backend/`) started with different roles.
@@ -310,7 +310,7 @@ or `:`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | empty | Token from [@BotFather](https://t.me/BotFather). Enables the daily portfolio digest and system alerts (disk space, insert errors, stale backups, services down). The chat ID, digest time and alert switch are set in **Settings → Telegram**. Empty — messages are written to the worker log |
+| `TELEGRAM_BOT_TOKEN` | empty | Token from [@BotFather](https://t.me/BotFather). Enables the daily portfolio digest and system alerts (disk space, insert errors, stale backups, services down, failed deletions and app merges). The chat ID, digest time and alert switch are set in **Settings → Telegram**. Empty — messages are written to the worker log |
 | `HEALTHCHECKS_PING_URL` | empty | [healthchecks.io](https://healthchecks.io) (or compatible) URL. The worker pings it every 5 minutes; silence means the server or the worker is down |
 | `DISK_FREE_ALERT_PCT` | `20` | Alert when free space on the ClickHouse volume drops below this percentage (1–99) |
 

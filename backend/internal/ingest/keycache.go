@@ -41,7 +41,7 @@ type KeyInfo struct {
 	AppStatus  sqlc.AppStatus
 	// KeyPlatform — write_keys.platform; "" — ключ для любой платформы.
 	KeyPlatform string
-	// AppPlatforms — apps.platforms в порядке enum; общий срез для всех ключей приложения, не изменяется.
+	// AppPlatforms — apps.platforms в порядке enum.
 	AppPlatforms []string
 }
 
@@ -102,15 +102,10 @@ func (c *KeyCache) Refresh(ctx context.Context) error {
 		return fmt.Errorf("ingest: load write keys: %w", err)
 	}
 	keys := make(map[string]KeyInfo, len(rows))
-	appPlatforms := map[uuid.UUID][]string{}
 	for _, r := range rows {
-		platforms, ok := appPlatforms[r.AppID]
-		if !ok {
-			platforms = make([]string, len(r.AppPlatforms))
-			for i, p := range r.AppPlatforms {
-				platforms[i] = string(p)
-			}
-			appPlatforms[r.AppID] = platforms
+		platforms := make([]string, len(r.AppPlatforms))
+		for i, p := range r.AppPlatforms {
+			platforms[i] = string(p)
 		}
 		info := KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus, AppPlatforms: platforms}
 		if r.KeyPlatform != nil {

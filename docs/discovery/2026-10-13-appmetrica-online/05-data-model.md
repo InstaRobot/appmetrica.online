@@ -24,6 +24,8 @@ erDiagram
     apps ||--o{ deletion_requests : "получает"
     api_keys ||--o{ deletion_requests : "создал (опционально)"
     apps ||--o{ closed_days : "закрытые дни"
+    apps ||--o{ app_merges : "цель слияния"
+    apps |o--o{ app_merges : "источник слияния (до purge_source)"
 
     owner {
         uuid id PK
@@ -74,7 +76,8 @@ erDiagram
     apps {
         uuid id PK
         text name UK
-        app_platform platform
+        app_platform platform "deprecated = platforms[1]"
+        app_platform_array platforms
         text timezone
         app_status status
         timestamptz created_at
@@ -86,9 +89,23 @@ erDiagram
         uuid app_id FK
         text key UK
         text label
+        app_platform platform "NULL = любая"
         timestamptz created_at
         timestamptz revoked_at
         timestamptz last_used_at
+    }
+    app_merges {
+        uuid id PK
+        uuid target_app_id FK
+        uuid source_app_id FK
+        text source_name
+        app_platform_array source_platforms
+        text source_timezone
+        app_merge_status status
+        app_merge_step step
+        bigint copied_events
+        bigint total_events
+        text error
     }
     api_keys {
         uuid id PK
@@ -266,7 +283,8 @@ flowchart LR
 |---|---|---|---|
 | id | uuid | PK, default `uuidv7()` | `app_id` во всех таблицах ClickHouse |
 | name | text | NOT NULL, CHECK длина 1..64, UNIQUE INDEX по lower(name) | «Notes iOS» |
-| platform | app_platform | NOT NULL | Задаётся при создании; значение по умолчанию для `context.platform` |
+| platform | app_platform | NOT NULL, CHECK `platform = platforms[1]` (`apps_platform_first_chk`) | **Устарело** (expand-фаза): всегда первая платформа из `platforms`; старые бинарники ingest читают её до перезапуска. Удаление — миграцией следующего релиза (T-MP-021, не раньше 2026-11-07) |
+| platforms | app_platform[] | NOT NULL, CHECK `cardinality(platforms) BETWEEN 1 AND 9` (`apps_platforms_len_chk`) | Набор платформ приложения в порядке, заданном владельцем; по ключу записи на каждую платформу |
 | timezone | text | NOT NULL, CHECK длина 1..64 | IANA TZ (валидируется в Go через `time.LoadLocation`); границы суток всех отчётов |
 | status | app_status | NOT NULL, default 'active' | `archived` → ingest отвечает 403 `app_archived` |
 | created_at | timestamptz | NOT NULL, default now() | |
@@ -283,6 +301,7 @@ flowchart LR
 | app_id | uuid | NOT NULL, FK apps(id) ON DELETE CASCADE | |
 | key | text | NOT NULL, UNIQUE, CHECK `^pk_[A-Za-z0-9]{32}$` | Хранится открыто: ключ публичный и вшит в приложения, сниппеты на экране «Интеграция» подставляют его |
 | label | text | NOT NULL, default '', CHECK длина ≤ 64 | «iOS 3.x», «Web» |
+| platform | app_platform | NULL | Платформа событий ключа, когда в `context.platform` её нет; NULL — «любая платформа» (у мультиплатформенного приложения такие события пишутся как `other` с предупреждением `platform_missing`). Ключи, созданные до миграции 00002, получили платформу приложения |
 | created_at | timestamptz | NOT NULL, default now() | |
 | revoked_at | timestamptz | NULL | После отзыва ingest отвечает 401 `invalid_app_key` в течение ≤ 15 с (`KEY_CACHE_REFRESH`) |
 | last_used_at | timestamptz | NULL | Ingest сбрасывает батчем раз в 5 минут |
@@ -341,11 +360,11 @@ flowchart LR
 | Колонка | Тип | Constraints | Описание |
 |---|---|---|---|
 | id | uuid | PK, default `uuidv7()` | |
-| job | job_name | NOT NULL | `close_day`, `digest`, `system_check`, `deletion`, `session_cleanup` |
+| job | job_name | NOT NULL | `close_day`, `digest`, `system_check`, `deletion`, `session_cleanup`, `app_merge` |
 | started_at | timestamptz | NOT NULL, default now() | |
 | finished_at | timestamptz | NULL | |
 | status | job_status | NOT NULL, default 'running' | `running`, `ok`, `failed` |
-| details | jsonb | NOT NULL, default '{}' | Счётчики, ошибки, копия удалённого deletion-запроса для subject_type `app` |
+| details | jsonb | NOT NULL, default '{}' | Счётчики, ошибки, копия удалённого deletion-запроса для subject_type `app`, копия слияния с удалённым источником (шаг `purge_source` job `app_merge`) |
 
 `alert_states` — состояние системных алертов (дедупликация Telegram-сообщений):
 
@@ -366,6 +385,26 @@ flowchart LR
 | closed_at | timestamptz | NOT NULL, default now() | |
 
 **Retention**: `job_runs` хранится 90 дней (cleanup), `alert_states` и `closed_days` бессрочно.
+
+#### 2.4.7. `app_merges` (слияние приложений, миграция `00002_multi_platform.sql`)
+
+Слияние «источник → цель»: события и ключи источника переносятся в цель, источник удаляется. Выполняет job `app_merge` worker-а по шагам `app_merge_step`; состояние и прогресс — в этой таблице.
+
+| Колонка | Тип | Constraints | Описание |
+|---|---|---|---|
+| id | uuid | PK, default `uuidv7()` | `merge_id` в Admin API |
+| target_app_id | uuid | NOT NULL, FK apps(id) ON DELETE CASCADE | Цель |
+| source_app_id | uuid | NULL, FK apps(id) ON DELETE SET NULL, CHECK `<> target_app_id` | Источник; NULL после шага `purge_source` |
+| source_name, source_platforms, source_timezone | text, app_platform[], text | NOT NULL, CHECK длина имени 1..64 | Снимок источника для журнала после его удаления |
+| status | app_merge_status | NOT NULL, default 'pending' | `pending`, `running`, `done`, `failed` |
+| step | app_merge_step | NOT NULL, default 'move_keys' | `move_keys` → `wait_keys` → `copy` → `purge_source` → `reclose` → `done`; повтор продолжает с сохранённого шага |
+| keys_moved_at, first_source_day | timestamptz, date | NULL | Момент переноса ключей (отсчёт ожидания `wait_keys`) и первый день событий источника в TZ цели (для `reclose`) |
+| copied_partitions, copied_events, total_events | integer[], bigint, bigint | NOT NULL, default `{}`/0/0, CHECK ≥ 0 | Прогресс шага `copy` по партициям; идемпотентный повтор |
+| attempts | integer | NOT NULL, default 0, CHECK ≥ 0 | Число повторов через `retryAppMerge` |
+| error | text | NULL | Причина `failed` |
+| created_at, started_at, finished_at | timestamptz | created_at NOT NULL; CHECK (status = 'done') = (finished_at IS NOT NULL) | |
+
+Частичные уникальные индексы `app_merges_active_target_uq (target_app_id)` и `app_merges_active_source_uq (source_app_id)` при `status IN ('pending','running','failed')`: одно незавершённое слияние на приложение в каждой роли, `failed` тоже блокирует до повтора (Admin API отвечает 409 `merge_in_progress` на `archiveApp`/`deleteApp`/`unarchiveApp` и новое слияние). **Retention**: бессрочно (журнал слияний цели).
 
 ### 2.5. AuditLog
 
@@ -469,6 +508,7 @@ apps 1:N api_keys (api_keys.app_id NULL = доступ ко всем прило�
 apps 1:N deletion_requests
 api_keys 1:N deletion_requests (api_key_id NULL для source = dashboard)
 apps 1:N closed_days
+apps 1:N app_merges (как цель; как источник — до шага purge_source, затем source_app_id NULL)
 apps.id  ≙ ClickHouse *.app_id (логическая связь без FK; целостность обеспечивает deletion job)
 write_keys.id ≙ events.write_key_id (логическая)
 events (app_id, install_id) N:1 identity_links (app_id, install_id) — person resolution
@@ -485,6 +525,8 @@ events (app_id, install_id) N:1 identity_links (app_id, install_id) — person r
 | apps | api_keys (app-scoped) | CASCADE | Ключ, ограниченный удалённым приложением, бесполезен |
 | apps | deletion_requests | CASCADE | Запрос subject_type `app` до удаления копируется в `job_runs.details` |
 | apps | closed_days | CASCADE | |
+| apps | app_merges.target_app_id | CASCADE | Журнал слияний живёт вместе с целью |
+| apps | app_merges.source_app_id | SET NULL | Шаг `purge_source` удаляет источник; снимок имени/платформ/TZ остаётся в строке |
 | api_keys | deletion_requests.api_key_id | SET NULL | Журнал удалений сохраняется; api_keys на практике не удаляются (только revoke) |
 | apps (Postgres) | ClickHouse-данные приложения | Явный job `deletion` | В ClickHouse нет FK; worker удаляет события до удаления строки apps |
 
@@ -523,6 +565,10 @@ events (app_id, install_id) N:1 identity_links (app_id, install_id) — person r
 | PG | deletion_requests | deletion_requests_active_subject_uq | (app_id, subject_type, subject_value) WHERE status IN ('pending','running') | btree unique partial | Идемпотентный POST |
 | PG | job_runs | job_runs_job_started_at_idx | (job, started_at DESC) | btree | Последний запуск каждой задачи |
 | PG | closed_days | closed_days_pkey | (app_id, day) | btree PK | |
+| PG | app_merges | app_merges_target_created_idx | (target_app_id, created_at DESC) | btree | `listAppMerges` (20 последних) |
+| PG | app_merges | app_merges_status_created_idx | (status, created_at) | btree | `ClaimNextAppMerge` (старейшее pending/running; запуски разделяет advisory lock worker-а) |
+| PG | app_merges | app_merges_active_target_uq | target_app_id WHERE status IN ('pending','running','failed') | btree unique partial | Одно незавершённое слияние на цель |
+| PG | app_merges | app_merges_active_source_uq | source_app_id WHERE status IN ('pending','running','failed') | btree unique partial | Одно незавершённое слияние на источник |
 | CH | events | primary key | (app_id, event_date, install_id, insert_id) | sparse index | Все отчёты фильтруют app_id + диапазон event_date |
 | CH | events | idx_user_id | user_id | bloom_filter(0.01), GRANULARITY 4 | Профиль/удаление по user_id |
 | CH | events | idx_session_id | session_id | bloom_filter(0.01), GRANULARITY 4 | Лента сессий профиля |
@@ -640,7 +686,9 @@ events (app_id, install_id) N:1 identity_links (app_id, install_id) — person r
 
 ORM не используется. Ниже весь слой данных в виде copy-paste файлов: goose-миграции, конфигурация и запросы sqlc, DDL ClickHouse, гранты, Go-структура строки события и канонические SQL отчётов.
 
-### 10.1. Postgres: goose-миграция `backend/migrations/postgres/00001_init.sql`
+### 10.1. Postgres: goose-миграции `backend/migrations/postgres/00001_init.sql` и `00002_multi_platform.sql`
+
+`00001_init.sql` — исходная схема (ниже целиком). `00002_multi_platform.sql` (мультиплатформенные приложения и слияние) приведена после неё в сокращении: комментарии и `Down` опущены.
 
 ```sql
 -- +goose Up
@@ -856,6 +904,59 @@ DROP TYPE deletion_subject;
 DROP TYPE app_status;
 DROP TYPE app_platform;
 ```
+
+`00002_multi_platform.sql` (Up; expand-фаза — `apps.platform` остаётся и всегда равна `platforms[1]`, удаление — миграцией следующего релиза):
+
+```sql
+-- +goose Up
+ALTER TABLE apps ADD COLUMN platforms app_platform[];
+UPDATE apps SET platforms = ARRAY[platform];
+ALTER TABLE apps ALTER COLUMN platforms SET NOT NULL;
+ALTER TABLE apps ADD CONSTRAINT apps_platforms_len_chk CHECK (cardinality(platforms) BETWEEN 1 AND 9);
+ALTER TABLE apps ADD CONSTRAINT apps_platform_first_chk CHECK (platform = platforms[1]);
+
+-- NULL — «любая платформа»; существующие ключи получают платформу приложения.
+ALTER TABLE write_keys ADD COLUMN platform app_platform;
+UPDATE write_keys AS k SET platform = a.platform FROM apps AS a WHERE a.id = k.app_id;
+
+ALTER TYPE job_name ADD VALUE 'app_merge';
+
+CREATE TYPE app_merge_status AS ENUM ('pending', 'running', 'done', 'failed');
+CREATE TYPE app_merge_step AS ENUM ('move_keys', 'wait_keys', 'copy', 'purge_source', 'reclose', 'done');
+
+CREATE TABLE app_merges (
+    id                uuid             PRIMARY KEY DEFAULT uuidv7(),
+    target_app_id     uuid             NOT NULL REFERENCES apps (id) ON DELETE CASCADE,
+    source_app_id     uuid             REFERENCES apps (id) ON DELETE SET NULL,
+    source_name       text             NOT NULL,
+    source_platforms  app_platform[]   NOT NULL,
+    source_timezone   text             NOT NULL,
+    status            app_merge_status NOT NULL DEFAULT 'pending',
+    step              app_merge_step   NOT NULL DEFAULT 'move_keys',
+    keys_moved_at     timestamptz,
+    first_source_day  date,
+    copied_partitions integer[]        NOT NULL DEFAULT '{}',
+    copied_events     bigint           NOT NULL DEFAULT 0,
+    total_events      bigint           NOT NULL DEFAULT 0,
+    attempts          integer          NOT NULL DEFAULT 0,
+    error             text,
+    created_at        timestamptz      NOT NULL DEFAULT now(),
+    started_at        timestamptz,
+    finished_at       timestamptz,
+    CONSTRAINT app_merges_distinct_apps_chk CHECK (source_app_id IS NULL OR source_app_id <> target_app_id),
+    CONSTRAINT app_merges_source_name_len_chk CHECK (char_length(source_name) BETWEEN 1 AND 64),
+    CONSTRAINT app_merges_counters_chk CHECK (copied_events >= 0 AND total_events >= 0 AND attempts >= 0),
+    CONSTRAINT app_merges_finished_consistency_chk CHECK ((status = 'done') = (finished_at IS NOT NULL))
+);
+CREATE INDEX app_merges_target_created_idx ON app_merges (target_app_id, created_at DESC);
+CREATE INDEX app_merges_status_created_idx ON app_merges (status, created_at);
+CREATE UNIQUE INDEX app_merges_active_target_uq ON app_merges (target_app_id)
+    WHERE status IN ('pending', 'running', 'failed');
+CREATE UNIQUE INDEX app_merges_active_source_uq ON app_merges (source_app_id)
+    WHERE status IN ('pending', 'running', 'failed');
+```
+
+`Down` снимает всё в обратном порядке; значение `app_merge` из `job_name` удалить нельзя — тип пересоздаётся без него после `DELETE FROM job_runs WHERE job = 'app_merge'`. Запросы `apps.sql`/`keys.sql` после 00002 читают и пишут `platforms` и `write_keys.platform` (в коде, здесь не дублируются).
 
 ### 10.2. sqlc: `backend/sqlc.yaml` и `backend/queries/postgres/*.sql`
 
@@ -1206,6 +1307,8 @@ DELETE FROM webauthn_ceremonies WHERE expires_at < sqlc.arg(now)::timestamptz;
 -- name: DeleteSpentSetupTokens :execrows
 DELETE FROM passkey_setup_tokens WHERE expires_at < sqlc.arg(now)::timestamptz OR used_at IS NOT NULL;
 ```
+
+`queries/postgres/merges.sql` (таблица `app_merges`, §2.4.7; полный текст — в коде): `CreateAppMerge :one`, `GetAppMerge :one` (по `id` и `target_app_id`), `ListAppMerges :many` (20 последних цели), `ActiveMergeForApp :one` (незавершённое слияние, где приложение — цель или источник; даёт 409 `merge_in_progress`), `ClaimNextAppMerge :one` (старейшее `pending`/`running` по `created_at`; строка не блокируется — запуски разделяет advisory lock worker-а), `SetAppMergeStep :exec` (шаг, `started_at`, `keys_moved_at`, `first_source_day`), `AddCopiedPartition :exec` (идемпотентно по `copied_partitions`), `FailAppMerge :exec`, `RetryAppMerge :one` (только из `failed`, `attempts + 1`), `FinishAppMerge :exec`.
 
 ### 10.3. ClickHouse: миграции, гранты, Go-строка события
 
@@ -2053,3 +2156,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-14 | 1.3 | §2.9: `invalid_app_key` исключён из batch-кодов `rejected_events` — отозванный ключ не резолвится в приложение (кэш ключей держит только действующие), как решено в OQ-033 (3) |
 | 2026-10-14 | 1.4 | §2.9: `payload_sample` batch-ошибок тоже без PII — `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` до записи (ревью MVP, OQ-070) |
 | 2026-10-14 | 1.5 | §2.9: в `payload_sample` строковые `app_key` (поле тела, путь `sendBeacon`) обрезаются до `key_prefix` — полный ключ записи иначе читался через `integration/health` ключом с read-scope (ревью MVP) |
+| 2026-10-15 | 1.6 | Мультиплатформенные приложения и слияние (миграция `00002_multi_platform.sql`): `apps.platforms app_platform[]` с `apps_platforms_len_chk`/`apps_platform_first_chk`, `apps.platform` устарела (= `platforms[1]`, удаление в contract-фазе T-MP-021); `write_keys.platform` (NULL — любая); `job_name` + `app_merge`; enum `app_merge_status`/`app_merge_step`, таблица `app_merges` (§2.4.7, ER, §3, §4), `queries/postgres/merges.sql` (§10.2) |

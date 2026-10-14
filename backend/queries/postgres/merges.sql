@@ -19,11 +19,16 @@ WHERE (target_app_id = sqlc.arg(app_id) OR source_app_id = sqlc.arg(app_id))
 ORDER BY created_at DESC LIMIT 1;
 
 -- name: ClaimNextAppMerge :one
+-- Старейшее слияние в очереди. Запросы идут вне транзакции, поэтому строка не блокируется: запуски job
+-- app_merge разделяет advisory lock worker-а (worker.MergeJob), а не блокировка строки.
 SELECT * FROM app_merges
 WHERE status IN ('pending', 'running')
 ORDER BY created_at
-LIMIT 1
-FOR UPDATE SKIP LOCKED;
+LIMIT 1;
+
+-- name: SetAppMergeTotalEvents :exec
+-- Шаг copy пересчитывает объём источника: за wait_keys источник принимал события по старому снимку ключей.
+UPDATE app_merges SET total_events = sqlc.arg(total_events)::bigint WHERE id = sqlc.arg(id);
 
 -- name: SetAppMergeStep :exec
 UPDATE app_merges

@@ -1,8 +1,10 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -103,8 +105,13 @@ func TestMergeFailedNotifier(t *testing.T) {
 			if tc.nilTG {
 				sender = nil
 			}
-			notify := MergeFailedNotifier(tc.settings, sender, discardLogger())
+			var logs bytes.Buffer
+			notify := MergeFailedNotifier(tc.settings, sender, slog.New(slog.NewTextHandler(&logs, nil)))
 			notify(t.Context(), m, `clickhouse: <timeout> & "retry"`)
+			if tc.tgErr != nil {
+				require.Contains(t, logs.String(), "merge alert not sent")
+				require.Contains(t, logs.String(), tc.tgErr.Error())
+			}
 			if !tc.wantSent {
 				require.Empty(t, tg.sent)
 				return

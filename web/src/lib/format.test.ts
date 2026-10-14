@@ -11,6 +11,7 @@ import {
   formatInt,
   formatPercent,
   formatRejectionRate,
+  formatShare,
   formatWeekdayDate,
   formatWeekRange,
   shortId,
@@ -40,6 +41,15 @@ describe("format", () => {
     expect(formatPercent(0.12345)).toBe(`12,3${NBSP}%`);
   });
 
+  it("formats shares as whole percents", () => {
+    expect(formatShare(0)).toBe(`0${NBSP}%`);
+    expect(formatShare(0.514)).toBe(`51${NBSP}%`);
+    expect(formatShare(0.515)).toBe(`52${NBSP}%`);
+    expect(formatShare(0.004)).toBe(`0${NBSP}%`);
+    expect(formatShare(1)).toBe(`100${NBSP}%`);
+    expect(formatShare(1.2)).toBe(`120${NBSP}%`);
+  });
+
   it.each([
     [0, `0${NBSP}с`],
     [999, `1${NBSP}с`],
@@ -61,6 +71,7 @@ describe("format", () => {
   ])("renders a dash for %s", (_name, value) => {
     expect(formatInt(value)).toBe("—");
     expect(formatPercent(value)).toBe("—");
+    expect(formatShare(value)).toBe("—");
     expect(formatDuration(value)).toBe("—");
   });
 

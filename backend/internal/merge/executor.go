@@ -57,9 +57,12 @@ type store interface {
 	moveKeys(ctx context.Context, m sqlc.AppMerge, now time.Time) error
 	// appTimezone — часовой пояс приложения (first_source_day считается в поясе цели).
 	appTimezone(ctx context.Context, id uuid.UUID) (string, error)
+	// setTotalEvents — объём источника, пересчитанный шагом copy (прогресс «перенесено N из M» в баннере).
+	setTotalEvents(ctx context.Context, id uuid.UUID, total int64) error
 	addCopiedPartition(ctx context.Context, arg sqlc.AddCopiedPartitionParams) error
-	// purgeSource — удаление строки apps источника одной транзакцией с копией слияния в job_runs.details
-	// запуска runID и переходом к reclose.
+	// purgeSource — одной транзакцией: ключи Read API и заявки на удаление человека или установки источника
+	// переходят в цель, копия слияния пишется в job_runs.details запуска runID, строка apps источника
+	// удаляется, шаг — reclose.
 	purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) error
 	// reclose — шаг reclose одной транзакцией: переоткрытие closed_days цели и status done.
 	reclose(ctx context.Context, m sqlc.AppMerge, now time.Time) error
@@ -198,6 +201,18 @@ func (e *Executor) copy(ctx context.Context, m sqlc.AppMerge, now time.Time) (sq
 	parts, err := e.copier.partitions(ctx, source, tz)
 	if err != nil {
 		return m, err
+	}
+	// total_events снят при заявке, а за wait_keys источник ещё принимал события: без пересчёта прогресс
+	// показал бы «перенесено больше, чем всего».
+	var total int64
+	for _, p := range parts {
+		total += int64(p.Rows) //nolint:gosec // строк в партиции одного приложения далеко до 2^63
+	}
+	if total != m.TotalEvents {
+		if err := e.store.setTotalEvents(ctx, m.ID, total); err != nil {
+			return m, fmt.Errorf("merge: refresh total events: %w", err)
+		}
+		m.TotalEvents = total
 	}
 	for _, p := range parts {
 		id := int32(p.ID) //nolint:gosec // YYYYMM
@@ -412,6 +427,10 @@ func (s pgStore) appTimezone(ctx context.Context, id uuid.UUID) (string, error) 
 	return app.Timezone, nil
 }
 
+func (s pgStore) setTotalEvents(ctx context.Context, id uuid.UUID, total int64) error {
+	return s.store.Queries().SetAppMergeTotalEvents(ctx, sqlc.SetAppMergeTotalEventsParams{TotalEvents: total, ID: id})
+}
+
 func (s pgStore) addCopiedPartition(ctx context.Context, arg sqlc.AddCopiedPartitionParams) error {
 	return s.store.Queries().AddCopiedPartition(ctx, arg)
 }
@@ -443,6 +462,14 @@ func (s pgStore) purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UU
 	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := q.AppendMergedAppToJobRun(ctx, sqlc.AppendMergedAppToJobRunParams{Merge: copyJSON, ID: runID}); err != nil {
 			return fmt.Errorf("merge: copy merge to job_runs: %w", err)
+		}
+		// Удаление строки apps каскадом снесло бы ключи Read API источника и заявки на удаление его людей:
+		// ключи должны работать дальше (диалог слияния это обещает), заявки — выполниться в цели.
+		if _, err := q.MoveAPIKeysForMerge(ctx, sqlc.MoveAPIKeysForMergeParams{TargetID: m.TargetAppID, SourceID: *m.SourceAppID}); err != nil {
+			return fmt.Errorf("merge: move api keys: %w", err)
+		}
+		if _, err := q.MoveDeletionRequestsForMerge(ctx, sqlc.MoveDeletionRequestsForMergeParams{TargetID: m.TargetAppID, SourceID: *m.SourceAppID}); err != nil {
+			return fmt.Errorf("merge: move deletion requests: %w", err)
 		}
 		if _, err := q.DeleteApp(ctx, *m.SourceAppID); err != nil {
 			return fmt.Errorf("merge: delete source app: %w", err)
