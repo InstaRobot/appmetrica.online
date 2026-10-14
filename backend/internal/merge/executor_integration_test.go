@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -239,6 +240,43 @@ func TestRecloseStepWithoutSourceEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
 	require.Equal(t, 1, e.count(t, "closed_days"))
+}
+
+// Идёт запуск close_day (его advisory lock занят): reclose не переоткрывает дни и ждёт следующего запуска job.
+// Иначе close_day, прочитавший последний закрытый день до переоткрытия, записал бы более поздние дни, и
+// переоткрытые остались бы незакрытыми навсегда.
+func TestRecloseStepWaitsForCloseDay(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	target := e.create(t, "Notes iOS", []string{"ios"}, "UTC")
+	source := e.create(t, "Notes Android", []string{"android"}, "UTC")
+	e.closeDays(t, target, time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC))
+	m := decode[mergeJSON](t, e.createMerge(t, target, source))
+	e.setMerge(t, m.ID, "status = 'running', step = 'reclose', started_at = now(), first_source_day = DATE '2026-09-01'")
+
+	release, ok, err := e.PG.TryAdvisoryLock(ctx, merge.CloseDayLockKey)
+	require.NoError(t, err)
+	require.True(t, ok)
+	// Lock держит соединение пула: без release закрытие пула в cleanup ждало бы его вечно.
+	release = sync.OnceFunc(release)
+	t.Cleanup(release)
+
+	var failed []failedMerge
+	exec := e.executor(clock.NewFixed(t0), &failed)
+	res, err := exec.RunOnce(ctx, uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, merge.Result{MergeID: uuid.MustParse(m.ID), Status: sqlc.AppMergeStatusRunning, Step: sqlc.AppMergeStepReclose}, res)
+	require.Equal(t, 47, e.count(t, "closed_days"), "дни не переоткрыты: 2026-08-20…2026-10-05")
+	require.Nil(t, e.getMerge(t, target, m.ID).FinishedAt)
+	require.Empty(t, failed)
+
+	// close_day закончился: следующий запуск переоткрывает дни и завершает слияние.
+	release()
+	res, err = exec.RunOnce(ctx, uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
+	require.Equal(t, 12, e.count(t, "closed_days"), "2026-08-20…2026-08-31")
+	require.Empty(t, failed)
 }
 
 // Ошибка шага: слияние failed с текстом, алерт один раз; «Повторить» продолжает с того же шага.
@@ -543,7 +581,7 @@ func TestMergeRetriesAfterPurgeFailure(t *testing.T) {
 
 	clk := clock.NewFixed(t0)
 	var failed []failedMerge
-	conn := &faultyConn{Conn: e.CH.Conn(), failPrefix: "SYSTEM FLUSH ASYNC INSERT QUEUE"}
+	conn := &faultyConn{Conn: e.CH.Conn(), failPrefix: "ALTER TABLE events DELETE"}
 	res, err := e.executorOn(conn, clk, &failed, merge.WithKeysWait(0)).RunOnce(ctx, uuid.New())
 	require.ErrorContains(t, err, "injected failure")
 	require.Equal(t, sqlc.AppMergeStepPurgeSource, res.Step)
@@ -561,6 +599,61 @@ func TestMergeRetriesAfterPurgeFailure(t *testing.T) {
 	require.Equal(t, uint64(0), e.appRows(t, "rejected_events", source))
 	require.Equal(t, 0, e.countWhere(t, "apps", source.ID))
 	require.Equal(t, int64(800), e.getMerge(t, target, m.ID).CopiedEvents)
+}
+
+// Заявка на удаление человека, вставленная в источник параллельно с purge_source (её INSERT держит KEY SHARE
+// строки apps источника до commit): шаг ждёт её под блокировкой строки и переносит в цель — а не удаляет каскадом
+// после того, как заявка получила 202.
+func TestPurgeSourceMovesConcurrentDeletionRequest(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	target := e.create(t, "Notes iOS", []string{"ios"}, "UTC")
+	source := e.create(t, "Notes Android", []string{"android"}, "UTC")
+	m := decode[mergeJSON](t, e.createMerge(t, target, source))
+	e.setMerge(t, m.ID, "status = 'running', step = 'purge_source', started_at = now()")
+
+	tx, err := e.PG.Pool().Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	req, err := e.PG.Queries().WithTx(tx).CreateDeletionRequest(ctx, sqlc.CreateDeletionRequestParams{
+		AppID: uuid.MustParse(source.ID), SubjectType: sqlc.DeletionSubjectUser, SubjectValue: "u1",
+		Source: sqlc.DeletionSourceDashboard, Now: t0,
+	})
+	require.NoError(t, err)
+
+	var failed []failedMerge
+	exec := e.executor(clock.NewFixed(t0), &failed)
+	type outcome struct {
+		res merge.Result
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := exec.RunOnce(ctx, uuid.New())
+		done <- outcome{res, err}
+	}()
+	// Шаг упёрся в строку источника, которую держит незакрытая транзакция заявки.
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := e.PG.Pool().QueryRow(ctx,
+			"SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&waiting)
+		return err == nil && waiting > 0
+	}, 10*time.Second, 20*time.Millisecond)
+	select {
+	case out := <-done:
+		t.Fatalf("шаг не дождался заявки: %+v, %v", out.res, out.err)
+	default:
+	}
+	require.NoError(t, tx.Commit(ctx))
+	out := <-done
+	require.NoError(t, out.err)
+	require.Equal(t, sqlc.AppMergeStatusDone, out.res.Status)
+	require.Empty(t, failed)
+
+	moved, err := e.PG.Queries().GetDeletionRequest(ctx, sqlc.GetDeletionRequestParams{ID: req.ID, AppID: uuid.MustParse(target.ID)})
+	require.NoError(t, err, "заявка перешла в цель, а не удалена каскадом")
+	require.Equal(t, sqlc.DeletionStatusPending, moved.Status)
+	require.Equal(t, 0, e.countWhere(t, "apps", source.ID))
 }
 
 func (e *env) countWhere(t *testing.T, table, id string) int {

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"appmetrica.online/backend/internal/clock"
+	"appmetrica.online/backend/internal/merge"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
@@ -62,7 +63,8 @@ const (
 	closeDayEvery = 15 * time.Minute
 	// closeDayTimeout — запуск с догоняющим закрытием длиннее тика; следующий ждёт его окончания.
 	closeDayTimeout = 14 * time.Minute
-	closeDayLockKey = "close_day"
+	// closeDayLockKey — его же берёт шаг reclose слияния, переоткрывая дни цели (merge.CloseDayLockKey).
+	closeDayLockKey = merge.CloseDayLockKey
 	// closeAfterMinutes — 03:30: к этому времени по TZ приложения день D − 8 закрывается.
 	closeAfterMinutes = 3*60 + 30
 )

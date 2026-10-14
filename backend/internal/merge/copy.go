@@ -7,6 +7,8 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+
+	"appmetrica.online/backend/internal/deletion"
 )
 
 // Запросы шага copy (02-data-model-diff.md §7.1). Копия партиции читает одну партицию источника по первичному
@@ -56,6 +58,9 @@ SETTINGS async_insert = 0`
 
 // copier — ClickHouse-часть шага copy; в unit-тестах подменяется.
 type copier interface {
+	// flush — сброс очереди async insert сервера: блок, принятый в очередь до конца wait_keys, но ещё не
+	// записанный (клиент ingest отвалился по таймауту раньше ack), должен лежать в events до чтения партиций.
+	flush(ctx context.Context) error
 	// partitions — партиции событий источника по возрастанию; дни — в часовом поясе tz.
 	partitions(ctx context.Context, sourceID uuid.UUID, tz string) ([]Partition, error)
 	copyPartition(ctx context.Context, sourceID, targetID uuid.UUID, partition uint32) error
@@ -64,6 +69,8 @@ type copier interface {
 
 // chCopier — copier поверх соединения ClickHouse рабочего пользователя (INSERT и SELECT на базу).
 type chCopier struct{ conn driver.Conn }
+
+func (c chCopier) flush(ctx context.Context) error { return deletion.FlushAsyncInserts(ctx, c.conn) }
 
 func (c chCopier) partitions(ctx context.Context, sourceID uuid.UUID, tz string) ([]Partition, error) {
 	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{

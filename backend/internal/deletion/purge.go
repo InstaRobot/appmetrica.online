@@ -173,9 +173,13 @@ func (p chPurger) linkedInstalls(ctx context.Context, appID uuid.UUID, userID st
 	return out, nil
 }
 
-// flushAsyncInserts записывает в таблицы всё, что сервер принял в очередь async insert (qFlushAsyncInserts).
-func (p chPurger) flushAsyncInserts(ctx context.Context) error {
-	if err := p.conn.Exec(ctx, qFlushAsyncInserts); err != nil {
+func (p chPurger) flushAsyncInserts(ctx context.Context) error { return FlushAsyncInserts(ctx, p.conn) }
+
+// FlushAsyncInserts записывает в таблицы всё, что сервер принял в очередь async insert (qFlushAsyncInserts):
+// перед удалением и перед копией событий приложения (шаг copy слияния), чтобы принятый, но ещё не записанный
+// блок не остался в источнике.
+func FlushAsyncInserts(ctx context.Context, conn driver.Conn) error {
+	if err := conn.Exec(ctx, qFlushAsyncInserts); err != nil {
 		return fmt.Errorf("clickhouse: flush async insert queue: %w", err)
 	}
 	return nil

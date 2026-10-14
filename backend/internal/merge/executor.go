@@ -27,8 +27,15 @@ const maxErrorLen = 1000
 // slowStep — шаг дольше таймаута запуска job app_merge: предупреждение merge.slow в логе.
 const slowStep = 30 * time.Minute
 
+// CloseDayLockKey — advisory lock запуска job close_day (worker): шаг reclose берёт его на время переоткрытия
+// дней цели, а close_day под ним читает последний закрытый день и закрывает следующие.
+const CloseDayLockKey = "close_day"
+
 // errSourceGone — строки источника нет: переносить ключи некуда и неоткуда.
 var errSourceGone = errors.New("merge: source app is gone")
+
+// errCloseDayBusy — идёт запуск close_day: шаг reclose повторится в следующем запуске job.
+var errCloseDayBusy = errors.New("merge: close_day is running")
 
 // Result — итог запуска job app_merge (job_runs.details); нулевой — слияний в очереди нет.
 type Result struct {
@@ -64,7 +71,8 @@ type store interface {
 	// переходят в цель, копия слияния пишется в job_runs.details запуска runID, строка apps источника
 	// удаляется, шаг — reclose.
 	purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, now time.Time) error
-	// reclose — шаг reclose одной транзакцией: переоткрытие closed_days цели и status done.
+	// reclose — шаг reclose одной транзакцией под advisory lock close_day: переоткрытие closed_days цели и
+	// status done; errCloseDayBusy — lock держит запуск close_day.
 	reclose(ctx context.Context, m sqlc.AppMerge, now time.Time) error
 	fail(ctx context.Context, id uuid.UUID, msg string) error
 }
@@ -176,7 +184,11 @@ func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, n
 		m, err := e.purgeSource(ctx, m, runID, now)
 		return m, false, err
 	case sqlc.AppMergeStepReclose:
-		if err := e.store.reclose(ctx, m, now); err != nil {
+		err := e.store.reclose(ctx, m, now)
+		switch {
+		case errors.Is(err, errCloseDayBusy):
+			return m, true, nil
+		case err != nil:
 			return m, false, err
 		}
 		m.Status, m.Step, m.FinishedAt = sqlc.AppMergeStatusDone, sqlc.AppMergeStepDone, &now
@@ -186,14 +198,20 @@ func (e *Executor) step(ctx context.Context, m sqlc.AppMerge, runID uuid.UUID, n
 	}
 }
 
-// copy копирует партиции источника, которых нет в copied_partitions, отмечая каждую после копии, затем журнал
-// отказов, и переходит к purge_source с first_source_day — первым днём событий источника в часовом поясе цели.
-// Сбой оставляет скопированные партиции в copied_partitions: повтор продолжит со следующей.
+// copy сбрасывает очередь async insert ClickHouse, копирует партиции источника, которых нет в copied_partitions,
+// отмечая каждую после копии, затем журнал отказов, и переходит к purge_source с first_source_day — первым днём
+// событий источника в часовом поясе цели. Сбой оставляет скопированные партиции в copied_partitions: повтор
+// продолжит со следующей.
 func (e *Executor) copy(ctx context.Context, m sqlc.AppMerge, now time.Time) (sqlc.AppMerge, error) {
 	if m.SourceAppID == nil {
 		return m, errSourceGone
 	}
 	source := *m.SourceAppID
+	// Блок, принятый сервером в очередь до конца wait_keys, но ещё не записанный, иначе не попал бы в партиции:
+	// его записал бы сброс в PurgeApp — и тут же удалил вместе с источником.
+	if err := e.copier.flush(ctx); err != nil {
+		return m, fmt.Errorf("merge: flush async inserts: %w", err)
+	}
 	tz, err := e.store.appTimezone(ctx, m.TargetAppID)
 	if err != nil {
 		return m, fmt.Errorf("merge: target timezone: %w", err)
@@ -422,8 +440,20 @@ func (s pgStore) moveKeys(ctx context.Context, m sqlc.AppMerge, now time.Time) e
 }
 
 // reclose удаляет closed_days цели с first_source_day (job close_day закроет их заново с событиями источника)
-// и завершает слияние. Без событий источника first_source_day пуст и переоткрывать нечего.
+// и завершает слияние. Без событий источника first_source_day пуст и переоткрывать нечего. Транзакция идёт под
+// advisory lock close_day: его запуск читает последний закрытый день и затем записывает следующие — переоткрытие
+// посреди запуска оставило бы дни с first_source_day до прочитанного незакрытыми навсегда (следующий запуск начал
+// бы после записанных). Идёт запуск — errCloseDayBusy, шаг повторится через минуту; запуск close_day, пришедший
+// во время шага, пропускает тик.
 func (s pgStore) reclose(ctx context.Context, m sqlc.AppMerge, now time.Time) error {
+	release, ok, err := s.store.TryAdvisoryLock(ctx, CloseDayLockKey)
+	if err != nil {
+		return fmt.Errorf("merge: lock close_day: %w", err)
+	}
+	if !ok {
+		return errCloseDayBusy
+	}
+	defer release()
 	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
 		if m.FirstSourceDay.Valid {
 			if _, err := q.ReopenClosedDays(ctx, sqlc.ReopenClosedDaysParams{AppID: m.TargetAppID, FromDay: m.FirstSourceDay}); err != nil {
@@ -478,6 +508,15 @@ func (s pgStore) purgeSource(ctx context.Context, m sqlc.AppMerge, runID uuid.UU
 		return fmt.Errorf("merge: encode merge copy: %w", err)
 	}
 	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		// Строка источника под блокировкой до конца транзакции: ключ Read API или заявка на удаление, которые
+		// вставляют в источник параллельно (INSERT ждёт KEY SHARE строки apps), либо успевают под перенос ниже,
+		// либо после удаления строки получают app not found — а не исчезают каскадом, уже ответив 201/202.
+		if _, err := q.GetAppForUpdate(ctx, *m.SourceAppID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return errSourceGone
+			}
+			return fmt.Errorf("merge: lock source app: %w", err)
+		}
 		if err := q.AppendMergedAppToJobRun(ctx, sqlc.AppendMergedAppToJobRunParams{Merge: copyJSON, ID: runID}); err != nil {
 			return fmt.Errorf("merge: copy merge to job_runs: %w", err)
 		}

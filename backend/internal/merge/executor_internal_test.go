@@ -140,6 +140,7 @@ func (s *fakeStore) fail(ctx context.Context, _ uuid.UUID, msg string) error {
 // fakeCopier — партиции источника в памяти; ошибки копирования задаются по партиции.
 type fakeCopier struct {
 	parts    []Partition
+	flushErr error
 	partsErr error
 	copyErr  map[uint32]error
 	rejErr   error
@@ -147,6 +148,11 @@ type fakeCopier struct {
 	onCopy func(partition uint32)
 
 	calls []string
+}
+
+func (c *fakeCopier) flush(context.Context) error {
+	c.calls = append(c.calls, "flush")
+	return c.flushErr
 }
 
 func (c *fakeCopier) partitions(_ context.Context, _ uuid.UUID, tz string) ([]Partition, error) {
@@ -280,7 +286,7 @@ func TestWaitKeysStep(t *testing.T) {
 			}
 			// Источник без событий: после ожидания слияние проходит copy и следующие шаги в том же запуске.
 			require.Equal(t, []string{"claim", "set_step:copy", "timezone"}, s.calls[:3])
-			require.Equal(t, []string{"partitions:UTC", "rejected"}, cp.calls)
+			require.Equal(t, []string{"flush", "partitions:UTC", "rejected"}, cp.calls)
 			require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
 		})
 	}
@@ -314,7 +320,7 @@ func TestRunOnceRunsStepsToDone(t *testing.T) {
 		"set_step:purge_source", "purge_source", "set_step:reclose", "reclose",
 	}, s.calls)
 	require.Equal(t, int64(810), s.merge.TotalEvents, "объём источника пересчитан на шаге copy")
-	require.Equal(t, []string{"partitions:UTC", "copy:202608", "copy:202609", "copy:202610", "rejected"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:UTC", "copy:202608", "copy:202609", "copy:202610", "rejected"}, cp.calls)
 	require.Equal(t, []uuid.UUID{source}, p.purged)
 	require.Equal(t, []uuid.UUID{runID}, s.runIDs)
 	require.Equal(t, execNow, *s.merge.FinishedAt)
@@ -342,7 +348,7 @@ func TestCopyStepSkipsCopiedPartitions(t *testing.T) {
 	res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
 	require.NoError(t, err)
 	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
-	require.Equal(t, []string{"partitions:Europe/Moscow", "copy:202609", "copy:202610", "rejected"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:Europe/Moscow", "copy:202609", "copy:202610", "rejected"}, cp.calls)
 	require.Equal(t, []int32{202608, 202609, 202610}, s.merge.CopiedPartitions)
 	require.Equal(t, int64(810), s.merge.CopiedEvents)
 	require.Equal(t, pgtype.Date{Time: day(2026, 8, 10), Valid: true}, s.merge.FirstSourceDay)
@@ -357,7 +363,7 @@ func TestCopyStepEmptySource(t *testing.T) {
 	res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
 	require.NoError(t, err)
 	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
-	require.Equal(t, []string{"partitions:UTC", "rejected"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:UTC", "rejected"}, cp.calls)
 	for _, call := range s.calls {
 		require.False(t, strings.HasPrefix(call, "add_partition:"), "партиций нет — записывать нечего: %v", s.calls)
 	}
@@ -377,7 +383,7 @@ func TestCopyStepFailureKeepsProgress(t *testing.T) {
 	res, err := e.RunOnce(t.Context(), uuid.New())
 	require.ErrorContains(t, err, "connection closed")
 	require.Equal(t, Result{MergeID: s.merge.ID, Status: sqlc.AppMergeStatusFailed, Step: sqlc.AppMergeStepCopy}, res)
-	require.Equal(t, []string{"partitions:UTC", "copy:202608", "copy:202609"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:UTC", "copy:202608", "copy:202609"}, cp.calls)
 	require.Equal(t, []int32{202608}, s.merge.CopiedPartitions)
 	require.Contains(t, s.failed[0], "202609")
 	require.Len(t, failed, 1)
@@ -389,7 +395,7 @@ func TestCopyStepFailureKeepsProgress(t *testing.T) {
 	res, err = e.RunOnce(t.Context(), uuid.New())
 	require.NoError(t, err)
 	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
-	require.Equal(t, []string{"partitions:UTC", "copy:202609", "copy:202610", "rejected"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:UTC", "copy:202609", "copy:202610", "rejected"}, cp.calls)
 	require.Equal(t, []int32{202608, 202609, 202610}, s.merge.CopiedPartitions)
 }
 
@@ -460,6 +466,42 @@ func TestPurgeSourceStep(t *testing.T) {
 	require.Equal(t, []string{"claim", "purge_source", "set_step:reclose", "reclose"}, s.calls)
 	require.Nil(t, s.merge.SourceAppID)
 	require.Empty(t, failed)
+}
+
+// Сбой сброса очереди async insert — сбой шага copy до чтения партиций: блок, принятый сервером ClickHouse в
+// очередь, но ещё не записанный, иначе остался бы в источнике и ушёл с ним в purge_source.
+func TestCopyStepFlushError(t *testing.T) {
+	s := &fakeStore{merge: runningAt(sqlc.AppMergeStepCopy)}
+	cp := &fakeCopier{parts: sourceParts(), flushErr: errors.New("clickhouse: flush async insert queue: access denied")}
+	var failed []failedCall
+	res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
+	require.ErrorContains(t, err, "flush async insert queue")
+	require.Equal(t, Result{MergeID: s.merge.ID, Status: sqlc.AppMergeStatusFailed, Step: sqlc.AppMergeStepCopy}, res)
+	require.Equal(t, []string{"flush"}, cp.calls)
+	require.Empty(t, s.merge.CopiedPartitions)
+	require.Len(t, failed, 1)
+}
+
+// Идёт запуск close_day: reclose ждёт следующего запуска job, слияние остаётся running без ошибки и алерта.
+func TestRecloseWaitsForCloseDay(t *testing.T) {
+	s := &fakeStore{merge: runningAt(sqlc.AppMergeStepReclose), reclErr: errCloseDayBusy}
+	var failed []failedCall
+	e := newTestExecutor(s, clock.NewFixed(execNow), &failed)
+	res, err := e.RunOnce(t.Context(), uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, Result{MergeID: s.merge.ID, Status: sqlc.AppMergeStatusRunning, Step: sqlc.AppMergeStepReclose}, res)
+	require.Equal(t, []string{"claim", "reclose"}, s.calls)
+	require.Nil(t, s.merge.FinishedAt)
+	require.Empty(t, s.failed)
+	require.Empty(t, failed)
+
+	// close_day закончился: следующий запуск завершает слияние.
+	s.reclErr, s.calls = nil, nil
+	res, err = e.RunOnce(t.Context(), uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, sqlc.AppMergeStatusDone, res.Status)
+	require.Equal(t, []string{"claim", "reclose"}, s.calls)
+	require.Equal(t, execNow, *s.merge.FinishedAt)
 }
 
 // Метрики: merge_copied_events_total — скопированные события, merge_step_duration_seconds{step} — каждый шаг.
@@ -613,7 +655,7 @@ func TestCopyStepTotalEventsError(t *testing.T) {
 	res, err := newTestExecutorWith(s, cp, &fakePurger{}, clock.NewFixed(execNow), &failed).RunOnce(t.Context(), uuid.New())
 	require.ErrorContains(t, err, "refresh total events: pg down")
 	require.Equal(t, sqlc.AppMergeStatusFailed, res.Status)
-	require.Equal(t, []string{"partitions:UTC"}, cp.calls)
+	require.Equal(t, []string{"flush", "partitions:UTC"}, cp.calls)
 	require.Len(t, failed, 1)
 }
 
