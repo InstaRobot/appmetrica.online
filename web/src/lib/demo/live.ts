@@ -9,7 +9,15 @@ import type {
   Realtime,
   RecentEvent,
 } from "@/lib/api/gen/model";
-import { type DemoApp, dayStats, dimEntries, hourShares, makeScope, type Scope } from "./model";
+import {
+  type DemoApp,
+  dayStats,
+  dimEntries,
+  hourShares,
+  makeScope,
+  NO_FILTERS,
+  type Scope,
+} from "./model";
 import { appPersons, POOL_SIZE } from "./profiles";
 import { jitter, rand, roundRandom, seeded, splitTotal, uuidFrom } from "./random";
 import { formatZoned, HOUR_MS, isoUtc, localTime, MINUTE_MS } from "./time";
@@ -30,7 +38,13 @@ function sessionsPerMinute(scope: Scope, t: number): number {
   return (dayStats(scope, local.date, true).sessions * share) / 60;
 }
 
-function recentEvents(demo: DemoApp, env: Environment, now: number): RecentEvent[] {
+// recentEvents — лента realtime; platforms (не пусто) оставляет события этих платформ, не сдвигая остальные.
+function recentEvents(
+  demo: DemoApp,
+  env: Environment,
+  now: number,
+  platforms: readonly string[],
+): RecentEvent[] {
   const id = demo.app.id;
   const persons = appPersons(demo);
   const curated = persons.filter((p) => p.curated);
@@ -58,6 +72,7 @@ function recentEvents(demo: DemoApp, env: Environment, now: number): RecentEvent
             : persons[curated.length + Math.floor(personDraw * POOL_SIZE)];
       const install = person?.installs[Math.floor(installDraw * person.installs.length)];
       if (!person || !install) continue;
+      if (platforms.length > 0 && !platforms.includes(install.platform)) continue;
       out.push({
         insert_id: uuidFrom(id, env, "event", minute, j),
         event_time: isoUtc(received - lag - late),
@@ -85,8 +100,14 @@ function recentEvents(demo: DemoApp, env: Environment, now: number): RecentEvent
     .slice(0, RECENT_LIMIT);
 }
 
-export function realtime(demo: DemoApp, env: Environment, now: number): Realtime {
-  const scope = makeScope(demo, now, { env });
+// realtime — срез «прямо сейчас»; platforms — фильтр platform (пусто — все платформы).
+export function realtime(
+  demo: DemoApp,
+  env: Environment,
+  now: number,
+  platforms: readonly string[] = [],
+): Realtime {
+  const scope = makeScope(demo, now, { env, filters: { ...NO_FILTERS, platform: platforms } });
   const tz = demo.app.timezone;
   const id = demo.app.id;
   const live = isLive(demo, scope.today);
@@ -103,7 +124,7 @@ export function realtime(demo: DemoApp, env: Environment, now: number): Realtime
   return {
     active_now: roundRandom(concurrent, id, env, lastFull, "active"),
     per_minute: perMinute,
-    recent_events: live ? recentEvents(demo, env, now) : [],
+    recent_events: live ? recentEvents(demo, env, now, platforms) : [],
     generated_at: isoUtc(now),
   };
 }

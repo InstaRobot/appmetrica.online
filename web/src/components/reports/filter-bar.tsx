@@ -20,6 +20,8 @@ import { FILTER_DIMENSIONS, type FilterDimension, type Filters } from "@/lib/url
 type FilterOption = { value: string; count: number };
 
 type FilterBarProps = {
+  /** Измерения в списке и чипах; на страницах приложения платформу выбирает PlatformSwitcher. */
+  dims?: readonly FilterDimension[];
   value: Filters;
   onChange: (value: Filters) => void;
   /** Значения для выбора — из getAudienceBreakdown по текущему периоду (limit 50). */
@@ -44,8 +46,10 @@ export function toggleFilter(filters: Filters, dim: FilterDimension, value: stri
   return values.length > 0 ? ({ ...rest, [dim]: values } as Filters) : rest;
 }
 
-// Фильтры отчёта (14-ux-ui-spec.md §16.8): OR внутри измерения, AND между измерениями.
+// Фильтры отчёта (14-ux-ui-spec.md §16.8): OR внутри измерения, AND между измерениями. Сброс снимает только
+// измерения dims: фильтры остальных (платформа) остаются.
 export function FilterBar({
+  dims = FILTER_DIMENSIONS,
   value,
   onChange,
   options,
@@ -53,7 +57,10 @@ export function FilterBar({
   loading = false,
 }: FilterBarProps) {
   const [open, setOpen] = useState(false);
-  const active = FILTER_DIMENSIONS.filter((dim) => (value[dim]?.length ?? 0) > 0);
+  const active = dims.filter((dim) => (value[dim]?.length ?? 0) > 0);
+  const kept = Object.fromEntries(
+    Object.entries(value).filter(([dim]) => !(dims as readonly string[]).includes(dim)),
+  ) as Filters;
 
   const changeOpen = (next: boolean) => {
     setOpen(next);
@@ -82,7 +89,7 @@ export function FilterBar({
                   ) : (
                     <CommandEmpty>Ничего не найдено</CommandEmpty>
                   )}
-                  {FILTER_DIMENSIONS.map((dim) => {
+                  {dims.map((dim) => {
                     // Пустое значение («Не определено») фильтром не задаётся: у страны его нет в контракте.
                     const items = (options[dim] ?? []).filter((o) => o.value !== "");
                     if (items.length === 0) return null;
@@ -137,7 +144,7 @@ export function FilterBar({
         </Badge>
       ))}
       {active.length > 0 ? (
-        <Button variant="link" size="sm" onClick={() => onChange({})}>
+        <Button variant="link" size="sm" onClick={() => onChange(kept)}>
           Сбросить фильтры
         </Button>
       ) : null}

@@ -11,14 +11,17 @@ import { RealtimeSkeleton } from "@/components/skeletons/realtime-skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useObservedPlatforms } from "@/hooks/use-observed-platforms";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetRealtime } from "@/lib/api/gen/endpoints/realtime/realtime";
 import type { App } from "@/lib/api/gen/model";
 import { formatClock } from "@/lib/format";
+import { todayIn } from "@/lib/period";
 import { useRealtimeState } from "@/lib/url-state";
 import { EnvironmentSwitch } from "./environment-switch";
 import { PerMinuteChart } from "./lazy-charts";
+import { PlatformSwitcher } from "./platform-switcher";
 
 // Опрос getRealtime раз в 5 с (14-ux-ui-spec.md S-07); после 3 неудачных опросов подряд — предупреждение.
 const POLL_MS = 5000;
@@ -33,13 +36,21 @@ export function RealtimePanel({ appId }: RealtimePanelProps) {
 }
 
 function RealtimeReport({ app }: { app: App }) {
-  const { env, setEnv } = useRealtimeState();
+  const { platform, env, setPlatform, setEnv } = useRealtimeState();
   const [paused, setPaused] = useState(false);
+  // Платформы для переключателя — наблюдаемые сегодня (TZ приложения).
+  const today = todayIn(app.timezone);
+  const observedPlatforms = useObservedPlatforms(app.id, {
+    from: today,
+    to: today,
+    environment: env,
+    unit: "persons",
+  });
   // На паузе опрос, фокус окна и восстановление сети запросов не делают; на скрытой вкладке
   // TanStack Query сам не опрашивает (refetchIntervalInBackground: false).
   const realtime = useGetRealtime(
     app.id,
-    { environment: env },
+    { environment: env, ...(platform ? { platform: [platform] } : {}) },
     {
       query: {
         refetchInterval: paused ? false : POLL_MS,
@@ -131,6 +142,12 @@ function RealtimeReport({ app }: { app: App }) {
           {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
           {paused ? "Продолжить" : "Пауза"}
         </Button>
+        <PlatformSwitcher
+          appPlatforms={app.platforms}
+          observed={observedPlatforms}
+          value={platform}
+          onChange={(next) => void setPlatform(next)}
+        />
         <div className="ml-auto">
           <EnvironmentSwitch value={env} onChange={(next) => void setEnv(next)} />
         </div>

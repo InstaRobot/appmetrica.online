@@ -211,7 +211,7 @@ describe("RealtimePanel", () => {
       "true",
     );
     await user.click(within(switcher).getByRole("radio", { name: "iOS" }));
-    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios&env=development");
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?env=development&platform=ios");
     await waitFor(() => expect(requests.at(-1)?.getAll("platform")).toEqual(["ios"]));
 
     await user.click(within(switcher).getByRole("radio", { name: "Все" }));

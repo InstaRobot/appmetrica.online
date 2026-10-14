@@ -31,9 +31,9 @@ describe("AppTabs", () => {
   });
 
   it("drops parameters of a single report", () => {
-    expect(reportQuery(new URLSearchParams("platform=android&q=u%3A42&metric=new&cohort=week"))).toBe(
-      "?platform=android",
-    );
+    expect(
+      reportQuery(new URLSearchParams("platform=android&q=u%3A42&metric=new&cohort=week")),
+    ).toBe("?platform=android");
     expect(reportQuery(new URLSearchParams("q=u%3A42"))).toBe("");
   });
 });

@@ -14,12 +14,14 @@ import { FilterBar } from "@/components/reports/filter-bar";
 import { GRANULARITY_LABELS, GranularitySelect } from "@/components/reports/granularity-select";
 import { MetricChart, RollingActiveChart } from "@/components/reports/lazy-charts";
 import { PeriodPicker } from "@/components/reports/period-picker";
+import { PlatformSwitcher } from "@/components/reports/platform-switcher";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useFilterOptions } from "@/hooks/use-filter-options";
+import { useObservedPlatforms } from "@/hooks/use-observed-platforms";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import {
@@ -48,6 +50,7 @@ import {
   type Filters,
   filtersSearch,
   periodSearch,
+  REPORT_FILTER_DIMENSIONS,
   reportParams,
   useAudienceState,
 } from "@/lib/url-state";
@@ -119,7 +122,8 @@ function AudienceReport({ app }: { app: App }) {
     { ...params, dimension: state.dim, metric: state.bmetric, limit: 50 },
     keep,
   );
-  const filterOptions = useFilterOptions(app.id, params);
+  const filterOptions = useFilterOptions(app.id, params, REPORT_FILTER_DIMENSIONS);
+  const observedPlatforms = useObservedPlatforms(app.id, params);
 
   const summaryData = summary.data?.status === 200 ? summary.data.data : undefined;
   // Пустое приложение отличается от пустого периода только наличием первого события.
@@ -150,9 +154,16 @@ function AudienceReport({ app }: { app: App }) {
     void update({ ...periodSearch(next), ...(g !== state.granularity ? { g } : {}) });
   };
   const changeFilters = (filters: Filters) => void update(filtersSearch(filters));
+  const changePlatform = (platform: Platform | null) =>
+    void update({ platform: platform ? [platform] : null });
   const addFilter = (value: string) => {
     const dim = state.dim;
-    if (dim === "platform" && !Object.values<string>(Platform).includes(value)) return;
+    if (dim === "platform") {
+      // Платформа — одно значение переключателя: строка разбивки заменяет выбранную.
+      const platform = Object.values(Platform).find((p) => p === value);
+      if (platform) changePlatform(platform);
+      return;
+    }
     if (!(FILTER_DIMENSIONS as readonly string[]).includes(dim)) return;
     const key = dim as (typeof FILTER_DIMENSIONS)[number];
     const current: string[] = state.filters[key] ?? [];
@@ -196,7 +207,14 @@ function AudienceReport({ app }: { app: App }) {
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <PlatformSwitcher
+            appPlatforms={app.platforms}
+            observed={observedPlatforms}
+            value={state.filters.platform?.[0] ?? null}
+            onChange={changePlatform}
+          />
           <FilterBar
+            dims={REPORT_FILTER_DIMENSIONS}
             value={state.filters}
             onChange={changeFilters}
             options={filterOptions.options}

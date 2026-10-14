@@ -286,7 +286,9 @@ const ROUTES: readonly Route[] = [
   }),
   route("/v1/apps/:app_id/realtime", ({ params, query, now }) => {
     const app = requireApp(params.app_id);
-    return json(realtime(app, oneOf(query, "environment", ENVIRONMENTS, "production"), now));
+    const env = oneOf(query, "environment", ENVIRONMENTS, "production");
+    // Из фильтров отчётов realtime принимает только platform.
+    return json(realtime(app, env, now, filters(query).platform));
   }),
   route("/v1/apps/:app_id/profiles", ({ params, query, now }) => {
     const app = requireApp(params.app_id);

@@ -227,12 +227,11 @@ describe("AudienceView", () => {
     // Опции — явные платформы и наблюдаемые за период (без фильтров отчёта).
     const switcher = await screen.findByRole("radiogroup", { name: "Платформа" });
     await waitFor(() =>
-      expect(within(switcher).getAllByRole("radio").map((r) => r.textContent)).toEqual([
-        "Все",
-        "iOS",
-        "Android",
-        "Веб",
-      ]),
+      expect(
+        within(switcher)
+          .getAllByRole("radio")
+          .map((r) => r.textContent),
+      ).toEqual(["Все", "iOS", "Android", "Веб"]),
     );
     const observed = requests.breakdown.find(
       (p) => p.get("dimension") === "platform" && p.get("limit") === "50",
@@ -241,7 +240,9 @@ describe("AudienceView", () => {
     expect(observed?.has("country")).toBe(false);
 
     await user.click(within(switcher).getByRole("radio", { name: "Android" }));
-    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d&platform=android&country=RU"));
+    await waitFor(() =>
+      expect(lastUrl(onUrlUpdate)).toBe("?period=30d&country=RU&platform=android"),
+    );
     await waitFor(() =>
       expect(requests.summary.some((p) => p.getAll("platform").join() === "android")).toBe(true),
     );

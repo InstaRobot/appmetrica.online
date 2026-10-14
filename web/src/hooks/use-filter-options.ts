@@ -7,12 +7,16 @@ import { FILTER_DIMENSIONS, type FilterDimension, type ReportParams } from "@/li
 
 type FilterOptions = Partial<Record<FilterDimension, { value: string; count: number }[]>>;
 
-// Значения FilterBar (OQ-053): getAudienceBreakdown по четырём измерениям за текущий период (limit 50).
+// Значения FilterBar (OQ-053): getAudienceBreakdown по измерениям dims за текущий период (limit 50).
 // Запросы идут только после первого открытия списка «Фильтр».
-export function useFilterOptions(appId: string, params: ReportParams) {
+export function useFilterOptions(
+  appId: string,
+  params: ReportParams,
+  dims: readonly FilterDimension[] = FILTER_DIMENSIONS,
+) {
   const [opened, setOpened] = useState(false);
   const queries = useQueries({
-    queries: FILTER_DIMENSIONS.map((dimension) => ({
+    queries: dims.map((dimension) => ({
       ...getGetAudienceBreakdownQueryOptions(appId, {
         ...params,
         dimension,
@@ -24,7 +28,7 @@ export function useFilterOptions(appId: string, params: ReportParams) {
   });
 
   const options: FilterOptions = {};
-  FILTER_DIMENSIONS.forEach((dim, i) => {
+  dims.forEach((dim, i) => {
     const q = queries[i];
     if (q?.data?.status === 200) options[dim] = q.data.data.rows;
   });

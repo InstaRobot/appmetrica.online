@@ -93,10 +93,7 @@ describe("PlatformSwitcher", () => {
 
   it("orders options by the platform enum and ignores unknown observed values", () => {
     render(
-      <Controlled
-        appPlatforms={["web", "ios"]}
-        observed={["symbian", "", "android", "other"]}
-      />,
+      <Controlled appPlatforms={["web", "ios"]} observed={["symbian", "", "android", "other"]} />,
     );
     expect(options()).toEqual(["Все", "iOS", "Android", "Веб", "Другое"]);
   });

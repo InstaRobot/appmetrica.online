@@ -32,6 +32,8 @@ import {
 
 export const FILTER_DIMENSIONS = ["platform", "app_version", "os_name", "country"] as const;
 export type FilterDimension = (typeof FILTER_DIMENSIONS)[number];
+// Измерения FilterBar на страницах приложения: платформу выбирает PlatformSwitcher.
+export const REPORT_FILTER_DIMENSIONS = ["app_version", "os_name", "country"] as const;
 export type Filters = {
   platform?: Platform[];
   app_version?: string[];
@@ -120,10 +122,11 @@ function resolvePeriod(search: AudienceSearch, today: string): PeriodValue {
 
 type FilterSearch = inferParserType<typeof filterParams>;
 
-// Пустые фильтры в состояние не попадают.
+// Пустые фильтры в состояние не попадают. Платформа — одно значение (PlatformSwitcher): из старых ссылок с
+// несколькими платформами берётся первая.
 function resolveFilters(search: FilterSearch): Filters {
   const filters: Filters = {};
-  if (search.platform.length > 0) filters.platform = search.platform;
+  if (search.platform.length > 0) filters.platform = search.platform.slice(0, 1);
   if (search.app_version.length > 0) filters.app_version = search.app_version;
   if (search.os_name.length > 0) filters.os_name = search.os_name;
   if (search.country.length > 0) filters.country = search.country;
@@ -283,15 +286,18 @@ export function useRetentionState(timezone: string, today: string = todayIn(time
   };
 }
 
-// URL-состояние экрана S-07 (14-ux-ui-spec.md S-07): только окружение. Период и фильтры других вкладок
-// остаются в URL нетронутыми, чтобы пережить переход обратно.
-const realtimeSearchParams = { env: scopeParams.env };
+// URL-состояние экрана S-07 (14-ux-ui-spec.md S-07): платформа и окружение. Период и остальные фильтры других
+// вкладок остаются в URL нетронутыми, чтобы пережить переход обратно.
+const realtimeSearchParams = { platform: filterParams.platform, env: scopeParams.env };
 
-// useRealtimeState читает окружение S-07 из URL; смена — новая запись истории.
+// useRealtimeState читает платформу и окружение S-07 из URL; смена — новая запись истории.
 export function useRealtimeState() {
   const [search, setSearch] = useQueryStates(realtimeSearchParams, { history: "push" });
   return {
+    platform: search.platform[0] ?? null,
     env: search.env,
+    setPlatform: (platform: Platform | null) =>
+      setSearch({ platform: platform ? [platform] : null }),
     setEnv: (env: Environment) => setSearch({ env }),
   };
 }

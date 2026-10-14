@@ -193,12 +193,13 @@ describe("RetentionView", () => {
 
     await user.click(screen.getByRole("button", { name: "Фильтр" }));
     await waitFor(() => expect(requests.breakdown).toHaveLength(4));
-    expect(requests.breakdown.slice(1).map((p) => p.get("dimension"))).toEqual([
+    const opened = requests.breakdown.slice(1);
+    expect(opened.map((p) => p.get("dimension")).sort()).toEqual([
       "app_version",
-      "os_name",
       "country",
+      "os_name",
     ]);
-    expect(requests.breakdown[1]?.getAll("country")).toEqual(["RU"]);
+    expect(opened.every((p) => p.getAll("country").join() === "RU")).toBe(true);
   });
 
   it("narrows cohorts to the platform from the switcher", async () => {

@@ -9,11 +9,13 @@ import { EnvironmentSwitch } from "@/components/reports/environment-switch";
 import { FilterBar } from "@/components/reports/filter-bar";
 import { RetentionAverageChart } from "@/components/reports/lazy-charts";
 import { PeriodPicker } from "@/components/reports/period-picker";
+import { PlatformSwitcher } from "@/components/reports/platform-switcher";
 import { RetentionHeatmap } from "@/components/reports/retention-heatmap";
 import { RetentionSkeleton } from "@/components/skeletons/retention-skeleton";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useFilterOptions } from "@/hooks/use-filter-options";
+import { useObservedPlatforms } from "@/hooks/use-observed-platforms";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetRetention } from "@/lib/api/gen/endpoints/retention/retention";
@@ -24,6 +26,7 @@ import {
   COHORT_GRANULARITIES,
   filtersSearch,
   periodSearch,
+  REPORT_FILTER_DIMENSIONS,
   RETENTION_PRESETS,
   reportParams,
   retentionParams,
@@ -45,7 +48,9 @@ function RetentionReport({ app }: { app: App }) {
   const retention = useGetRetention(app.id, retentionParams(state), {
     query: { placeholderData: keepPreviousData },
   });
-  const filterOptions = useFilterOptions(app.id, reportParams(state));
+  const params = reportParams(state);
+  const filterOptions = useFilterOptions(app.id, params, REPORT_FILTER_DIMENSIONS);
+  const observedPlatforms = useObservedPlatforms(app.id, params);
 
   // apiFetch бросает ApiError; тип ошибки orval описывает тело ответа, а не исключение.
   const error = retention.isError ? (retention.error as unknown as ApiError | null) : null;
@@ -114,7 +119,14 @@ function RetentionReport({ app }: { app: App }) {
           presets={RETENTION_PRESETS}
           error={rangeError}
         />
+        <PlatformSwitcher
+          appPlatforms={app.platforms}
+          observed={observedPlatforms}
+          value={state.filters.platform?.[0] ?? null}
+          onChange={(platform) => void update({ platform: platform ? [platform] : null })}
+        />
         <FilterBar
+          dims={REPORT_FILTER_DIMENSIONS}
           value={state.filters}
           onChange={(filters) => void update(filtersSearch(filters))}
           options={filterOptions.options}
