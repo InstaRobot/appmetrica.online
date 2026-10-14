@@ -32,14 +32,18 @@ test("first event turns onboarding green", async ({ page, context }) => {
 
   const status = page.getByRole("status", { name: "Первое событие" });
   await expect(status).toContainText("Ждём первое событие…");
+  const ios = page.getByRole("region", { name: "iOS" });
+  const iosStatus = ios.getByRole("status", { name: "Статус iOS" });
+  await expect(iosStatus).toContainText("Ждём первое событие с iOS");
+  await expect(page.getByRole("link", { name: "Добавить платформу" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "эндпоинт" })).toHaveValue(
     `${INGEST_URL}/v1/events`,
   );
 
   await expectNoA11yViolations(page);
 
-  await page.getByRole("tab", { name: "curl" }).click();
-  await page.getByRole("button", { name: "Копировать код" }).click();
+  await ios.getByRole("tab", { name: "curl" }).click();
+  await ios.getByRole("button", { name: "Копировать код" }).click();
   const snippet = await page.evaluate(() => navigator.clipboard.readText());
   expect(snippet).toContain(`curl -sS -X POST "${INGEST_URL}/v1/events"`);
 
@@ -61,6 +65,8 @@ test("first event turns onboarding green", async ({ page, context }) => {
   expect(Date.now() - accepted).toBeLessThanOrEqual(10_000);
   await expect(status).toContainText(`${name} подключено!`);
   await expect(page.getByRole("link", { name: "Открыть Аудиторию" })).toBeVisible();
+  // Статус секции — по breakdown платформ за 48 ч, опрос раз в 3 с.
+  await expect(iosStatus).toContainText("Получено первое событие", { timeout: 10_000 });
 
   // После перезагрузки страница открывается в режиме здоровья.
   await page.reload();

@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { IntegrationHealth, WriteKey } from "@/lib/api/gen/model";
+import type { Breakdown, IntegrationHealth, Platform, WriteKey } from "@/lib/api/gen/model";
 import { app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -43,17 +43,39 @@ function writeKey(overrides: Partial<WriteKey> = {}): WriteKey {
 }
 
 type MockOptions = {
+  platforms?: Platform[];
   keys?: WriteKey[];
+  /** Платформы, наблюдавшиеся за 48 ч, по окружениям. */
+  observed?: { production?: string[]; development?: string[] };
   /** Ответ на n-й (с нуля) запрос здоровья. */
   health?: (n: number) => IntegrationHealth;
 };
 
+function breakdown(values: string[]): Breakdown {
+  return {
+    dimension: "platform",
+    metric: "active",
+    total: values.length,
+    rows: values.map((value) => ({ value, count: 1, share: 1 / values.length })),
+  };
+}
+
 function mockApi(opts: MockOptions = {}) {
   const requests: URLSearchParams[] = [];
+  const breakdownRequests: URLSearchParams[] = [];
+  const platforms = opts.platforms ?? ["ios"];
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
-      HttpResponse.json(makeApp({ id: APP_ID, name: "Notes iOS", platform: "ios" })),
+      HttpResponse.json(
+        makeApp({ id: APP_ID, name: "Notes iOS", platform: platforms[0], platforms }),
+      ),
     ),
+    http.get(`*/v1/apps/${APP_ID}/audience/breakdown`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      breakdownRequests.push(params);
+      const env = params.get("environment") === "development" ? "development" : "production";
+      return HttpResponse.json(breakdown(opts.observed?.[env] ?? []));
+    }),
     http.get(`*/admin/v1/apps/${APP_ID}/write-keys`, () =>
       HttpResponse.json({ items: opts.keys ?? [writeKey()] }),
     ),
@@ -63,7 +85,7 @@ function mockApi(opts: MockOptions = {}) {
       return HttpResponse.json(opts.health ? opts.health(n) : health());
     }),
   );
-  return requests;
+  return Object.assign(requests, { breakdown: breakdownRequests });
 }
 
 async function tick(ms: number) {
@@ -146,10 +168,7 @@ describe("IntegrationOnboarding", () => {
     expect(screen.getByRole("textbox", { name: "эндпоинт" })).toHaveValue(
       "http://localhost:8081/v1/events",
     );
-    expect(screen.getByRole("heading", { name: "1. Ключ приложения" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "2. Отправьте первое событие" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "iOS" })).toBeInTheDocument();
 
     const swift = screen.getByLabelText("Пример кода на Swift");
     expect(swift.textContent).toContain('"pk_BBBBbbbbBBBBbbbbBBBBbbbbBBBBbbbb"');
@@ -160,18 +179,119 @@ describe("IntegrationOnboarding", () => {
     mockApi({ keys: [writeKey({ revoked_at: "2026-10-13T11:10:00Z" })] });
     renderWithClient(<IntegrationPanel appId={APP_ID} />);
 
-    const alert = await screen.findByText(
-      "Нет активного write-ключа. Создайте ключ в настройках приложения.",
+    const section = await screen.findByRole("region", { name: "iOS" });
+    const alert = await within(section).findByRole("alert");
+    expect(alert).toHaveTextContent("Для iOS нет активного ключа");
+    expect(within(alert).getByRole("link", { name: "Создать ключ для iOS" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/settings#write-keys`,
     );
-    const link = within(alert.closest("[role=alert]") as HTMLElement).getByRole("link", {
-      name: "Настройки приложения",
-    });
-    expect(link).toHaveAttribute("href", `/apps/${APP_ID}/settings`);
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "write-ключ" })).not.toBeInTheDocument();
     // Ожидание первого события продолжается и без ключа.
     expect(screen.getByRole("status", { name: "Первое событие" })).toHaveTextContent(
       "Ждём первое событие…",
     );
+  });
+
+  it("shows a section per platform", async () => {
+    mockApi({
+      platforms: ["ios", "web"],
+      keys: [
+        writeKey({
+          id: "k2",
+          key: "pk_K2K2k2k2K2K2k2k2K2K2k2k2K2K2k2k2",
+          platform: null,
+          created_at: "2026-09-01T00:00:00Z",
+        }),
+        writeKey({
+          id: "k1",
+          key: "pk_K1K1k1k1K1K1k1k1K1K1k1k1K1K1k1k1",
+          platform: "ios",
+          created_at: "2026-10-01T00:00:00Z",
+        }),
+      ],
+    });
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    const ios = await screen.findByRole("region", { name: "iOS" });
+    const web = screen.getByRole("region", { name: "Веб" });
+    expect(within(ios).getByRole("textbox", { name: "write-ключ" })).toHaveValue(
+      "pk_K1K1k1k1K1K1k1k1K1K1k1k1K1K1k1k1",
+    );
+    expect(within(ios).getByRole("tab", { name: "Swift" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(within(web).getByRole("textbox", { name: "write-ключ" })).toHaveValue(
+      "pk_K2K2k2k2K2K2k2k2K2K2k2k2K2K2k2k2",
+    );
+    expect(within(web).getByRole("tab", { name: "JavaScript" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(within(web).getByLabelText("Пример кода на JavaScript").textContent).toContain(
+      'platform: "web",',
+    );
+    // Эндпоинт общий для всех платформ.
+    expect(screen.getAllByRole("textbox", { name: "эндпоинт" })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Добавить платформу" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/settings#platforms`,
+    );
+  });
+
+  it("warns when a platform has no key", async () => {
+    mockApi({
+      platforms: ["ios", "android"],
+      keys: [writeKey({ platform: "ios" })],
+    });
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    const android = await screen.findByRole("region", { name: "Android" });
+    const alert = within(android).getByRole("alert");
+    expect(alert).toHaveTextContent("Для Android нет активного ключа");
+    expect(within(alert).getByRole("link", { name: "Создать ключ для Android" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/settings#write-keys`,
+    );
+    expect(within(android).queryByRole("tablist")).not.toBeInTheDocument();
+    const ios = screen.getByRole("region", { name: "iOS" });
+    expect(within(ios).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(ios).getByRole("textbox", { name: "write-ключ" })).toHaveValue(KEY);
+  });
+
+  it("marks platforms observed in the last 48 hours as received", async () => {
+    const requests = mockApi({
+      platforms: ["ios", "android", "web"],
+      keys: [writeKey()],
+      observed: { production: ["ios", "linux"], development: ["web"] },
+    });
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Статус iOS" })).toHaveTextContent(
+        "Получено первое событие",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Статус Веб" })).toHaveTextContent(
+        "Получено первое событие",
+      ),
+    );
+    expect(screen.getByRole("status", { name: "Статус Android" })).toHaveTextContent(
+      "Ждём первое событие с Android",
+    );
+    // Неявная платформа (linux) секцию не получает.
+    expect(screen.queryByRole("region", { name: "Linux" })).not.toBeInTheDocument();
+
+    // Вчера и сегодня по часовому поясу приложения (Europe/Moscow), оба окружения.
+    const envs = requests.breakdown.map((p) => p.get("environment")).sort();
+    expect(envs).toEqual(["development", "production"]);
+    for (const params of requests.breakdown) {
+      expect(params.get("dimension")).toBe("platform");
+      expect(params.get("from")).toBe("2026-10-12");
+      expect(params.get("to")).toBe("2026-10-13");
+    }
   });
 });

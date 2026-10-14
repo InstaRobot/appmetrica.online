@@ -88,6 +88,16 @@ describe("WriteKeysTable", () => {
     expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /Отозвать/ })).toBeNull();
   });
 
+  it("is the #write-keys target of the integration tab", async () => {
+    mockKeys([ACTIVE]);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
+
+    await screen.findByRole("table", { name: "Write-ключи" });
+    expect(screen.getByRole("region", { name: "Write-ключи" })).toHaveAttribute("id", "write-keys");
+  });
+
   it("creates a key and shows it with a copy button", async () => {
     const calls = mockKeys([ACTIVE]);
     renderWithClient(

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Platform } from "@/lib/api/gen/model";
 import {
   buildSnippet,
   defaultSnippetLang,
@@ -10,7 +11,8 @@ import {
   type SnippetLang,
 } from "./snippets";
 
-// Эталоны — тексты сниппетов из 14-ux-ui-spec.md S-10 (платформа ios, ключ-пример, боевой URL).
+// Эталоны — тексты сниппетов из 14-ux-ui-spec.md S-10 (ключ-пример, боевой URL): Kotlin — для
+// платформы android, JavaScript — для web, остальные — для ios.
 // vitest запускается из web/; import.meta.url в jsdom — не file:, поэтому путь от cwd.
 const SPEC = readFileSync(
   resolve(process.cwd(), "../docs/discovery/2026-10-13-appmetrica-online/14-ux-ui-spec.md"),
@@ -18,6 +20,14 @@ const SPEC = readFileSync(
 );
 const SPEC_KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
 const SPEC_URL = "https://i.appmetrica.online/v1/events";
+
+const SPEC_PLATFORMS: Record<SnippetLang, Platform> = {
+  curl: "ios",
+  swift: "ios",
+  kotlin: "android",
+  javascript: "web",
+  go: "ios",
+};
 
 const SPEC_LABELS: Record<SnippetLang, string> = {
   curl: "curl (во всех сниппетах",
@@ -59,7 +69,7 @@ describe("snippets", () => {
       const snippet = buildSnippet(lang, {
         ingestUrl: SPEC_URL,
         writeKey: SPEC_KEY,
-        platform: "ios",
+        platform: SPEC_PLATFORMS[lang],
       });
       expect(snippet, lang).toBe(specSnippet(lang));
     }
@@ -117,6 +127,21 @@ describe("snippets", () => {
       '"platform":    "server"',
     );
     expect(buildSnippet("go", { ...input, platform: "bot" })).toContain('"platform":    "bot"');
+  });
+
+  it("uses the section platform inside Kotlin and JavaScript snippets", () => {
+    const input = { ingestUrl: SPEC_URL, writeKey: SPEC_KEY } as const;
+    expect(buildSnippet("kotlin", { ...input, platform: "ios" })).toContain(
+      '.put("platform", "ios")',
+    );
+    expect(buildSnippet("kotlin", { ...input, platform: "android" })).toContain(
+      '.put("platform", "android")',
+    );
+    expect(buildSnippet("javascript", { ...input, platform: "android" })).toContain(
+      'platform: "android",',
+    );
+    expect(buildSnippet("javascript", { ...input, platform: "web" })).toContain('platform: "web",');
+    expect(buildSnippet("javascript", { ...input, platform: "web" })).not.toContain('"android"');
   });
 
   it("picks the default language by platform", () => {
