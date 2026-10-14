@@ -111,6 +111,28 @@ func TestGetAudience_HTTP(t *testing.T) {
 			"from=2026-10-01&to=2026-10-12&granularity=week&metric=avg_duration_ms&compare=previous_period"), e.all))
 	})
 
+	// AC-6.1: split=platform — ряды по платформам рядом с итогом, compare_points нет даже при compare=previous_period.
+	t.Run("timeseries_split", func(t *testing.T) {
+		p := audienceParams(t, msk, "2026-10-01", "2026-10-12")
+		want, err := e.reports.AudienceTimeseries(t.Context(), p, reports.TimeseriesQuery{
+			Granularity: reports.GranularityDay, Metric: reports.MetricActive, Compare: true, SplitByPlatform: true,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, want.Splits)
+		require.Nil(t, want.ComparePoints)
+		rec := e.get(t, audiencePath(msk, "timeseries", "from=2026-10-01&to=2026-10-12&split=platform"), e.all)
+		requireJSON(t, want, rec)
+		require.NotContains(t, rec.Body.String(), `"compare_points"`)
+
+		want, err = e.reports.AudienceTimeseries(t.Context(), p, reports.TimeseriesQuery{
+			Granularity: reports.GranularityDay, Metric: reports.MetricActive, Compare: true,
+		})
+		require.NoError(t, err)
+		rec = e.get(t, audiencePath(msk, "timeseries", "from=2026-10-01&to=2026-10-12&split=none"), e.all)
+		requireJSON(t, want, rec)
+		require.NotContains(t, rec.Body.String(), `"splits"`)
+	})
+
 	t.Run("rolling_active", func(t *testing.T) {
 		want, err := e.reports.RollingActive(t.Context(), audienceParams(t, msk, "2026-09-13", "2026-10-12"))
 		require.NoError(t, err)
@@ -181,6 +203,7 @@ func TestGetAudience_InvalidParams(t *testing.T) {
 		{"granularity", "timeseries", "from=2026-10-06&to=2026-10-12&granularity=quarter", "invalid_request", "granularity", 0},
 		{"summary_compare", "summary", "from=2026-10-06&to=2026-10-12&compare=yes", "invalid_request", "compare", 0},
 		{"timeseries_compare", "timeseries", "from=2026-10-06&to=2026-10-12&compare=", "invalid_request", "compare", 0},
+		{"timeseries_split", "timeseries", "from=2026-10-06&to=2026-10-12&split=os", "invalid_request", "split", 0},
 		{"unit", "rolling-active", "from=2026-10-06&to=2026-10-12&unit=people", "invalid_request", "unit", 0},
 		{"environment", "summary", "from=2026-10-06&to=2026-10-12&environment=staging", "invalid_request", "environment", 0},
 		{"country", "breakdown", "from=2026-10-06&to=2026-10-12&dimension=city&country=ru", "invalid_request", "country", 0},

@@ -270,6 +270,38 @@ func TestParamError_Response(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `"code":"invalid_request"`)
 }
 
+// AC-006.2 (AC-6.2): split — none (по умолчанию) или platform; остальное, в том числе пустое значение, —
+// 400 invalid_request с details.field=split, присланное значение не цитируется.
+func TestParseSplit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   *string
+		want bool
+	}{
+		{"default", nil, false},
+		{"none", ptr("none"), false},
+		{"platform", ptr("platform"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, perr := parseSplit(tc.in)
+			require.Nil(t, perr)
+			require.Equal(t, tc.want, got)
+		})
+	}
+	for _, in := range []string{"os", "", "Platform", "platform,os"} {
+		t.Run("invalid_"+in, func(t *testing.T) {
+			got, perr := parseSplit(&in)
+			require.False(t, got)
+			require.NotNil(t, perr)
+			require.Equal(t, "invalid_request", perr.code)
+			require.Equal(t, "split", perr.field)
+			if in != "" {
+				require.NotContains(t, perr.message, in)
+			}
+		})
+	}
+}
+
 // Неверные environment и unit портфеля — 400 до обращения к хранилищам.
 func TestGetPortfolio_InvalidParams(t *testing.T) {
 	srv := &Server{}

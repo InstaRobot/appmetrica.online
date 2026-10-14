@@ -3,6 +3,8 @@
 package reports
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -73,10 +75,15 @@ func timeseries(t *testing.T, svc *Service, p Params, q TimeseriesQuery) Timeser
 	require.NoError(t, err)
 	require.Equal(t, q.Metric, got.Metric)
 	require.Equal(t, q.Granularity, got.Granularity)
-	if q.Compare {
+	if q.Compare && !q.SplitByPlatform {
 		require.Len(t, got.ComparePoints, len(bucketStarts(p.Period.Previous(), p.Location, q.Granularity)))
 	} else {
 		require.Nil(t, got.ComparePoints)
+	}
+	if q.SplitByPlatform {
+		require.NotNil(t, got.Splits)
+	} else {
+		require.Nil(t, got.Splits)
 	}
 	return got
 }
@@ -509,6 +516,100 @@ func TestTimeseries_WeekAndMonthBuckets(t *testing.T) {
 	month := timeseries(t, svc, p, TimeseriesQuery{Granularity: GranularityMonth, Metric: MetricActive})
 	require.Equal(t, []string{"2026-09-01T00:00:00+03:00", "2026-10-01T00:00:00+03:00"}, stamps(month.Points))
 	require.Equal(t, []any{1.0, 2.0}, values(month.Points))
+}
+
+// AC-006.1 (AC-6.1): split=platform — ряд на каждую платформу периода, равный ряду с фильтром platform=[p], для
+// всех метрик; итог прежний, compare игнорируется. Человек на двух платформах входит в оба ряда, новые
+// считаются по first_seen внутри платформы.
+func TestTimeseriesSplitByPlatform(t *testing.T) {
+	on := func(platform string) func(*chstore.EventRow) {
+		return func(r *chstore.EventRow) { r.Platform = platform }
+	}
+	var events [][]chstore.EventRow
+	for d := 1; d <= 7; d++ {
+		at := func(hour int) string { return fmt.Sprintf("2026-10-%02dT%02d:00:00+03:00", d, hour) }
+		events = append(events, with(visit(t, 1, "", at(9), time.Duration(d)*10*time.Second), on("ios")))
+		if d%2 == 1 {
+			events = append(events, with(visit(t, 2, "", at(10), 30*time.Second), on("android")))
+		}
+		if d >= 3 {
+			// u1: iOS с 3-го, Android с 5-го — новый на Android позже, чем в итоге.
+			events = append(events, with(visit(t, 3, "u1", at(11), 0), on("ios")))
+		}
+		if d >= 5 {
+			events = append(events, with(visit(t, 4, "u1", at(12), 0), on("android")))
+		}
+	}
+	svc := newService(startWith(t, concat(events...)))
+	p := period(t, identity.Persons, "2026-10-01", "2026-10-07")
+
+	for _, m := range []Metric{MetricActive, MetricNew, MetricSessions, MetricAvgDuration} {
+		t.Run(string(m), func(t *testing.T) {
+			q := TimeseriesQuery{Granularity: GranularityDay, Metric: m}
+			total := timeseries(t, svc, p, q)
+
+			split := q
+			split.Compare, split.SplitByPlatform = true, true
+			got := timeseries(t, svc, p, split)
+			require.Equal(t, total.Points, got.Points, "итог не меняется")
+			require.Equal(t, []string{"android", "ios"}, splitPlatforms(got))
+			for _, s := range got.Splits {
+				filtered := p
+				filtered.Filters = Filters{Platform: []string{s.Platform}}
+				require.Equal(t, timeseries(t, svc, filtered, q).Points, s.Points, s.Platform)
+			}
+		})
+	}
+
+	got := timeseries(t, svc, p, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricActive, SplitByPlatform: true})
+	require.Equal(t, []any{1.0, 0.0, 1.0, 0.0, 2.0, 1.0, 2.0}, values(got.Splits[0].Points), "android")
+	require.Equal(t, []any{1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0}, values(got.Splits[1].Points), "ios")
+	require.Equal(t, []any{2.0, 1.0, 3.0, 2.0, 3.0, 2.0, 3.0}, values(got.Points), "u1 на двух платформах — один человек")
+	newAndroid := timeseries(t, svc, p, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricNew, SplitByPlatform: true})
+	require.Equal(t, []any{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0}, values(newAndroid.Splits[0].Points), "u1 новый на Android 5-го")
+}
+
+// split=platform с другими фильтрами: платформы — только из отфильтрованных событий; фильтр platform сужает
+// набор рядов; пустой период — ряда нет ни одного, splits пустой, но не nil.
+func TestTimeseriesSplitByPlatform_Filters(t *testing.T) {
+	version := func(platform, v string) func(*chstore.EventRow) {
+		return func(r *chstore.EventRow) { r.Platform, r.AppVersion = platform, v }
+	}
+	svc := newService(startWith(t, concat(
+		with(visit(t, 1, "", "2026-10-01T10:00:00+03:00", 0), version("ios", "2.4.0")),
+		with(visit(t, 2, "", "2026-10-01T11:00:00+03:00", 0), version("android", "2.4.0")),
+		with(visit(t, 3, "", "2026-10-02T11:00:00+03:00", 0), version("web", "2.5.0")),
+	)))
+	q := TimeseriesQuery{Granularity: GranularityDay, Metric: MetricActive, SplitByPlatform: true}
+	p := period(t, identity.Persons, "2026-10-01", "2026-10-02")
+
+	require.Equal(t, []string{"android", "ios", "web"}, splitPlatforms(timeseries(t, svc, p, q)))
+
+	p.Filters = Filters{AppVersion: []string{"2.4.0"}}
+	got := timeseries(t, svc, p, q)
+	require.Equal(t, []string{"android", "ios"}, splitPlatforms(got))
+	require.Equal(t, []any{1.0, 0.0}, values(got.Splits[0].Points))
+
+	p.Filters = Filters{Platform: []string{"ios", "web"}}
+	got = timeseries(t, svc, p, q)
+	require.Equal(t, []string{"ios", "web"}, splitPlatforms(got))
+	require.Equal(t, []any{0.0, 1.0}, values(got.Splits[1].Points))
+	require.Equal(t, []any{1.0, 1.0}, values(got.Points))
+
+	empty := timeseries(t, svc, period(t, identity.Persons, "2026-09-01", "2026-09-03"), q)
+	require.Empty(t, empty.Splits)
+	require.Equal(t, []any{0.0, 0.0, 0.0}, values(empty.Points))
+	b, err := json.Marshal(empty)
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"splits":[]`)
+}
+
+func splitPlatforms(ts Timeseries) []string {
+	out := make([]string, 0, len(ts.Splits))
+	for _, s := range ts.Splits {
+		out = append(out, s.Platform)
+	}
+	return out
 }
 
 // DAU — день, WAU — 7 дней, MAU — 30 дней, заканчивая днём; окна читают события до from.
