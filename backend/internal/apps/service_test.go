@@ -35,7 +35,7 @@ const testOrigin = "http://localhost:3000"
 var (
 	t0           = time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
 	writeKeyRe   = regexp.MustCompile(`^pk_[A-Za-z0-9]{32}$`)
-	notesIOSBody = map[string]any{"name": "Notes iOS", "platform": "ios", "timezone": "Europe/Moscow"}
+	notesIOSBody = map[string]any{"name": "Notes iOS", "platforms": []string{"ios"}, "timezone": "Europe/Moscow"}
 )
 
 func TestMain(m *testing.M) {
@@ -125,6 +125,7 @@ type appJSON struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
 	Platform   string     `json:"platform"`
+	Platforms  []string   `json:"platforms"`
 	Timezone   string     `json:"timezone"`
 	Status     string     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
@@ -137,6 +138,7 @@ type writeKeyJSON struct {
 	AppID      string     `json:"app_id"`
 	Key        string     `json:"key"`
 	Label      string     `json:"label"`
+	Platform   *string    `json:"platform"`
 	RevokedAt  *time.Time `json:"revoked_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 }
@@ -161,16 +163,24 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 	return v
 }
 
-// create создаёт приложение через POST /admin/v1/apps и требует 201.
+// create создаёт одноплатформенное приложение через POST /admin/v1/apps и требует 201.
 func (e *env) create(t *testing.T, name, platform, tz string) (appJSON, writeKeyJSON) {
 	t.Helper()
-	rec := e.call(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platform": platform, "timezone": tz})
+	app, keys := e.createMulti(t, name, []string{platform}, tz)
+	require.Len(t, keys, 1)
+	return app, keys[0]
+}
+
+// createMulti создаёт приложение с набором платформ и требует 201; возвращает ключи из ответа.
+func (e *env) createMulti(t *testing.T, name string, platforms []string, tz string) (appJSON, []writeKeyJSON) {
+	t.Helper()
+	rec := e.call(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platforms": platforms, "timezone": tz})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	out := decode[struct {
-		App      appJSON      `json:"app"`
-		WriteKey writeKeyJSON `json:"write_key"`
+		App       appJSON        `json:"app"`
+		WriteKeys []writeKeyJSON `json:"write_keys"`
 	}](t, rec)
-	return out.App, out.WriteKey
+	return out.App, out.WriteKeys
 }
 
 func (e *env) get(t *testing.T, id string) appJSON {
@@ -254,13 +264,15 @@ func TestCreateApp_CreatesAppAndFirstKey(t *testing.T) {
 	require.NotEmpty(t, app.ID)
 	require.Equal(t, "Notes iOS", app.Name)
 	require.Equal(t, "ios", app.Platform)
+	require.Equal(t, []string{"ios"}, app.Platforms)
 	require.Equal(t, "Europe/Moscow", app.Timezone)
 	require.Equal(t, "active", app.Status)
 	require.Nil(t, app.ArchivedAt)
 
 	require.Regexp(t, writeKeyRe, key.Key)
 	require.Equal(t, app.ID, key.AppID)
-	require.Equal(t, "Основной", key.Label)
+	require.Equal(t, "iOS", key.Label)
+	require.Equal(t, new("ios"), key.Platform)
 	require.Nil(t, key.RevokedAt)
 	require.Nil(t, key.LastUsedAt)
 	require.Equal(t, 1, e.count(t, "apps"))
@@ -290,7 +302,7 @@ func TestCreateApp_Validation(t *testing.T) {
 
 	t.Run("duplicate name ignoring case", func(t *testing.T) {
 		for _, name := range []string{"notes ios", "NOTES IOS", " Notes iOS "} {
-			rec := e.call(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platform": "android", "timezone": "UTC"})
+			rec := e.call(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platforms": []string{"android"}, "timezone": "UTC"})
 			requireAPIError(t, rec, http.StatusConflict, "app_name_taken")
 		}
 	})
@@ -300,13 +312,16 @@ func TestCreateApp_Validation(t *testing.T) {
 		body  map[string]any
 		field string
 	}{
-		{"unknown timezone", map[string]any{"name": "Bot", "platform": "bot", "timezone": "Mars/Base"}, "timezone"},
-		{"empty timezone", map[string]any{"name": "Bot", "platform": "bot", "timezone": ""}, "timezone"},
-		{"local timezone", map[string]any{"name": "Bot", "platform": "bot", "timezone": "Local"}, "timezone"},
-		{"path in timezone", map[string]any{"name": "Bot", "platform": "bot", "timezone": "../../etc/passwd"}, "timezone"},
-		{"unknown platform", map[string]any{"name": "Bot", "platform": "symbian", "timezone": "UTC"}, "platform"},
-		{"blank name", map[string]any{"name": "   ", "platform": "bot", "timezone": "UTC"}, "name"},
-		{"name too long", map[string]any{"name": strings.Repeat("я", 65), "platform": "bot", "timezone": "UTC"}, "name"},
+		{"unknown timezone", map[string]any{"name": "Bot", "platforms": []string{"bot"}, "timezone": "Mars/Base"}, "timezone"},
+		{"empty timezone", map[string]any{"name": "Bot", "platforms": []string{"bot"}, "timezone": ""}, "timezone"},
+		{"local timezone", map[string]any{"name": "Bot", "platforms": []string{"bot"}, "timezone": "Local"}, "timezone"},
+		{"path in timezone", map[string]any{"name": "Bot", "platforms": []string{"bot"}, "timezone": "../../etc/passwd"}, "timezone"},
+		{"unknown platform", map[string]any{"name": "Bot", "platforms": []string{"symbian"}, "timezone": "UTC"}, "platforms"},
+		{"no platforms", map[string]any{"name": "Bot", "platforms": []string{}, "timezone": "UTC"}, "platforms"},
+		{"missing platforms", map[string]any{"name": "Bot", "timezone": "UTC"}, "platforms"},
+		{"legacy platform field", map[string]any{"name": "Bot", "platform": "bot", "timezone": "UTC"}, "platforms"},
+		{"blank name", map[string]any{"name": "   ", "platforms": []string{"bot"}, "timezone": "UTC"}, "name"},
+		{"name too long", map[string]any{"name": strings.Repeat("я", 65), "platforms": []string{"bot"}, "timezone": "UTC"}, "name"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			requireFieldError(t, e.call(t, http.MethodPost, "/admin/v1/apps", tc.body), tc.field)
@@ -338,6 +353,114 @@ func TestCreateApp_Concurrent(t *testing.T) {
 	require.Equal(t, 1, e.count(t, "write_keys"))
 }
 
+// AC-002.1: набор платформ хранится в порядке enum, на каждую платформу — свой ключ с меткой платформы.
+func TestCreateAppWithPlatforms(t *testing.T) {
+	e := newEnv(t)
+	app, keys := e.createMulti(t, "Notes", []string{"web", "ios", "android"}, "Europe/Moscow")
+
+	require.Equal(t, []string{"ios", "android", "web"}, app.Platforms)
+	require.Equal(t, "ios", app.Platform)
+	require.Len(t, keys, 3)
+	type keyPlatform struct{ platform, label string }
+	got := make([]keyPlatform, 0, len(keys))
+	seen := map[string]bool{}
+	for _, k := range keys {
+		require.Regexp(t, writeKeyRe, k.Key)
+		require.Equal(t, app.ID, k.AppID)
+		require.NotNil(t, k.Platform)
+		require.Nil(t, k.RevokedAt)
+		require.False(t, seen[k.Key], "ключи не совпадают")
+		seen[k.Key] = true
+		got = append(got, keyPlatform{*k.Platform, k.Label})
+	}
+	require.Equal(t, []keyPlatform{{"ios", "iOS"}, {"android", "Android"}, {"web", "Веб"}}, got)
+	require.Equal(t, 3, e.count(t, "write_keys"))
+
+	// Ключи из ответа совпадают со списком ключей приложения, а Read API отдаёт тот же набор.
+	require.ElementsMatch(t, keys, e.listWriteKeys(t, app.ID))
+	require.Equal(t, app, e.get(t, app.ID))
+
+	// Метки всех платформ enum.
+	_, all := e.createMulti(t, "All",
+		[]string{"other", "server", "bot", "linux", "windows", "macos", "web", "android", "ios"}, "UTC")
+	labels := make([]string, 0, len(all))
+	for _, k := range all {
+		labels = append(labels, *k.Platform+"="+k.Label)
+	}
+	require.Equal(t, []string{
+		"ios=iOS", "android=Android", "web=Веб", "macos=macOS", "windows=Windows",
+		"linux=Linux", "bot=Бот", "server=Бэкенд", "other=Другое",
+	}, labels)
+}
+
+// AC-002.2: дубли платформ схлопываются, пустой набор — 400 без вставки.
+func TestCreateAppNormalizesPlatforms(t *testing.T) {
+	e := newEnv(t)
+	app, keys := e.createMulti(t, "Notes", []string{"ios", "ios"}, "UTC")
+	require.Equal(t, []string{"ios"}, app.Platforms)
+	require.Len(t, keys, 1)
+	require.Equal(t, new("ios"), keys[0].Platform)
+
+	for _, tc := range []struct {
+		name      string
+		platforms any
+	}{
+		{"empty", []string{}},
+		{"null", nil},
+		{"unknown among known", []string{"ios", "symbian"}},
+		{"empty string", []string{""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := e.call(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": "Other", "platforms": tc.platforms, "timezone": "UTC"})
+			requireFieldError(t, rec, "platforms")
+		})
+	}
+	require.Equal(t, 1, e.count(t, "apps"))
+	require.Equal(t, 1, e.count(t, "write_keys"))
+}
+
+// AC-002.3: смена набора платформ не трогает ключи, в том числе ключи снятых платформ.
+func TestUpdateAppPlatformsKeepsKeys(t *testing.T) {
+	e := newEnv(t)
+	app, keys := e.createMulti(t, "Notes", []string{"ios", "android"}, "Europe/Moscow")
+	require.Len(t, keys, 2)
+	e.clock.Advance(time.Hour)
+
+	rec := e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"platforms": []string{"ios"}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got := decode[appJSON](t, rec)
+	require.Equal(t, []string{"ios"}, got.Platforms)
+	require.Equal(t, "ios", got.Platform)
+	require.Equal(t, "Notes", got.Name)
+	require.Equal(t, "Europe/Moscow", got.Timezone)
+	require.True(t, t0.Add(time.Hour).Equal(got.UpdatedAt), got.UpdatedAt)
+
+	list := e.listWriteKeys(t, app.ID)
+	require.Len(t, list, 2)
+	for _, k := range list {
+		require.Nil(t, k.RevokedAt, k.Label)
+	}
+	var revoked int
+	require.NoError(t, e.pg.Pool().QueryRow(t.Context(),
+		"SELECT count(*) FROM write_keys WHERE app_id = $1 AND revoked_at IS NOT NULL", app.ID).Scan(&revoked))
+	require.Zero(t, revoked)
+
+	// Новый набор нормализуется: порядок enum, без дублей; первая платформа меняет устаревшее platform.
+	rec = e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID,
+		map[string]any{"platforms": []string{"web", "android", "web"}, "name": "Notes 2"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got = decode[appJSON](t, rec)
+	require.Equal(t, []string{"android", "web"}, got.Platforms)
+	require.Equal(t, "android", got.Platform)
+	require.Equal(t, "Notes 2", got.Name)
+	require.Len(t, e.listWriteKeys(t, app.ID), 2, "новые ключи не выпускаются")
+
+	// Пустой и неизвестный набор — 400 по полю platforms, набор не меняется.
+	requireFieldError(t, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"platforms": []string{}}), "platforms")
+	requireFieldError(t, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"platforms": []string{"symbian"}}), "platforms")
+	require.Equal(t, []string{"android", "web"}, e.get(t, app.ID).Platforms)
+}
+
 func TestUpdateApp(t *testing.T) {
 	e := newEnv(t)
 	app, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
@@ -356,6 +479,7 @@ func TestUpdateApp(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, "notes IOS", decode[appJSON](t, rec).Name)
 	require.Equal(t, "ios", e.get(t, app.ID).Platform)
+	require.Equal(t, []string{"ios"}, e.get(t, app.ID).Platforms)
 
 	requireAPIError(t, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"name": "SITE"}),
 		http.StatusConflict, "app_name_taken")

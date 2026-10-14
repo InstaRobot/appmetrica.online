@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"appmetrica.online/backend/internal/auth"
 	"appmetrica.online/backend/internal/chstore"
+	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/reports"
 	"appmetrica.online/backend/internal/testutil"
@@ -92,6 +94,45 @@ func TestReadAPI_Unauthenticated(t *testing.T) {
 			validateResponse(t, doc, req, rec)
 		})
 	}
+}
+
+// AC-002.4: Read API отдаёт набор платформ и устаревшее platform = platforms[0].
+func TestAppModelPlatforms(t *testing.T) {
+	e := newPortfolioEnv(t)
+	doc := loadAPIDoc(t)
+	id := uuid.Must(uuid.NewV7())
+	_, err := e.env.PG.Pool().Exec(t.Context(),
+		`INSERT INTO apps (id, name, platform, platforms, timezone) VALUES ($1, 'Notes', 'ios', '{ios,web}', 'Europe/Moscow')`, id)
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/apps/"+id.String(), nil)
+	req.Header.Set("Authorization", "Bearer "+e.newKey(t))
+	rec := serveRequest(t, e.handler, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "getApp", validateResponse(t, doc, req, rec))
+	var app gen.App
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &app))
+	require.Equal(t, gen.PlatformList{gen.PlatformIos, gen.PlatformWeb}, app.Platforms)
+	require.Equal(t, gen.PlatformIos, app.Platform)
+
+	// В списке приложений — те же поля.
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/apps", nil)
+	req.Header.Set("Authorization", "Bearer "+e.newKey(t))
+	rec = serveRequest(t, e.handler, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	validateResponse(t, doc, req, rec)
+	var list gen.AppList
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	var found bool
+	for _, a := range list.Items {
+		require.NotEmpty(t, a.Platforms, a.Name)
+		require.Equal(t, a.Platforms[0], a.Platform, a.Name)
+		if a.Id == id {
+			found = true
+			require.Equal(t, app, a)
+		}
+	}
+	require.True(t, found)
 }
 
 func TestReadAPI_SameResultForCookieAndBearer(t *testing.T) {

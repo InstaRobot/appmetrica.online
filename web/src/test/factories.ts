@@ -24,6 +24,7 @@ export function appSummary(overrides: Partial<AppSummary> = {}): AppSummary {
     id: faker.string.uuid(),
     name: "Notes iOS",
     platform: "ios",
+    platforms: ["ios"],
     status: "active",
     ...overrides,
   };
@@ -34,6 +35,7 @@ export function app(overrides: Partial<App> = {}): App {
     id: faker.string.uuid(),
     name: "Notes iOS",
     platform: "ios",
+    platforms: ["ios"],
     timezone: "Europe/Moscow",
     status: "active",
     created_at: "2026-09-01T10:00:00Z",
@@ -152,6 +154,7 @@ export function writeKey(overrides: Partial<WriteKey> = {}): WriteKey {
     app_id: faker.string.uuid(),
     key: "pk_7Hq2xxxxxxxxxxxxxxxxxxxxxxxxxAb0",
     label: "iOS 2.x",
+    platform: null,
     created_at: "2026-10-01T09:00:00Z",
     revoked_at: null,
     last_used_at: "2026-10-12T11:30:00Z",

@@ -226,7 +226,7 @@ func TestGetPortfolio_HTTP(t *testing.T) {
 				require.GreaterOrEqual(t, got.Rows[i-1].ActiveDate, row.ActiveDate, "сортировка по active_date DESC")
 			}
 		}
-		require.Equal(t, gen.AppSummary{Id: msk.ID, Name: msk.Name, Platform: gen.PlatformIos, Status: gen.AppStatusActive},
+		require.Equal(t, gen.AppSummary{Id: msk.ID, Name: msk.Name, Platform: gen.PlatformIos, Platforms: gen.PlatformList{gen.PlatformIos}, Status: gen.AppStatusActive},
 			got.Rows[slices.Index(appIDs(got), msk.ID)].App)
 	})
 

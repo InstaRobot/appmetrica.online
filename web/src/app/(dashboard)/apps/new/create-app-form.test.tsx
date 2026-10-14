@@ -26,15 +26,18 @@ function mockCreate(respond?: () => Response) {
       return HttpResponse.json(
         {
           app: created,
-          write_key: {
-            id: "0192cccc-0000-7000-8000-000000000001",
-            app_id: created.id,
-            key: `pk_${"a".repeat(32)}`,
-            label: "",
-            created_at: "2026-10-13T10:00:00Z",
-            revoked_at: null,
-            last_used_at: null,
-          },
+          write_keys: [
+            {
+              id: "0192cccc-0000-7000-8000-000000000001",
+              app_id: created.id,
+              key: `pk_${"a".repeat(32)}`,
+              label: "iOS",
+              platform: "ios",
+              created_at: "2026-10-13T10:00:00Z",
+              revoked_at: null,
+              last_used_at: null,
+            },
+          ],
         },
         { status: 201 },
       );
@@ -68,7 +71,9 @@ describe("CreateAppForm", () => {
     await user.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${created.id}/integration`));
-    expect(bodies).toEqual([{ name: "Notes iOS", platform: "ios", timezone: "Europe/Moscow" }]);
+    expect(bodies).toEqual([
+      { name: "Notes iOS", platforms: ["ios"], timezone: "Europe/Moscow" },
+    ]);
     expect(toasts.success).toHaveBeenCalledWith("Приложение создано");
   });
 
@@ -208,5 +213,6 @@ describe("CreateAppForm", () => {
 
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]?.timezone).toBe("Asia/Tokyo");
+    expect(bodies[0]?.platforms).toEqual(["ios"]);
   });
 });

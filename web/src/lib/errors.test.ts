@@ -31,6 +31,10 @@ describe("errors", () => {
     expect(messageFor("storage_unavailable")).toBe(
       "Хранилище данных временно недоступно. Повторим автоматически.",
     );
+    expect(messageFor("merge_in_progress")).toBe(
+      "Приложение участвует в объединении — дождитесь завершения",
+    );
+    expect(messageFor("app_archived")).toBe("Целевое приложение в архиве — сначала верните его");
     expect(messageFor("something_new")).toBe(GENERIC_ERROR);
     expect(GENERIC_ERROR).toMatch(/^Что-то пошло не так/);
 
@@ -45,7 +49,14 @@ describe("errors", () => {
 
   it("has a message for every error code of the contract", () => {
     const codes = contractErrorCodes();
-    expect(codes).toEqual(expect.arrayContaining(["app_not_found", "storage_unavailable"]));
+    expect(codes).toEqual(
+      expect.arrayContaining([
+        "app_not_found",
+        "storage_unavailable",
+        "merge_in_progress",
+        "app_archived",
+      ]),
+    );
     for (const code of codes) {
       expect(API_ERRORS, code).toHaveProperty(code);
       expect(messageFor(code), code).not.toBe(GENERIC_ERROR);

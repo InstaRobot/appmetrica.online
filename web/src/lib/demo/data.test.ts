@@ -67,6 +67,7 @@ describe("demo apps", () => {
       ["Old Game", "ios", "archived"],
     ]);
     expect(DEMO_APPS.map((a) => a.id)).toEqual([IOS, ANDROID, SITE, BOT, OLD]);
+    for (const app of DEMO_APPS) expect(app.platforms).toEqual([app.platform]);
     expect(DEMO_APPS[0]?.timezone).toBe("Europe/Moscow");
     expect(DEMO_APPS.find((a) => a.id === OLD)?.archived_at).not.toBeNull();
   });

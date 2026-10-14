@@ -142,7 +142,7 @@ func (e *keysEnv) listKeys(t *testing.T) []apiKeyJSON {
 // createApp создаёт приложение через admin API и возвращает его id.
 func (e *keysEnv) createApp(t *testing.T, name string) string {
 	t.Helper()
-	rec := e.admin(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platform": "ios", "timezone": "Europe/Moscow"})
+	rec := e.admin(t, http.MethodPost, "/admin/v1/apps", map[string]any{"name": name, "platforms": []string{"ios"}, "timezone": "Europe/Moscow"})
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	return decodeJSON[struct {
 		App struct {

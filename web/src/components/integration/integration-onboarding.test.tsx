@@ -34,6 +34,7 @@ function writeKey(overrides: Partial<WriteKey> = {}): WriteKey {
     app_id: APP_ID,
     key: KEY,
     label: "",
+    platform: null,
     created_at: "2026-10-13T11:00:00Z",
     revoked_at: null,
     last_used_at: null,
