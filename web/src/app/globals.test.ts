@@ -179,14 +179,14 @@ describe("globals.css status palette", () => {
   // Сырая палитра объявлена в :root (разная для тем), поэтому Tailwind не видит её без @theme:
   // bg-success-500 и подобные классы молча не генерировались. reference — без повторного вывода
   // переменных (иначе в слое theme появилось бы циклическое --color-x: var(--color-x)).
-  const reference = css.slice(css.indexOf("@theme inline reference {"));
+  const reference = css.slice(css.indexOf("@theme reference {"));
 
   it.each(
     ["success", "warning", "danger"].flatMap((tone) =>
       [50, 500, 600, 700].map((step) => `--color-${tone}-${step}`),
     ),
   )("exposes %s to Tailwind utilities", (name) => {
-    expect(css).toContain("@theme inline reference {");
+    expect(css).toContain("@theme reference {");
     expect(reference).toContain(`${name}: var(${name});`);
   });
 });
