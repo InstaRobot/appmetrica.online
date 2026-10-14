@@ -202,8 +202,9 @@ describe("RealtimePanel", () => {
   });
 
   it("keeps the last data and warns after three failed polls in a row", async () => {
-    mockApi({
-      respond: (n) => (n >= 1 && n <= 3 ? { status: 500, code: "internal" } : realtime(n)),
+    const requests = mockApi({
+      respond: (n) =>
+        (n >= 1 && n <= 3) || n === 5 ? { status: 500, code: "internal" } : realtime(n),
     });
     renderPanel();
     const region = await counter();
@@ -221,6 +222,13 @@ describe("RealtimePanel", () => {
     // Опрос продолжается: следующий успешный ответ снимает предупреждение.
     await poll();
     await waitFor(() => expect(value(region)).toBe("1288"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(region).getByText("обновлено 14:32:25")).toBeInTheDocument();
+
+    // Счёт ошибок начинается заново после успеха: одна неудача — ещё не предупреждение.
+    await poll();
+    await waitFor(() => expect(requests).toHaveLength(6));
+    await poll(1000);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

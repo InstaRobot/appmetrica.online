@@ -290,3 +290,16 @@ export function useRetentionState(timezone: string, today: string = todayIn(time
     update: (patch: RetentionSearchPatch) => setSearch(patch),
   };
 }
+
+// URL-состояние экрана S-07 (14-ux-ui-spec.md S-07): только окружение. Период и фильтры других вкладок
+// остаются в URL нетронутыми, чтобы пережить переход обратно.
+const realtimeSearchParams = { env: scopeParams.env };
+
+// useRealtimeState читает окружение S-07 из URL; смена — новая запись истории.
+export function useRealtimeState() {
+  const [search, setSearch] = useQueryStates(realtimeSearchParams, { history: "push" });
+  return {
+    env: search.env,
+    setEnv: (env: Environment) => setSearch({ env }),
+  };
+}

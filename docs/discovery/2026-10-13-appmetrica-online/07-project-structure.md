@@ -270,7 +270,7 @@ backend/
 web/src/hooks/
 ├── use-app-params.ts             # appId из useParams + валидация UUID
 ├── use-report-filters.ts         # nuqs: from, to, granularity, compare, environment, unit, фильтры (из lib/search-params)
-├── use-realtime-polling.ts       # refetchInterval 5000 мс, пауза по кнопке и при скрытой вкладке
+├── use-prefers-reduced-motion.ts # prefers-reduced-motion: без подсветки новых строк EventFeed (опрос S-07 — в components/reports/realtime-panel.tsx)
 ├── use-first-event-waiter.ts     # S-10: опрос integration/health раз в 3 с до появления first_event_at
 ├── use-filter-options.ts         # значения FilterBar (getAudienceBreakdown по 4 измерениям) после открытия списка
 └── use-passkey.ts                # обёртки begin/finish login/setup/register над сгенерированными мутациями

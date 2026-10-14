@@ -190,6 +190,18 @@
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Подсветка новой строки EventFeed (14-ux-ui-spec.md §2.7, §12.2): фон --bg-selected → прозрачный. */
+  --duration-highlight: 1000ms;
+  --animate-row-highlight: row-highlight var(--duration-highlight) var(--ease-out);
+  @keyframes row-highlight {
+    from {
+      background-color: var(--bg-selected);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
 }
 
 @utility text-kpi-xl {

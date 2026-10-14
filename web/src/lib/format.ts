@@ -145,8 +145,10 @@ export function formatWeekRange(start: string): string {
 
 const timeFormats = new Map<string, Intl.DateTimeFormat>();
 
-function timeFormat(timeZone: string): Intl.DateTimeFormat {
-  let format = timeFormats.get(timeZone);
+// Время «14:32» или «14:32:05» в timeZone; неизвестная зона — UTC.
+function timeFormat(timeZone: string, seconds = false): Intl.DateTimeFormat {
+  const key = `${timeZone}|${seconds}`;
+  let format = timeFormats.get(key);
   if (!format) {
     let zone = timeZone;
     try {
@@ -158,11 +160,33 @@ function timeFormat(timeZone: string): Intl.DateTimeFormat {
       timeZone: zone,
       hour: "2-digit",
       minute: "2-digit",
+      ...(seconds ? { second: "2-digit" } : {}),
       hourCycle: "h23",
     });
-    timeFormats.set(timeZone, format);
+    timeFormats.set(key, format);
   }
   return format;
+}
+
+function formatInstant(ts: string, timeZone: string, seconds: boolean): string {
+  const date = new Date(ts);
+  return Number.isNaN(date.getTime()) ? DASH : timeFormat(timeZone, seconds).format(date);
+}
+
+// Минута момента времени в timeZone: «14:32» (оси realtime-графика).
+export function formatTime(ts: string, timeZone: string): string {
+  return formatInstant(ts, timeZone, false);
+}
+
+// Время с секундами в timeZone: «14:32:05» (лента и «обновлено» на S-07).
+export function formatClock(ts: string, timeZone: string): string {
+  return formatInstant(ts, timeZone, true);
+}
+
+// Длинный идентификатор → «первые4…последние4» (14-ux-ui-spec.md S-07); короткий — как есть.
+export function shortId(value: string): string {
+  if (!value) return DASH;
+  return value.length <= 9 ? value : `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
 // Подпись корзины ряда (начало корзины с offset TZ приложения): «12 окт, 14:00», «12 окт», «окт 2026».

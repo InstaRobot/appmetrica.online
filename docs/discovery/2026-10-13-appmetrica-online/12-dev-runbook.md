@@ -301,7 +301,7 @@ cd web && pnpm test:coverage   # пороги web: lines/statements/functions 70
 ```bash
 cd web && pnpm exec playwright install chromium   # один раз
 make dev-infra migrate-up geo-db                  # инфраструктура
-make seed                                         # «Seed iOS» и др.: данные для audience.spec.ts и retention.spec.ts
+make seed                                         # «Seed iOS» и др.: данные для audience.spec.ts, retention.spec.ts, realtime.spec.ts
 make run-ingest & make run-api-e2e &              # backend в фоне (или в отдельных терминалах); api с APP_ENV=e2e
 make e2e                                          # pnpm build && pnpm e2e (webServer поднимает next start)
 cd web && pnpm e2e:ui                             # интерактивный режим
@@ -313,6 +313,10 @@ cd web && pnpm e2e:ui                             # интерактивный �
 `POSTGRES_URL` api: чтобы не терять локального владельца, запускай E2E на отдельной базе. Если порты 3000/8080 заняты,
 укажи `E2E_PORT` (порт web; тот же origin — в `PUBLIC_BASE_URL` и `WEBAUTHN_RP_ORIGINS` api), `E2E_API_URL` и
 `API_INTERNAL_URL` (адрес api для сборки и для `next start`).
+`realtime.spec.ts` отправляет `session_start` в ingest (`E2E_INGEST_URL`, по умолчанию `http://localhost:8081`)
+write-ключом «Seed iOS» (`E2E_WRITE_KEY`, по умолчанию `DEV_WRITE_KEY` из `.env.example`) и ждёт событие в ленте
+S-07: ingest должен писать в те же базы Postgres и ClickHouse, что читает api. Без `make geo-db` ingest можно
+запустить с синтетической базой `GEOIP_DB_PATH=backend/testdata/geo/test-city.mmdb`.
 
 ### 7.3. Type check
 ```bash
