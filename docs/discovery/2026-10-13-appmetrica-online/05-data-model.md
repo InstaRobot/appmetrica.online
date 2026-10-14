@@ -1933,14 +1933,16 @@ WHERE app_id = {app_id:UUID} AND environment = {env:String} AND unit = {unit:Str
 ORDER BY day`
 
 // Job close_day: на каждое приложение × environment {production, development} × unit {persons, installs}.
-// start_utc/end_utc — границы дня {day:Date} в TZ приложения; фильтры пустые.
+// start_utc/end_utc — границы дня {day:Date} в TZ приложения; фильтры пустые. active/new/sessions — те же,
+// что у QAudienceSummary за этот день (new — активные в этот день с first_seen в нём, OQ-065).
 const QCloseDayInsert = `INSERT INTO appmetrica.daily_stats
     (app_id, day, environment, unit, active, new, sessions, sessions_with_duration, duration_ms_sum, closed_at)
 WITH ` + linksCTE + `, ` + personsFirstCTE + `, ` + evCTE + `,
 sess AS (SELECT session_id, max(duration_ms) AS duration_ms FROM ev WHERE name = 'session_end' GROUP BY session_id)
 SELECT {app_id:UUID}, {day:Date}, {env:String}, {unit:String},
        (SELECT uniqExact(person_key) FROM ev),
-       (SELECT count() FROM persons_first WHERE first_seen >= {start_utc:DateTime64(3)} AND first_seen < {end_utc:DateTime64(3)}),
+       (SELECT uniqExact(a.person_key) FROM ev AS a INNER JOIN persons_first AS pf ON pf.person_key = a.person_key
+        WHERE pf.first_seen >= {start_utc:DateTime64(3)} AND pf.first_seen < {end_utc:DateTime64(3)}),
        (SELECT uniqExactIf(session_id, name = 'session_start') FROM ev),
        (SELECT count() FROM sess),
        (SELECT sum(duration_ms) FROM sess),

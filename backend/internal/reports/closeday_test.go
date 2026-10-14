@@ -18,9 +18,9 @@ import (
 
 // closedRow — строка daily_stats после FINAL.
 type closedRow struct {
-	Env, Unit                                                      string
-	Active, New, Sessions, SessionsWithDuration, DurationMsSum     uint64
-	ClosedAt                                                       time.Time
+	Env, Unit                                                  string
+	Active, New, Sessions, SessionsWithDuration, DurationMsSum uint64
+	ClosedAt                                                   time.Time
 }
 
 func closedRows(t *testing.T, env *testutil.Env, appID uuid.UUID, day string) []closedRow {
@@ -29,7 +29,7 @@ func closedRows(t *testing.T, env *testutil.Env, appID uuid.UUID, day string) []
 	rows, err := env.CH.Conn().Query(ctx, `SELECT environment, unit, active, new, sessions, sessions_with_duration, duration_ms_sum, closed_at
 FROM daily_stats FINAL WHERE app_id = {app_id:UUID} AND day = {day:Date} ORDER BY environment, unit`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { require.NoError(t, rows.Close()) }()
 	var out []closedRow
 	for rows.Next() {
 		var r closedRow
@@ -77,7 +77,7 @@ func TestCloseDay_MatchesAudienceSummary(t *testing.T) {
 					} else {
 						require.NotNil(t, live.AvgDurationMs, msg...)
 						require.InDelta(t, *live.AvgDurationMs,
-							math.Round(float64(got.DurationMsSum)/float64(got.SessionsWithDuration)), 0, msg...)
+							math.RoundToEven(float64(got.DurationMsSum)/float64(got.SessionsWithDuration)), 0, msg...) // round() ClickHouse — к чётному
 					}
 					if got.Active > 0 {
 						nonEmpty++

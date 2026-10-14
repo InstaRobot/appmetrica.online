@@ -134,7 +134,7 @@ func (h *harness) dailyStats(t *testing.T, appID uuid.UUID, day string) []statRo
 	rows, err := h.env.CH.Conn().Query(ctx, `SELECT environment, unit, active, new, sessions, sessions_with_duration, duration_ms_sum
 FROM daily_stats FINAL WHERE app_id = {app_id:UUID} AND day = {day:Date} ORDER BY environment, unit`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { require.NoError(t, rows.Close()) }()
 	var out []statRow
 	for rows.Next() {
 		var r statRow

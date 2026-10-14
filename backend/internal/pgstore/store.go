@@ -75,7 +75,26 @@ func (s *Store) InTx(ctx context.Context, fn func(q *sqlc.Queries) error) (err e
 // TryAdvisoryLock берёт сессионный advisory lock key на отдельном соединении пула. ok = false — lock держит
 // другой процесс. release снимает lock и возвращает соединение в пул.
 func (s *Store) TryAdvisoryLock(ctx context.Context, key string) (release func(), ok bool, err error) {
-	return nil, false, errors.New("pgstore: advisory lock: not implemented")
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("pgstore: advisory lock %s: acquire: %w", key, err)
+	}
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, key).Scan(&ok); err != nil {
+		conn.Release()
+		return nil, false, fmt.Errorf("pgstore: advisory lock %s: %w", key, err)
+	}
+	if !ok {
+		conn.Release()
+		return nil, false, nil
+	}
+	return func() {
+		// Lock живёт, пока жива сессия: если снять его не удалось, соединение закрывается, а не возвращается в пул.
+		unlockCtx := context.WithoutCancel(ctx)
+		if _, err := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, key); err != nil {
+			_ = conn.Conn().Close(unlockCtx)
+		}
+		conn.Release()
+	}, true, nil
 }
 
 // NewMigrationProvider возвращает goose-провайдер встроенных миграций Postgres поверх пула.

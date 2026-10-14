@@ -16,6 +16,7 @@ import (
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/deletion"
 	"appmetrica.online/backend/internal/pgstore"
+	"appmetrica.online/backend/internal/reports"
 	"appmetrica.online/backend/internal/telegram"
 	"appmetrica.online/backend/internal/worker"
 )
@@ -63,6 +64,7 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		deletion.WithOnFailed(worker.DeletionFailedNotifier(pg.Queries(), tg, logger)))
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
 		worker.DeletionJob(executor),
+		worker.CloseDayJob(pg.Queries(), reports.NewService(ch.Conn(), c), pg, c),
 	)
 	if err := sched.RegisterMetrics(reg); err != nil {
 		logger.Error("metrics init failed", slog.Any("error", err))
