@@ -43,6 +43,10 @@ func TestPerf_DefaultConfig(t *testing.T) {
 	require.Equal(t, time.Date(2026, time.October, 12, 18, 0, 0, 0, time.UTC), cfg.Now())
 	require.NoError(t, cfg.Validate())
 	require.Len(t, testutil.PerfApps, 3)
+	require.Equal(t, []string{"ios", "android", "web"}, testutil.PerfApps[0].Platforms, "основное приложение мультиплатформенное")
+	for _, app := range testutil.PerfApps {
+		require.Equal(t, app.Platform, app.Platforms[0], app.Code)
+	}
 }
 
 func TestPerf_ConfigValidate(t *testing.T) {
@@ -145,6 +149,8 @@ func TestPerf_Invariants(t *testing.T) {
 	insertIDs := map[uuid.UUID]bool{}
 	installUser := map[uuid.UUID]string{}
 	installApp := map[uuid.UUID]uuid.UUID{}
+	installPlatform := map[uuid.UUID]string{}
+	mainPlatforms := map[string]int{}
 	users := map[string]bool{}
 	powerDays := map[string]int{}
 
@@ -158,7 +164,14 @@ func TestPerf_Invariants(t *testing.T) {
 		insertIDs[r.InsertID] = true
 		require.Contains(t, []string{"session_start", "session_end"}, r.Name)
 		require.Contains(t, []string{"production", "development"}, r.Environment)
-		require.Equal(t, app.Platform, r.Platform)
+		require.Contains(t, app.Platforms, r.Platform)
+		if prev, ok := installPlatform[r.InstallID]; ok {
+			require.Equal(t, prev, r.Platform, "платформа установки не меняется")
+		}
+		installPlatform[r.InstallID] = r.Platform
+		if r.AppID == testutil.PerfApps[0].ID && r.Name == "session_start" {
+			mainPlatforms[r.Platform]++
+		}
 		require.Equal(t, app.WriteKeyID, r.WriteKeyID)
 		require.NotEmpty(t, r.AppVersion)
 		require.NotEmpty(t, r.OSName)
@@ -223,6 +236,13 @@ func TestPerf_Invariants(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, powerInstalls, "power user на двух установках основного приложения")
+	require.Equal(t, "ios", installPlatform[testutil.PerfPowerInstall])
+
+	// Сессии основного приложения: iOS ≈ 70 %, Android ≈ 20 %, Web ≈ 10 %.
+	total := mainPlatforms["ios"] + mainPlatforms["android"] + mainPlatforms["web"]
+	require.InDelta(t, 0.7, float64(mainPlatforms["ios"])/float64(total), 0.1, "доля iOS")
+	require.InDelta(t, 0.2, float64(mainPlatforms["android"])/float64(total), 0.1, "доля Android")
+	require.InDelta(t, 0.1, float64(mainPlatforms["web"])/float64(total), 0.07, "доля Web")
 }
 
 func TestPerf_EmitErrorStops(t *testing.T) {

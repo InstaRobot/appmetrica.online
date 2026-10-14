@@ -37,6 +37,10 @@ const (
 	perfPortfolio     = time.Second
 	perfProfileLimit  = time.Second
 	perfRealtimeLimit = 300 * time.Millisecond
+	// split=platform основного приложения (iOS, Android, Web) — не дольше трёх рядов без split
+	// (05-impact-and-regression.md §4.1 мультиплатформенности).
+	perfSplitLimit = 3 * perfReportLimit
+	perfSplitRatio = 3.0
 )
 
 // perfReportPath — результаты последнего прогона (рабочий файл, в git не попадает).
@@ -102,6 +106,9 @@ func perfCases(t *testing.T, svc *Service, cfg testutil.PerfConfig) []perfCase {
 		}},
 		{"audience_timeseries_active", perfReportLimit, func(ctx context.Context) error {
 			return ignore(svc.AudienceTimeseries(ctx, main, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricActive, Compare: true}))
+		}},
+		{"audience_timeseries_split_platform", perfSplitLimit, func(ctx context.Context) error {
+			return ignore(svc.AudienceTimeseries(ctx, main, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricActive, SplitByPlatform: true}))
 		}},
 		{"audience_timeseries_avg_duration", perfReportLimit, func(ctx context.Context) error {
 			return ignore(svc.AudienceTimeseries(ctx, main, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricAvgDuration}))
@@ -206,10 +213,15 @@ func TestReportsPerf_90Days100kDAU(t *testing.T) {
 	require.NoError(t, os.WriteFile(perfReportPath(), append(data, '\n'), 0o644))
 	t.Logf("результаты: %s", perfReportPath())
 
+	byName := map[string]testutil.PerfResult{}
 	for _, res := range report.Results {
 		assert.Empty(t, res.Error, res.Name)
 		assert.True(t, res.Pass, "%s: P95 %.1f мс > порога %.0f мс", res.Name, res.P95Ms, res.ThresholdMs)
+		byName[res.Name] = res
 	}
+	none, split := byName["audience_timeseries_active"], byName["audience_timeseries_split_platform"]
+	assert.LessOrEqual(t, split.P95Ms, perfSplitRatio*none.P95Ms,
+		"split=platform: P95 %.1f мс больше %.0f× ряда без split (%.1f мс)", split.P95Ms, perfSplitRatio, none.P95Ms)
 }
 
 // measure — прогрев и perfRuns замеров отчёта. Ошибка (например, превышение памяти) записывается в результат,
