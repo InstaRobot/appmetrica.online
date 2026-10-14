@@ -1,9 +1,10 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { DEMO_COOKIE } from "@/lib/demo-mode";
 
 // Вход в демо-режим (кнопка «Посмотреть демо-данные» на лендинге): ставит am_demo=1 и открывает портфель.
-export function GET(request: NextRequest) {
-  const res = NextResponse.redirect(new URL("/portfolio", request.url), 307);
+// Location относительный: за обратным прокси request.url standalone-сервера — внутренний 0.0.0.0:3000.
+export function GET() {
+  const res = new NextResponse(null, { status: 307, headers: { Location: "/portfolio" } });
   res.cookies.set(DEMO_COOKIE, "1", {
     path: "/",
     sameSite: "lax",
