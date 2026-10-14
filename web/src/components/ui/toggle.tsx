@@ -12,6 +12,10 @@ const toggleVariants = cva(
       variant: {
         default: "bg-transparent",
         outline: "border border-input bg-transparent hover:bg-muted",
+        // Сегментированный контрол из макета «Dashboard v2»: внутри подложки ToggleGroup (bg-muted),
+        // выбранный пункт — белая приподнятая «таблетка»; недоступные варианты приглушены.
+        segmented:
+          "rounded-[7px] text-fg-muted hover:bg-transparent hover:text-foreground aria-pressed:bg-card data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-(--shadow-card) disabled:opacity-40",
       },
       size: {
         default:

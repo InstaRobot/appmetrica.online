@@ -90,9 +90,9 @@ export function PeriodPicker({
       <div className="flex items-center gap-2">
         <ToggleGroup
           type="single"
-          variant="outline"
+          variant="segmented"
           size="sm"
-          spacing={0}
+          spacing={0.5}
           aria-label="Период"
           value={custom ? "" : value.preset}
           onValueChange={(next) => {

@@ -15,9 +15,9 @@ export function EnvironmentSwitch({ value, onChange }: EnvironmentSwitchProps) {
   return (
     <ToggleGroup
       type="single"
-      variant="outline"
+      variant="segmented"
       size="sm"
-      spacing={0}
+      spacing={0.5}
       aria-label="Окружение"
       value={value}
       onValueChange={(next) => {

@@ -96,7 +96,7 @@ export function RetentionHeatmap({ matrix, granularity, unit = "persons" }: Rete
       aria-label="Матрица когорт, прокручивается по горизонтали"
       className="max-h-[640px] overflow-auto rounded-md border border-border outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <table className="border-separate border-spacing-0 text-body-sm tabular-nums">
+      <table className="border-separate border-spacing-px text-body-sm tabular-nums">
         <caption className="sr-only">{copy.caption}</caption>
         <thead>
           <tr className="text-label-sm text-fg-muted uppercase">

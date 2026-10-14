@@ -22,9 +22,9 @@ export function GranularitySelect({ value, allowed, onChange }: GranularitySelec
   return (
     <ToggleGroup
       type="single"
-      variant="outline"
+      variant="segmented"
       size="sm"
-      spacing={0}
+      spacing={0.5}
       aria-label="Детализация"
       value={value}
       onValueChange={(next) => {

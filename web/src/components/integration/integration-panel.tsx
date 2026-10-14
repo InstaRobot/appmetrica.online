@@ -12,7 +12,7 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetIntegrationHealth } from "@/lib/api/gen/endpoints/integration/integration";
 import type { App, IntegrationHealth } from "@/lib/api/gen/model";
-import { formatInt, formatRejectionRate } from "@/lib/format";
+import { formatDateTime, formatInt, formatRejectionRate } from "@/lib/format";
 import { ingestEndpoint } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
 import { IntegrationOnboarding } from "./integration-onboarding";
@@ -103,7 +103,7 @@ function HealthKpi({ label, children }: { label: string; children: React.ReactNo
     <div
       role="group"
       aria-label={label}
-      className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-5 shadow-xs"
+      className="flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-5 shadow-(--shadow-card)"
     >
       <span className="text-label-md text-fg-muted">{label}</span>
       <span className="flex items-center gap-2 text-heading-1 tabular-nums">{children}</span>
@@ -117,6 +117,13 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
   const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const high = isRejectionRateHigh(data.rejected_total, data.accepted_total);
+  // «Последнее событие» (макет «Dashboard v2»): отдельного поля в IntegrationHealth нет — берём самый
+  // свежий last_seen среди версий приложения.
+  const lastSeen = data.versions.reduce<string | null>(
+    (latest, v) =>
+      latest === null || Date.parse(v.last_seen) > Date.parse(latest) ? v.last_seen : latest,
+    null,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -140,7 +147,7 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
       <div id={sectionId} hidden={!expanded} className="flex flex-col gap-6">
         {expanded ? <IntegrationOnboarding app={app} ingestUrl={ingestUrl} /> : null}
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <HealthKpi label={`Принято за ${data.hours} ч`}>{formatInt(data.accepted_total)}</HealthKpi>
         <HealthKpi label={`Отклонено за ${data.hours} ч`}>
           {formatInt(data.rejected_total)}
@@ -150,6 +157,11 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
             {formatRejectionRate(data.rejected_total, data.accepted_total)}
           </span>
           {high ? <RejectionRateWarning /> : null}
+        </HealthKpi>
+        <HealthKpi label="Последнее событие">
+          <span className="text-heading-3">
+            {lastSeen ? formatDateTime(lastSeen, app.timezone) : "—"}
+          </span>
         </HealthKpi>
       </div>
       <Card className="gap-4 px-6">
