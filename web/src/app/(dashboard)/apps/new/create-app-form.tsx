@@ -151,7 +151,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" asChild>
-              <Link href="/">Отмена</Link>
+              <Link href="/portfolio">Отмена</Link>
             </Button>
             <Button type="submit" disabled={form.submitting}>
               {form.submitting ? "Создаём…" : "Создать"}

@@ -83,7 +83,7 @@ function FullPageError({
       <div className="flex gap-2">
         {onRetry ? <Button onClick={onRetry}>Попробовать снова</Button> : null}
         <Button variant="outline" asChild>
-          <Link href="/">В портфель</Link>
+          <Link href="/portfolio">В портфель</Link>
         </Button>
       </div>
       {requestId ? <RequestId id={requestId} /> : null}

@@ -65,7 +65,7 @@ export function AppDangerZone({ app }: { app: App }) {
       if (res.status !== 202) return;
       toast.success("Удаление запущено");
       refreshLists();
-      router.push("/");
+      router.push("/portfolio");
     } catch {
       // Текст ошибки показывает serverError диалога.
     }

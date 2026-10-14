@@ -31,7 +31,7 @@ const within = (prefix: string) => (path: string) =>
   path === prefix || path.startsWith(`${prefix}/`);
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Портфель", icon: LayoutGrid, active: (path) => path === "/" },
+  { href: "/portfolio", label: "Портфель", icon: LayoutGrid, active: within("/portfolio") },
   { href: "/docs", label: "Документация", icon: BookOpen, active: within("/docs") },
   { href: "/settings", label: "Настройки", icon: Settings, active: within("/settings") },
 ];
@@ -47,7 +47,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-sticky h-16 border-b border-border bg-header backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-[1600px] items-center gap-4 px-8">
-        <Link href="/" aria-label="appmetrica.online — в портфель" className="rounded-md">
+        <Link href="/portfolio" aria-label="appmetrica.online — в портфель" className="rounded-md">
           <Logo />
         </Link>
         <Suspense

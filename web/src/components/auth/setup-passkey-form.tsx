@@ -19,7 +19,7 @@ import { PasskeyUnsupported, usePasskeySupport } from "./passkey-button";
 import { PasskeyLinkCommand } from "./passkey-link-command";
 
 // Страница портфеля S-03 появляется в T-037; до этого typedRoutes не знает маршрут "/".
-const PORTFOLIO = "/" as Route;
+const PORTFOLIO = "/portfolio" as Route;
 const REDIRECT_DELAY_MS = 800;
 
 type Status = "idle" | "submitting" | "success" | "expired" | "error";

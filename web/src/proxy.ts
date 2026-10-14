@@ -5,9 +5,11 @@ import { type NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "am_session";
 
 // /api/* — rewrite на Go API и собственный /api/health: API отвечает 401 сам, HTML-редирект ему не нужен.
+// «/» — публичный лендинг S-00 (только сам корень, без вложенных путей).
 const PUBLIC_PREFIXES = ["/login", "/setup/", "/api/"];
 
 function isPublic(pathname: string): boolean {
+  if (pathname === "/") return true;
   return PUBLIC_PREFIXES.some((prefix) =>
     prefix.endsWith("/")
       ? pathname.startsWith(prefix)

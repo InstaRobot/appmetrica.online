@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             icon={SearchX}
             title={API_ERRORS.app_not_found}
             description="Проверьте адрес или выберите приложение в портфеле."
-            action={{ label: "В портфель", href: "/" }}
+            action={{ label: "В портфель", href: "/portfolio" }}
           />
         </Card>
       );

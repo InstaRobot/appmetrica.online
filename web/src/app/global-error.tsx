@@ -27,7 +27,7 @@ export default function GlobalError({ reset }: Props) {
             <button type="button" onClick={reset}>
               Попробовать снова
             </button>
-            <a href="/">В портфель</a>
+            <a href="/portfolio">В портфель</a>
           </div>
         </main>
       </body>

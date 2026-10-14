@@ -12,7 +12,7 @@ export default function NotFound() {
         Проверьте адрес или вернитесь в портфель.
       </p>
       <Button asChild>
-        <Link href="/">В портфель</Link>
+        <Link href="/portfolio">В портфель</Link>
       </Button>
     </main>
   );
