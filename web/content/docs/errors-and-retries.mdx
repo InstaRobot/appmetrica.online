@@ -128,7 +128,7 @@ JSON
 |---|---|---|
 | 400 | `invalid_json` | Тело не JSON |
 | 400 | `invalid_batch` | Нет `sent_at`, в `events` не от 1 до 500 событий, `app_key` не совпадает с `X-App-Key` |
-| 400 | `unsupported_content_encoding` | `Content-Encoding` не `gzip` |
+| 400 | `unsupported_content_encoding` | `Content-Encoding` не `gzip` и не `identity` или передан несколько раз |
 | 401 | `missing_app_key` | Нет ни `X-App-Key`, ни `app_key` |
 | 401 | `invalid_app_key` | Ключ не найден или отозван. Отзыв действует не позже чем через 15 с |
 | 403 | `app_archived` | Приложение в архиве, приём остановлен |
