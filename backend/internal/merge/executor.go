@@ -334,6 +334,16 @@ func defaultKeyPlatform(platforms []sqlc.AppPlatform) *sqlc.AppPlatform {
 	return &platforms[0]
 }
 
+// addsPlatforms — есть ли у источника платформа, которой нет у цели (AbsorbAppForMerge расширит набор цели).
+func addsPlatforms(target, source []sqlc.AppPlatform) bool {
+	for _, p := range source {
+		if !slices.Contains(target, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // truncate обрезает s до max байт по границе символа, отмечая обрезку «…».
 func truncate(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
@@ -367,18 +377,26 @@ func (s pgStore) setStep(ctx context.Context, arg sqlc.SetAppMergeStepParams) er
 
 // moveKeys блокирует обе строки apps (как Create, в порядке id), переносит ключи источника в цель, архивирует
 // источник и расширяет цель его платформами и created_at. Платформы и created_at берутся из текущей строки
-// источника, а не из снимка заявки: после заявки их могли изменить.
+// источника, а не из снимка заявки: после заявки их могли изменить. Ключи цели без платформы до расширения
+// набора получают её единственную платформу: ingest ставил её их событиям как единственную платформу
+// приложения, а с набором из нескольких писал бы other с platform_missing (диалог слияния обещает, что ключи
+// работают как раньше).
 func (s pgStore) moveKeys(ctx context.Context, m sqlc.AppMerge, now time.Time) error {
 	if m.SourceAppID == nil {
 		return errSourceGone
 	}
 	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
-		_, source, err := lockPair(ctx, q, m.TargetAppID, *m.SourceAppID)
+		target, source, err := lockPair(ctx, q, m.TargetAppID, *m.SourceAppID)
 		switch {
 		case errors.Is(err, ErrAppNotFound):
 			return errSourceGone
 		case err != nil:
 			return err
+		}
+		if p := defaultKeyPlatform(target.Platforms); p != nil && addsPlatforms(target.Platforms, source.Platforms) {
+			if _, err := q.DefaultWriteKeyPlatform(ctx, sqlc.DefaultWriteKeyPlatformParams{Platform: *p, AppID: target.ID}); err != nil {
+				return fmt.Errorf("merge: default target key platform: %w", err)
+			}
 		}
 		if _, err := q.MoveWriteKeys(ctx, sqlc.MoveWriteKeysParams{
 			TargetID: m.TargetAppID, SourceID: source.ID, DefaultPlatform: defaultKeyPlatform(source.Platforms),

@@ -93,6 +93,27 @@ func (q *Queries) CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) 
 	return i, err
 }
 
+const defaultWriteKeyPlatform = `-- name: DefaultWriteKeyPlatform :execrows
+UPDATE write_keys SET platform = $1::app_platform
+WHERE app_id = $2 AND platform IS NULL
+`
+
+type DefaultWriteKeyPlatformParams struct {
+	Platform AppPlatform
+	AppID    uuid.UUID
+}
+
+// Шаг move_keys: ключи цели без платформы получают её единственную платформу до того, как AbsorbAppForMerge
+// расширит набор платформами источника — иначе события по ним ingest писал бы как other с platform_missing
+// (resolveContext: платформа ключа → единственная платформа приложения → other).
+func (q *Queries) DefaultWriteKeyPlatform(ctx context.Context, arg DefaultWriteKeyPlatformParams) (int64, error) {
+	result, err := q.db.Exec(ctx, defaultWriteKeyPlatform, arg.Platform, arg.AppID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveApiKeyByHash = `-- name: GetActiveApiKeyByHash :one
 SELECT id, scopes, app_id, last_used_at FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL
 `

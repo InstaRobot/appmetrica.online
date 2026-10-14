@@ -71,7 +71,8 @@ func (e *env) setCreatedAt(t *testing.T, app appJSON, at time.Time) {
 }
 
 // AC-008.1: move_keys переносит ключи источника (ключ без платформы получает android), архивирует источник,
-// расширяет platforms цели и берёт самый ранний created_at; затем слияние ждёт кэш ключей ingest.
+// расширяет platforms цели и берёт самый ранний created_at; затем слияние ждёт кэш ключей ingest. Ключ цели без
+// платформы получает ios: до слияния ingest ставил её как единственную платформу приложения.
 func TestMoveKeysStep(t *testing.T) {
 	e := newEnv(t)
 	target := e.create(t, "Notes iOS", []string{"ios"}, "Europe/Moscow")
@@ -83,8 +84,11 @@ func TestMoveKeysStep(t *testing.T) {
 	sourceKeys, err := e.PG.Queries().ListWriteKeys(t.Context(), uuid.MustParse(source.ID))
 	require.NoError(t, err)
 	require.Len(t, sourceKeys, 2)
+	rec = e.call(t, http.MethodPost, "/admin/v1/apps/"+target.ID+"/write-keys", map[string]any{"label": "Любая цели"})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	targetKeys, err := e.PG.Queries().ListWriteKeys(t.Context(), uuid.MustParse(target.ID))
 	require.NoError(t, err)
+	require.Len(t, targetKeys, 2)
 
 	rec = e.createMerge(t, target, source)
 	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
@@ -105,9 +109,11 @@ func TestMoveKeysStep(t *testing.T) {
 		moved[k.ID] = true
 	}
 	for _, k := range keys {
+		require.NotNil(t, k.Platform, "ключ %s без платформы", k.Label)
 		if moved[k.ID] {
-			require.NotNil(t, k.Platform, "ключ %s без платформы", k.Label)
 			require.Equal(t, sqlc.AppPlatformAndroid, *k.Platform, k.Label)
+		} else {
+			require.Equal(t, sqlc.AppPlatformIos, *k.Platform, k.Label)
 		}
 	}
 	left, err := e.PG.Queries().ListWriteKeys(t.Context(), uuid.MustParse(source.ID))
@@ -362,17 +368,19 @@ func TestMergeEndToEnd(t *testing.T) {
 	e.seedSource(t, source)
 	require.NoError(t, e.CH.InsertRejected(ctx, []chstore.RejectedRow{rejectedRow(source)}))
 	e.closeDays(t, target, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC))
-	// Ключ Read API, привязанный к источнику, и заявки на удаление его людей: после слияния они у цели.
+	// Ключ Read API, привязанный к источнику: после слияния он у цели.
 	sourceKey := e.createAPIKey(t, source, "Источник")
-	sourceUser := e.createDeletionRequest(t, source, sqlc.DeletionSubjectUser, "u1")
-	sourceInstall := e.createDeletionRequest(t, source, sqlc.DeletionSubjectInstall, "i-1")
-	// У цели уже есть активная заявка на ту же установку: заявка источника не переезжает, а уходит с ним.
-	targetInstall := e.createDeletionRequest(t, target, sqlc.DeletionSubjectInstall, "i-1")
 
 	rec := e.createMerge(t, target, source)
 	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 	m := decode[mergeJSON](t, rec)
 	require.Equal(t, int64(800), m.TotalEvents)
+	// Заявки на удаление людей источника, поданные во время слияния (до него они блокируют заявку на слияние,
+	// а job deletion во время слияния их не берёт): после слияния они у цели.
+	sourceUser := e.createDeletionRequest(t, source, sqlc.DeletionSubjectUser, "u1")
+	sourceInstall := e.createDeletionRequest(t, source, sqlc.DeletionSubjectInstall, "i-1")
+	// У цели уже есть активная заявка на ту же установку: заявка источника не переезжает, а уходит с ним.
+	targetInstall := e.createDeletionRequest(t, target, sqlc.DeletionSubjectInstall, "i-1")
 
 	runID, err := e.PG.Queries().StartJobRun(ctx, sqlc.StartJobRunParams{Job: sqlc.JobNameAppMerge, Now: t0})
 	require.NoError(t, err)

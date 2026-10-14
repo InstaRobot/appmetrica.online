@@ -27,6 +27,7 @@ import (
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/merge"
+	"appmetrica.online/backend/internal/pgstore/sqlc"
 	"appmetrica.online/backend/internal/testutil"
 )
 
@@ -385,6 +386,13 @@ func TestCreateMergeErrors(t *testing.T) {
 		tgt, src := pair(t)
 		rec := e.call(t, http.MethodDelete, "/admin/v1/apps/"+src.ID, map[string]any{"confirm_name": src.Name})
 		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		requireAPIError(t, e.createMerge(t, tgt, src), http.StatusConflict, "deletion_pending")
+	})
+	// Невыполненная заявка на удаление человека у цели тоже блокирует: job deletion во время слияния заявки
+	// обоих приложений не берёт, а уже взятая выполнилась бы посреди копирования.
+	t.Run("user_deletion_pending", func(t *testing.T) {
+		tgt, src := pair(t)
+		e.createDeletionRequest(t, tgt, sqlc.DeletionSubjectUser, "u1")
 		requireAPIError(t, e.createMerge(t, tgt, src), http.StatusConflict, "deletion_pending")
 	})
 	t.Run("target_archived", func(t *testing.T) {

@@ -101,8 +101,10 @@ func (s *Service) Preview(ctx context.Context, targetID, sourceID uuid.UUID) (Pr
 
 // Create ставит слияние источника в цель в очередь worker-а (status pending, step move_keys). Обе строки apps
 // блокируются до конца транзакции, как в apps.Service: архивация, удаление и новые ключи ждут и затем видят
-// активное слияние. Проверки: заявок на удаление нет, цель не в архиве, ни одно из приложений не участвует в
-// другом слиянии pending/running/failed, confirmName совпадает с именем источника. Объём источника
+// активное слияние. Проверки: у обоих приложений нет невыполненных заявок на удаление (любого субъекта: job
+// deletion во время слияния заявки этих приложений не берёт, а заявка, уже взятая в работу, выполнилась бы
+// посреди копирования), цель не в архиве, ни одно из приложений не участвует в другом слиянии
+// pending/running/failed, confirmName совпадает с именем источника. Объём источника
 // (total_events) считается в ClickHouse до транзакции: он справочный, и держать строки apps заблокированными
 // на время запроса к ClickHouse незачем.
 func (s *Service) Create(ctx context.Context, targetID uuid.UUID, in CreateInput) (sqlc.AppMerge, error) {
@@ -135,7 +137,7 @@ func (s *Service) Create(ctx context.Context, targetID uuid.UUID, in CreateInput
 			return err
 		}
 		for _, id := range []uuid.UUID{targetID, in.SourceAppID} {
-			pending, err := q.AppDeletionPending(ctx, id)
+			pending, err := q.AnyDeletionPending(ctx, id)
 			if err != nil {
 				return fmt.Errorf("merge: deletion pending: %w", err)
 			}

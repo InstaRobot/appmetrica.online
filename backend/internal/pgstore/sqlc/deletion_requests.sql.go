@@ -12,6 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const anyDeletionPending = `-- name: AnyDeletionPending :one
+SELECT EXISTS (
+    SELECT 1 FROM deletion_requests
+    WHERE app_id = $1 AND status IN ('pending', 'running')
+)::boolean AS pending
+`
+
+// Есть ли невыполненная заявка на удаление чего угодно из приложения (merge.Create отвечает 409): пока
+// слияние активно, job deletion заявки обоих приложений не берёт (ClaimNextDeletionRequest), а заявка,
+// выполненная между копированием партиции и переносом в цель, оставила бы данные субъекта у цели со статусом done.
+func (q *Queries) AnyDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, anyDeletionPending, appID)
+	var pending bool
+	err := row.Scan(&pending)
+	return pending, err
+}
+
 const appDeletionPending = `-- name: AppDeletionPending :one
 SELECT EXISTS (
     SELECT 1 FROM deletion_requests
@@ -31,10 +48,14 @@ const claimNextDeletionRequest = `-- name: ClaimNextDeletionRequest :one
 UPDATE deletion_requests
 SET status = 'running', started_at = $1, attempts = attempts + 1
 WHERE id = (
-    SELECT id FROM deletion_requests
-    WHERE status = 'pending'
-      AND (subject_type <> 'app' OR requested_at <= $2::timestamptz)
-    ORDER BY requested_at
+    SELECT d.id FROM deletion_requests AS d
+    WHERE d.status = 'pending'
+      AND (d.subject_type <> 'app' OR d.requested_at <= $2::timestamptz)
+      AND NOT EXISTS (
+          SELECT 1 FROM app_merges AS m
+          WHERE (m.target_app_id = d.app_id OR m.source_app_id = d.app_id)
+            AND m.status IN ('pending', 'running', 'failed'))
+    ORDER BY d.requested_at
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
@@ -48,6 +69,9 @@ type ClaimNextDeletionRequestParams struct {
 
 // Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
 // снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
+// Заявки приложения, которое участвует в незавершённом слиянии (цель или источник, включая failed до повтора),
+// ждут его конца: удаление из источника после копирования партиции или из цели до него оставило бы данные
+// субъекта у цели, а заявку — done. После purge_source заявки источника переезжают в цель и выполняются там.
 func (q *Queries) ClaimNextDeletionRequest(ctx context.Context, arg ClaimNextDeletionRequestParams) (DeletionRequest, error) {
 	row := q.db.QueryRow(ctx, claimNextDeletionRequest, arg.Now, arg.AppRequestedBefore)
 	var i DeletionRequest

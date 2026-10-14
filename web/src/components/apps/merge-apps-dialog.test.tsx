@@ -224,7 +224,7 @@ describe("MergeAppsDialog", () => {
     expect(confirm).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("explains that a source pending deletion cannot be merged", async () => {
+  it("explains that an app with a pending deletion request cannot be merged", async () => {
     mockApi({
       create: () => HttpResponse.json(errorBody("deletion_pending"), { status: 409 }),
     });
@@ -243,7 +243,7 @@ describe("MergeAppsDialog", () => {
     await user.click(within(dialog).getByRole("button", { name: "Объединить" }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Источник ожидает удаления — объединить нельзя",
+      "У одного из приложений есть невыполненная заявка на удаление — дождитесь её выполнения",
     );
   });
 

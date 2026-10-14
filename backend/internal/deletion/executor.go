@@ -65,7 +65,8 @@ type Result struct {
 type queue interface {
 	requeueStuck(ctx context.Context, staleBefore time.Time) (int64, error)
 	// claim берёт старейший pending (FOR UPDATE SKIP LOCKED) и переводит в running; запросы app —
-	// только с requested_at ≤ appRequestedBefore; ok=false — брать нечего.
+	// только с requested_at ≤ appRequestedBefore; запросы приложений в незавершённом слиянии (app_merges
+	// pending/running/failed) пропускаются до его конца; ok=false — брать нечего.
 	claim(ctx context.Context, now, appRequestedBefore time.Time) (dr sqlc.DeletionRequest, ok bool, err error)
 	complete(ctx context.Context, id uuid.UUID, now time.Time) error
 	fail(ctx context.Context, id uuid.UUID, msg string) error

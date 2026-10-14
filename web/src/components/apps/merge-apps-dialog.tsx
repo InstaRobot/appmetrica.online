@@ -101,7 +101,11 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
       const ui = toUiError(err);
       if (ui.code === "confirm_name_mismatch") setError({ field: true, message: ui.message });
       else if (ui.code === "deletion_pending") {
-        setError({ field: false, message: "Источник ожидает удаления — объединить нельзя" });
+        setError({
+          field: false,
+          message:
+            "У одного из приложений есть невыполненная заявка на удаление — дождитесь её выполнения",
+        });
       } else setError({ field: false, message: ui.message });
     }
   };

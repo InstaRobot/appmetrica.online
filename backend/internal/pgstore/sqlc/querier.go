@@ -20,6 +20,10 @@ type Querier interface {
 	// Слияние, которое блокирует операции с приложением (как цель или как источник).
 	ActiveMergeForApp(ctx context.Context, appID uuid.UUID) (AppMerge, error)
 	AddCopiedPartition(ctx context.Context, arg AddCopiedPartitionParams) error
+	// Есть ли невыполненная заявка на удаление чего угодно из приложения (merge.Create отвечает 409): пока
+	// слияние активно, job deletion заявки обоих приложений не берёт (ClaimNextDeletionRequest), а заявка,
+	// выполненная между копированием партиции и переносом в цель, оставила бы данные субъекта у цели со статусом done.
+	AnyDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error)
 	// Есть ли невыполненная заявка на удаление самого приложения (createWriteKey и unarchiveApp отвечают 409).
 	AppDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error)
 	// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
@@ -32,6 +36,9 @@ type Querier interface {
 	ClaimNextAppMerge(ctx context.Context) (AppMerge, error)
 	// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
 	// снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
+	// Заявки приложения, которое участвует в незавершённом слиянии (цель или источник, включая failed до повтора),
+	// ждут его конца: удаление из источника после копирования партиции или из цели до него оставило бы данные
+	// субъекта у цели, а заявку — done. После purge_source заявки источника переезжают в цель и выполняются там.
 	ClaimNextDeletionRequest(ctx context.Context, arg ClaimNextDeletionRequestParams) (DeletionRequest, error)
 	CompleteDeletionRequest(ctx context.Context, arg CompleteDeletionRequestParams) error
 	CountPasskeys(ctx context.Context) (int64, error)
@@ -45,6 +52,10 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateSetupToken(ctx context.Context, arg CreateSetupTokenParams) error
 	CreateWriteKey(ctx context.Context, arg CreateWriteKeyParams) (WriteKey, error)
+	// Шаг move_keys: ключи цели без платформы получают её единственную платформу до того, как AbsorbAppForMerge
+	// расширит набор платформами источника — иначе события по ним ingest писал бы как other с platform_missing
+	// (resolveContext: платформа ключа → единственная платформа приложения → other).
+	DefaultWriteKeyPlatform(ctx context.Context, arg DefaultWriteKeyPlatformParams) (int64, error)
 	DeleteApp(ctx context.Context, id uuid.UUID) (int64, error)
 	// Только для стека E2E (auth.ResetForE2E).
 	DeleteCeremonies(ctx context.Context) error

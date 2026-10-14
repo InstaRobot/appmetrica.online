@@ -9,7 +9,7 @@ var (
 	ErrNotFound = errors.New("merge: not found")
 	// ErrConfirmNameMismatch — confirm_name не совпал с именем источника (точно, с учётом регистра).
 	ErrConfirmNameMismatch = errors.New("merge: confirm name mismatch")
-	// ErrDeletionPending — у цели или источника невыполненная заявка на удаление.
+	// ErrDeletionPending — у цели или источника невыполненная заявка на удаление (приложения, человека или установки).
 	ErrDeletionPending = errors.New("merge: deletion pending")
 	// ErrAppArchived — цель в архиве: в неё нельзя переносить ключи и события.
 	ErrAppArchived = errors.New("merge: target archived")

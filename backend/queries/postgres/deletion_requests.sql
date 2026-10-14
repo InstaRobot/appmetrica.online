@@ -16,6 +16,15 @@ SELECT EXISTS (
     WHERE app_id = sqlc.arg(app_id) AND subject_type = 'app' AND status IN ('pending', 'running')
 )::boolean AS pending;
 
+-- name: AnyDeletionPending :one
+-- Есть ли невыполненная заявка на удаление чего угодно из приложения (merge.Create отвечает 409): пока
+-- слияние активно, job deletion заявки обоих приложений не берёт (ClaimNextDeletionRequest), а заявка,
+-- выполненная между копированием партиции и переносом в цель, оставила бы данные субъекта у цели со статусом done.
+SELECT EXISTS (
+    SELECT 1 FROM deletion_requests
+    WHERE app_id = sqlc.arg(app_id) AND status IN ('pending', 'running')
+)::boolean AS pending;
+
 -- name: MoveDeletionRequestsForMerge :execrows
 -- Шаг purge_source: заявки на удаление человека или установки из источника переходят в цель — его события
 -- уже скопированы туда, и удаление выполнится в цели. Заявка pending/running, у которой в цели уже есть
@@ -38,13 +47,20 @@ LIMIT 200;
 -- name: ClaimNextDeletionRequest :one
 -- Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
 -- снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
+-- Заявки приложения, которое участвует в незавершённом слиянии (цель или источник, включая failed до повтора),
+-- ждут его конца: удаление из источника после копирования партиции или из цели до него оставило бы данные
+-- субъекта у цели, а заявку — done. После purge_source заявки источника переезжают в цель и выполняются там.
 UPDATE deletion_requests
 SET status = 'running', started_at = sqlc.arg(now), attempts = attempts + 1
 WHERE id = (
-    SELECT id FROM deletion_requests
-    WHERE status = 'pending'
-      AND (subject_type <> 'app' OR requested_at <= sqlc.arg(app_requested_before)::timestamptz)
-    ORDER BY requested_at
+    SELECT d.id FROM deletion_requests AS d
+    WHERE d.status = 'pending'
+      AND (d.subject_type <> 'app' OR d.requested_at <= sqlc.arg(app_requested_before)::timestamptz)
+      AND NOT EXISTS (
+          SELECT 1 FROM app_merges AS m
+          WHERE (m.target_app_id = d.app_id OR m.source_app_id = d.app_id)
+            AND m.status IN ('pending', 'running', 'failed'))
+    ORDER BY d.requested_at
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )

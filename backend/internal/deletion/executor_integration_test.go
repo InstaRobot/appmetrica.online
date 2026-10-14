@@ -202,6 +202,48 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 	require.Equal(t, statsBefore, dailyStats(t, h.env, appID))
 }
 
+// Заявки приложений в незавершённом слиянии (цель и источник) ждут его конца; остальные выполняются.
+// После слияния очередь берёт их в порядке requested_at.
+func TestDeletion_WaitsForActiveMerge(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	target := h.createApp(t, "Notes iOS")
+	source := h.createApp(t, "Notes Android")
+	other := h.createApp(t, "Other")
+	m, err := h.env.PG.Queries().CreateAppMerge(ctx, sqlc.CreateAppMergeParams{
+		TargetAppID: target, SourceAppID: &source, SourceName: "Notes Android",
+		SourcePlatforms: []sqlc.AppPlatform{sqlc.AppPlatformAndroid}, SourceTimezone: "UTC",
+	})
+	require.NoError(t, err)
+	targetReq := h.request(t, target, "user", "u1")
+	h.clock.Advance(time.Second)
+	sourceReq := h.request(t, source, "install", uuid.New().String())
+	h.clock.Advance(time.Second)
+	otherReq := h.request(t, other, "user", "u1")
+
+	res, err := h.executor(nil).RunOnce(ctx, h.jobRun(t))
+	require.NoError(t, err)
+	require.Equal(t, deletion.Result{Done: 1}, res)
+	require.Equal(t, sqlc.DeletionStatusDone, h.status(t, other, otherReq).Status)
+	require.Equal(t, sqlc.DeletionStatusPending, h.status(t, target, targetReq).Status)
+	require.Equal(t, sqlc.DeletionStatusPending, h.status(t, source, sourceReq).Status)
+
+	// failed до повтора тоже блокирует: данные уже частично скопированы.
+	_, err = h.env.PG.Pool().Exec(ctx, "UPDATE app_merges SET status = 'failed', error = 'boom' WHERE id = $1", m.ID)
+	require.NoError(t, err)
+	res, err = h.executor(nil).RunOnce(ctx, h.jobRun(t))
+	require.NoError(t, err)
+	require.Equal(t, deletion.Result{}, res)
+
+	_, err = h.env.PG.Pool().Exec(ctx, "UPDATE app_merges SET status = 'done', step = 'done', finished_at = now() WHERE id = $1", m.ID)
+	require.NoError(t, err)
+	res, err = h.executor(nil).RunOnce(ctx, h.jobRun(t))
+	require.NoError(t, err)
+	require.Equal(t, deletion.Result{Done: 2}, res)
+	require.Equal(t, sqlc.DeletionStatusDone, h.status(t, target, targetReq).Status)
+	require.Equal(t, sqlc.DeletionStatusDone, h.status(t, source, sourceReq).Status)
+}
+
 func TestDeletion_InstallRemovesInstallData(t *testing.T) {
 	h := newHarness(t)
 	ctx := t.Context()

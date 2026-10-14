@@ -43,6 +43,13 @@ SET app_id = sqlc.arg(target_id),
     platform = coalesce(platform, sqlc.narg(default_platform))
 WHERE app_id = sqlc.arg(source_id);
 
+-- name: DefaultWriteKeyPlatform :execrows
+-- Шаг move_keys: ключи цели без платформы получают её единственную платформу до того, как AbsorbAppForMerge
+-- расширит набор платформами источника — иначе события по ним ingest писал бы как other с platform_missing
+-- (resolveContext: платформа ключа → единственная платформа приложения → other).
+UPDATE write_keys SET platform = sqlc.arg(platform)::app_platform
+WHERE app_id = sqlc.arg(app_id) AND platform IS NULL;
+
 -- name: MoveAPIKeysForMerge :execrows
 -- Шаг purge_source: ключи Read API, привязанные к источнику, переходят в цель вместе с его данными —
 -- иначе их удалил бы каскад по apps.id.
