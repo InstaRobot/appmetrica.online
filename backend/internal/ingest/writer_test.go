@@ -184,6 +184,20 @@ func TestIngestHandler_BatchErrorsLogged(t *testing.T) {
 			status: http.StatusBadRequest, code: "invalid_batch", app: appA, field: "events",
 		},
 		{
+			name: "app_rate_limited with key in body",
+			setup: func(t *testing.T, h *pipelineHarness) {
+				ok, _ := h.limits.Apps.Allow(appA, 4000)
+				require.True(t, ok)
+			},
+			req:    request{contentType: "text/plain", body: []byte(`{"app_key":"` + testKey + `","sent_at":"2026-10-13T09:15:02Z","events":[` + event + `]}`)},
+			status: http.StatusTooManyRequests, code: "app_rate_limited", app: appA,
+		},
+		{
+			name:   "app_archived with key in body",
+			req:    request{contentType: "text/plain", body: []byte(`{"app_key":"` + archivedKey + `","sent_at":"2026-10-13T09:15:02Z","events":[` + event + `]}`)},
+			status: http.StatusForbidden, code: "app_archived", app: appB,
+		},
+		{
 			name:   "invalid_json",
 			req:    request{contentType: "application/json", header: testKey, body: []byte(`{"sent_at":`)},
 			status: http.StatusBadRequest, code: "invalid_json", app: appA,
@@ -248,6 +262,10 @@ func TestIngestHandler_BatchErrorsLogged(t *testing.T) {
 			require.Len(t, r.KeyPrefix, 11)
 			require.LessOrEqual(t, len(r.PayloadSample), ingest.MaxPayloadSampleBytes)
 			require.NotEmpty(t, r.PayloadSample)
+			// Ревью MVP: полный ключ из поля тела app_key не хранится — Read API отдаёт сэмпл как
+			// example_payload, и ключ с read-scope мог бы получить ключ записи.
+			require.NotContains(t, r.PayloadSample, testKey[11:], "полный app_key в сэмпле")
+			require.NotContains(t, r.PayloadSample, archivedKey[11:], "полный app_key в сэмпле")
 		})
 	}
 }

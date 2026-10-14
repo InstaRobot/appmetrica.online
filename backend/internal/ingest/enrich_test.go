@@ -457,6 +457,19 @@ func TestPayloadSample(t *testing.T) {
 		require.Equal(t, `{"user_id":"u31","name":"a/b","nested":{"n":1.50,"t":true,"z":null}}`, ingest.PayloadSample([]byte(body))) //nolint:testifylint // сравниваются байты: важна каноничная форма, а не равенство JSON
 	})
 
+	// Ревью MVP: ключ записи из поля тела app_key (обязательный путь для sendBeacon) попадал в сэмпл целиком
+	// и уходил в Read API как example_payload. В сэмпле остаётся только key_prefix, как в соседней колонке.
+	t.Run("app_key_cut_to_prefix", func(t *testing.T) {
+		body := `{"app_key":"pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2","sent_at":"2026-10-13T09:15:02Z","events":[]}`
+		require.Equal(t, `{"app_key":"pk_7Hq2x9Ab","sent_at":"2026-10-13T09:15:02Z","events":[]}`, ingest.PayloadSample([]byte(body))) //nolint:testifylint // сравниваются байты
+		escaped := `{"APP_KEY":"pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2","app\u005fkey":"pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2","nested":{"app_key":"pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2"},"events":[`
+		sample := ingest.PayloadSample([]byte(escaped))
+		require.NotContains(t, sample, "Lm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2")
+		require.Equal(t, `{"APP_KEY":"pk_7Hq2x9Ab","app_key":"pk_7Hq2x9Ab","nested":{"app_key":"pk_7Hq2x9Ab"},"events":[`, sample) //nolint:testifylint // сравниваются байты
+		scalars := `{"app_key":42,"app_key":null,"app_key":{"k":"pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2"}}`
+		require.Equal(t, scalars, ingest.PayloadSample([]byte(scalars)), "нестроковое значение не трогаем") //nolint:testifylint // сравниваются байты
+	})
+
 	t.Run("invalid_utf8_and_garbage", func(t *testing.T) {
 		require.Empty(t, ingest.PayloadSample([]byte("not json")))
 		require.Empty(t, ingest.PayloadSample(nil))
