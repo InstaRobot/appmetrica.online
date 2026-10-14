@@ -138,8 +138,11 @@ gen-sqlc: ## sqlc (в Docker): queries/postgres + migrations/postgres → intern
 	docker run --rm -u $$(id -u):$$(id -g) -v "$$(pwd)/backend":/src -w /src $(SQLC_IMAGE) generate
 
 .PHONY: gen-web
-gen-web: ## orval: contracts/openapi/api.yaml → web/src/lib/api/gen
+gen-web: ## orval: contracts/openapi/api.yaml → web/src/lib/api/gen; копии спек для API reference (S-13)
 	cd $(WEB) && pnpm gen:api
+	@# Docker-образ web собирается из web/ без contracts/: Fumadocs читает спеки из этих копий.
+	mkdir -p $(WEB)/src/lib/api/gen/openapi
+	cp $(ROOT)/contracts/openapi/ingest.yaml $(ROOT)/contracts/openapi/api.yaml $(WEB)/src/lib/api/gen/openapi/
 
 .PHONY: gen-check
 gen-check: gen ## Проверить, что сгенерированный код закоммичен и актуален

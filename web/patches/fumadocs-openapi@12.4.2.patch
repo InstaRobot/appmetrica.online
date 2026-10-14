@@ -1,0 +1,52 @@
+diff --git a/dist/ui/operation/index.js b/dist/ui/operation/index.js
+index 7e895084f0fc3f76453b6cb55f74c5d714769043..a7bb48969a625c750c16bf3ace9c05e2e06f0f4d 100644
+--- a/dist/ui/operation/index.js
++++ b/dist/ui/operation/index.js
+@@ -89,7 +89,10 @@ function OperationContent({ showTitle, showDescription, headingLevel = 2 }) {
+ 					children: /* @__PURE__ */ jsx(MediaContent, {
+ 						schema: content.schema,
+ 						required: requestBody.required,
+-						selector: /* @__PURE__ */ jsx(CardSelector, { items }),
++						selector: /* @__PURE__ */ jsx(CardSelector, {
++							items,
++							label: "Тип содержимого запроса"
++						}),
+ 						request: true
+ 					})
+ 				}, mediaType))
+@@ -154,7 +157,10 @@ function OperationContent({ showTitle, showDescription, headingLevel = 2 }) {
+ 				className: "overflow-hidden rounded-xl border bg-fd-card",
+ 				children: [/* @__PURE__ */ jsx("div", {
+ 					className: "flex h-9 items-center border-b ps-1.5 pe-1 text-[0.8125rem] not-prose",
+-					children: /* @__PURE__ */ jsx(CardSelector, { items })
++					children: /* @__PURE__ */ jsx(CardSelector, {
++						items,
++						label: "Способ авторизации"
++					})
+ 				}), security.map((requirement, i) => /* @__PURE__ */ jsx(SelectTab, {
+ 					value: items[i].value,
+ 					className: "px-3",
+@@ -274,9 +280,10 @@ function SectionHeader({ id, depth, title, children }) {
+ 	});
+ }
+ /** selects the variant shown in a card, like the media type */
+-function CardSelector({ items }) {
++function CardSelector({ items, label }) {
+ 	if (items.length > 1) return /* @__PURE__ */ jsx(SelectTabTrigger, {
+ 		items,
++		"aria-label": label,
+ 		className: "h-7 w-auto gap-1 border-0 bg-transparent px-1.5 py-0 text-[0.8125rem] font-medium hover:bg-fd-accent hover:text-fd-accent-foreground focus:ring-0 focus-visible:ring-2 focus-visible:ring-inset data-popup-open:bg-fd-accent"
+ 	});
+ 	return /* @__PURE__ */ jsx("span", {
+@@ -373,7 +380,10 @@ function ResponseContent({ item: { status, response, content }, onLink }) {
+ 					anchorSegments: [mediaType],
+ 					children: /* @__PURE__ */ jsx(MediaContent, {
+ 						schema: media.schema,
+-						selector: /* @__PURE__ */ jsx(CardSelector, { items })
++						selector: /* @__PURE__ */ jsx(CardSelector, {
++							items,
++							label: "Тип содержимого ответа"
++						})
+ 					})
+ 				}, mediaType))]
+ 			})

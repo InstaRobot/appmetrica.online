@@ -12,6 +12,9 @@ const options = {
   country: [{ value: "RU", count: 700 }],
 };
 
+// Код popover грузится лениво: ждём настоящий триггер (с aria-expanded), а не кнопку-заглушку.
+const filterTrigger = () => screen.findByRole("button", { name: "Фильтр", expanded: false });
+
 describe("FilterBar", () => {
   it("shows active filters as removable chips", async () => {
     const onChange = vi.fn();
@@ -43,7 +46,7 @@ describe("FilterBar", () => {
     );
     expect(screen.queryByRole("button", { name: "Сбросить фильтры" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Фильтр" }));
+    await user.click(await filterTrigger());
     expect(onOpenChange).toHaveBeenCalledWith(true);
     const option = await screen.findByRole("option", { name: /^2\.1\.0/ });
     expect(option).toHaveTextContent("300");
@@ -57,7 +60,7 @@ describe("FilterBar", () => {
         options={options}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Фильтр" }));
+    await user.click(await filterTrigger());
     expect(await screen.findByRole("option", { name: /^2\.1\.0/ })).toHaveAttribute(
       "data-checked",
       "true",
@@ -69,14 +72,14 @@ describe("FilterBar", () => {
   it("says that values are loading", async () => {
     const user = userEvent.setup();
     render(<FilterBar value={{}} onChange={vi.fn()} options={{}} loading />);
-    await user.click(screen.getByRole("button", { name: "Фильтр" }));
+    await user.click(await filterTrigger());
     expect(screen.getByText("Загружаем значения…")).toBeInTheDocument();
   });
 
   it("filters the list by the search text", async () => {
     const user = userEvent.setup();
     render(<FilterBar value={{}} onChange={vi.fn()} options={options} />);
-    await user.click(screen.getByRole("button", { name: "Фильтр" }));
+    await user.click(await filterTrigger());
     await user.type(screen.getByRole("combobox"), "zzz");
     expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
   });

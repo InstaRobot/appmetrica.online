@@ -55,3 +55,7 @@ minimumReleaseAgeExclude:
   - orval@8.42.0
   - postcss@8.5.30
   - radix-ui@1.8.1
+# Патчи зависимостей (pnpm patch). fumadocs-openapi: aria-label у селекторов тела запроса,
+# авторизации и ответа API reference (combobox без имени нарушает WCAG 4.1.2, axe button-name).
+patchedDependencies:
+  fumadocs-openapi@12.4.2: patches/fumadocs-openapi@12.4.2.patch

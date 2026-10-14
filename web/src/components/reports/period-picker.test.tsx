@@ -59,7 +59,8 @@ describe("PeriodPicker", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Выбрать даты" }));
+    // Код popover грузится лениво: ждём настоящий триггер (с aria-expanded).
+    await user.click(await screen.findByRole("button", { name: "Выбрать даты", expanded: false }));
     const apply = screen.getByRole("button", { name: "Применить" });
     expect(apply).toBeDisabled();
     await user.click(await screen.findByRole("button", { name: /(^|\s)1 октября 2026/ }));

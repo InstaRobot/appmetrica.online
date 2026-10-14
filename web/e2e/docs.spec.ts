@@ -23,7 +23,7 @@ test.describe("without session", () => {
 
     await page.goto("/docs/api-reference/ingest/ingest-events");
 
-    await expect(page).toHaveURL(/\/login\?next=%2Fdocs$/);
+    await expect(page).toHaveURL(/\/login\?next=(%2F|\/)docs$/);
     await expect(page.getByText("Ingestion API")).toHaveCount(0);
     await expectNoA11yViolations(page);
   });
@@ -55,13 +55,18 @@ test("api reference lists public operations without playground", async ({ page }
   await sidebar.getByText("Read API").click();
   await expect(sidebar.getByRole("link", { name: /portfolio/i })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /auth|passkey|settings/i })).toHaveCount(0);
+  // Папка раскрывается с анимацией прозрачности: axe проверяет контраст после неё.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running"),
+  );
   await expectNoA11yViolations(page);
 });
 
+// Оболочка доков стримится (Suspense), поэтому notFound() приходит со статусом 200 и noindex.
 test("unknown docs page shows not found", async ({ page }) => {
-  const res = await page.goto("/docs/no-such-page");
+  await page.goto("/docs/no-such-page");
 
-  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1, name: "Страница не найдена" })).toBeVisible();
   await expect(page.getByRole("link", { name: "К быстрому старту" })).toHaveAttribute(
     "href",
     "/docs",

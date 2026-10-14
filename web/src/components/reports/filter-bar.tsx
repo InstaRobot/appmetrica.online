@@ -11,9 +11,9 @@ import {
   CommandList,
   CommandSkeleton,
 } from "@/components/common/lazy-command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/common/lazy-popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatInt } from "@/lib/format";
 import { FILTER_DIMENSIONS, type FilterDimension, type Filters } from "@/lib/url-state";
 
@@ -60,60 +60,64 @@ export function FilterBar({
     onOpenChange?.(next);
   };
 
+  const trigger = (
+    <Button variant="outline" size="sm">
+      <Plus aria-hidden="true" />
+      Фильтр
+    </Button>
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Popover open={open} onOpenChange={changeOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Plus aria-hidden="true" />
-            Фильтр
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-0">
-          <Suspense fallback={<CommandSkeleton />}>
-            <Command>
-              <CommandInput placeholder="Найти значение…" aria-label="Найти значение" />
-              <CommandList>
-                {loading ? (
-                  <p className="px-3 py-4 text-body-sm text-fg-muted">Загружаем значения…</p>
-                ) : (
-                  <CommandEmpty>Ничего не найдено</CommandEmpty>
-                )}
-                {FILTER_DIMENSIONS.map((dim) => {
-                  // Пустое значение («Не определено») фильтром не задаётся: у страны его нет в контракте.
-                  const items = (options[dim] ?? []).filter((o) => o.value !== "");
-                  if (items.length === 0) return null;
-                  return (
-                    <CommandGroup key={dim} heading={FILTER_LABELS[dim]}>
-                      {items.map((o) => {
-                        const selected: string[] = value[dim] ?? [];
-                        const checked = selected.includes(o.value);
-                        return (
-                          <CommandItem
-                            key={o.value}
-                            value={`${dim}:${o.value}`}
-                            keywords={[o.value, FILTER_LABELS[dim]]}
-                            data-checked={checked ? "true" : "false"}
-                            onSelect={() => {
-                              onChange(toggleFilter(value, dim, o.value));
-                              changeOpen(false);
-                            }}
-                          >
-                            {o.value}
-                            <span className="ml-auto text-fg-muted tabular-nums">
-                              {formatInt(o.count)}
-                            </span>
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  );
-                })}
-              </CommandList>
-            </Command>
-          </Suspense>
-        </PopoverContent>
-      </Popover>
+      <Suspense fallback={trigger}>
+        <Popover open={open} onOpenChange={changeOpen}>
+          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+          <PopoverContent align="start" className="w-72 p-0">
+            <Suspense fallback={<CommandSkeleton />}>
+              <Command>
+                <CommandInput placeholder="Найти значение…" aria-label="Найти значение" />
+                <CommandList>
+                  {loading ? (
+                    <p className="px-3 py-4 text-body-sm text-fg-muted">Загружаем значения…</p>
+                  ) : (
+                    <CommandEmpty>Ничего не найдено</CommandEmpty>
+                  )}
+                  {FILTER_DIMENSIONS.map((dim) => {
+                    // Пустое значение («Не определено») фильтром не задаётся: у страны его нет в контракте.
+                    const items = (options[dim] ?? []).filter((o) => o.value !== "");
+                    if (items.length === 0) return null;
+                    return (
+                      <CommandGroup key={dim} heading={FILTER_LABELS[dim]}>
+                        {items.map((o) => {
+                          const selected: string[] = value[dim] ?? [];
+                          const checked = selected.includes(o.value);
+                          return (
+                            <CommandItem
+                              key={o.value}
+                              value={`${dim}:${o.value}`}
+                              keywords={[o.value, FILTER_LABELS[dim]]}
+                              data-checked={checked ? "true" : "false"}
+                              onSelect={() => {
+                                onChange(toggleFilter(value, dim, o.value));
+                                changeOpen(false);
+                              }}
+                            >
+                              {o.value}
+                              <span className="ml-auto text-fg-muted tabular-nums">
+                                {formatInt(o.count)}
+                              </span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    );
+                  })}
+                </CommandList>
+              </Command>
+            </Suspense>
+          </PopoverContent>
+        </Popover>
+      </Suspense>
       {active.map((dim) => (
         <Badge key={dim} variant="secondary" className="h-7 gap-1 pr-1 text-label-sm">
           <span>

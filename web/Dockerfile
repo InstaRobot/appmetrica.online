@@ -10,6 +10,7 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@12.11.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml source.config.ts ./
+COPY patches ./patches
 COPY content ./content
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 

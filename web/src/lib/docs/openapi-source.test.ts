@@ -1,5 +1,7 @@
 // @vitest-environment node
+import { loader } from "fumadocs-core/source";
 import type { Document } from "fumadocs-openapi";
+import { openapiPlugin } from "fumadocs-openapi/server";
 import { describe, expect, it } from "vitest";
 import { createDocsOpenAPI, openApiSource, publicDocument } from "./openapi-source";
 
@@ -57,14 +59,33 @@ describe("openApiSource", () => {
     expect(paths).toContain("api-reference/read/get-portfolio.mdx");
     expect(paths).not.toContain("api-reference/read/get-auth-state.mdx");
 
-    const titles = Object.fromEntries(
-      files.flatMap((f) => (f.type === "meta" ? [[f.path, f.data.title]] : [])),
-    );
-    expect(titles).toMatchObject({
+    const metas = files.flatMap((f) => (f.type === "meta" ? [[f.path, f.data.title]] : []));
+    expect(metas).toHaveLength(3);
+    expect(Object.fromEntries(metas)).toEqual({
       "api-reference/meta.json": "API reference",
       "api-reference/ingest/meta.json": "Ingestion API",
       "api-reference/read/meta.json": "Read API",
     });
+  });
+
+  it("builds one API reference folder with both sections", async () => {
+    const { pageTree } = loader(await openApiSource(createDocsOpenAPI()), {
+      baseUrl: "/docs",
+      plugins: [openapiPlugin()],
+    });
+
+    expect(pageTree.children).toHaveLength(1);
+    const [reference] = pageTree.children;
+    expect(reference).toMatchObject({ type: "folder", name: "API reference", defaultOpen: true });
+    const sections = reference?.type === "folder" ? reference.children : [];
+    expect(sections.map((s) => s.type === "folder" && s.name)).toEqual([
+      "Ingestion API",
+      "Read API",
+    ]);
+    const [ingest] = sections;
+    expect(
+      ingest?.type === "folder" && ingest.children.map((p) => p.type === "page" && p.url),
+    ).toEqual(["/docs/api-reference/ingest/ingest-events"]);
   });
 
   it("skips CORS preflight and health endpoints", async () => {
@@ -80,7 +101,7 @@ const ok = { responses: { "200": { description: "ok" } } };
 
 function sample(): Document {
   return {
-    openapi: "3.0.3",
+    openapi: "3.2.0",
     info: { title: "t", version: "1" },
     tags: [{ name: "Apps" }, { name: "Admin Apps", "x-internal": true }],
     paths: {
@@ -127,7 +148,7 @@ describe("publicDocument", () => {
 
   it("handles a document without paths and tags", () => {
     const doc = publicDocument({
-      openapi: "3.0.3",
+      openapi: "3.2.0",
       info: { title: "t", version: "1" },
     } as Document);
 

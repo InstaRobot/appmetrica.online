@@ -1,7 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 
-// Документация (S-13) появляется в T-047; до этого typedRoutes не знает маршрут "/docs".
+// typedRoutes не сопоставляет "/docs" с опциональным catch-all /docs/[[...slug]] (Next 16.4).
 const DOCS = "/docs" as Route;
 
 // Футер дашборда: атрибуция DB-IP обязательна по лицензии CC BY 4.0 базы IP-to-City Lite.

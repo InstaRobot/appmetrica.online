@@ -1,0 +1,43 @@
+/* Стили документации S-13: подключаются только в layout доков, дашборд их не грузит.
+   Preflight и наши утилиты уже есть в globals.css: здесь только тема и утилиты Fumadocs
+   (классы перечислены в его CSS через @source inline, сканировать исходники не нужно). */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+/* Preset Fumadocs берёт цвета из переменных shadcn (--background, --primary, …) из globals.css. */
+@import "fumadocs-ui/css/shadcn.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-openapi/css/preset.css";
+
+/* MDX-страницы: классы из content/docs. */
+@source "../../../content";
+
+:root {
+  --color-fd-primary: var(--color-primary-600);
+  --color-fd-background: var(--bg-base);
+  --color-fd-muted: var(--bg-subtle);
+  --color-fd-border: var(--border-base);
+
+  /* Переменные сайдбара shadcn, на которые ссылается preset (#nd-sidebar). */
+  --sidebar: var(--bg-subtle);
+  --sidebar-foreground: var(--fg-base);
+  --sidebar-border: var(--border-base);
+  --sidebar-accent: var(--color-primary-50);
+  --sidebar-accent-foreground: var(--color-primary-800);
+  --sidebar-primary-foreground: var(--color-neutral-0);
+  --sidebar-ring: var(--ring-focus);
+
+  /* Шапка дашборда (56 px) над layout Fumadocs. */
+  --fd-banner-height: 3.5rem;
+}
+
+/* Метки HTTP-методов и кодов ответа fumadocs-openapi (text-*-600) на белом фоне не дотягивают
+   до контраста 4.5:1 (WCAG 1.4.3): подменяем палитру Tailwind нашими токенами -700. */
+#nd-docs-layout {
+  --color-green-600: var(--color-success-700);
+  --color-blue-600: var(--color-primary-700);
+  --color-red-600: var(--color-danger-700);
+  --color-orange-600: var(--color-warning-700);
+  --color-yellow-600: var(--color-warning-700);
+  --color-amber-600: var(--color-warning-700);
+}

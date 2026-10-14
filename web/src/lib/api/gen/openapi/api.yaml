@@ -1,0 +1,1759 @@
+openapi: 3.0.3
+info:
+  title: appmetrica.online API
+  version: 1.0.0
+  description: |
+    Read API (`/v1`, Bearer `sk_…` со scopes read/delete, либо cookie дашборда)
+    и внутренний Admin API (`/admin/v1`, только cookie `am_session`, все операции x-internal).
+    Даты from/to/date — YYYY-MM-DD в часовом поясе приложения, включительно.
+servers:
+  - url: https://api.appmetrica.online
+    description: Production — Read API для скриптов (Bearer sk_)
+  - url: https://appmetrica.online/api
+    description: Production — через rewrites дашборда (cookie am_session)
+  - url: http://localhost:8080
+    description: Local development
+security:
+  - bearerApiKey: []
+  - sessionCookie: []
+tags:
+  - name: Apps
+  - name: Portfolio
+  - name: Audience
+  - name: Retention
+  - name: Realtime
+  - name: Profiles
+  - name: Integration
+  - name: Deletion
+  - name: Health
+  - name: Admin Auth
+    x-internal: true
+  - name: Admin Passkeys
+    x-internal: true
+  - name: Admin Apps
+    x-internal: true
+  - name: Admin Keys
+    x-internal: true
+  - name: Admin Settings
+    x-internal: true
+  - name: Admin System
+    x-internal: true
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: apiHealth
+      security: []
+      responses:
+        '200':
+          description: Процесс жив
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+  /ready:
+    get:
+      tags: [Health]
+      operationId: apiReady
+      security: []
+      responses:
+        '200':
+          description: Готов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadyStatus' }
+        '503':
+          description: Не готов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadyStatus' }
+  /v1/apps:
+    get:
+      tags: [Apps]
+      operationId: listApps
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: Список приложений
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/apps/{app_id}:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Apps]
+      operationId: getApp
+      x-required-scope: read
+      responses:
+        '200':
+          description: Приложение
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/App' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/portfolio:
+    get:
+      tags: [Portfolio]
+      operationId: getPortfolio
+      x-required-scope: read
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: По умолчанию — вчера в settings.owner_timezone
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: Портфель
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Portfolio' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/audience/summary:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Audience]
+      operationId: getAudienceSummary
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Compare'
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: KPI аудитории
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AudienceSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/audience/timeseries:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Audience]
+      operationId: getAudienceTimeseries
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: granularity
+          in: query
+          schema: { $ref: '#/components/schemas/Granularity' }
+        - name: metric
+          in: query
+          schema: { $ref: '#/components/schemas/TimeSeriesMetric' }
+        - $ref: '#/components/parameters/Compare'
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Временной ряд
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeSeries' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/audience/rolling-active:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Audience]
+      operationId: getRollingActive
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: DAU/WAU/MAU по дням
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RollingActive' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/audience/breakdown:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Audience]
+      operationId: getAudienceBreakdown
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: dimension
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/BreakdownDimension' }
+        - name: metric
+          in: query
+          schema: { $ref: '#/components/schemas/BreakdownMetric' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Разбивка по измерению
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Breakdown' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/retention:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Retention]
+      operationId: getRetention
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: cohort_granularity
+          in: query
+          schema: { $ref: '#/components/schemas/CohortGranularity' }
+        - name: periods
+          in: query
+          description: day 1..90 (default 30), week 1..52 (default 12)
+          schema: { type: integer, minimum: 1, maximum: 90 }
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Матрица retention
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionMatrix' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/realtime:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Realtime]
+      operationId: getRealtime
+      x-required-scope: read
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentQ'
+      responses:
+        '200':
+          description: Realtime-срез
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Realtime' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/profiles:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Profiles]
+      operationId: searchProfiles
+      x-required-scope: read
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Точный install_id (UUID) или user_id
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: Найденные профили (до 20)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileSearchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/profiles/{person_key}:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - name: person_key
+        in: path
+        required: true
+        description: u:<user_id> или i:<install_id>, URL-encoded
+        schema: { type: string, pattern: '^(u:.{1,128}|i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' }
+    get:
+      tags: [Profiles]
+      operationId: getProfile
+      x-required-scope: read
+      parameters:
+        - name: sessions_limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: before
+          in: query
+          description: Курсор — started_at последней сессии предыдущей страницы (исключающая граница)
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Профиль
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/integration/health:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Integration]
+      operationId: getIntegrationHealth
+      x-required-scope: read
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+      responses:
+        '200':
+          description: Здоровье интеграции
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationHealth' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/deletion-requests:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    post:
+      tags: [Deletion]
+      operationId: createDeletionRequest
+      x-required-scope: delete
+      description: Идемпотентно по (app_id, subject_type, subject_value) среди pending/running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDeletionRequestBody' }
+      responses:
+        '202':
+          description: Запрос принят (новый или существующий pending/running)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/apps/{app_id}/deletion-requests/{request_id}:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - name: request_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Deletion]
+      operationId: getDeletionRequest
+      x-required-scope: read
+      responses:
+        '200':
+          description: Статус удаления
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/v1/auth/state:
+    get:
+      tags: [Admin Auth]
+      operationId: getAuthState
+      x-internal: true
+      security: []
+      responses:
+        '200':
+          description: Состояние аутентификации
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthState' }
+  /admin/v1/auth/login/begin:
+    post:
+      tags: [Admin Auth]
+      operationId: beginLogin
+      x-internal: true
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '200':
+          description: Опции WebAuthn для входа
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnCeremonyOptions' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/v1/auth/login/finish:
+    post:
+      tags: [Admin Auth]
+      operationId: finishLogin
+      x-internal: true
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinishLoginBody' }
+      responses:
+        '204':
+          description: Вход выполнен
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/WebAuthnFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/v1/auth/setup/{token}/begin:
+    parameters:
+      - $ref: '#/components/parameters/SetupToken'
+    post:
+      tags: [Admin Auth]
+      operationId: beginSetup
+      x-internal: true
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '200':
+          description: Опции WebAuthn для регистрации
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnCeremonyOptions' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/v1/auth/setup/{token}/finish:
+    parameters:
+      - $ref: '#/components/parameters/SetupToken'
+    post:
+      tags: [Admin Auth]
+      operationId: finishSetup
+      x-internal: true
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinishRegistrationBody' }
+      responses:
+        '204':
+          description: Passkey зарегистрирован, сессия создана
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '422': { $ref: '#/components/responses/WebAuthnFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/v1/auth/logout:
+    post:
+      tags: [Admin Auth]
+      operationId: logout
+      x-internal: true
+      security:
+        - sessionCookie: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: Сессия завершена
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/ClearSessionCookie' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/v1/passkeys:
+    get:
+      tags: [Admin Passkeys]
+      operationId: listPasskeys
+      x-internal: true
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Passkeys владельца
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /admin/v1/passkeys/register/begin:
+    post:
+      tags: [Admin Passkeys]
+      operationId: beginPasskeyRegistration
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '200':
+          description: Опции WebAuthn для регистрации дополнительного passkey
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnCeremonyOptions' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/v1/passkeys/register/finish:
+    post:
+      tags: [Admin Passkeys]
+      operationId: finishPasskeyRegistration
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinishRegistrationBody' }
+      responses:
+        '201':
+          description: Passkey добавлен
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Passkey' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/WebAuthnFailed' }
+  /admin/v1/passkeys/{passkey_id}:
+    parameters:
+      - name: passkey_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Admin Passkeys]
+      operationId: renamePasskey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenamePasskeyBody' }
+      responses:
+        '200':
+          description: Переименован
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Passkey' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Admin Passkeys]
+      operationId: deletePasskey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: Удалён
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/apps:
+    post:
+      tags: [Admin Apps]
+      operationId: createApp
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppBody' }
+      responses:
+        '201':
+          description: Приложение и первый write-ключ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateAppResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/apps/{app_id}:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    patch:
+      tags: [Admin Apps]
+      operationId: updateApp
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAppBody' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/App' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Admin Apps]
+      operationId: deleteApp
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeleteAppBody' }
+      responses:
+        '202':
+          description: Удаление запланировано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/apps/{app_id}/archive:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    post:
+      tags: [Admin Apps]
+      operationId: archiveApp
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: В архиве
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/apps/{app_id}/unarchive:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    post:
+      tags: [Admin Apps]
+      operationId: unarchiveApp
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: Активно
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/apps/{app_id}/write-keys:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Admin Keys]
+      operationId: listWriteKeys
+      x-internal: true
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Write-ключи приложения, включая отозванные
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteKeyList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin Keys]
+      operationId: createWriteKey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWriteKeyBody' }
+      responses:
+        '201':
+          description: Ключ создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteKey' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/apps/{app_id}/write-keys/{key_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - $ref: '#/components/parameters/KeyId'
+    post:
+      tags: [Admin Keys]
+      operationId: revokeWriteKey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: Отозван (идемпотентно)
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/api-keys:
+    get:
+      tags: [Admin Keys]
+      operationId: listApiKeys
+      x-internal: true
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Read API ключи (без секретов)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiKeyList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Admin Keys]
+      operationId: createApiKey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApiKeyBody' }
+      responses:
+        '201':
+          description: Ключ создан; secret показывается один раз
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateApiKeyResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/api-keys/{key_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/KeyId'
+    post:
+      tags: [Admin Keys]
+      operationId: revokeApiKey
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '204':
+          description: Отозван (идемпотентно)
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/settings:
+    get:
+      tags: [Admin Settings]
+      operationId: getSettings
+      x-internal: true
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Настройки владельца
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    patch:
+      tags: [Admin Settings]
+      operationId: updateSettings
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSettingsBody' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/v1/settings/telegram/test:
+    post:
+      tags: [Admin Settings]
+      operationId: sendTelegramTest
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '200':
+          description: Результат отправки (ошибка Telegram — sent=false, не 5xx)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TelegramTestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/v1/system/status:
+    get:
+      tags: [Admin System]
+      operationId: getSystemStatus
+      x-internal: true
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Статус системы
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemStatus' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /admin/v1/deletion-requests:
+    get:
+      tags: [Admin System]
+      operationId: listDeletionRequests
+      x-internal: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: app_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Последние 200 запросов на удаление
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionRequestList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: 'sk_ + 40 base62'
+      description: Read API ключ. Scope операции указан в x-required-scope (read | delete).
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: am_session
+      description: Сессия дашборда после passkey-входа. Изменяющие запросы требуют X-Requested-With.
+  parameters:
+    AppId:
+      name: app_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SetupToken:
+      name: token
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+    From:
+      name: from
+      in: query
+      required: true
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      required: true
+      schema: { type: string, format: date }
+    Compare:
+      name: compare
+      in: query
+      schema: { type: string, enum: [previous_period, none], default: previous_period }
+    EnvironmentQ:
+      name: environment
+      in: query
+      schema: { $ref: '#/components/schemas/Environment' }
+    UnitQ:
+      name: unit
+      in: query
+      schema: { $ref: '#/components/schemas/Unit' }
+    IncludeArchived:
+      name: include_archived
+      in: query
+      schema: { type: boolean, default: false }
+    FilterPlatform:
+      name: platform
+      in: query
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/Platform' }
+    FilterAppVersion:
+      name: app_version
+      in: query
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { type: string, maxLength: 64 }
+    FilterOsName:
+      name: os_name
+      in: query
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { type: string, maxLength: 32 }
+    FilterCountry:
+      name: country
+      in: query
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { type: string, pattern: '^[A-Z]{2}$' }
+    XRequestedWith:
+      name: X-Requested-With
+      in: header
+      required: true
+      description: CSRF-защита cookie-запросов
+      schema: { type: string, enum: [appmetrica-web] }
+  headers:
+    RetryAfter:
+      schema: { type: integer, minimum: 1 }
+    SetSessionCookie:
+      description: am_session=<token>; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000
+      schema: { type: string }
+    ClearSessionCookie:
+      description: am_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: invalid_request | range_too_large
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: unauthenticated
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: insufficient_scope | csrf_check_failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: app_not_found | profile_not_found | not_found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: last_passkey | app_name_taken | confirm_name_mismatch
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Gone:
+      description: setup_token_expired
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    WebAuthnFailed:
+      description: webauthn_verification_failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: rate_limited
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    StorageUnavailable:
+      description: storage_unavailable
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Platform:
+      type: string
+      enum: [ios, android, web, macos, windows, linux, bot, server, other]
+    Environment:
+      type: string
+      enum: [production, development]
+      default: production
+    Unit:
+      type: string
+      enum: [persons, installs]
+      default: persons
+    AppStatus:
+      type: string
+      enum: [active, archived]
+    Granularity:
+      type: string
+      enum: [hour, day, week, month]
+      default: day
+    TimeSeriesMetric:
+      type: string
+      enum: [active, new, sessions, avg_duration_ms]
+      default: active
+    BreakdownDimension:
+      type: string
+      enum: [platform, os_name, os_version, app_version, device_model, device_type, country, city, locale]
+    BreakdownMetric:
+      type: string
+      enum: [active, new, sessions]
+      default: active
+    CohortGranularity:
+      type: string
+      enum: [day, week]
+      default: day
+    DeletionSubjectType:
+      type: string
+      enum: [install, user, app]
+    DeletionStatus:
+      type: string
+      enum: [pending, running, done, failed]
+    DeletionSource:
+      type: string
+      enum: [api, dashboard]
+    ApiKeyScope:
+      type: string
+      enum: [read, delete]
+    AlertKey:
+      type: string
+      enum: [disk_free, insert_errors, backup_stale, ingest_down, api_down, clickhouse_down]
+    JobName:
+      type: string
+      enum: [close_day, digest, system_check, deletion, session_cleanup]
+    JobStatus:
+      type: string
+      enum: [running, ok, failed]
+    App:
+      type: object
+      required: [id, name, platform, timezone, status, created_at, updated_at, archived_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        platform: { $ref: '#/components/schemas/Platform' }
+        timezone: { type: string, example: Europe/Moscow }
+        status: { $ref: '#/components/schemas/AppStatus' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: string, format: date-time, nullable: true }
+    AppSummary:
+      type: object
+      required: [id, name, platform, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        platform: { $ref: '#/components/schemas/Platform' }
+        status: { $ref: '#/components/schemas/AppStatus' }
+    AppList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/App' }
+    SparklinePoint:
+      type: object
+      required: [day, active]
+      properties:
+        day: { type: string, format: date }
+        active: { type: integer, format: int64 }
+    PortfolioRow:
+      type: object
+      required: [app, active_today, active_date, active_same_day_prev_week, active_delta_pct, new_date, sessions_date, retention_d1, retention_d7, sparkline]
+      properties:
+        app: { $ref: '#/components/schemas/AppSummary' }
+        active_today: { type: integer, format: int64 }
+        active_date: { type: integer, format: int64 }
+        active_same_day_prev_week: { type: integer, format: int64 }
+        active_delta_pct: { type: number, nullable: true }
+        new_date: { type: integer, format: int64 }
+        sessions_date: { type: integer, format: int64 }
+        retention_d1: { type: number, minimum: 0, maximum: 1, nullable: true }
+        retention_d7: { type: number, minimum: 0, maximum: 1, nullable: true }
+        sparkline:
+          type: array
+          minItems: 30
+          maxItems: 30
+          items: { $ref: '#/components/schemas/SparklinePoint' }
+    Portfolio:
+      type: object
+      required: [date, environment, unit, rows]
+      properties:
+        date: { type: string, format: date }
+        environment: { $ref: '#/components/schemas/Environment' }
+        unit: { $ref: '#/components/schemas/Unit' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/PortfolioRow' }
+    AudienceDelta:
+      type: object
+      required: [active, new, sessions, avg_duration_ms, median_duration_ms]
+      properties:
+        active: { type: number, nullable: true }
+        new: { type: number, nullable: true }
+        sessions: { type: number, nullable: true }
+        avg_duration_ms: { type: number, nullable: true }
+        median_duration_ms: { type: number, nullable: true }
+    AudienceCompare:
+      type: object
+      required: [from, to, active, new, sessions, avg_duration_ms, median_duration_ms, delta_pct]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        active: { type: integer, format: int64 }
+        new: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+        avg_duration_ms: { type: number, nullable: true }
+        median_duration_ms: { type: number, nullable: true }
+        delta_pct: { $ref: '#/components/schemas/AudienceDelta' }
+    AudienceSummary:
+      type: object
+      required: [from, to, active, new, sessions, avg_duration_ms, median_duration_ms]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        active: { type: integer, format: int64 }
+        new: { type: integer, format: int64 }
+        sessions: { type: integer, format: int64 }
+        avg_duration_ms: { type: number, nullable: true }
+        median_duration_ms: { type: number, nullable: true }
+        compare: { $ref: '#/components/schemas/AudienceCompare' }
+    TimeSeriesPoint:
+      type: object
+      required: [ts, value]
+      properties:
+        ts: { type: string, format: date-time, description: Начало корзины с offset TZ приложения }
+        value: { type: number, nullable: true }
+    TimeSeries:
+      type: object
+      required: [metric, granularity, points]
+      properties:
+        metric: { $ref: '#/components/schemas/TimeSeriesMetric' }
+        granularity: { $ref: '#/components/schemas/Granularity' }
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/TimeSeriesPoint' }
+        compare_points:
+          type: array
+          items: { $ref: '#/components/schemas/TimeSeriesPoint' }
+    RollingActivePoint:
+      type: object
+      required: [day, dau, wau, mau]
+      properties:
+        day: { type: string, format: date }
+        dau: { type: integer, format: int64 }
+        wau: { type: integer, format: int64 }
+        mau: { type: integer, format: int64 }
+    RollingActive:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/RollingActivePoint' }
+    BreakdownRow:
+      type: object
+      required: [value, count, share]
+      properties:
+        value: { type: string, description: Пустая строка — значение не определено }
+        count: { type: integer, format: int64 }
+        share: { type: number, minimum: 0, maximum: 1 }
+    Breakdown:
+      type: object
+      required: [dimension, metric, total, rows]
+      properties:
+        dimension: { $ref: '#/components/schemas/BreakdownDimension' }
+        metric: { $ref: '#/components/schemas/BreakdownMetric' }
+        total: { type: integer, format: int64 }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/BreakdownRow' }
+    RetentionCohort:
+      type: object
+      required: [cohort_start, size, values]
+      properties:
+        cohort_start: { type: string, format: date }
+        size: { type: integer, format: int64 }
+        values:
+          type: array
+          description: Длина periods+1 (D0..Dperiods); null — период ещё не наступил
+          items: { type: number, minimum: 0, maximum: 1, nullable: true }
+    RetentionMatrix:
+      type: object
+      required: [cohort_granularity, periods, cohorts, average]
+      properties:
+        cohort_granularity: { $ref: '#/components/schemas/CohortGranularity' }
+        periods: { type: integer }
+        cohorts:
+          type: array
+          items: { $ref: '#/components/schemas/RetentionCohort' }
+        average:
+          type: array
+          items: { type: number, minimum: 0, maximum: 1, nullable: true }
+    RealtimeMinute:
+      type: object
+      required: [minute, sessions_started]
+      properties:
+        minute: { type: string, format: date-time }
+        sessions_started: { type: integer, format: int64 }
+    RecentEvent:
+      type: object
+      required: [insert_id, event_time, received_at, name, environment, platform, app_version, os_name, os_version, device_model, country, city, install_id, person_key]
+      properties:
+        insert_id: { type: string, format: uuid, description: 'Стабильный ключ строки ленты (React key, подсветка новых строк)' }
+        event_time: { type: string, format: date-time }
+        received_at: { type: string, format: date-time }
+        name: { type: string, enum: [session_start, session_end] }
+        environment: { $ref: '#/components/schemas/Environment' }
+        platform: { type: string }
+        app_version: { type: string }
+        os_name: { type: string }
+        os_version: { type: string }
+        device_model: { type: string }
+        country: { type: string }
+        city: { type: string }
+        install_id: { type: string, format: uuid }
+        person_key: { type: string }
+    Realtime:
+      type: object
+      required: [active_now, per_minute, recent_events, generated_at]
+      properties:
+        active_now: { type: integer, format: int64 }
+        per_minute:
+          type: array
+          minItems: 30
+          maxItems: 30
+          items: { $ref: '#/components/schemas/RealtimeMinute' }
+        recent_events:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/RecentEvent' }
+        generated_at: { type: string, format: date-time }
+    ProfileSummary:
+      type: object
+      required: [person_key, user_id, matched_by, installs_count, first_seen, last_seen]
+      properties:
+        person_key: { type: string }
+        user_id: { type: string, nullable: true }
+        matched_by: { type: string, enum: [install_id, user_id] }
+        installs_count: { type: integer }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+    ProfileSearchResult:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ProfileSummary' }
+    ProfileInstall:
+      type: object
+      required: [install_id, platform, os_name, os_version, app_version, device_model, device_type, locale, country, city, first_seen, last_seen]
+      properties:
+        install_id: { type: string, format: uuid }
+        platform: { type: string }
+        os_name: { type: string }
+        os_version: { type: string }
+        app_version: { type: string }
+        device_model: { type: string }
+        device_type: { type: string }
+        locale: { type: string }
+        country: { type: string }
+        city: { type: string }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+    ProfileSession:
+      type: object
+      required: [session_id, install_id, started_at, ended_at, duration_ms, app_version, platform, environment, country, city]
+      properties:
+        session_id: { type: string, format: uuid }
+        install_id: { type: string, format: uuid }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        duration_ms: { type: integer, format: int64, nullable: true }
+        app_version: { type: string }
+        platform: { type: string }
+        environment: { $ref: '#/components/schemas/Environment' }
+        country: { type: string }
+        city: { type: string }
+    Profile:
+      type: object
+      required: [person_key, user_id, first_seen, last_seen, installs, sessions, next_before]
+      properties:
+        person_key: { type: string }
+        user_id: { type: string, nullable: true }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        installs:
+          type: array
+          items: { $ref: '#/components/schemas/ProfileInstall' }
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/ProfileSession' }
+        next_before: { type: string, format: date-time, nullable: true }
+    IntegrationHour:
+      type: object
+      required: [hour, accepted, rejected]
+      properties:
+        hour: { type: string, format: date-time }
+        accepted: { type: integer, format: int64 }
+        rejected: { type: integer, format: int64 }
+    IntegrationReason:
+      type: object
+      required: [code, count, last_seen, example_payload, example_message]
+      properties:
+        code: { type: string, description: RejectionCode или batch-код ingest }
+        count: { type: integer, format: int64 }
+        last_seen: { type: string, format: date-time }
+        example_payload: { type: string, maxLength: 4096 }
+        example_message: { type: string }
+    IntegrationVersion:
+      type: object
+      required: [app_version, accepted, rejected, last_seen]
+      properties:
+        app_version: { type: string }
+        accepted: { type: integer, format: int64 }
+        rejected: { type: integer, format: int64 }
+        last_seen: { type: string, format: date-time }
+    IntegrationHealth:
+      type: object
+      required: [hours, first_event_at, accepted_total, rejected_total, hourly, reasons, versions]
+      properties:
+        hours: { type: integer }
+        first_event_at: { type: string, format: date-time, nullable: true }
+        accepted_total: { type: integer, format: int64 }
+        rejected_total: { type: integer, format: int64 }
+        hourly:
+          type: array
+          items: { $ref: '#/components/schemas/IntegrationHour' }
+        reasons:
+          type: array
+          items: { $ref: '#/components/schemas/IntegrationReason' }
+        versions:
+          type: array
+          items: { $ref: '#/components/schemas/IntegrationVersion' }
+    CreateDeletionRequestBody:
+      type: object
+      additionalProperties: false
+      required: [subject_type, subject_value]
+      properties:
+        subject_type: { type: string, enum: [install, user] }
+        subject_value: { type: string, minLength: 1, maxLength: 128 }
+    DeletionRequest:
+      type: object
+      required: [id, app_id, subject_type, subject_value, status, source, requested_at, started_at, completed_at, error]
+      properties:
+        id: { type: string, format: uuid }
+        app_id: { type: string, format: uuid }
+        subject_type: { $ref: '#/components/schemas/DeletionSubjectType' }
+        subject_value: { type: string }
+        status: { $ref: '#/components/schemas/DeletionStatus' }
+        source: { $ref: '#/components/schemas/DeletionSource' }
+        requested_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        error: { type: string, nullable: true }
+    DeletionRequestList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/DeletionRequest' }
+    AuthState:
+      type: object
+      required: [authenticated, setup_required]
+      properties:
+        authenticated: { type: boolean }
+        setup_required: { type: boolean }
+    WebAuthnCeremonyOptions:
+      type: object
+      required: [ceremony_id, options]
+      properties:
+        ceremony_id: { type: string, format: uuid }
+        options:
+          type: object
+          additionalProperties: true
+          description: |
+            JSON от go-webauthn v0.18.2: {"publicKey": PublicKeyCredentialCreationOptionsJSON |
+            PublicKeyCredentialRequestOptionsJSON, "mediation"?: "conditional"}. Во фронт передаётся
+            options.publicKey как optionsJSON для @simplewebauthn/browser 14.0.0.
+    FinishLoginBody:
+      type: object
+      required: [ceremony_id, credential]
+      properties:
+        ceremony_id: { type: string, format: uuid }
+        credential:
+          type: object
+          additionalProperties: true
+          description: AuthenticationResponseJSON из startAuthentication()
+    FinishRegistrationBody:
+      type: object
+      required: [ceremony_id, credential, name]
+      properties:
+        ceremony_id: { type: string, format: uuid }
+        credential:
+          type: object
+          additionalProperties: true
+          description: RegistrationResponseJSON из startRegistration()
+        name: { type: string, minLength: 1, maxLength: 64 }
+    Passkey:
+      type: object
+      required: [id, name, created_at, last_used_at, backup_eligible, backup_state, transports]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        backup_eligible: { type: boolean }
+        backup_state: { type: boolean }
+        transports:
+          type: array
+          items: { type: string, enum: [usb, nfc, ble, smart-card, hybrid, internal] }
+    PasskeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Passkey' }
+    RenamePasskeyBody:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+    CreateAppBody:
+      type: object
+      additionalProperties: false
+      required: [name, platform, timezone]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        platform: { $ref: '#/components/schemas/Platform' }
+        timezone: { type: string, description: IANA, example: Europe/Moscow }
+    UpdateAppBody:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        timezone: { type: string }
+    DeleteAppBody:
+      type: object
+      additionalProperties: false
+      required: [confirm_name]
+      properties:
+        confirm_name: { type: string }
+    WriteKey:
+      type: object
+      required: [id, app_id, key, label, created_at, revoked_at, last_used_at]
+      properties:
+        id: { type: string, format: uuid }
+        app_id: { type: string, format: uuid }
+        key: { type: string, pattern: '^pk_[A-Za-z0-9]{32}$' }
+        label: { type: string, maxLength: 64 }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+    WriteKeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WriteKey' }
+    CreateWriteKeyBody:
+      type: object
+      additionalProperties: false
+      properties:
+        label: { type: string, maxLength: 64, default: '' }
+    CreateAppResult:
+      type: object
+      required: [app, write_key]
+      properties:
+        app: { $ref: '#/components/schemas/App' }
+        write_key: { $ref: '#/components/schemas/WriteKey' }
+    ApiKey:
+      type: object
+      required: [id, key_prefix, label, scopes, app_id, created_at, revoked_at, last_used_at]
+      properties:
+        id: { type: string, format: uuid }
+        key_prefix: { type: string, pattern: '^sk_[A-Za-z0-9]{8}$' }
+        label: { type: string }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKeyScope' }
+        app_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+    ApiKeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKey' }
+    CreateApiKeyBody:
+      type: object
+      additionalProperties: false
+      required: [label, scopes]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 64 }
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ApiKeyScope' }
+        app_id: { type: string, format: uuid, nullable: true }
+    CreateApiKeyResult:
+      type: object
+      required: [api_key, secret]
+      properties:
+        api_key: { $ref: '#/components/schemas/ApiKey' }
+        secret: { type: string, pattern: '^sk_[A-Za-z0-9]{40}$' }
+    Settings:
+      type: object
+      required: [owner_timezone, telegram_chat_id, digest_enabled, digest_time, alerts_enabled, updated_at]
+      properties:
+        owner_timezone: { type: string }
+        telegram_chat_id: { type: string, nullable: true }
+        digest_enabled: { type: boolean }
+        digest_time: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        alerts_enabled: { type: boolean }
+        updated_at: { type: string, format: date-time }
+    UpdateSettingsBody:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        owner_timezone: { type: string }
+        telegram_chat_id: { type: string, pattern: '^-?[0-9]{1,20}$', nullable: true }
+        digest_enabled: { type: boolean }
+        digest_time: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        alerts_enabled: { type: boolean }
+    TelegramTestResult:
+      type: object
+      required: [sent]
+      properties:
+        sent: { type: boolean }
+        telegram_message_id: { type: integer, format: int64 }
+        error: { type: string }
+    AlertState:
+      type: object
+      required: [key, firing, first_fired_at, last_notified_at, last_value]
+      properties:
+        key: { $ref: '#/components/schemas/AlertKey' }
+        firing: { type: boolean }
+        first_fired_at: { type: string, format: date-time, nullable: true }
+        last_notified_at: { type: string, format: date-time, nullable: true }
+        last_value: { type: string }
+    JobRun:
+      type: object
+      required: [id, job, started_at, finished_at, status, details]
+      properties:
+        id: { type: string, format: uuid }
+        job: { $ref: '#/components/schemas/JobName' }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time, nullable: true }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        details:
+          type: object
+          additionalProperties: true
+    SystemStatus:
+      type: object
+      required: [clickhouse, postgres, backup, alerts, jobs]
+      properties:
+        clickhouse:
+          type: object
+          required: [ok, disk_free_pct, events_rows]
+          properties:
+            ok: { type: boolean }
+            disk_free_pct: { type: number, nullable: true }
+            events_rows: { type: integer, format: int64, nullable: true }
+        postgres:
+          type: object
+          required: [ok]
+          properties:
+            ok: { type: boolean }
+        backup:
+          type: object
+          required: [last_backup_at, last_backup_name]
+          properties:
+            last_backup_at: { type: string, format: date-time, nullable: true }
+            last_backup_name: { type: string, nullable: true }
+        alerts:
+          type: array
+          items: { $ref: '#/components/schemas/AlertState' }
+        jobs:
+          type: array
+          items: { $ref: '#/components/schemas/JobRun' }
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    ReadyStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          additionalProperties: { type: string, enum: [ok, fail] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+            details:
+              type: object
+              additionalProperties: true
