@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,6 +36,11 @@ function at(pathname: string, search = "") {
 const mainNav = () => screen.getByRole("navigation", { name: "Основная навигация" });
 const appNav = () => screen.getByRole("navigation", { name: "Разделы приложения" });
 const switcher = () => screen.findByRole("combobox", { name: "Приложение" });
+// Список приложений грузится на клиенте: ждём, пока триггер покажет ожидаемое имя.
+const expectSwitcher = (text: string) =>
+  waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "Приложение" })).toHaveTextContent(text),
+  );
 
 beforeEach(() => {
   at("/");
@@ -69,7 +74,7 @@ describe("AppHeader", () => {
     for (const tab of tabs.filter((t) => t !== retention)) {
       expect(tab).not.toHaveAttribute("aria-current");
     }
-    expect(await switcher()).toHaveTextContent("Notes iOS");
+    await expectSwitcher("Notes iOS");
     // Внутри приложения пункт «Портфель» не активен.
     expect(within(mainNav()).getByRole("link", { name: "Портфель" })).not.toHaveAttribute(
       "aria-current",
@@ -121,7 +126,7 @@ describe("AppHeader", () => {
       "href",
       "/docs",
     );
-    expect(await switcher()).toHaveTextContent("Все приложения");
+    await expectSwitcher("Все приложения");
     expect(screen.getByRole("link", { name: "appmetrica.online — в портфель" })).toHaveAttribute(
       "href",
       "/",
@@ -137,9 +142,17 @@ describe("AppHeader", () => {
     );
     unmount();
 
+    let loaded = false;
+    server.use(
+      getListAppsMockHandler(() => {
+        loaded = true;
+        return { items: [notes, maps] };
+      }),
+    );
     at("/apps/new");
     renderWithClient(<AppHeader />);
-    expect(await switcher()).toHaveTextContent("Все приложения");
+    await waitFor(() => expect(loaded).toBe(true));
+    await expectSwitcher("Все приложения");
   });
 
   it("switches to the same tab of another app", async () => {
@@ -147,6 +160,7 @@ describe("AppHeader", () => {
     at(`/apps/${notes.id}/retention`, "period=30d");
     renderWithClient(<AppHeader />);
 
+    await expectSwitcher("Notes iOS");
     await user.click(await switcher());
     await user.type(screen.getByPlaceholderText("Найти приложение…"), "maps");
     const options = screen.getAllByRole("option");
@@ -160,7 +174,9 @@ describe("AppHeader", () => {
     const user = userEvent.setup();
     renderWithClient(<AppHeader />);
 
+    await expectSwitcher("Все приложения");
     await user.click(await switcher());
+    expect(await screen.findAllByRole("option")).toHaveLength(3);
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Maps Android",
       "Notes iOS",
@@ -172,16 +188,19 @@ describe("AppHeader", () => {
   });
 
   it("keeps working when apps fail to load", async () => {
+    let failed = false;
     server.use(
-      http.get("*/v1/apps", () =>
-        HttpResponse.json(errorBody("storage_unavailable"), { status: 503 }),
-      ),
+      http.get("*/v1/apps", () => {
+        failed = true;
+        return HttpResponse.json(errorBody("storage_unavailable"), { status: 503 });
+      }),
     );
     at(`/apps/${notes.id}`);
 
     renderWithClient(<AppHeader />);
 
-    expect(await switcher()).toHaveTextContent("Все приложения");
+    await waitFor(() => expect(failed).toBe(true));
+    await expectSwitcher("Все приложения");
     expect(within(mainNav()).getByRole("link", { name: "Настройки" })).toBeVisible();
   });
 

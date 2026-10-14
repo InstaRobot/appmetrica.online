@@ -1,10 +1,6 @@
 import { FileQuestion } from "lucide-react";
-import type { Route } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-
-// Страница портфеля S-03 появляется в T-037; до этого typedRoutes не знает маршрут "/".
-const PORTFOLIO = "/" as Route;
 
 // S-14a: глобальная 404 (14-ux-ui-spec.md §5, Screen S-14).
 export default function NotFound() {
@@ -16,7 +12,7 @@ export default function NotFound() {
         Проверьте адрес или вернитесь в портфель.
       </p>
       <Button asChild>
-        <Link href={PORTFOLIO}>В портфель</Link>
+        <Link href="/">В портфель</Link>
       </Button>
     </main>
   );
