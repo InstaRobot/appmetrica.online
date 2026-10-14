@@ -111,7 +111,16 @@ func TestFixtures_GeneratorUsage(t *testing.T) {
 		{name: "отрицательный seed", args: []string{"-seed", "-1"}, wantCode: 2, wantErr: "usage"},
 		{name: "лишний аргумент", args: []string{"-seed", "42", "extra"}, wantCode: 2, wantErr: "usage"},
 		{name: "неизвестная подкоманда", args: []string{"perf"}, wantCode: 2, wantErr: "usage"},
-		{name: "неизвестный флаг", args: []string{"-days", "3"}, wantCode: 2, wantErr: "usage"},
+		{name: "неизвестный флаг", args: []string{"-bogus", "3"}, wantCode: 2, wantErr: "usage"},
+		{name: "days без -mode perf", args: []string{"-days", "3"}, wantCode: 2, wantErr: "usage"},
+		{name: "dau без -mode perf", args: []string{"-dau", "500"}, wantCode: 2, wantErr: "usage"},
+		{name: "неизвестный режим", args: []string{"-mode", "bulk"}, wantCode: 2, wantErr: "usage"},
+		{name: "perf без -out и -stats", args: []string{"-mode", "perf"}, wantCode: 2, wantErr: "-out"},
+		{name: "perf: dau 0", args: []string{"-mode", "perf", "-dau", "0", "-stats"}, wantCode: 2, wantErr: "dau"},
+		{name: "perf: days больше года", args: []string{"-mode", "perf", "-days", "400", "-stats"}, wantCode: 2, wantErr: "days"},
+		{name: "perf: каталог вывода — файл", args: []string{
+			"-mode", "perf", "-dau", "200", "-days", "1", "-out", filepath.Join(blocker, "sub", "p.ndjson"),
+		}, wantCode: 1, wantErr: "gen:"},
 		{name: "каталог вывода — файл", args: []string{"-out", filepath.Join(blocker, "sub", "s.ndjson")}, wantCode: 1, wantErr: "gen:"},
 	}
 	for _, tt := range tests {
@@ -452,4 +461,47 @@ func TestScenarioStats_Errors(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, table, fmt.Sprintf("| %s |", testutil.ScenarioFirstDay.Format(time.DateOnly)))
 	require.NotContains(t, table, "/", "без новых D1 не показывается дробью")
+}
+
+func TestFixtures_GeneratorPerfMode(t *testing.T) {
+	bin := buildGen(t)
+	cfg := testutil.DefaultPerfConfig()
+	cfg.DAU, cfg.Days = 200, 3
+
+	t.Run("stats печатает сводку объёма и не пишет файл", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "p.ndjson")
+		stdout, stderr, code := runGen(t, bin, "-mode", "perf", "-dau", "200", "-days", "3", "-stats", "-out", out)
+		require.Zero(t, code, stderr)
+		stats, err := testutil.GeneratePerf(cfg, func([]chstore.EventRow) error { return nil })
+		require.NoError(t, err)
+		require.Equal(t, testutil.PerfStatsTable(cfg, stats), stdout)
+		require.NoFileExists(t, out)
+	})
+
+	t.Run("NDJSON в файл совпадает с WritePerf", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "perf", "p.ndjson")
+		_, stderr, code := runGen(t, bin, "-mode", "perf", "-dau", "200", "-days", "3", "-out", out)
+		require.Zero(t, code, stderr)
+		got, err := os.ReadFile(out)
+		require.NoError(t, err)
+		var want bytes.Buffer
+		_, err = testutil.WritePerf(&want, cfg)
+		require.NoError(t, err)
+		require.True(t, bytes.Equal(want.Bytes(), got), "CLI расходится с WritePerf")
+	})
+
+	t.Run("-out - пишет в stdout, seed меняет данные", func(t *testing.T) {
+		stdout, stderr, code := runGen(t, bin, "-mode", "perf", "-dau", "200", "-days", "1", "-seed", "7", "-out", "-")
+		require.Zero(t, code, stderr)
+		rows, err := testutil.ParseNDJSON(strings.NewReader(stdout), "stdout")
+		require.NoError(t, err)
+		require.NotEmpty(t, rows)
+
+		seven := cfg
+		seven.Days, seven.Seed = 1, 7
+		var want bytes.Buffer
+		_, err = testutil.WritePerf(&want, seven)
+		require.NoError(t, err)
+		require.Equal(t, want.String(), stdout)
+	})
 }

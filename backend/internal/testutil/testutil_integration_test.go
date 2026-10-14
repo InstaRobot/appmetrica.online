@@ -106,3 +106,25 @@ func TestHarness_NewPostgresDB(t *testing.T) {
 		require.Equal(t, want, n, dsn)
 	}
 }
+
+// LoadPerf вставляет весь объём генератора: события, установки и связки identity (через MV) совпадают со
+// статистикой генератора.
+func TestHarness_LoadPerf(t *testing.T) {
+	ctx := t.Context()
+	env := testutil.Start(t)
+	cfg := testutil.DefaultPerfConfig()
+	cfg.DAU, cfg.Days = 300, 10
+
+	stats := env.LoadPerf(t, cfg)
+	require.Positive(t, stats.Events)
+
+	var events, installs, links, users uint64
+	require.NoError(t, env.CH.Conn().QueryRow(ctx, "SELECT count() FROM events").Scan(&events))
+	require.NoError(t, env.CH.Conn().QueryRow(ctx, "SELECT uniqExact(install_id) FROM events").Scan(&installs))
+	require.NoError(t, env.CH.Conn().QueryRow(ctx, "SELECT uniqExact(app_id, install_id) FROM identity_links").Scan(&links))
+	require.NoError(t, env.CH.Conn().QueryRow(ctx, "SELECT uniqExact(user_id) FROM user_first_seen").Scan(&users))
+	require.Equal(t, uint64(stats.Events), events)
+	require.Equal(t, uint64(stats.Installs), installs)
+	require.Equal(t, uint64(stats.Links), links)
+	require.Equal(t, uint64(stats.Users), users)
+}
