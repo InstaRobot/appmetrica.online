@@ -5,25 +5,18 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FieldError, Required } from "@/components/common/form-field";
-import { PLATFORM_LABELS } from "@/components/common/platform-icon";
+import { PlatformToggleGroup } from "@/components/common/platform-toggle-group";
 import { TimezoneSelect } from "@/components/common/timezone-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createApp } from "@/lib/api/gen/endpoints/admin-apps/admin-apps";
 import { useGetSettings } from "@/lib/api/gen/endpoints/admin-settings/admin-settings";
 import { getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
-import { type CreateAppBody as CreateAppRequest, Platform } from "@/lib/api/gen/model";
+import type { CreateAppBody as CreateAppRequest } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
@@ -33,18 +26,12 @@ const schema = () => import("@/lib/forms/schemas").then((m) => m.createAppSchema
 
 const messages = {
   name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },
-  platforms: "Выберите платформу",
+  platforms: "Выберите хотя бы одну платформу",
   timezone: "Выберите часовой пояс",
 };
 
-// Порядок и подписи опций S-04; «server» здесь «Сервер», как в спецификации экрана.
-const PLATFORM_OPTIONS = Object.values(Platform).map((value) => ({
-  value,
-  label: value === Platform.server ? "Сервер" : PLATFORM_LABELS[value],
-}));
-
-// S-04: создание приложения (FR-009). После 201 — экран интеграции с write-ключами и сниппетами.
-// Пока платформа выбирается одна: мультивыбор — T-MP-011.
+// S-04: создание приложения (FR-009) с одной или несколькими платформами (04-ux-diff.md §5.1).
+// Сервер создаёт ключ записи на каждую платформу; после 201 — экран интеграции со сниппетами.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -69,7 +56,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
   });
 
   const name = form.field("name");
-  const platform = form.field("platforms");
+  const platforms = form.field("platforms");
   const timezone = form.field("timezone");
 
   return (
@@ -92,37 +79,23 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={platform.id}>
-              Платформа <Required />
+            <Label id="platforms-label">
+              Платформы <Required />
             </Label>
-            <Select
-              value={form.values.platforms[0] ?? ""}
-              onValueChange={(value) => form.setValue("platforms", [value as Platform])}
-              onOpenChange={(open) => {
-                if (!open) form.blur("platforms");
-              }}
-            >
-              <SelectTrigger
-                {...platform}
-                aria-required="true"
-                aria-describedby={platform["aria-describedby"] ?? "platform-hint"}
-                className="w-full"
-              >
-                <SelectValue placeholder="Выберите платформу" />
-              </SelectTrigger>
-              <SelectContent>
-                {PLATFORM_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <PlatformToggleGroup
+              ref={platforms.ref}
+              aria-labelledby="platforms-label"
+              aria-describedby={platforms["aria-describedby"] ?? "platforms-hint"}
+              disabled={form.submitting}
+              value={form.values.platforms}
+              onValueChange={(value) => form.setValue("platforms", value)}
+            />
             {form.errors.platforms ? (
               <FieldError id={form.errorId("platforms")} message={form.errors.platforms} />
             ) : (
-              <p id="platform-hint" className="text-caption text-fg-muted">
-                Используется по умолчанию, если в событии не передан context.platform.
+              <p id="platforms-hint" className="text-caption text-fg-muted">
+                На каждую платформу создадим ключ записи. Платформы можно добавить позже в
+                настройках.
               </p>
             )}
           </div>
