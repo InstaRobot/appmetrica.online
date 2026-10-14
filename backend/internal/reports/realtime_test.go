@@ -187,6 +187,33 @@ func TestRealtime_EnvironmentFilter(t *testing.T) {
 	require.Equal(t, []uuid.UUID{prod[0].InsertID}, feedIDs(got))
 }
 
+// Переключатель платформ (FR-5 multi-platform): фильтр platform сужает active_now, поминутные старты и ленту;
+// пустой фильтр — все платформы.
+func TestRealtime_PlatformFilter(t *testing.T) {
+	android := func(r *chstore.EventRow) { r.Platform = "android" }
+	ios := concat(visit(t, 1, "", ago(5*time.Minute), 0), visit(t, 2, "", ago(9*time.Minute), 0))
+	droid := with(concat(visit(t, 3, "", ago(6*time.Minute), 0), visit(t, 4, "", ago(8*time.Minute), time.Minute)), android)
+	env := startWith(t, concat(ios, droid))
+
+	p := realtimeParams(t, EnvProduction)
+	p.Filters.Platform = []string{"android"}
+	got := realtimeAt(t, env, realtimeNow, p)
+	require.Equal(t, uint64(1), got.ActiveNow, "установка 4 завершила сессию")
+	require.Equal(t, uint64(2), sessionsStarted(got))
+	require.ElementsMatch(t, []uuid.UUID{droid[0].InsertID, droid[1].InsertID, droid[2].InsertID}, feedIDs(got))
+
+	p.Filters.Platform = []string{"web"}
+	got = realtimeAt(t, env, realtimeNow, p)
+	require.Zero(t, got.ActiveNow)
+	require.Zero(t, sessionsStarted(got))
+	require.Empty(t, got.RecentEvents)
+
+	got = realtimeAt(t, env, realtimeNow, realtimeParams(t, EnvProduction))
+	require.Equal(t, uint64(3), got.ActiveNow)
+	require.Equal(t, uint64(4), sessionsStarted(got))
+	require.Len(t, got.RecentEvents, 5)
+}
+
 // AC-031.3 (AC-5.4.3): событие, записанное дважды до слияния частей (ретрай с более поздним received_at), в ленте
 // одной строкой — копией последнего приёма, как после слияния ReplacingMergeTree(received_at).
 func TestRealtime_FeedDeduplicated(t *testing.T) {

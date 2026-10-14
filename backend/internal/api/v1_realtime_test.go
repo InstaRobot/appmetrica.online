@@ -109,6 +109,26 @@ func TestGetRealtime_HTTP(t *testing.T) {
 		require.Equal(t, rows[2].InsertID, got.RecentEvents[0].InsertId)
 	})
 
+	t.Run("platform", func(t *testing.T) {
+		p := reports.Params{AppID: msk.ID, Location: loadLocation(t, msk), Env: reports.EnvProduction}
+		p.Filters.Platform = []string{"android"}
+		want, err := e.reports.Realtime(ctx, p)
+		require.NoError(t, err)
+		got, _ := realtime(t, msk, "platform=android")
+		requireSame(t, want, got)
+		require.Zero(t, got.ActiveNow, "все события — ios")
+		require.Empty(t, got.RecentEvents)
+
+		got, _ = realtime(t, msk, "platform=ios&platform=android")
+		require.Equal(t, int64(2), got.ActiveNow)
+	})
+
+	t.Run("invalid_platform", func(t *testing.T) {
+		body := errorBody(t, e.get(t, realtimePath(msk, "platform=symbian"), e.all), http.StatusBadRequest)
+		require.Equal(t, "invalid_request", body.Code)
+		require.Equal(t, "platform", body.Details["field"])
+	})
+
 	t.Run("archived_and_restricted", func(t *testing.T) {
 		require.Equal(t, http.StatusOK, e.get(t, realtimePath(tyo, ""), e.all).Code)
 		require.Equal(t, http.StatusOK, e.get(t, realtimePath(nyc, ""), e.restricted).Code)
