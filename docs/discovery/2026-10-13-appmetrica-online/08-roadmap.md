@@ -1,6 +1,6 @@
 # Дорожная карта: appmetrica.online
 
-**Версия**: 1.0 | **Дата**: 2026-10-13
+**Версия**: 1.1 | **Дата**: 2026-10-14
 
 > Поэтапный план реализации внутренней системы аналитики приложений appmetrica.online:
 > эпики E0–E9 из канонического якоря, оценки, зависимости, критический путь и вехи.
@@ -110,7 +110,7 @@ gantt
 1. Корень: `AGENTS.md` (симлинк `CLAUDE.md`), `Makefile` с целями `dev`, `test`, `gen`, `lint`, `migrate`, а также `lefthook.yml`, `.editorconfig`, `.gitignore`. (0.5d)
 2. `backend/`: модуль `appmetrica.online/backend` на Go 1.27.2, `cmd/appmetrica/main.go` с подкомандами `ingest|api|worker|migrate|admin|healthcheck`, пакеты `internal/config`, `internal/clock`, `internal/httpx`. (1d)
 3. `contracts/openapi/ingest.yaml` и `contracts/openapi/api.yaml` (OAS 3.0.3) по [06-api-contracts.md](./06-api-contracts.md). Кодоген: oapi-codegen v2.8.0 (strict-server, std-http-server) в `internal/gen/*` и orval 8.42.0 в `web/src/lib/api`. (1d)
-4. Миграции goose v3.29.0: `migrations/postgres/00001_init.sql` (13 таблиц) и `migrations/clickhouse/00001_init.sql` (6 таблиц + 3 MV) по [05-data-model.md](./05-data-model.md); sqlc v1.31.1 для `queries/postgres`. (1d)
+4. Миграции goose v3.29.0: `migrations/postgres/00001_init.sql` (13 таблиц) и `migrations/clickhouse/00001_init.sql` (events), `00002_aggregates.sql` (install_first_seen, user_first_seen, identity_links + 3 MV), `00003_service_tables.sql` (rejected_events, daily_stats) по [05-data-model.md](./05-data-model.md); sqlc v1.31.1 для `queries/postgres`. (1d)
 5. Тестовый харнесс: testcontainers-go v0.44.0 (модули clickhouse и postgres), загрузчик фикстур `testdata/fixtures/*.ndjson` и сравнение с `*.golden.json`. (0.5d)
 6. `web/`: Next.js 16.4.0, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, `npx shadcn@4.21.4 init -b radix`, Biome 2.5.15, Vitest 5.0.4, Playwright 1.64.0. (1d)
 7. `.github/workflows/ci.yml`: Go (golangci-lint v2.14.0, `go test -race`, coverage gate), web (biome, `tsc --noEmit`, vitest, playwright smoke), проверка, что сгенерированный код совпадает с контрактом. (0.5d)
@@ -483,3 +483,4 @@ Total: **~49 агент-дней + ~91 час владельца + 6 недел�
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial roadmap: эпики E0–E9, вехи M1–M6, ранний прод-срез E9a, сверка до 2026-12-11 |
+| 2026-10-14 | 1.1 | E0 п. 4: миграции ClickHouse — три файла 00001–00003, как в 05-data-model и коде |

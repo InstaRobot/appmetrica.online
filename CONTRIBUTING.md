@@ -30,6 +30,7 @@ appmetrica.online — внутренняя система аналитики п�
 - `backend/` — Go-модуль `appmetrica.online/backend`, один бинарник `appmetrica` (подкоманды `ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck`).
 - `web/` — Next.js 16.4 (App Router), дашборд и документация (Fumadocs).
 - `deploy/` — compose-стек ClickHouse + clickhouse-backup для Dokploy и конфиги ClickHouse.
+- `scripts/` — shell-скрипты CI и деплоя (с тестами `scripts/test-*.sh`) и отдельный Go-модуль `scripts/reconcile` (сверка с AppMetrica, процедура — `docs/reconciliation/README.md`).
 - Сгенерированный код: `backend/internal/gen/**`, `backend/internal/pgstore/sqlc/**`, `web/src/lib/api/gen/**`. Руками не редактируется, перегенерируется `make gen` и коммитится.
 
 ## 3. Обязательный процесс работы (TDD)
@@ -57,7 +58,9 @@ cd web && pnpm biome check . && pnpm typecheck && pnpm test && cd ..
 cd backend && go test -race -count=1 -tags=integration ./... && cd ..
 ```
 
-Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e` (поднимает инфраструктуру и сервисы, см. `12-dev-runbook.md`).
+Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e`. Цель собирает web и запускает Playwright, а сервисы должны быть уже запущены: `make dev-infra migrate-up`, затем `make run-ingest`, `make run-api-e2e` (`APP_ENV=e2e`, сбрасывает владельца и passkey в базе!) и `make run-worker` (см. `12-dev-runbook.md`).
+
+Если тикет добавляет клиентский код или зависимость в web — дополнительно бюджет initial JS: `cd web && pnpm build && pnpm check:bundle` (≤ 250 KB gzip на страницу дашборда).
 
 ## 5. Жёсткие запреты
 
@@ -93,3 +96,18 @@ TypeScript:
 
 1. `10-open-questions.md` — возможно, вопрос уже записан и у него есть дефолт.
 2. Если решения нет — не выдумывай: выбери вариант, который не ломает контракты и схему, запиши его в описание PR в раздел «Допущения» и добавь строку в `10-open-questions.md`.
+
+## 8. Закономерности, найденные при реализации MVP
+
+- **Node 24.21.0 обязателен** (`engines` в `web/package.json`). Под Node 22 `pnpm typecheck` падает с `MODULE_NOT_FOUND …/.source/source.config.mjs` — это не поломка Fumadocs, а версия Node.
+- **`make test` экспортирует `.env`**, поэтому web-тесты видят локальные `NEXT_PUBLIC_*`. `web/src/test/setup.ts` обнуляет `NEXT_PUBLIC_API_URL` и `NEXT_PUBLIC_INGEST_URL` перед каждым тестом. Не читай эти переменные на уровне модуля: только внутри функций.
+- **Бюджет initial JS почти исчерпан** (страницы дашборда держатся около 220–250 KB gzip). Recharts, Radix Popover, cmdk, react-day-picker, sonner и zod подключаются только через ленивые обёртки (`components/common/lazy-*.tsx`, `components/reports/lazy-charts.tsx`, динамический импорт `lib/forms/schemas.ts`). Новая клиентская зависимость в любом маршруте может сдвинуть чужую страницу за бюджет: Turbopack считает экспорты общих модулей по всему клиентскому графу. Не включай `experimental.turbopackModuleFragments`: он добавляет 25–40 KB.
+- **Web-переменные на этапе сборки**: `API_INTERNAL_URL` нужен и при `pnpm build`, и при `next start`; `NEXT_PUBLIC_INGEST_URL` вшивается при сборке (сниппеты S-10). Порты E2E-стенда переопределяются через `E2E_PORT`, `E2E_API_URL`, `E2E_INGEST_URL`.
+- **Lighthouse CI** (`pnpm lhci autorun`) запускается с системным Chrome через `CHROME_PATH`: Chrome for Testing из кэша Playwright даёт `NO_FCP`.
+- **Новый пакет `backend/internal/*`** требует правила в `internal/archtest/rules.go` и строки в таблице `07-project-structure.md §5`, иначе `go test ./...` падает.
+- **Новая публичная операция Read API** требует запроса `# @name <operationId>` в `contracts/http/requests.http` (проверяет `internal/api/spec_test.go`).
+- **Сниппеты MDX проверяются тестами**: код в `web/content/docs/**` извлекает `internal/docscheck` (Go — `go vet`, curl — запрос в ingest под тегом `integration`). Правишь рецепт — гоняй `go test ./internal/docscheck/...` с тегом и без.
+- **Golden-файлы** обновляются флагом `-update` только локально и коммитятся вместе с причиной изменения. `testdata/fixtures/scenario.ndjson` руками не правится, его генерирует `go run ./testdata/gen -seed 42`.
+- **Интеграционные тесты пакета** делят контейнеры через `main_integration_test.go` (TestMain). `golangci-lint` линтует их и без флага: `build-tags: [integration]` задан в `backend/.golangci.yml`.
+- **Задачи worker с побочными эффектами** (close_day, system_check) берут advisory lock Postgres (`pgstore`): второй экземпляр worker пропускает цикл, а не дублирует алерты и закрытие дня.
+- **Допущения** по ходу тикета записываются в `10-open-questions.md` следующим `OQ-NNN`, а при расхождении с discovery-доком правится сам документ (строка в его Changelog).

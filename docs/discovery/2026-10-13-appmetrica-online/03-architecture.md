@@ -1,6 +1,6 @@
 # Архитектура: appmetrica.online
 
-**Версия**: 1.0 | **Дата**: 2026-10-13
+**Версия**: 1.1 | **Дата**: 2026-10-14
 
 > Архитектурный документ в стиле **C4 model** (Context → Container → Component →
 > Code). Фокус на границах ответственности, потоках данных и ключевых решениях
@@ -202,11 +202,11 @@ backend/
     ├── config/      — загрузка и валидация env (полный список в 12-dev-runbook), типизированный Config на каждую роль
     ├── httpx/       — middleware: request_id, recover, slog-логирование без IP, gzip-декомпрессия, лимит тела, CORS ingest, CSRF-заголовок admin, ошибки в конверте Error
     ├── clock/       — интерфейс Clock (Now) для детерминированных тестов коррекции времени и закрытия дня
-    ├── ingest/      — Handler POST /v1/events, Validator, TimeCorrector, PIIGuard, ContextMerger, Enricher (geo), Writer (батч в CH), RejectionSink
+    ├── ingest/      — Handler POST /v1/events, Validator, TimeCorrector, PIIGuard, ContextMerger, Enricher (geo), Writer (батч в CH), RejectionSink, KeyCache write-ключей (keycache.go, перезагрузка каждые 15 с)
     ├── geo/         — открытие mmdb (geoip2-golang), Lookup(netip.Addr) → {country, region, city}
     ├── ratelimit/   — AppLimiter (events/s), InstallLimiter (events/min) с TTL-эвикцией
     ├── auth/        — WebAuthn-церемонии (go-webauthn), setup-токены, сессии (cookie am_session), API-ключи sk_ (HMAC с pepper), middleware Authenticator
-    ├── apps/        — сервис приложений и write-ключей, KeyCache для ingest (перезагрузка каждые 15 с)
+    ├── apps/        — сервис приложений, write-ключей pk_ и API-ключей sk_ (кэш ключей ingest — в ingest/, правила импорта 07 §5)
     ├── identity/    — person_key: парсинг/форматирование `u:` / `i:`, SQL-фрагменты links CTE и first_seen
     ├── reports/     — Portfolio, AudienceSummary, AudienceTimeseries, RollingActive, Breakdown, Retention, Realtime, ProfileSearch, Profile, IntegrationHealth — каждый: билдер SQL + маппинг в тип API
     ├── deletion/    — Executor: разрешение install_id для user, DELETE / ALTER DELETE с mutations_sync=2, учёт строк
@@ -816,3 +816,4 @@ Docker обходит UFW, поэтому фильтрация выполняе�
 | Date | Version | Changes |
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial architecture после discovery: C4 L1/L2/L3, 8 потоков, ADR-001…ADR-014, топология Hetzner AX102-1 + Dokploy |
+| 2026-10-14 | 1.1 | §L3 backend: KeyCache перенесён из `apps/` в `ingest/keycache.go` — как в коде и по правилам импорта 07-project-structure §5 |
