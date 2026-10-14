@@ -130,7 +130,7 @@ web/src/components/               # имена и props — источник и�
 ├── profiles/
 │   └── profile-search.tsx  profile-card.tsx  installs-table.tsx  sessions-table.tsx  deletion-status-badge.tsx  # S-08, S-09
 ├── integration/
-│   └── snippet-tabs.tsx  waiting-for-first-event.tsx  hourly-ingest-chart.tsx  rejection-reasons-table.tsx  versions-health-table.tsx  # S-10
+│   └── integration-panel.tsx  integration-onboarding.tsx  snippet-tabs.tsx  waiting-for-first-event.tsx  hourly-ingest-chart.tsx  rejection-reasons-table.tsx  versions-health-table.tsx  rejection-rate-warning.tsx  # S-10
 ├── apps/
 │   └── app-settings-form.tsx  write-keys-table.tsx                          # S-04, S-11
 ├── settings/
@@ -270,8 +270,7 @@ backend/
 web/src/hooks/
 ├── use-app-params.ts             # appId из useParams + валидация UUID
 ├── use-report-filters.ts         # nuqs: from, to, granularity, compare, environment, unit, фильтры (из lib/search-params)
-├── use-prefers-reduced-motion.ts # prefers-reduced-motion: без подсветки новых строк EventFeed (опрос S-07 — в components/reports/realtime-panel.tsx)
-├── use-first-event-waiter.ts     # S-10: опрос integration/health раз в 3 с до появления first_event_at
+├── use-prefers-reduced-motion.ts # prefers-reduced-motion: без подсветки новых строк EventFeed (опрос S-07 — в components/reports/realtime-panel.tsx, S-10 — в components/integration/integration-panel.tsx)
 ├── use-filter-options.ts         # значения FilterBar (getAudienceBreakdown по 4 измерениям) после открытия списка
 └── use-passkey.ts                # обёртки begin/finish login/setup/register над сгенерированными мутациями
 

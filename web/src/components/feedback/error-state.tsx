@@ -3,9 +3,9 @@
 import { CircleAlert, Copy, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { copyText } from "@/lib/clipboard";
 import { toUiError } from "@/lib/errors";
 
 type ApiErrorLike = { code: string; message: string; request_id?: string; status?: number };
@@ -17,14 +17,15 @@ type ErrorStateProps = {
 };
 
 function RequestId({ id }: { id: string }) {
-  const copy = async () => {
-    await navigator.clipboard.writeText(id);
-    toast.success("Скопировано", { duration: 1500 });
-  };
   return (
     <p className="flex items-center gap-1 text-caption text-fg-muted">
       <span>Код запроса: {id}</span>
-      <Button variant="ghost" size="icon-xs" aria-label="Копировать код запроса" onClick={copy}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Копировать код запроса"
+        onClick={() => void copyText(id)}
+      >
         <Copy aria-hidden="true" />
       </Button>
     </p>

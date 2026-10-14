@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { IntegrationSkeleton } from "./integration-skeleton";
 import { KpiSkeleton } from "./kpi-skeleton";
 import { RealtimeSkeleton } from "./realtime-skeleton";
 import { RetentionSkeleton } from "./retention-skeleton";
@@ -33,5 +34,12 @@ describe("skeletons", () => {
     expect(screen.getByRole("status", { name: "Загрузка…" })).toBeInTheDocument();
     expect(container.querySelector("[data-skeleton-counter]")).toHaveClass("h-14");
     expect(container.querySelectorAll("[data-skeleton-row]")).toHaveLength(8);
+  });
+
+  it("renders the integration key card and snippet placeholder", () => {
+    const { container } = render(<IntegrationSkeleton />);
+
+    expect(screen.getByRole("status", { name: "Загрузка…" })).toBeInTheDocument();
+    expect(container.querySelector("[data-skeleton-code]")).toHaveClass("h-80");
   });
 });

@@ -10,7 +10,7 @@ import { IntegrationPanel } from "./integration-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000011";
 const KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 function health(overrides: Partial<IntegrationHealth> = {}): IntegrationHealth {
   return {
@@ -83,14 +83,14 @@ describe("IntegrationPanel", () => {
     mockApi(() => health());
     renderWithClient(<IntegrationPanel appId={APP_ID} />);
 
-    expect(await screen.findByRole("group", { name: "Принято за 24 ч" })).toHaveTextContent(
-      `412${NBSP}905`,
-    );
-    expect(screen.getByRole("group", { name: "Отклонено за 24 ч" })).toHaveTextContent(
+    // toHaveTextContent сводит U+00A0 к пробелу, поэтому числа сверяются по textContent.
+    const accepted = await screen.findByRole("group", { name: "Принято за 24 ч" });
+    expect(accepted.textContent).toContain(`412${NBSP}905`);
+    expect(screen.getByRole("group", { name: "Отклонено за 24 ч" }).textContent).toContain(
       `1${NBSP}204`,
     );
     const rate = screen.getByRole("group", { name: "Доля отказов" });
-    expect(rate).toHaveTextContent(`0,29${NBSP}%`);
+    expect(rate.textContent).toContain(`0,29${NBSP}%`);
     expect(within(rate).queryByRole("img")).not.toBeInTheDocument();
 
     expect(screen.getByRole("img", { name: /^События по часам/ })).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("IntegrationPanel", () => {
     renderWithClient(<IntegrationPanel appId={APP_ID} />);
 
     const rate = await screen.findByRole("group", { name: "Доля отказов" });
-    expect(rate).toHaveTextContent(`1${NBSP}%`);
+    expect(rate.textContent).toContain(`1${NBSP}%`);
     expect(within(rate).getByRole("img", { name: "Доля отказов 1 % и выше" })).toBeInTheDocument();
     expect(screen.getByText("Отказов за 24 часа нет ✓")).toBeInTheDocument();
   });

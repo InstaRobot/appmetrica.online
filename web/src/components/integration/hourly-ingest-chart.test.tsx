@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { IntegrationHour } from "@/lib/api/gen/model";
 import { HourlyIngestChart } from "./hourly-ingest-chart";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 const hours = (n: number): IntegrationHour[] =>
   Array.from({ length: n }, (_, i) => ({

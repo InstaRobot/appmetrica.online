@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { VersionsHealthTable } from "./versions-health-table";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 describe("VersionsHealthTable", () => {
   it("shows rejection rate per version and warns at 1 %", () => {
@@ -46,7 +46,7 @@ describe("VersionsHealthTable", () => {
     expect(within(rows[1] as HTMLElement).queryByRole("img")).not.toBeInTheDocument();
 
     const bad = within(rows[2] as HTMLElement).getAllByRole("cell");
-    expect(bad[3]).toHaveTextContent(`1,2${NBSP}%`);
+    expect(bad[3]?.textContent).toBe(`1,2${NBSP}%`);
     expect(
       within(bad[3] as HTMLElement).getByRole("img", { name: "Доля отказов 1 % и выше" }),
     ).toBeInTheDocument();

@@ -24,6 +24,17 @@ export function formatPercent(value: number | null | undefined): string {
   return isNumber(value) ? normalizeSpaces(percentFormat.format(value)) : DASH;
 }
 
+const rateFormat = new Intl.NumberFormat("ru-RU", {
+  style: "percent",
+  maximumSignificantDigits: 2,
+});
+
+// Доля отказов rejected / (accepted + rejected) с двумя значащими цифрами: «0,29 %», «0,004 %», «1,2 %».
+export function formatRejectionRate(rejected: number, accepted: number): string {
+  const total = accepted + rejected;
+  return total > 0 ? normalizeSpaces(rateFormat.format(rejected / total)) : DASH;
+}
+
 // Длительность в миллисекундах → две старшие единицы: «45 с», «4 мин 12 с», «1 ч 2 мин».
 export function formatDuration(ms: number | null | undefined): string {
   if (!isNumber(ms) || ms < 0) return DASH;

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { IntegrationReason } from "@/lib/api/gen/model";
 import { RejectionReasonsTable } from "./rejection-reasons-table";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 function reason(overrides: Partial<IntegrationReason> = {}): IntegrationReason {
   return {
@@ -53,7 +53,7 @@ describe("RejectionReasonsTable", () => {
 
     const unknown = within(rows[3] as HTMLElement).getAllByRole("cell");
     expect(unknown[1]).toHaveTextContent("brand_new_code");
-    expect(unknown[2]).toHaveTextContent(`1${NBSP}204`);
+    expect(unknown[2]?.textContent).toBe(`1${NBSP}204`);
   });
 
   it("shows the example payload in a popover", async () => {

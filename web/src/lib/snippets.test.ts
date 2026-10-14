@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSnippet,
@@ -9,8 +10,9 @@ import {
 } from "./snippets";
 
 // Эталоны — тексты сниппетов из 14-ux-ui-spec.md S-10 (платформа ios, ключ-пример, боевой URL).
+// vitest запускается из web/; import.meta.url в jsdom — не file:, поэтому путь от cwd.
 const SPEC = readFileSync(
-  new URL("../../../docs/discovery/2026-10-13-appmetrica-online/14-ux-ui-spec.md", import.meta.url),
+  resolve(process.cwd(), "../docs/discovery/2026-10-13-appmetrica-online/14-ux-ui-spec.md"),
   "utf8",
 );
 const SPEC_KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
@@ -69,7 +71,7 @@ describe("snippets", () => {
       expect(snippet, lang).toContain(url);
       expect(snippet, lang).not.toContain(SPEC_KEY);
       expect(snippet, lang).not.toContain(SPEC_URL);
-      expect(snippet, lang).not.toMatch(/YOUR_|<WRITE_KEY>|\{\{|pk_x{4}/);
+      expect(snippet, lang).not.toMatch(/YOUR_|<WRITE_KEY>|\{\{\s*\w+\s*\}\}|pk_x{4}/);
     }
 
     const body = curlJson(buildSnippet("curl", { ingestUrl: url, writeKey: key, platform: "ios" }));

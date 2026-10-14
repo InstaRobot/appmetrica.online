@@ -317,6 +317,10 @@ cd web && pnpm e2e:ui                             # интерактивный �
 write-ключом «Seed iOS» (`E2E_WRITE_KEY`, по умолчанию `DEV_WRITE_KEY` из `.env.example`) и ждёт событие в ленте
 S-07: ingest должен писать в те же базы Postgres и ClickHouse, что читает api. Без `make geo-db` ingest можно
 запустить с синтетической базой `GEOIP_DB_PATH=backend/testdata/geo/test-city.mmdb`.
+`app-onboarding.spec.ts` создаёт приложение, копирует curl-сниппет S-10 и выполняет его в bash (нужны `curl` и
+`uuidgen`), поэтому web собирается с `NEXT_PUBLIC_INGEST_URL`, равным `E2E_INGEST_URL` (адрес сниппета вшивается
+при `pnpm build`). Новый write-ключ ingest видит после перезагрузки кэша (`KEY_CACHE_REFRESH`, 15 с): спека
+повторяет сниппет до принятого события.
 
 ### 7.3. Type check
 ```bash

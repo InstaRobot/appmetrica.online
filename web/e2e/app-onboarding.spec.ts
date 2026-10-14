@@ -17,6 +17,13 @@ async function createApp(page: Page, name: string): Promise<void> {
   await expect(page).toHaveURL(/\/apps\/[0-9a-f-]{36}\/integration$/);
 }
 
+async function expectNoA11yViolations(page: Page): Promise<void> {
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(violations).toEqual([]);
+}
+
 // runSnippet выполняет curl-сниппет в bash и возвращает ответ ingest.
 function runSnippet(snippet: string): string {
   return execFileSync("bash", ["-c", snippet], { encoding: "utf8", timeout: 15_000 });
@@ -33,10 +40,7 @@ test("first event turns onboarding green", async ({ page, context }) => {
     `${INGEST_URL}/v1/events`,
   );
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
+  await expectNoA11yViolations(page);
 
   await page.getByRole("tab", { name: "curl" }).click();
   await page.getByRole("button", { name: "Копировать код" }).click();
@@ -66,4 +70,6 @@ test("first event turns onboarding green", async ({ page, context }) => {
   await page.reload();
   await expect(page.getByRole("group", { name: "Принято за 24 ч" })).toContainText("1");
   await expect(page.getByRole("button", { name: "Показать ключ и сниппеты" })).toBeVisible();
+  await expect(page.getByText("Отказов за 24 часа нет ✓")).toBeVisible();
+  await expectNoA11yViolations(page);
 });
