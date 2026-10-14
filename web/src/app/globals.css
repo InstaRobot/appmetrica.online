@@ -277,6 +277,23 @@
   --color-ret-5: var(--ret-5);
 }
 
+/* Статусная палитра для утилит bg-success-500, bg-warning-50 и т.п. Значения — в :root и в тёмной
+   теме выше; reference не выводит переменные повторно (иначе цикл --color-x: var(--color-x)). */
+@theme inline reference {
+  --color-success-50: var(--color-success-50);
+  --color-success-500: var(--color-success-500);
+  --color-success-600: var(--color-success-600);
+  --color-success-700: var(--color-success-700);
+  --color-warning-50: var(--color-warning-50);
+  --color-warning-500: var(--color-warning-500);
+  --color-warning-600: var(--color-warning-600);
+  --color-warning-700: var(--color-warning-700);
+  --color-danger-50: var(--color-danger-50);
+  --color-danger-500: var(--color-danger-500);
+  --color-danger-600: var(--color-danger-600);
+  --color-danger-700: var(--color-danger-700);
+}
+
 @theme {
   --spacing: 4px;
 
