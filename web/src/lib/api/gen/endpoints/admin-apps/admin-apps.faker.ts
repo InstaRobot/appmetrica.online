@@ -11,8 +11,17 @@
  * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
-import type { App, CreateAppResult, DeletionRequest } from "../../model";
+import type {
+  App,
+  AppMerge,
+  AppMergeList,
+  CreateAppResult,
+  DeletionRequest,
+  MergePreview,
+} from "../../model";
 import {
+  AppMergeStatus,
+  AppMergeStep,
   AppStatus,
   DeletionSource,
   DeletionStatus,
@@ -98,5 +107,102 @@ export const getDeleteAppResponseMock = (
     null,
   ]),
   error: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  ...overrideResponse,
+});
+
+export const getGetMergePreviewResponseMock = (
+  overrideResponse: Partial<Extract<MergePreview, object>> = {},
+): MergePreview => ({
+  source: {
+    id: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    platform: faker.helpers.arrayElement(Object.values(Platform)),
+    platforms: faker.helpers.arrayElements(Object.values(Platform)),
+    status: faker.helpers.arrayElement(Object.values(AppStatus)),
+  },
+  events: faker.number.int({ min: 0 }),
+  first_day: faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 10), null]),
+  last_day: faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 10), null]),
+  write_keys: faker.number.int({ min: 0 }),
+  timezone_differs: faker.datatype.boolean(),
+  target_timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source_timezone: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getListAppMergesResponseMock = (
+  overrideResponse: Partial<Extract<AppMergeList, object>> = {},
+): AppMergeList => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    target_app_id: faker.string.uuid(),
+    source_app_id: faker.helpers.arrayElement([faker.string.uuid(), null]),
+    source_name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    source_platforms: faker.helpers.arrayElements(Object.values(Platform)),
+    status: faker.helpers.arrayElement(Object.values(AppMergeStatus)),
+    step: faker.helpers.arrayElement(Object.values(AppMergeStep)),
+    copied_events: faker.number.int({ min: 0 }),
+    total_events: faker.number.int({ min: 0 }),
+    error: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
+    started_at: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + "Z",
+      null,
+    ]),
+    finished_at: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + "Z",
+      null,
+    ]),
+  })),
+  ...overrideResponse,
+});
+
+export const getCreateAppMergeResponseMock = (
+  overrideResponse: Partial<Extract<AppMerge, object>> = {},
+): AppMerge => ({
+  id: faker.string.uuid(),
+  target_app_id: faker.string.uuid(),
+  source_app_id: faker.helpers.arrayElement([faker.string.uuid(), null]),
+  source_name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source_platforms: faker.helpers.arrayElements(Object.values(Platform)),
+  status: faker.helpers.arrayElement(Object.values(AppMergeStatus)),
+  step: faker.helpers.arrayElement(Object.values(AppMergeStep)),
+  copied_events: faker.number.int({ min: 0 }),
+  total_events: faker.number.int({ min: 0 }),
+  error: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
+  started_at: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + "Z",
+    null,
+  ]),
+  finished_at: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + "Z",
+    null,
+  ]),
+  ...overrideResponse,
+});
+
+export const getRetryAppMergeResponseMock = (
+  overrideResponse: Partial<Extract<AppMerge, object>> = {},
+): AppMerge => ({
+  id: faker.string.uuid(),
+  target_app_id: faker.string.uuid(),
+  source_app_id: faker.helpers.arrayElement([faker.string.uuid(), null]),
+  source_name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source_platforms: faker.helpers.arrayElements(Object.values(Platform)),
+  status: faker.helpers.arrayElement(Object.values(AppMergeStatus)),
+  step: faker.helpers.arrayElement(Object.values(AppMergeStep)),
+  copied_events: faker.number.int({ min: 0 }),
+  total_events: faker.number.int({ min: 0 }),
+  error: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  created_at: faker.date.past().toISOString().slice(0, 19) + "Z",
+  started_at: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + "Z",
+    null,
+  ]),
+  finished_at: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + "Z",
+    null,
+  ]),
   ...overrideResponse,
 });

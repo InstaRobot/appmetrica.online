@@ -18,6 +18,7 @@ import (
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/deletion"
 	"appmetrica.online/backend/internal/httpx"
+	"appmetrica.online/backend/internal/merge"
 	"appmetrica.online/backend/internal/pgstore"
 	"appmetrica.online/backend/internal/reports"
 	"appmetrica.online/backend/internal/telegram"
@@ -74,6 +75,7 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	srv := api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).
 		WithReports(reports.NewService(ch.Conn(), c), pg.Queries()).
 		WithDeletion(deletion.NewService(pg, c, logger)).
+		WithMerges(merge.NewService(pg, ch.Conn(), c, logger)).
 		WithSettings(pg.Queries(), telegramSender(cfg.TelegramBotToken), c).
 		WithSystemStatus(api.SystemSources{
 			ClickHouse: ch,

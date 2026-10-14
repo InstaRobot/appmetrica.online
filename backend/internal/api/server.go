@@ -18,6 +18,7 @@ import (
 	"appmetrica.online/backend/internal/deletion"
 	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/httpx"
+	"appmetrica.online/backend/internal/merge"
 	"appmetrica.online/backend/internal/reports"
 )
 
@@ -34,6 +35,7 @@ type Server struct {
 	apps          *apps.Service
 	reports       *reports.Service  // nil — отчёты не подключены (WithReports)
 	deletion      *deletion.Service // nil — запросы на удаление не подключены (WithDeletion)
+	merges        *merge.Service    // nil — слияние приложений не подключено (WithMerges)
 	settings      SettingsReader
 	settingsStore SettingsStore  // nil — настройки не подключены (WithSettings)
 	telegram      TelegramSender // nil — TELEGRAM_BOT_TOKEN не задан
@@ -174,6 +176,12 @@ func (s *Server) Register(mux *http.ServeMux) {
 	owner("GET /admin/v1/apps/{app_id}/write-keys", w.ListWriteKeys)
 	owner("POST /admin/v1/apps/{app_id}/write-keys", w.CreateWriteKey)
 	owner("POST /admin/v1/apps/{app_id}/write-keys/{key_id}/revoke", w.RevokeWriteKey)
+	if s.merges != nil {
+		owner("GET /admin/v1/apps/{app_id}/merge-preview", w.GetMergePreview)
+		owner("GET /admin/v1/apps/{app_id}/merges", w.ListAppMerges)
+		owner("POST /admin/v1/apps/{app_id}/merges", w.CreateAppMerge)
+		owner("POST /admin/v1/apps/{app_id}/merges/{merge_id}/retry", w.RetryAppMerge)
+	}
 	owner("GET /admin/v1/api-keys", w.ListApiKeys)
 	owner("POST /admin/v1/api-keys", w.CreateApiKey)
 	owner("POST /admin/v1/api-keys/{key_id}/revoke", w.RevokeApiKey)

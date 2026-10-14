@@ -14,17 +14,32 @@
 import type { RequestHandlerOptions } from "msw";
 import { HttpResponse, http } from "msw";
 
-import type { App, CreateAppResult, DeletionRequest } from "../../model";
+import type {
+  App,
+  AppMerge,
+  AppMergeList,
+  CreateAppResult,
+  DeletionRequest,
+  MergePreview,
+} from "../../model";
 
 import {
+  getCreateAppMergeResponseMock,
   getCreateAppResponseMock,
   getDeleteAppResponseMock,
+  getGetMergePreviewResponseMock,
+  getListAppMergesResponseMock,
+  getRetryAppMergeResponseMock,
   getUpdateAppResponseMock,
 } from "./admin-apps.faker";
 
 export {
+  getCreateAppMergeResponseMock,
   getCreateAppResponseMock,
   getDeleteAppResponseMock,
+  getGetMergePreviewResponseMock,
+  getListAppMergesResponseMock,
+  getRetryAppMergeResponseMock,
   getUpdateAppResponseMock,
 } from "./admin-apps.faker";
 
@@ -135,10 +150,106 @@ export const getUnarchiveAppMockHandler = (
     options,
   );
 };
+
+export const getGetMergePreviewMockHandler = (
+  overrideResponse?:
+    | MergePreview
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<MergePreview> | MergePreview),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    "*/admin/v1/apps/:appId/merge-preview",
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === "function"
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetMergePreviewResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getListAppMergesMockHandler = (
+  overrideResponse?:
+    | AppMergeList
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<AppMergeList> | AppMergeList),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    "*/admin/v1/apps/:appId/merges",
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === "function"
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getListAppMergesResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getCreateAppMergeMockHandler = (
+  overrideResponse?:
+    | AppMerge
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<AppMerge> | AppMerge),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    "*/admin/v1/apps/:appId/merges",
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === "function"
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getCreateAppMergeResponseMock(),
+        { status: 202 },
+      );
+    },
+    options,
+  );
+};
+
+export const getRetryAppMergeMockHandler = (
+  overrideResponse?:
+    | AppMerge
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<AppMerge> | AppMerge),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    "*/admin/v1/apps/:appId/merges/:mergeId/retry",
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === "function"
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getRetryAppMergeResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
 export const getAdminAppsMock = () => [
   getCreateAppMockHandler(),
   getUpdateAppMockHandler(),
   getDeleteAppMockHandler(),
   getArchiveAppMockHandler(),
   getUnarchiveAppMockHandler(),
+  getGetMergePreviewMockHandler(),
+  getListAppMergesMockHandler(),
+  getCreateAppMergeMockHandler(),
+  getRetryAppMergeMockHandler(),
 ];

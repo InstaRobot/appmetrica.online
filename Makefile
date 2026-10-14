@@ -14,7 +14,7 @@ COMPOSE := docker compose -f $(ROOT)/docker-compose.dev.yml --env-file $(ROOT)/.
 SQLC_IMAGE := sqlc/sqlc:1.31.1
 K6_IMAGE := grafana/k6:2.3.0
 PERF_REPORTS := $(BACKEND)/perf/reports
-COVER_PKGS := ingest reports auth identity deletion
+COVER_PKGS := ingest reports auth identity deletion merge
 COVER_MIN := 80
 
 # Подключаем .env (KEY=value), чтобы go run и pnpm видели переменные.

@@ -21,19 +21,31 @@ import type {
   UndefinedInitialDataOptions,
   UseQueryOptions,
   UseQueryResult,
+  UseSuspenseQueryOptions,
+  UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
+import {
+  queryOptions as queryOptionsBuilder,
+  useQuery,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { apiFetch } from "../../../fetcher";
 import type {
   App,
+  AppMerge,
+  AppMergeList,
   BadRequestResponse,
   ConflictResponse,
   CreateAppBody,
+  CreateAppMergeBody,
   CreateAppResult,
   DeleteAppBody,
   DeletionRequest,
   ForbiddenResponse,
+  GetMergePreviewParams,
+  MergePreview,
   NotFoundResponse,
+  StorageUnavailableResponse,
   UnauthenticatedResponse,
   UpdateAppBody,
 } from "../../model";
@@ -662,6 +674,11 @@ export type archiveAppResponse404 = {
   status: 404;
 };
 
+export type archiveAppResponse409 = {
+  data: ConflictResponse;
+  status: 409;
+};
+
 export type archiveAppResponseSuccess = archiveAppResponse204 & {
   headers: Headers;
 };
@@ -669,6 +686,7 @@ export type archiveAppResponseError = (
   | archiveAppResponse401
   | archiveAppResponse403
   | archiveAppResponse404
+  | archiveAppResponse409
 ) & {
   headers: Headers;
 };
@@ -695,7 +713,7 @@ export const getArchiveAppQueryKey = (appId: string) => {
 
 export const getArchiveAppQueryOptions = <
   TData = Awaited<ReturnType<typeof archiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -721,11 +739,15 @@ export const getArchiveAppQueryOptions = <
 };
 
 export type ArchiveAppQueryResult = NonNullable<Awaited<ReturnType<typeof archiveApp>>>;
-export type ArchiveAppQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse;
+export type ArchiveAppQueryError =
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ConflictResponse;
 
 export function useArchiveApp<
   TData = Awaited<ReturnType<typeof archiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options: {
@@ -744,7 +766,7 @@ export function useArchiveApp<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useArchiveApp<
   TData = Awaited<ReturnType<typeof archiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -763,7 +785,7 @@ export function useArchiveApp<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useArchiveApp<
   TData = Awaited<ReturnType<typeof archiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -775,7 +797,7 @@ export function useArchiveApp<
 
 export function useArchiveApp<
   TData = Awaited<ReturnType<typeof archiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -946,6 +968,992 @@ export function useUnarchiveApp<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getUnarchiveAppQueryOptions(appId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type getMergePreviewResponse200 = {
+  data: MergePreview;
+  status: 200;
+};
+
+export type getMergePreviewResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
+};
+
+export type getMergePreviewResponse401 = {
+  data: UnauthenticatedResponse;
+  status: 401;
+};
+
+export type getMergePreviewResponse404 = {
+  data: NotFoundResponse;
+  status: 404;
+};
+
+export type getMergePreviewResponse503 = {
+  data: StorageUnavailableResponse;
+  status: 503;
+};
+
+export type getMergePreviewResponseSuccess = getMergePreviewResponse200 & {
+  headers: Headers;
+};
+export type getMergePreviewResponseError = (
+  | getMergePreviewResponse400
+  | getMergePreviewResponse401
+  | getMergePreviewResponse404
+  | getMergePreviewResponse503
+) & {
+  headers: Headers;
+};
+
+export type getMergePreviewResponse = getMergePreviewResponseSuccess | getMergePreviewResponseError;
+
+export const getGetMergePreviewUrl = (appId: string, params: GetMergePreviewParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/admin/v1/apps/${appId}/merge-preview?${stringifiedParams}`
+    : `/admin/v1/apps/${appId}/merge-preview`;
+};
+
+/**
+ * @summary Предпросмотр слияния источника в это приложение
+ */
+export const getMergePreview = async (
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<getMergePreviewResponse> => {
+  return apiFetch<getMergePreviewResponse>(getGetMergePreviewUrl(appId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMergePreviewQueryKey = (appId: string, params?: GetMergePreviewParams) => {
+  return [`/admin/v1/apps/${appId}/merge-preview`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMergePreviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMergePreviewQueryKey(appId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMergePreview>>> = ({ signal }) =>
+    getMergePreview(appId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: appId !== null && appId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetMergePreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getMergePreview>>>;
+export type GetMergePreviewQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | NotFoundResponse
+  | StorageUnavailableResponse;
+
+export function useGetMergePreview<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMergePreview>>,
+          TError,
+          Awaited<ReturnType<typeof getMergePreview>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMergePreview<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMergePreview>>,
+          TError,
+          Awaited<ReturnType<typeof getMergePreview>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMergePreview<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Предпросмотр слияния источника в это приложение
+ */
+
+export function useGetMergePreview<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMergePreviewQueryOptions(appId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getGetMergePreviewSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMergePreviewQueryKey(appId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMergePreview>>> = ({ signal }) =>
+    getMergePreview(appId, params, { signal, ...requestOptions });
+
+  return queryOptionsBuilder({
+    queryKey,
+    ...queryOptions,
+    queryFn: queryOptions?.queryFn ?? queryFn,
+  }) as UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  } & {
+    throwOnError?: ((this: never, error: TError) => boolean) & { readonly __inferenceOnly: never };
+  };
+};
+
+export type GetMergePreviewSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMergePreview>>
+>;
+export type GetMergePreviewSuspenseQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | NotFoundResponse
+  | StorageUnavailableResponse;
+
+export function useGetMergePreviewSuspense<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMergePreviewSuspense<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMergePreviewSuspense<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Предпросмотр слияния источника в это приложение
+ */
+
+export function useGetMergePreviewSuspense<
+  TData = Awaited<ReturnType<typeof getMergePreview>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | NotFoundResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  params: GetMergePreviewParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof getMergePreview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMergePreviewSuspenseQueryOptions(appId, params, options);
+
+  const query = useSuspenseQuery(queryOptions, queryClient) as UseSuspenseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type listAppMergesResponse200 = {
+  data: AppMergeList;
+  status: 200;
+};
+
+export type listAppMergesResponse401 = {
+  data: UnauthenticatedResponse;
+  status: 401;
+};
+
+export type listAppMergesResponse404 = {
+  data: NotFoundResponse;
+  status: 404;
+};
+
+export type listAppMergesResponseSuccess = listAppMergesResponse200 & {
+  headers: Headers;
+};
+export type listAppMergesResponseError = (listAppMergesResponse401 | listAppMergesResponse404) & {
+  headers: Headers;
+};
+
+export type listAppMergesResponse = listAppMergesResponseSuccess | listAppMergesResponseError;
+
+export const getListAppMergesUrl = (appId: string) => {
+  return `/admin/v1/apps/${appId}/merges`;
+};
+
+/**
+ * @summary Слияния в это приложение, новые первыми (до 20)
+ */
+export const listAppMerges = async (
+  appId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<listAppMergesResponse> => {
+  return apiFetch<listAppMergesResponse>(getListAppMergesUrl(appId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAppMergesQueryKey = (appId: string) => {
+  return [`/admin/v1/apps/${appId}/merges`] as const;
+};
+
+export const getListAppMergesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAppMergesQueryKey(appId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAppMerges>>> = ({ signal }) =>
+    listAppMerges(appId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: appId !== null && appId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListAppMergesQueryResult = NonNullable<Awaited<ReturnType<typeof listAppMerges>>>;
+export type ListAppMergesQueryError = UnauthenticatedResponse | NotFoundResponse;
+
+export function useListAppMerges<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAppMerges>>,
+          TError,
+          Awaited<ReturnType<typeof listAppMerges>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListAppMerges<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAppMerges>>,
+          TError,
+          Awaited<ReturnType<typeof listAppMerges>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListAppMerges<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Слияния в это приложение, новые первыми (до 20)
+ */
+
+export function useListAppMerges<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListAppMergesQueryOptions(appId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getListAppMergesSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAppMergesQueryKey(appId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAppMerges>>> = ({ signal }) =>
+    listAppMerges(appId, { signal, ...requestOptions });
+
+  return queryOptionsBuilder({
+    queryKey,
+    ...queryOptions,
+    queryFn: queryOptions?.queryFn ?? queryFn,
+  }) as UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  } & {
+    throwOnError?: ((this: never, error: TError) => boolean) & { readonly __inferenceOnly: never };
+  };
+};
+
+export type ListAppMergesSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAppMerges>>
+>;
+export type ListAppMergesSuspenseQueryError = UnauthenticatedResponse | NotFoundResponse;
+
+export function useListAppMergesSuspense<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListAppMergesSuspense<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListAppMergesSuspense<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Слияния в это приложение, новые первыми (до 20)
+ */
+
+export function useListAppMergesSuspense<
+  TData = Awaited<ReturnType<typeof listAppMerges>>,
+  TError = UnauthenticatedResponse | NotFoundResponse,
+>(
+  appId: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listAppMerges>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListAppMergesSuspenseQueryOptions(appId, options);
+
+  const query = useSuspenseQuery(queryOptions, queryClient) as UseSuspenseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type createAppMergeResponse202 = {
+  data: AppMerge;
+  status: 202;
+};
+
+export type createAppMergeResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
+};
+
+export type createAppMergeResponse401 = {
+  data: UnauthenticatedResponse;
+  status: 401;
+};
+
+export type createAppMergeResponse403 = {
+  data: ForbiddenResponse;
+  status: 403;
+};
+
+export type createAppMergeResponse404 = {
+  data: NotFoundResponse;
+  status: 404;
+};
+
+export type createAppMergeResponse409 = {
+  data: ConflictResponse;
+  status: 409;
+};
+
+export type createAppMergeResponseSuccess = createAppMergeResponse202 & {
+  headers: Headers;
+};
+export type createAppMergeResponseError = (
+  | createAppMergeResponse400
+  | createAppMergeResponse401
+  | createAppMergeResponse403
+  | createAppMergeResponse404
+  | createAppMergeResponse409
+) & {
+  headers: Headers;
+};
+
+export type createAppMergeResponse = createAppMergeResponseSuccess | createAppMergeResponseError;
+
+export const getCreateAppMergeUrl = (appId: string) => {
+  return `/admin/v1/apps/${appId}/merges`;
+};
+
+/**
+ * @summary Объединить источник с этим приложением (фоновой задачей worker)
+ */
+export const createAppMerge = async (
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<createAppMergeResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return apiFetch<createAppMergeResponse>(getCreateAppMergeUrl(appId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(createAppMergeBody),
+  });
+};
+
+export const getCreateAppMergeQueryKey = (
+  appId: string,
+  createAppMergeBody?: CreateAppMergeBody,
+) => {
+  return ["POST", `/admin/v1/apps/${appId}/merges`, createAppMergeBody] as const;
+};
+
+export const getCreateAppMergeQueryOptions = <
+  TData = Awaited<ReturnType<typeof createAppMerge>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
+>(
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCreateAppMergeQueryKey(appId, createAppMergeBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof createAppMerge>>> = ({ signal }) =>
+    createAppMerge(appId, createAppMergeBody, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: appId !== null && appId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type CreateAppMergeQueryResult = NonNullable<Awaited<ReturnType<typeof createAppMerge>>>;
+export type CreateAppMergeQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ConflictResponse;
+
+export function useCreateAppMerge<
+  TData = Awaited<ReturnType<typeof createAppMerge>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
+>(
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createAppMerge>>,
+          TError,
+          Awaited<ReturnType<typeof createAppMerge>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCreateAppMerge<
+  TData = Awaited<ReturnType<typeof createAppMerge>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
+>(
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createAppMerge>>,
+          TError,
+          Awaited<ReturnType<typeof createAppMerge>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useCreateAppMerge<
+  TData = Awaited<ReturnType<typeof createAppMerge>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
+>(
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Объединить источник с этим приложением (фоновой задачей worker)
+ */
+
+export function useCreateAppMerge<
+  TData = Awaited<ReturnType<typeof createAppMerge>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
+>(
+  appId: string,
+  createAppMergeBody: CreateAppMergeBody,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof createAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getCreateAppMergeQueryOptions(appId, createAppMergeBody, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type retryAppMergeResponse200 = {
+  data: AppMerge;
+  status: 200;
+};
+
+export type retryAppMergeResponse401 = {
+  data: UnauthenticatedResponse;
+  status: 401;
+};
+
+export type retryAppMergeResponse403 = {
+  data: ForbiddenResponse;
+  status: 403;
+};
+
+export type retryAppMergeResponse404 = {
+  data: NotFoundResponse;
+  status: 404;
+};
+
+export type retryAppMergeResponse409 = {
+  data: ConflictResponse;
+  status: 409;
+};
+
+export type retryAppMergeResponseSuccess = retryAppMergeResponse200 & {
+  headers: Headers;
+};
+export type retryAppMergeResponseError = (
+  | retryAppMergeResponse401
+  | retryAppMergeResponse403
+  | retryAppMergeResponse404
+  | retryAppMergeResponse409
+) & {
+  headers: Headers;
+};
+
+export type retryAppMergeResponse = retryAppMergeResponseSuccess | retryAppMergeResponseError;
+
+export const getRetryAppMergeUrl = (appId: string, mergeId: string) => {
+  return `/admin/v1/apps/${appId}/merges/${mergeId}/retry`;
+};
+
+/**
+ * @summary Повторить упавшее слияние с сохранённого шага
+ */
+export const retryAppMerge = async (
+  appId: string,
+  mergeId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<retryAppMergeResponse> => {
+  return apiFetch<retryAppMergeResponse>(getRetryAppMergeUrl(appId, mergeId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryAppMergeQueryKey = (appId: string, mergeId: string) => {
+  return ["POST", `/admin/v1/apps/${appId}/merges/${mergeId}/retry`] as const;
+};
+
+export const getRetryAppMergeQueryOptions = <
+  TData = Awaited<ReturnType<typeof retryAppMerge>>,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
+>(
+  appId: string,
+  mergeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getRetryAppMergeQueryKey(appId, mergeId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof retryAppMerge>>> = ({ signal }) =>
+    retryAppMerge(appId, mergeId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: appId !== null && appId !== undefined && mergeId !== null && mergeId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type RetryAppMergeQueryResult = NonNullable<Awaited<ReturnType<typeof retryAppMerge>>>;
+export type RetryAppMergeQueryError =
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ConflictResponse;
+
+export function useRetryAppMerge<
+  TData = Awaited<ReturnType<typeof retryAppMerge>>,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
+>(
+  appId: string,
+  mergeId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof retryAppMerge>>,
+          TError,
+          Awaited<ReturnType<typeof retryAppMerge>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useRetryAppMerge<
+  TData = Awaited<ReturnType<typeof retryAppMerge>>,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
+>(
+  appId: string,
+  mergeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof retryAppMerge>>,
+          TError,
+          Awaited<ReturnType<typeof retryAppMerge>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useRetryAppMerge<
+  TData = Awaited<ReturnType<typeof retryAppMerge>>,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
+>(
+  appId: string,
+  mergeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Повторить упавшее слияние с сохранённого шага
+ */
+
+export function useRetryAppMerge<
+  TData = Awaited<ReturnType<typeof retryAppMerge>>,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
+>(
+  appId: string,
+  mergeId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof retryAppMerge>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getRetryAppMergeQueryOptions(appId, mergeId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

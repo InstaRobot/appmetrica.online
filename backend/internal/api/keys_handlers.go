@@ -52,6 +52,8 @@ func (s *Server) CreateWriteKey(ctx context.Context, req gen.CreateWriteKeyReque
 		return gen.CreateWriteKey404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
 	case errors.Is(err, apps.ErrDeletionPending):
 		return gen.CreateWriteKey409JSONResponse{ConflictJSONResponse: deletionPending(ctx)}, nil
+	case errors.Is(err, apps.ErrMergeInProgress):
+		return gen.CreateWriteKey409JSONResponse{ConflictJSONResponse: mergeInProgress(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}

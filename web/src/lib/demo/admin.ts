@@ -8,6 +8,7 @@ import type {
   DeletionRequestList,
   HealthStatus,
   JobRun,
+  MergePreview,
   PasskeyList,
   ReadyStatus,
   Settings,
@@ -16,8 +17,9 @@ import type {
   WriteKeyList,
 } from "@/lib/api/gen/model";
 import { DEMO_APP_IDS, DEMO_APPS, DEMO_OWNER_TIMEZONE } from "./apps";
+import { type DemoApp, dayStats, makeScope } from "./model";
 import { alnumFrom, uuidFrom } from "./random";
-import { DAY_MS, HOUR_MS, isoUtc, localTime, MINUTE_MS, zonedMidnight } from "./time";
+import { DAY_MS, eachDay, HOUR_MS, isoUtc, localTime, MINUTE_MS, zonedMidnight } from "./time";
 
 export const AUTH_STATE: AuthState = { authenticated: true, setup_required: false };
 export const HEALTH: HealthStatus = { status: "ok" };
@@ -72,6 +74,35 @@ export function passkeys(now: number): PasskeyList {
 // demoWriteKey — pk_ из 32 символов, начинается с «demo»: видно, что ключ ненастоящий.
 function demoWriteKey(appId: string, n: number): string {
   return `pk_demo${alnumFrom(28, appId, "write-key", n)}`;
+}
+
+// mergePreview — предпросмотр слияния source в target: события — начало и конец каждой сессии источника
+// за всю его историю (оба окружения), ключи — активные ключи источника.
+export function mergePreview(target: DemoApp, source: DemoApp, now: number): MergePreview {
+  let events = 0;
+  let firstDay: string | null = null;
+  let lastDay: string | null = null;
+  for (const env of ["production", "development"] as const) {
+    const scope = makeScope(source, now, { env });
+    for (const day of eachDay(source.firstDay, source.lastDay ?? scope.today)) {
+      const sessions = dayStats(scope, day).sessions;
+      if (sessions === 0) continue;
+      events += sessions * 2;
+      if (firstDay === null || day < firstDay) firstDay = day;
+      if (lastDay === null || day > lastDay) lastDay = day;
+    }
+  }
+  const { id, name, platform, platforms, status, timezone } = source.app;
+  return {
+    source: { id, name, platform, platforms, status },
+    events,
+    first_day: firstDay,
+    last_day: lastDay,
+    write_keys: writeKeys(id, now).items.filter((k) => k.revoked_at === null).length,
+    timezone_differs: timezone !== target.app.timezone,
+    target_timezone: target.app.timezone,
+    source_timezone: timezone,
+  };
 }
 
 export function writeKeys(appId: string, now: number): WriteKeyList {

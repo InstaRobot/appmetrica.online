@@ -17,6 +17,7 @@ const (
 	msgAppNameTaken        = "Приложение с таким названием уже есть"
 	msgConfirmNameMismatch = "Название не совпадает"
 	msgDeletionPending     = "Приложение ожидает удаления"
+	msgMergeInProgress     = "Приложение участвует в объединении — дождитесь завершения"
 )
 
 // ListApps — для Bearer-ключа с app_id только его приложение; чужие app_id в остальных маршрутах
@@ -108,6 +109,8 @@ func (s *Server) DeleteApp(ctx context.Context, req gen.DeleteAppRequestObject) 
 	case errors.Is(err, apps.ErrConfirmNameMismatch):
 		return gen.DeleteApp409JSONResponse{ConflictJSONResponse: gen.ConflictJSONResponse(
 			apiError(ctx, "confirm_name_mismatch", msgConfirmNameMismatch, nil))}, nil
+	case errors.Is(err, apps.ErrMergeInProgress):
+		return gen.DeleteApp409JSONResponse{ConflictJSONResponse: mergeInProgress(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -119,6 +122,8 @@ func (s *Server) ArchiveApp(ctx context.Context, req gen.ArchiveAppRequestObject
 	switch {
 	case errors.Is(err, apps.ErrNotFound):
 		return gen.ArchiveApp404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
+	case errors.Is(err, apps.ErrMergeInProgress):
+		return gen.ArchiveApp409JSONResponse{ConflictJSONResponse: mergeInProgress(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -132,6 +137,8 @@ func (s *Server) UnarchiveApp(ctx context.Context, req gen.UnarchiveAppRequestOb
 		return gen.UnarchiveApp404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
 	case errors.Is(err, apps.ErrDeletionPending):
 		return gen.UnarchiveApp409JSONResponse{ConflictJSONResponse: deletionPending(ctx)}, nil
+	case errors.Is(err, apps.ErrMergeInProgress):
+		return gen.UnarchiveApp409JSONResponse{ConflictJSONResponse: mergeInProgress(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -145,6 +152,11 @@ func appNotFound(ctx context.Context) gen.NotFoundJSONResponse {
 // deletionPending — 409 deletion_pending: у приложения невыполненная заявка на удаление (deleteApp).
 func deletionPending(ctx context.Context) gen.ConflictJSONResponse {
 	return gen.ConflictJSONResponse(apiError(ctx, "deletion_pending", msgDeletionPending, nil))
+}
+
+// mergeInProgress — 409 merge_in_progress: приложение — цель или источник незавершённого слияния.
+func mergeInProgress(ctx context.Context) gen.ConflictJSONResponse {
+	return gen.ConflictJSONResponse(apiError(ctx, "merge_in_progress", msgMergeInProgress, nil))
 }
 
 func appNameTaken(ctx context.Context) gen.ConflictJSONResponse {
@@ -195,6 +207,16 @@ func appModel(a sqlc.App) gen.App {
 		CreatedAt:  a.CreatedAt,
 		UpdatedAt:  a.UpdatedAt,
 		ArchivedAt: nullableValue(a.ArchivedAt),
+	}
+}
+
+func appSummaryModel(a sqlc.App) gen.AppSummary {
+	return gen.AppSummary{
+		Id:        a.ID,
+		Name:      a.Name,
+		Platform:  gen.Platform(a.Platform),
+		Platforms: platformListModel(a.Platforms),
+		Status:    gen.AppStatus(a.Status),
 	}
 }
 

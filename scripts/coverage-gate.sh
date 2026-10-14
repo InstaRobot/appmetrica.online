@@ -9,14 +9,14 @@
 # покрытым, если хотя бы одна запись имеет count > 0.
 # Пакет, которого ещё нет в профиле (тикет не реализован), пропускается.
 #
-# Переменные: COVER_MIN (по умолчанию 80), COVER_PKGS (по умолчанию "ingest reports auth identity deletion"),
+# Переменные: COVER_MIN (по умолчанию 80), COVER_PKGS (по умолчанию "ingest reports auth identity deletion merge"),
 # COVER_MODULE (по умолчанию appmetrica.online/backend).
 # Exit: 0 — все пакеты проходят, 1 — есть пакет ниже порога, 2 — ошибка использования.
 set -euo pipefail
 
 profile=${1:-}
 min=${COVER_MIN:-80}
-pkgs=${COVER_PKGS:-ingest reports auth identity deletion}
+pkgs=${COVER_PKGS:-ingest reports auth identity deletion merge}
 module=${COVER_MODULE:-appmetrica.online/backend}
 
 if [ -z "$profile" ]; then

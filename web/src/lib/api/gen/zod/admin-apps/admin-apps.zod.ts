@@ -180,3 +180,186 @@ export const UnarchiveAppHeader = zod.object({
 });
 
 export const UnarchiveAppResponse = zod.void();
+
+/**
+ * @summary Предпросмотр слияния источника в это приложение
+ */
+export const GetMergePreviewParams = zod.object({
+  app_id: zod.uuid(),
+});
+
+export const GetMergePreviewQueryParams = zod.object({
+  source_app_id: zod.uuid(),
+});
+
+export const getMergePreviewResponseSourcePlatformsMax = 9;
+
+export const getMergePreviewResponseEventsMin = 0;
+
+export const getMergePreviewResponseWriteKeysMin = 0;
+
+export const GetMergePreviewResponse = zod.object({
+  source: zod.object({
+    id: zod.uuid(),
+    name: zod.string(),
+    platform: zod
+      .enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"])
+      .describe("Устарело — первая платформа из platforms. Будет удалено в следующем релизе."),
+    platforms: zod
+      .array(
+        zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+      )
+      .min(1)
+      .max(getMergePreviewResponseSourcePlatformsMax),
+    status: zod.enum(["active", "archived"]),
+  }),
+  events: zod.int().min(getMergePreviewResponseEventsMin),
+  first_day: zod.iso.date().nullable().describe("Первый день событий источника, TZ источника"),
+  last_day: zod.iso.date().nullable(),
+  write_keys: zod
+    .int()
+    .min(getMergePreviewResponseWriteKeysMin)
+    .describe("Активные ключи источника, переедут в цель"),
+  timezone_differs: zod.boolean(),
+  target_timezone: zod.string(),
+  source_timezone: zod.string(),
+});
+
+/**
+ * @summary Слияния в это приложение, новые первыми (до 20)
+ */
+export const ListAppMergesParams = zod.object({
+  app_id: zod.uuid(),
+});
+
+export const listAppMergesResponseItemsItemSourcePlatformsMax = 9;
+
+export const listAppMergesResponseItemsItemCopiedEventsMin = 0;
+
+export const listAppMergesResponseItemsItemTotalEventsMin = 0;
+
+export const ListAppMergesResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.uuid(),
+      target_app_id: zod.uuid(),
+      source_app_id: zod
+        .uuid()
+        .nullable()
+        .describe("null после удаления источника (шаг purge_source)"),
+      source_name: zod.string(),
+      source_platforms: zod
+        .array(
+          zod.enum([
+            "ios",
+            "android",
+            "web",
+            "macos",
+            "windows",
+            "linux",
+            "bot",
+            "server",
+            "other",
+          ]),
+        )
+        .min(1)
+        .max(listAppMergesResponseItemsItemSourcePlatformsMax),
+      status: zod.enum(["pending", "running", "done", "failed"]),
+      step: zod.enum(["move_keys", "wait_keys", "copy", "purge_source", "reclose", "done"]),
+      copied_events: zod.int().min(listAppMergesResponseItemsItemCopiedEventsMin),
+      total_events: zod.int().min(listAppMergesResponseItemsItemTotalEventsMin),
+      error: zod.string().nullable(),
+      created_at: zod.iso.datetime({ offset: true }),
+      started_at: zod.iso.datetime({ offset: true }).nullable(),
+      finished_at: zod.iso.datetime({ offset: true }).nullable(),
+    }),
+  ),
+});
+
+/**
+ * @summary Объединить источник с этим приложением (фоновой задачей worker)
+ */
+export const CreateAppMergeParams = zod.object({
+  app_id: zod.uuid(),
+});
+
+export const CreateAppMergeHeader = zod.object({
+  "X-Requested-With": zod.enum(["appmetrica-web"]).describe("CSRF-защита cookie-запросов"),
+});
+
+export const createAppMergeBodyConfirmNameMax = 64;
+
+export const CreateAppMergeBody = zod.object({
+  source_app_id: zod.uuid(),
+  confirm_name: zod
+    .string()
+    .min(1)
+    .max(createAppMergeBodyConfirmNameMax)
+    .describe("Точное название источника"),
+});
+
+export const createAppMergeResponseSourcePlatformsMax = 9;
+
+export const createAppMergeResponseCopiedEventsMin = 0;
+
+export const createAppMergeResponseTotalEventsMin = 0;
+
+export const CreateAppMergeResponse = zod.object({
+  id: zod.uuid(),
+  target_app_id: zod.uuid(),
+  source_app_id: zod.uuid().nullable().describe("null после удаления источника (шаг purge_source)"),
+  source_name: zod.string(),
+  source_platforms: zod
+    .array(
+      zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+    )
+    .min(1)
+    .max(createAppMergeResponseSourcePlatformsMax),
+  status: zod.enum(["pending", "running", "done", "failed"]),
+  step: zod.enum(["move_keys", "wait_keys", "copy", "purge_source", "reclose", "done"]),
+  copied_events: zod.int().min(createAppMergeResponseCopiedEventsMin),
+  total_events: zod.int().min(createAppMergeResponseTotalEventsMin),
+  error: zod.string().nullable(),
+  created_at: zod.iso.datetime({ offset: true }),
+  started_at: zod.iso.datetime({ offset: true }).nullable(),
+  finished_at: zod.iso.datetime({ offset: true }).nullable(),
+});
+
+/**
+ * @summary Повторить упавшее слияние с сохранённого шага
+ */
+export const RetryAppMergeParams = zod.object({
+  app_id: zod.uuid(),
+  merge_id: zod.uuid(),
+});
+
+export const RetryAppMergeHeader = zod.object({
+  "X-Requested-With": zod.enum(["appmetrica-web"]).describe("CSRF-защита cookie-запросов"),
+});
+
+export const retryAppMergeResponseSourcePlatformsMax = 9;
+
+export const retryAppMergeResponseCopiedEventsMin = 0;
+
+export const retryAppMergeResponseTotalEventsMin = 0;
+
+export const RetryAppMergeResponse = zod.object({
+  id: zod.uuid(),
+  target_app_id: zod.uuid(),
+  source_app_id: zod.uuid().nullable().describe("null после удаления источника (шаг purge_source)"),
+  source_name: zod.string(),
+  source_platforms: zod
+    .array(
+      zod.enum(["ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"]),
+    )
+    .min(1)
+    .max(retryAppMergeResponseSourcePlatformsMax),
+  status: zod.enum(["pending", "running", "done", "failed"]),
+  step: zod.enum(["move_keys", "wait_keys", "copy", "purge_source", "reclose", "done"]),
+  copied_events: zod.int().min(retryAppMergeResponseCopiedEventsMin),
+  total_events: zod.int().min(retryAppMergeResponseTotalEventsMin),
+  error: zod.string().nullable(),
+  created_at: zod.iso.datetime({ offset: true }),
+  started_at: zod.iso.datetime({ offset: true }).nullable(),
+  finished_at: zod.iso.datetime({ offset: true }).nullable(),
+});

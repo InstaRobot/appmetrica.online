@@ -39,6 +39,9 @@ var (
 	// ErrDeletionPending — у приложения есть невыполненная заявка на удаление: новые ключи и возврат из архива
 	// запрещены, иначе ingest снова писал бы строки приложения, в том числе после purge.
 	ErrDeletionPending = errors.New("apps: deletion pending")
+	// ErrMergeInProgress — приложение — цель или источник слияния pending/running/failed (app_merges): пока
+	// worker переносит ключи и события, архивация, удаление и новые ключи сломали бы перенос.
+	ErrMergeInProgress = errors.New("apps: merge in progress")
 )
 
 // ValidationError — некорректное поле запроса; Field пуст, если ошибка не относится к одному полю.
@@ -191,19 +194,32 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sql
 }
 
 // Archive переводит приложение в архив: ingest перестаёт принимать его ключи со следующим обновлением кэша.
-// Повторный вызов ничего не меняет (archived_at остаётся прежним).
+// Повторный вызов ничего не меняет (archived_at остаётся прежним). Во время слияния — ErrMergeInProgress.
 func (s *Service) Archive(ctx context.Context, id uuid.UUID) error {
-	now := s.clock.Now()
-	_, err := s.store.Queries().ArchiveApp(ctx, sqlc.ArchiveAppParams{ID: id, Now: &now})
-	return s.idempotent(ctx, id, err, "archive")
+	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		if err := lockApp(ctx, q, id); err != nil {
+			return err
+		}
+		if err := noActiveMerge(ctx, q, id); err != nil {
+			return err
+		}
+		now := s.clock.Now()
+		if _, err := q.ArchiveApp(ctx, sqlc.ArchiveAppParams{ID: id, Now: &now}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("apps: archive: %w", err)
+		}
+		return nil
+	})
 }
 
 // Unarchive возвращает приложение из архива; для активного ничего не меняет. Приложение с ожидающей заявкой
-// на удаление (Delete) не возвращается — ErrDeletionPending.
+// на удаление (Delete) не возвращается — ErrDeletionPending, участвующее в слиянии — ErrMergeInProgress.
 func (s *Service) Unarchive(ctx context.Context, id uuid.UUID) error {
 	now := s.clock.Now()
 	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := s.lockNotDeleting(ctx, q, id); err != nil {
+			return err
+		}
+		if err := noActiveMerge(ctx, q, id); err != nil {
 			return err
 		}
 		_, err := q.UnarchiveApp(ctx, sqlc.UnarchiveAppParams{ID: id, Now: now})
@@ -218,11 +234,8 @@ func (s *Service) Unarchive(ctx context.Context, id uuid.UUID) error {
 // заявки на его удаление нет (ErrDeletionPending). Delete берёт ту же блокировку, поэтому ключ или возврат из
 // архива не проскочат между архивацией и отзывом ключей.
 func (s *Service) lockNotDeleting(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
-	if _, err := q.GetAppForUpdate(ctx, id); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("apps: lock: %w", err)
+	if err := lockApp(ctx, q, id); err != nil {
+		return err
 	}
 	pending, err := q.AppDeletionPending(ctx, id)
 	if err != nil {
@@ -234,12 +247,37 @@ func (s *Service) lockNotDeleting(ctx context.Context, q *sqlc.Queries, id uuid.
 	return nil
 }
 
+// lockApp блокирует строку приложения до конца транзакции; нет приложения — ErrNotFound. merge.Service.Create
+// берёт ту же блокировку, поэтому операция и новое слияние не проскочат мимо проверки noActiveMerge.
+func lockApp(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
+	if _, err := q.GetAppForUpdate(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("apps: lock: %w", err)
+	}
+	return nil
+}
+
+// noActiveMerge — ErrMergeInProgress, если приложение — цель или источник слияния pending/running/failed.
+func noActiveMerge(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
+	_, err := q.ActiveMergeForApp(ctx, id)
+	switch {
+	case err == nil:
+		return ErrMergeInProgress
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	default:
+		return fmt.Errorf("apps: active merge: %w", err)
+	}
+}
+
 // Delete сверяет confirmName с именем (точно, с учётом регистра), архивирует приложение, отзывает все его
 // write-ключи и создаёт заявку на удаление subject_type=app. Отзыв нужен, чтобы ingest после перезагрузки
 // снимка не писал для приложения ничего: архивный ключ ещё даёт 403 app_archived в rejected_events, а
 // отозванный — 401 invalid_app_key без строки в журнале, иначе записи появлялись бы после purge.
 // Строку apps удаляет worker после очистки ClickHouse (deletion.AppPurgeDelay).
-// Повторный вызов возвращает ту же заявку, пока она pending или running.
+// Повторный вызов возвращает ту же заявку, пока она pending или running. Во время слияния — ErrMergeInProgress.
 func (s *Service) Delete(ctx context.Context, id uuid.UUID, confirmName string) (sqlc.DeletionRequest, error) {
 	ctx, cancel := context.WithTimeout(ctx, DeleteTimeout)
 	defer cancel()
@@ -252,6 +290,9 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID, confirmName string) 
 			return ErrNotFound
 		case err != nil:
 			return fmt.Errorf("apps: get: %w", err)
+		}
+		if err := noActiveMerge(ctx, q, id); err != nil {
+			return err
 		}
 		// requested_at — после захвата блокировки: ожидание не должно отодвигать commit от requested_at дальше
 		// DeleteTimeout, иначе снимок ключей, начатый во время ожидания, пережил бы deletion.AppPurgeDelay.
@@ -283,19 +324,6 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID, confirmName string) 
 	s.logger.InfoContext(ctx, "app deletion requested",
 		slog.String("app_id", id.String()), slog.String("deletion_request_id", dr.ID.String()))
 	return dr, nil
-}
-
-// idempotent: UPDATE … WHERE status = … не нашёл строку — либо приложение уже в нужном статусе (nil),
-// либо его нет (ErrNotFound).
-func (s *Service) idempotent(ctx context.Context, id uuid.UUID, err error, op string) error {
-	if !errors.Is(err, pgx.ErrNoRows) {
-		if err != nil {
-			return fmt.Errorf("apps: %s: %w", op, err)
-		}
-		return nil
-	}
-	_, err = s.Get(ctx, id)
-	return err
 }
 
 // normalizePlatforms убирает дубли и упорядочивает платформы как в enum app_platform; пустой набор и

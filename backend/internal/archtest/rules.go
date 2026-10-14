@@ -26,7 +26,7 @@ const free = "*"
 var rules = map[string][]string{
 	"cmd/appmetrica": {free},
 	"internal/api": {
-		"internal/gen/api", "internal/auth", "internal/apps", "internal/reports", "internal/deletion",
+		"internal/gen/api", "internal/auth", "internal/apps", "internal/reports", "internal/deletion", "internal/merge",
 		"internal/identity", "internal/pgstore", "internal/chstore", "internal/httpx", "internal/clock", "internal/config",
 	},
 	"internal/ingest": {
@@ -37,8 +37,11 @@ var rules = map[string][]string{
 		"internal/reports", "internal/deletion", "internal/telegram", "internal/identity", "internal/chstore",
 		"internal/pgstore", "internal/clock", "internal/config",
 	},
-	"internal/reports":   {"internal/chstore", "internal/identity", "internal/clock"},
-	"internal/deletion":  {"internal/chstore", "internal/pgstore", "internal/identity", "internal/clock"},
+	"internal/reports":  {"internal/chstore", "internal/identity", "internal/clock"},
+	"internal/deletion": {"internal/chstore", "internal/pgstore", "internal/identity", "internal/clock"},
+	"internal/merge": {
+		"internal/pgstore", "internal/chstore", "internal/deletion", "internal/identity", "internal/clock", "internal/config",
+	},
 	"internal/auth":      {"internal/pgstore", "internal/clock", "internal/config"},
 	"internal/apps":      {"internal/pgstore", "internal/clock", "internal/config"},
 	"internal/identity":  {},

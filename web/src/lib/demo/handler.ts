@@ -17,6 +17,7 @@ import {
   apiKeys,
   deletionRequests,
   HEALTH,
+  mergePreview,
   passkeys,
   READY,
   SETTINGS,
@@ -326,6 +327,22 @@ const ROUTES: readonly Route[] = [
   route("/admin/v1/apps/:app_id/write-keys", ({ params, now }) =>
     json(writeKeys(requireApp(params.app_id).app.id, now)),
   ),
+  route("/admin/v1/apps/:app_id/merge-preview", ({ params, query, now }) => {
+    const target = requireApp(params.app_id);
+    const sourceId = query.get("source_app_id");
+    if (sourceId === null || !UUID.test(sourceId)) {
+      throw invalid("source_app_id", "source_app_id: ожидается UUID.");
+    }
+    const source = requireApp(sourceId);
+    if (source.app.id === target.app.id) {
+      throw invalid("source_app_id", "Нельзя объединить приложение с самим собой.");
+    }
+    return json(mergePreview(target, source, now));
+  }),
+  route("/admin/v1/apps/:app_id/merges", ({ params }) => {
+    requireApp(params.app_id);
+    return json({ items: [] });
+  }),
   route("/admin/v1/api-keys", ({ now }) => json(apiKeys(now))),
   route("/admin/v1/settings", () => json(SETTINGS)),
   route("/admin/v1/system/status", ({ now }) => json(systemStatus(now))),

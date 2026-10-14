@@ -34,7 +34,8 @@ func (s *Service) ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]sqlc.Wr
 // CreateWriteKey выпускает ещё один write-ключ: активных ключей у приложения может быть несколько,
 // чтобы ротировать ключ без поломки старых версий клиентов. Label обрезается по краям, 0..64 символа.
 // platform — платформа событий без context.platform, nil — любая платформа; в набор платформ приложения
-// она входить не обязана. Приложению с ожидающей заявкой на удаление ключ не выпускается — ErrDeletionPending.
+// она входить не обязана. Приложению с ожидающей заявкой на удаление ключ не выпускается — ErrDeletionPending,
+// участвующему в слиянии — ErrMergeInProgress (worker переносит ключи источника в цель).
 func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label string, platform *string) (sqlc.WriteKey, error) {
 	label = strings.TrimSpace(label)
 	if utf8.RuneCountInString(label) > writeKeyLabelMaxLen || !utf8.ValidString(label) {
@@ -55,6 +56,9 @@ func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label str
 	var wk sqlc.WriteKey
 	err = s.store.InTx(ctx, func(q *sqlc.Queries) error {
 		if err := s.lockNotDeleting(ctx, q, appID); err != nil {
+			return err
+		}
+		if err := noActiveMerge(ctx, q, appID); err != nil {
 			return err
 		}
 		wk, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{

@@ -100,13 +100,7 @@ func (s *Server) GetPortfolio(ctx context.Context, req gen.GetPortfolioRequestOb
 
 func portfolioRowModel(app sqlc.App, r reports.PortfolioRow) (gen.PortfolioRow, error) {
 	row := gen.PortfolioRow{
-		App: gen.AppSummary{
-			Id:        app.ID,
-			Name:      app.Name,
-			Platform:  gen.Platform(app.Platform),
-			Platforms: platformListModel(app.Platforms),
-			Status:    gen.AppStatus(app.Status),
-		},
+		App:                   appSummaryModel(app),
 		ActiveToday:           toInt64(r.ActiveToday),
 		ActiveDate:            toInt64(r.ActiveDate),
 		ActiveSameDayPrevWeek: toInt64(r.ActiveSameDayPrevWeek),

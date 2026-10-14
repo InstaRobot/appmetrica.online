@@ -744,6 +744,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/v1/apps/{app_id}/unarchive:
     parameters:
       - $ref: '#/components/parameters/AppId'
@@ -821,6 +822,105 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/apps/{app_id}/merge-preview:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Admin Apps]
+      operationId: getMergePreview
+      x-internal: true
+      summary: Предпросмотр слияния источника в это приложение
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: source_app_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Объём переноса и предупреждения
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MergePreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+
+  /admin/v1/apps/{app_id}/merges:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Admin Apps]
+      operationId: listAppMerges
+      x-internal: true
+      summary: Слияния в это приложение, новые первыми (до 20)
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Список слияний
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppMergeList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin Apps]
+      operationId: createAppMerge
+      x-internal: true
+      summary: Объединить источник с этим приложением (фоновой задачей worker)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppMergeBody' }
+            examples:
+              merge:
+                value: { source_app_id: 0199d5f0-2b3c-7d4e-9f50-6b7c8d9e0f1a, confirm_name: Notes Android }
+      responses:
+        '202':
+          description: Слияние создано и ждёт worker
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppMerge' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/v1/apps/{app_id}/merges/{merge_id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - name: merge_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin Apps]
+      operationId: retryAppMerge
+      x-internal: true
+      summary: Повторить упавшее слияние с сохранённого шага
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestedWith'
+      responses:
+        '200':
+          description: Слияние снова в очереди
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppMerge' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/v1/api-keys:
     get:
       tags: [Admin Keys]
@@ -1660,6 +1760,55 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/WriteKey' }
+    AppMergeStatus:
+      type: string
+      enum: [pending, running, done, failed]
+    AppMergeStep:
+      type: string
+      enum: [move_keys, wait_keys, copy, purge_source, reclose, done]
+    AppMerge:
+      type: object
+      required: [id, target_app_id, source_app_id, source_name, source_platforms, status, step, copied_events, total_events, error, created_at, started_at, finished_at]
+      properties:
+        id: { type: string, format: uuid }
+        target_app_id: { type: string, format: uuid }
+        source_app_id: { type: string, format: uuid, nullable: true, description: 'null после удаления источника (шаг purge_source)' }
+        source_name: { type: string }
+        source_platforms: { $ref: '#/components/schemas/PlatformList' }
+        status: { $ref: '#/components/schemas/AppMergeStatus' }
+        step: { $ref: '#/components/schemas/AppMergeStep' }
+        copied_events: { type: integer, format: int64, minimum: 0 }
+        total_events: { type: integer, format: int64, minimum: 0 }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+    AppMergeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AppMerge' }
+    MergePreview:
+      type: object
+      required: [source, events, first_day, last_day, write_keys, timezone_differs, target_timezone, source_timezone]
+      properties:
+        source: { $ref: '#/components/schemas/AppSummary' }
+        events: { type: integer, format: int64, minimum: 0 }
+        first_day: { type: string, format: date, nullable: true, description: 'Первый день событий источника, TZ источника' }
+        last_day: { type: string, format: date, nullable: true }
+        write_keys: { type: integer, minimum: 0, description: 'Активные ключи источника, переедут в цель' }
+        timezone_differs: { type: boolean }
+        target_timezone: { type: string }
+        source_timezone: { type: string }
+    CreateAppMergeBody:
+      type: object
+      additionalProperties: false
+      required: [source_app_id, confirm_name]
+      properties:
+        source_app_id: { type: string, format: uuid }
+        confirm_name: { type: string, minLength: 1, maxLength: 64, description: 'Точное название источника' }
     CreateWriteKeyBody:
       type: object
       additionalProperties: false
