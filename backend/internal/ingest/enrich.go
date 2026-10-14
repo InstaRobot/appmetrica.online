@@ -103,7 +103,9 @@ func NewEventRow(b *Batch, ev *Event) chstore.EventRow {
 // токеном в компактный каноничный JSON (encoding/json без HTML-экранирования). Пары с ключом "ip" на любом
 // уровне (контекст батча, события, вложенные объекты) выбрасываются целиком, строковые user_id, похожие
 // на email или телефон, заменяются на "[redacted]" (AC-1.5.2 — и при batch-ошибке, когда до проверки
-// событий дело не дошло). Ключи и значения сравниваются после снятия JSON-экранирования, поэтому
+// событий дело не дошло), строковые app_key обрезаются до key_prefix: сэмпл отдаётся Read API как
+// example_payload, полный ключ записи в нём недопустим. Ключи и значения сравниваются после снятия
+// JSON-экранирования, поэтому
 // "\u0069p" и "ivan\u0040example.com" распознаются, а дубликаты ключей обрабатываются каждый. Неразбираемое
 // тело (invalid_json, обрезанное) даёт префикс до последнего полного токена: незакрытая строка в сэмпл не
 // попадает. Длина ≤ MaxPayloadSampleBytes, обрезка только по границе токена — значение длиннее лимита
@@ -130,6 +132,8 @@ type sampler struct {
 	skipValue bool
 	// userID — следующий токен — значение ключа user_id.
 	userID bool
+	// appKey — следующий токен — значение ключа app_key.
+	appKey bool
 }
 
 // sampleFrame — открытый контейнер: для объекта key=true, когда ожидается ключ; n — выведено элементов или пар.
@@ -179,6 +183,8 @@ func (s *sampler) emit(tok json.Token) bool {
 			return true
 		case strings.EqualFold(key, "user_id"):
 			s.userID = true
+		case strings.EqualFold(key, "app_key"):
+			s.appKey = true
 		}
 		sep := ""
 		if top.n > 0 {
@@ -200,7 +206,7 @@ func (s *sampler) emit(tok json.Token) bool {
 		if v == '}' || v == ']' {
 			return s.closeContainer(string(v))
 		}
-		s.userID = false
+		s.userID, s.appKey = false, false
 		if !s.write(sep + string(v)) {
 			return false
 		}
@@ -212,6 +218,9 @@ func (s *sampler) emit(tok json.Token) bool {
 	case string:
 		if s.userID && LooksLikePII(v) {
 			v = redactedUserID
+		}
+		if s.appKey {
+			v = keyPrefix(v)
 		}
 		return s.finishValue(sep + s.encodeString(v))
 	case json.Number:
@@ -225,7 +234,7 @@ func (s *sampler) emit(tok json.Token) bool {
 
 // finishValue выводит скалярное значение и переводит родителя к следующему элементу или ключу.
 func (s *sampler) finishValue(text string) bool {
-	s.userID = false
+	s.userID, s.appKey = false, false
 	if !s.write(text) {
 		return false
 	}

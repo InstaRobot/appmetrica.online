@@ -437,7 +437,7 @@ Skip-индексы: `idx_user_id`, `idx_session_id`, `idx_install_id` — `bloo
 | event_name | LowCardinality(String) | '' для batch-уровня |
 | app_version | LowCardinality(String) | Из context, если удалось разобрать |
 | platform | LowCardinality(String) | |
-| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча), переписанного ingest токен за токеном в каноничный компактный вид (`encoding/json` без HTML-экранирования, обрезка по границе токена); пары с ключом `ip` на любом уровне вырезаются, `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` (и при batch-ошибке, до проверки событий); экранирование клиента (`"\u0069p"`) снимается при разборе, у неразбираемого тела остаётся префикс до последнего полного токена |
+| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча), переписанного ingest токен за токеном в каноничный компактный вид (`encoding/json` без HTML-экранирования, обрезка по границе токена); пары с ключом `ip` на любом уровне вырезаются, `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` (и при batch-ошибке, до проверки событий), строковые `app_key` обрезаются до `key_prefix` — сэмпл уходит в Read API как `example_payload`; экранирование клиента (`"\u0069p"`) снимается при разборе, у неразбираемого тела остаётся префикс до последнего полного токена |
 
 `daily_stats` — `ReplacingMergeTree(closed_at)`, `ORDER BY (app_id, environment, unit, day)`, **без TTL**:
 
@@ -2052,3 +2052,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-14 | 1.2 | §10.4: эквивалентная форма запросов в коде для NFR-003 — склейка после предагрегации, first_seen в общем GROUP BY, rolling через префиксные суммы, retention по массивам дней; определения метрик и golden-фикстуры не менялись (Task 32a) |
 | 2026-10-14 | 1.3 | §2.9: `invalid_app_key` исключён из batch-кодов `rejected_events` — отозванный ключ не резолвится в приложение (кэш ключей держит только действующие), как решено в OQ-033 (3) |
 | 2026-10-14 | 1.4 | §2.9: `payload_sample` batch-ошибок тоже без PII — `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` до записи (ревью MVP, OQ-070) |
+| 2026-10-14 | 1.5 | §2.9: в `payload_sample` строковые `app_key` (поле тела, путь `sendBeacon`) обрезаются до `key_prefix` — полный ключ записи иначе читался через `integration/health` ключом с read-scope (ревью MVP) |
