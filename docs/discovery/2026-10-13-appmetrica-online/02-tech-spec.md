@@ -2434,6 +2434,8 @@ AC-8.4.4 (UI — вкладки настроек):
   (приложения ≤ 100, ключи ≤ 50, удаления — последние 200).
 - Rate limiting: ingest 2000 событий/с на приложение и 100/мин (burst 1000) на установку; Read API 10 req/s на ключ
   (burst 30); сессия 30 req/s; auth-эндпоинты 30 req/мин на процесс.
+- Body limit: ingest — `INGEST_MAX_BODY_BYTES` (1 048 576 байт после распаковки); api — 65 536 байт на любой запрос
+  (`api.MaxBodyBytes`, `http.MaxBytesReader` до разбора тела) → 413 `payload_too_large`.
 
 ### 4.2. Внешние интеграции
 

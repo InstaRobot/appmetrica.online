@@ -6,6 +6,8 @@ info:
     Read API (`/v1`, Bearer `sk_…` со scopes read/delete, либо cookie дашборда)
     и внутренний Admin API (`/admin/v1`, только cookie `am_session`, все операции x-internal).
     Даты from/to/date — YYYY-MM-DD в часовом поясе приложения, включительно.
+    Тело любого запроса ограничено 65 536 байт: превышение — 413 `payload_too_large` в конверте Error
+    (сквозное правило, как 500 `internal_error`; у операций не перечисляется).
 servers:
   - url: https://api.appmetrica.online
     description: Production — Read API для скриптов (Bearer sk_)

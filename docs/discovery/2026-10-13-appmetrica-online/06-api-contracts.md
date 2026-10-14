@@ -78,7 +78,7 @@
 | 404 | Не найдено или нет доступа по `app_id` ключа: `app_not_found`, `profile_not_found`, `not_found` |
 | 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch` |
 | 410 | Ссылка установки passkey истекла или использована: `setup_token_expired` |
-| 413 | Тело ingest > 1 048 576 байт после распаковки: `payload_too_large` |
+| 413 | Тело больше лимита: `payload_too_large` (ingest > 1 048 576 байт после распаковки; api > 65 536 байт) |
 | 415 | Неподдерживаемый Content-Type: `unsupported_media_type` |
 | 422 | WebAuthn-проверка не прошла: `webauthn_verification_failed` |
 | 429 | Rate limit: `app_rate_limited` (ingest), `rate_limited` (api); всегда с `Retry-After` |
@@ -3577,7 +3577,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 409 | `app_name_taken` | Приложение с таким именем уже есть. | Admin: дубль `lower(name)` |
 | 409 | `confirm_name_mismatch` | Имя для подтверждения не совпадает. | Admin: `deleteApp` |
 | 410 | `setup_token_expired` | Ссылка устарела. Создайте новую командой на сервере. | Admin: токен использован или старше 15 мин |
-| 413 | `payload_too_large` | Батч слишком большой. | Ingest: > 1 048 576 байт после распаковки |
+| 413 | `payload_too_large` | Батч слишком большой. / Тело запроса больше 65 536 байт. | Ingest: > 1 048 576 байт после распаковки; API: тело > 65 536 байт (`api.MaxBodyBytes`) |
 | 415 | `unsupported_media_type` | Неверный Content-Type. | Ingest: не `application/json`/`text/plain` |
 | 422 | `webauthn_verification_failed` | Не удалось проверить passkey. | Admin: подпись/origin/challenge/дубль credential |
 | 429 | `app_rate_limited` | Слишком много событий. | Ingest: > 2000 событий/с на приложение |
@@ -3595,3 +3595,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 |---|---|---|
 | 2026-10-13 | 1.0 | Initial API contracts: ingest.yaml (POST /v1/events, health), api.yaml (Read API /v1, Admin API /admin/v1), test vectors, codegen configs |
 | 2026-10-14 | 1.1 | `listApps`, `getApp`, `getRealtime`: добавлен ответ `400 BadRequest` (как в `contracts/openapi/api.yaml` и contract-тестах); вектор `future_null` приведён к правилу «только завершённые периоды» и имени теста |
+| 2026-10-14 | 1.2 | 413 `payload_too_large` и для api: тело любого запроса `/v1`, `/admin/v1` ограничено 65 536 байт (`http.MaxBytesReader`, сквозное правило в `info.description` api.yaml) |

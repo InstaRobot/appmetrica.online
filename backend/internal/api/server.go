@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -19,6 +20,10 @@ import (
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/reports"
 )
+
+// MaxBodyBytes — лимит тела любого запроса API (http.MaxBytesReader в Register). Самое большое легитимное
+// тело — attestation WebAuthn при регистрации passkey (единицы КБ); превышение → 413 payload_too_large.
+const MaxBodyBytes int64 = 64 << 10
 
 // Server реализует операции api.yaml. Операции других тикетов приходят из встроенного
 // gen.StrictServerInterface (nil) и недостижимы: Register подключает только реализованные маршруты.
@@ -99,15 +104,16 @@ func (s *Server) Register(mux *http.ServeMux) {
 		HandlerMiddlewares: []gen.MiddlewareFunc{s.metrics.observe},
 		ErrorHandlerFunc:   invalidRequest,
 	}
+	body := httpx.BodyLimit(MaxBodyBytes)
 	csrf := auth.CSRF(s.publicBaseURL, writeError)
 	limit := s.auth.LimitAttempts(writeError)
 	session := s.auth.RequireSession(writeError)
 
 	mux.HandleFunc("GET /ready", w.ApiReady)
 
-	public := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(h)) }
-	attempt := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(limit(h))) }
-	owner := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(session(h))) }
+	public := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, body(csrf(h))) }
+	attempt := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, body(csrf(limit(h)))) }
+	owner := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, body(csrf(session(h)))) }
 
 	public("GET /admin/v1/auth/state", w.GetAuthState)
 	attempt("POST /admin/v1/auth/login/begin", w.BeginLogin)
@@ -126,7 +132,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// статус удаления — с любым из двух.
 	apiAccess := func(scopes ...string) func(string, http.HandlerFunc) {
 		access := s.auth.RequireAPIAccess(writeError, scopes...)
-		return func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(access(h))) }
+		return func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, body(csrf(access(h)))) }
 	}
 	reader := apiAccess(auth.ScopeRead)
 
@@ -207,7 +213,13 @@ func metaFrom(ctx context.Context) requestMeta {
 
 // invalidRequest — тело или параметры не разобрались по схеме. Текст ошибки разбора не возвращается:
 // он может процитировать присланные значения; для параметра в details.field — его имя.
+// Тело больше MaxBodyBytes (ошибка http.MaxBytesReader при декодировании) — 413 payload_too_large.
 func invalidRequest(w http.ResponseWriter, r *http.Request, err error) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large",
+			fmt.Sprintf("Тело запроса больше %d байт.", MaxBodyBytes), nil)
+		return
+	}
 	if name := paramName(err); name != "" {
 		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request", "Некорректный параметр "+name+".",
 			map[string]any{"field": name})
