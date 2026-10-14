@@ -149,3 +149,46 @@ func TestWriteKeys_RequireSessionAndCSRF(t *testing.T) {
 	require.Len(t, list, 1)
 	require.Nil(t, list[0].RevokedAt)
 }
+
+// AC-003.1: ключ выпускается для платформы или без неё (null — любая платформа).
+func TestCreateWriteKeyWithPlatform(t *testing.T) {
+	e := newEnv(t)
+	app, _ := e.createMulti(t, "Notes", []string{"ios", "web"}, "Europe/Moscow")
+
+	web := e.createWriteKey(t, app.ID, map[string]any{"label": "CI", "platform": "web"})
+	require.Equal(t, "CI", web.Label)
+	require.NotNil(t, web.Platform)
+	require.Equal(t, "web", *web.Platform)
+
+	anyPlatform := e.createWriteKey(t, app.ID, map[string]any{"label": "Любая"})
+	require.Nil(t, anyPlatform.Platform)
+
+	// Платформа ключа не обязана входить в набор приложения: набор можно расширить позже.
+	android := e.createWriteKey(t, app.ID, map[string]any{"platform": "android"})
+	require.NotNil(t, android.Platform)
+	require.Equal(t, "android", *android.Platform)
+
+	list := e.listWriteKeys(t, app.ID)
+	byID := make(map[string]writeKeyJSON, len(list))
+	for _, k := range list {
+		byID[k.ID] = k
+	}
+	require.Equal(t, "web", *byID[web.ID].Platform)
+	require.Nil(t, byID[anyPlatform.ID].Platform)
+
+	// null равносилен отсутствию поля.
+	rec := e.call(t, http.MethodPost, "/admin/v1/apps/"+app.ID+"/write-keys", `{"platform":null}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	require.Nil(t, decode[writeKeyJSON](t, rec).Platform)
+}
+
+func TestCreateWriteKey_PlatformValidation(t *testing.T) {
+	e := newEnv(t)
+	app, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
+
+	for _, platform := range []string{"symbian", "", "IOS"} {
+		rec := e.call(t, http.MethodPost, "/admin/v1/apps/"+app.ID+"/write-keys", map[string]any{"platform": platform})
+		requireFieldError(t, rec, "platform")
+	}
+	require.Len(t, e.listWriteKeys(t, app.ID), 1)
+}

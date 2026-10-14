@@ -135,6 +135,40 @@ func TestAppModelPlatforms(t *testing.T) {
 	require.True(t, found)
 }
 
+// AC-003.2: неизвестная платформа ключа — 400 invalid_request с полем platform, ключ не создаётся.
+func TestCreateWriteKeyRejectsUnknownPlatform(t *testing.T) {
+	e := newPortfolioEnv(t)
+	doc := loadAPIDoc(t)
+	owner := asOwner(ownerCookie(t, e))
+	path := "/admin/v1/apps/" + testutil.ScenarioApps[0].ID.String() + "/write-keys"
+
+	rec := e.call(t, http.MethodPost, path, map[string]any{"label": "CI", "platform": "symbian"}, owner)
+	body := errorBody(t, rec, http.StatusBadRequest)
+	require.Equal(t, "invalid_request", body.Code)
+	fields, ok := body.Details["fields"].(map[string]any)
+	require.True(t, ok, rec.Body.String())
+	require.Contains(t, fields, "platform")
+
+	rec = e.call(t, http.MethodGet, path, nil, owner)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var list gen.WriteKeyList
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	require.Empty(t, list.Items)
+
+	// Известная платформа принимается, ответ валиден по контракту.
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(`{"label":"CI","platform":"web"}`))
+	req.Header.Set("Content-Type", "application/json")
+	owner(req)
+	rec = serveRequest(t, e.handler, req)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	require.Equal(t, "createWriteKey", validateResponse(t, doc, req, rec))
+	var key gen.WriteKey
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &key))
+	platform, err := key.Platform.Get()
+	require.NoError(t, err)
+	require.Equal(t, gen.PlatformWeb, platform)
+}
+
 func TestReadAPI_SameResultForCookieAndBearer(t *testing.T) {
 	e := newPortfolioEnv(t)
 	cookie := ownerCookie(t, e)
