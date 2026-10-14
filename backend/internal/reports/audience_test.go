@@ -519,8 +519,8 @@ func TestTimeseries_WeekAndMonthBuckets(t *testing.T) {
 }
 
 // AC-006.1 (AC-6.1): split=platform — ряд на каждую платформу периода, равный ряду с фильтром platform=[p], для
-// всех метрик; итог прежний, compare игнорируется. Человек на двух платформах входит в оба ряда, новые
-// считаются по first_seen внутри платформы.
+// всех метрик; итог прежний, compare игнорируется. Человек на двух платформах входит в оба ряда, first_seen у него
+// общий: новым он бывает только в ряду платформы, где появился впервые.
 func TestTimeseriesSplitByPlatform(t *testing.T) {
 	on := func(platform string) func(*chstore.EventRow) {
 		return func(r *chstore.EventRow) { r.Platform = platform }
@@ -533,7 +533,7 @@ func TestTimeseriesSplitByPlatform(t *testing.T) {
 			events = append(events, with(visit(t, 2, "", at(10), 30*time.Second), on("android")))
 		}
 		if d >= 3 {
-			// u1: iOS с 3-го, Android с 5-го — новый на Android позже, чем в итоге.
+			// u1: iOS с 3-го, Android с 5-го.
 			events = append(events, with(visit(t, 3, "u1", at(11), 0), on("ios")))
 		}
 		if d >= 5 {
@@ -565,8 +565,9 @@ func TestTimeseriesSplitByPlatform(t *testing.T) {
 	require.Equal(t, []any{1.0, 0.0, 1.0, 0.0, 2.0, 1.0, 2.0}, values(got.Splits[0].Points), "android")
 	require.Equal(t, []any{1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0}, values(got.Splits[1].Points), "ios")
 	require.Equal(t, []any{2.0, 1.0, 3.0, 2.0, 3.0, 2.0, 3.0}, values(got.Points), "u1 на двух платформах — один человек")
-	newAndroid := timeseries(t, svc, p, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricNew, SplitByPlatform: true})
-	require.Equal(t, []any{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0}, values(newAndroid.Splits[0].Points), "u1 новый на Android 5-го")
+	newPeople := timeseries(t, svc, p, TimeseriesQuery{Granularity: GranularityDay, Metric: MetricNew, SplitByPlatform: true})
+	require.Equal(t, []any{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, values(newPeople.Splits[0].Points), "u1 на Android 5-го не новый")
+	require.Equal(t, []any{1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0}, values(newPeople.Splits[1].Points), "ios")
 }
 
 // split=platform с другими фильтрами: платформы — только из отфильтрованных событий; фильтр platform сужает

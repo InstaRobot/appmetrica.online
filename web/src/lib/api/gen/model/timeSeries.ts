@@ -13,10 +13,13 @@
 import type { Granularity } from "./granularity";
 import type { TimeSeriesMetric } from "./timeSeriesMetric";
 import type { TimeSeriesPoint } from "./timeSeriesPoint";
+import type { TimeSeriesSplit } from "./timeSeriesSplit";
 
 export interface TimeSeries {
   metric: TimeSeriesMetric;
   granularity: Granularity;
   points: TimeSeriesPoint[];
   compare_points?: TimeSeriesPoint[];
+  /** Только при split=platform — ряд на каждую наблюдаемую платформу; compare_points при этом нет. */
+  splits?: TimeSeriesSplit[];
 }

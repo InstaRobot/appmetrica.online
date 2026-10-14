@@ -51,6 +51,21 @@ func parseCompare(in *string) (bool, *paramError) {
 	}
 }
 
+// parseSplit — split=none (по умолчанию) | platform.
+func parseSplit(in *string) (bool, *paramError) {
+	if in == nil {
+		return false, nil
+	}
+	switch gen.GetAudienceTimeseriesParamsSplit(*in) {
+	case gen.GetAudienceTimeseriesParamsSplitNone:
+		return false, nil
+	case gen.GetAudienceTimeseriesParamsSplitPlatform:
+		return true, nil
+	default:
+		return false, invalidParam("split", "split: допустимо none или platform.")
+	}
+}
+
 // GetAudienceSummary — KPI аудитории за период и сравнение с предыдущим (FR-013).
 func (s *Server) GetAudienceSummary(ctx context.Context, req gen.GetAudienceSummaryRequestObject) (gen.GetAudienceSummaryResponseObject, error) {
 	loc, ok, err := s.appLocation(ctx, req.AppId)
@@ -140,6 +155,9 @@ func (s *Server) GetAudienceTimeseries(ctx context.Context, req gen.GetAudienceT
 	if perr == nil {
 		q.Compare, perr = parseCompare((*string)(in.Compare))
 	}
+	if perr == nil {
+		q.SplitByPlatform, perr = parseSplit((*string)(in.Split))
+	}
 	if perr != nil {
 		return gen.GetAudienceTimeseries400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
 	}
@@ -156,6 +174,13 @@ func (s *Server) GetAudienceTimeseries(ctx context.Context, req gen.GetAudienceT
 	if ts.ComparePoints != nil {
 		points := timeseriesPoints(ts.ComparePoints)
 		out.ComparePoints = &points
+	}
+	if ts.Splits != nil {
+		splits := make([]gen.TimeSeriesSplit, 0, len(ts.Splits))
+		for _, sp := range ts.Splits {
+			splits = append(splits, gen.TimeSeriesSplit{Platform: sp.Platform, Points: timeseriesPoints(sp.Points)})
+		}
+		out.Splits = &splits
 	}
 	return out, nil
 }

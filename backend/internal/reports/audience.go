@@ -92,17 +92,26 @@ type AudienceDelta struct {
 
 // TimeseriesQuery — параметры getAudienceTimeseries.
 type TimeseriesQuery struct {
-	Granularity Granularity
-	Metric      Metric
-	Compare     bool // compare=previous_period
+	Granularity     Granularity
+	Metric          Metric
+	Compare         bool // compare=previous_period; при SplitByPlatform игнорируется
+	SplitByPlatform bool // split=platform
 }
 
-// Timeseries — ряд от from до to; ComparePoints — тот же ряд за предыдущий период (nil без compare).
+// Timeseries — ряд от from до to; ComparePoints — тот же ряд за предыдущий период (nil без compare); Splits — ряды
+// по платформам периода (nil без split, пустой — событий нет).
 type Timeseries struct {
 	Metric        Metric            `json:"metric"`
 	Granularity   Granularity       `json:"granularity"`
 	Points        []TimeseriesPoint `json:"points"`
 	ComparePoints []TimeseriesPoint `json:"compare_points,omitempty"`
+	Splits        []TimeseriesSplit `json:"splits,omitzero"`
+}
+
+// TimeseriesSplit — ряд с фильтром platform=[Platform].
+type TimeseriesSplit struct {
+	Platform string            `json:"platform"`
+	Points   []TimeseriesPoint `json:"points"`
 }
 
 // TimeseriesPoint — корзина, начинающаяся в TS (в TZ приложения). Value nil — нет значения (avg_duration_ms).
@@ -228,6 +237,12 @@ SELECT value, count, total FROM (
     )
 )
 ` + breakdownOrder
+
+	// qPeriodPlatforms — платформы событий периода с учётом фильтров (split=platform).
+	qPeriodPlatforms = `SELECT DISTINCT e.platform AS platform
+FROM events AS e
+WHERE ` + eventsFilter + `
+ORDER BY platform`
 
 	qBreakdownNew = `WITH ` + identity.LinksCTE + `, ` + peopleFirstCTE(uniqValues("$DIM", "vals")) + `
 SELECT value, count, total FROM (
@@ -408,12 +423,60 @@ func (s *Service) AudienceTimeseries(ctx context.Context, p Params, q Timeseries
 	if out.Points, err = s.series(ctx, p, q, query); err != nil {
 		return Timeseries{}, err
 	}
+	if q.SplitByPlatform {
+		// Ряд на платформу — тот же запрос с фильтром platform=[p], поэтому он совпадает с отфильтрованным рядом
+		// при любой метрике (02-data-model-diff.md §7.3).
+		if out.Splits, err = s.platformSplits(ctx, p, q, query); err != nil {
+			return Timeseries{}, err
+		}
+		return out, nil
+	}
 	if q.Compare {
 		prev := p
 		prev.Period = p.Period.Previous()
 		if out.ComparePoints, err = s.series(ctx, prev, q, query); err != nil {
 			return Timeseries{}, err
 		}
+	}
+	return out, nil
+}
+
+// platformSplits — ряды query по каждой платформе событий периода p, по алфавиту платформ.
+func (s *Service) platformSplits(ctx context.Context, p Params, q TimeseriesQuery, query string) ([]TimeseriesSplit, error) {
+	platforms, err := s.periodPlatforms(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TimeseriesSplit, 0, len(platforms))
+	for _, platform := range platforms {
+		sp := p
+		sp.Filters.Platform = []string{platform}
+		points, err := s.series(ctx, sp, q, query)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, TimeseriesSplit{Platform: platform, Points: points})
+	}
+	return out, nil
+}
+
+// periodPlatforms — различные events.platform событий периода p с учётом фильтров.
+func (s *Service) periodPlatforms(ctx context.Context, p Params) ([]string, error) {
+	rows, err := s.conn.Query(p.Bind(ctx), qPeriodPlatforms)
+	if err != nil {
+		return nil, fmt.Errorf("reports: period platforms: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var platform string
+		if err := rows.Scan(&platform); err != nil {
+			return nil, fmt.Errorf("reports: period platforms: %w", err)
+		}
+		out = append(out, platform)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reports: period platforms: %w", err)
 	}
 	return out, nil
 }

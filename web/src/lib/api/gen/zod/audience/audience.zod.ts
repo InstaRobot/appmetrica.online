@@ -78,6 +78,7 @@ export const GetAudienceTimeseriesParams = zod.object({
 export const getAudienceTimeseriesQueryGranularityDefault = `day`;
 export const getAudienceTimeseriesQueryMetricDefault = `active`;
 export const getAudienceTimeseriesQueryCompareDefault = `previous_period`;
+export const getAudienceTimeseriesQuerySplitDefault = `none`;
 export const getAudienceTimeseriesQueryEnvironmentDefault = `production`;
 export const getAudienceTimeseriesQueryUnitDefault = `persons`;
 export const getAudienceTimeseriesQueryAppVersionItemMax = 64;
@@ -96,6 +97,12 @@ export const GetAudienceTimeseriesQueryParams = zod.object({
     .enum(["active", "new", "sessions", "avg_duration_ms"])
     .default(getAudienceTimeseriesQueryMetricDefault),
   compare: zod.enum(["previous_period", "none"]).default(getAudienceTimeseriesQueryCompareDefault),
+  split: zod
+    .enum(["none", "platform"])
+    .default(getAudienceTimeseriesQuerySplitDefault)
+    .describe(
+      "platform — ряды по каждой платформе периода рядом с итогом (TimeSeries.splits); compare при этом игнорируется.",
+    ),
   environment: zod
     .enum(["production", "development"])
     .default(getAudienceTimeseriesQueryEnvironmentDefault),
@@ -134,6 +141,24 @@ export const GetAudienceTimeseriesResponse = zod.object({
       }),
     )
     .optional(),
+  splits: zod
+    .array(
+      zod.object({
+        platform: zod.string().describe("events.platform; неизвестные значения не отбрасываются"),
+        points: zod.array(
+          zod.object({
+            ts: zod.iso
+              .datetime({ offset: true })
+              .describe("Начало корзины с offset TZ приложения"),
+            value: zod.number().nullable(),
+          }),
+        ),
+      }),
+    )
+    .optional()
+    .describe(
+      "Только при split=platform — ряд на каждую наблюдаемую платформу; compare_points при этом нет.",
+    ),
 });
 
 export const GetRollingActiveParams = zod.object({

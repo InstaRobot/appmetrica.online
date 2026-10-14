@@ -18,6 +18,7 @@ import type { FilterOsNameParameter } from "./filterOsNameParameter";
 import type { FilterPlatformParameter } from "./filterPlatformParameter";
 import type { FromParameter } from "./fromParameter";
 import type { Granularity } from "./granularity";
+import type { SplitParameter } from "./splitParameter";
 import type { TimeSeriesMetric } from "./timeSeriesMetric";
 import type { ToParameter } from "./toParameter";
 import type { UnitQParameter } from "./unitQParameter";
@@ -28,6 +29,10 @@ export type GetAudienceTimeseriesParams = {
   granularity?: Granularity;
   metric?: TimeSeriesMetric;
   compare?: CompareParameter;
+  /**
+   * platform — ряды по каждой платформе периода рядом с итогом (TimeSeries.splits); compare при этом игнорируется.
+   */
+  split?: SplitParameter;
   environment?: EnvironmentQParameter;
   unit?: UnitQParameter;
   platform?: FilterPlatformParameter;
