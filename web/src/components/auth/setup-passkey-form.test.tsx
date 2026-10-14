@@ -119,7 +119,9 @@ describe("SetupPasskeyForm", () => {
     expect(await screen.findByText("Passkey создан. Переходим в дашборд…")).toBeVisible();
     expect(startRegistration).toHaveBeenCalledExactlyOnceWith({ optionsJSON: creationOptions });
     expect(finishBody).toEqual({ ceremony_id: CEREMONY, credential: attestation, name: "MacBook" });
-    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/"), { timeout: 2000 });
+    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/portfolio"), {
+      timeout: 2000,
+    });
   });
 
   it("shows the submitting state", async () => {

@@ -44,7 +44,7 @@ describe("ErrorState", () => {
     const heading = screen.getByRole("heading", { level: 1, name: "Что-то пошло не так" });
     expect(heading).toHaveFocus();
     expect(screen.getByRole("button", { name: "Попробовать снова" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/portfolio");
     expect(screen.queryByText(/Код запроса/)).toBeNull();
   });
 });

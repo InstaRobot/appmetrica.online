@@ -29,11 +29,15 @@ describe("proxy", () => {
     );
   });
 
-  it("redirects the portfolio root without next", () => {
-    const res = proxy(request("/"));
+  it("redirects the portfolio to login with next", () => {
+    const res = proxy(request("/portfolio"));
 
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toBe("http://localhost:3000/login");
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?next=%2Fportfolio");
+  });
+
+  it("shows the public landing at / without a session", () => {
+    expect(passesThrough(proxy(request("/")))).toBe(true);
   });
 
   it.each(["/login", "/login?next=%2Fapps", "/setup/abc123", "/api/health", "/api/v1/portfolio"])(

@@ -10,7 +10,7 @@ import { AppHeader } from "./app-header";
 import { AppTabs } from "./app-tabs";
 
 const nav = vi.hoisted(() => ({
-  pathname: "/",
+  pathname: "/portfolio",
   search: "",
   push: vi.fn<(href: string) => void>(),
   replace: vi.fn<(href: string) => void>(),
@@ -43,7 +43,7 @@ const expectSwitcher = (text: string) =>
   );
 
 beforeEach(() => {
-  at("/");
+  at("/portfolio");
   nav.push.mockReset();
   nav.replace.mockReset();
   server.use(getListAppsMockHandler({ items: [notes, maps] }));
@@ -129,7 +129,7 @@ describe("AppHeader", () => {
     await expectSwitcher("Все приложения");
     expect(screen.getByRole("link", { name: "appmetrica.online — в портфель" })).toHaveAttribute(
       "href",
-      "/",
+      "/portfolio",
     );
   });
 

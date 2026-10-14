@@ -15,7 +15,7 @@ describe("S-14b error", () => {
     expect(
       screen.getByText("Произошла непредвиденная ошибка. Попробуйте обновить страницу."),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/portfolio");
     expect(screen.queryByText(/Код запроса/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Попробовать снова" }));

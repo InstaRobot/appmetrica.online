@@ -19,7 +19,7 @@ const MINUS = "−";
 const nav = vi.hoisted(() => ({ push: vi.fn<(href: string) => void>() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
-  usePathname: () => "/",
+  usePathname: () => "/portfolio",
   useSearchParams: () => new URLSearchParams(),
 }));
 

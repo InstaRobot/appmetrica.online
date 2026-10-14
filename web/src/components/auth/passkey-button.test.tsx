@@ -104,7 +104,7 @@ describe("PasskeyButton", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Войти с passkey" }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/"));
+    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/portfolio"));
   });
 
   it("disables the button while waiting for the authenticator", async () => {

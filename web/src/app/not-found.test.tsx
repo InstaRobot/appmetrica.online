@@ -8,6 +8,6 @@ describe("S-14a not-found", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Страница не найдена" })).toBeVisible();
     expect(screen.getByText("Проверьте адрес или вернитесь в портфель.")).toBeVisible();
-    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/portfolio");
   });
 });

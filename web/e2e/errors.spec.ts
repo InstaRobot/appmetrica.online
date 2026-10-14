@@ -7,6 +7,9 @@ test("not found page is accessible", async ({ page }) => {
 
   expect(res?.status()).toBe(404);
   await expect(page.getByRole("heading", { level: 1, name: "Страница не найдена" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "В портфель" })).toHaveAttribute(
+    "href",
+    "/portfolio",
+  );
   await expectNoA11yViolations(page);
 });

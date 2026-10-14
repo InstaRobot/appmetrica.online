@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import { safeNext } from "./safe-next";
 
 describe("safeNext", () => {
+  it("sends the root and empty next to the portfolio instead of the public landing", () => {
+    expect(safeNext("/")).toBe("/portfolio");
+    expect(safeNext(undefined)).toBe("/portfolio");
+    expect(safeNext("/?utm=1")).toBe("/portfolio");
+  });
+
   it("rejects absolute and protocol-relative next", () => {
-    expect(safeNext("https://evil.example")).toBe("/");
-    expect(safeNext("//evil.example")).toBe("/");
+    expect(safeNext("https://evil.example")).toBe("/portfolio");
+    expect(safeNext("//evil.example")).toBe("/portfolio");
     expect(safeNext("/apps/1")).toBe("/apps/1");
   });
 
@@ -31,12 +37,12 @@ describe("safeNext", () => {
     ["nested dot segments to protocol-relative", "/a/..//evil.example"],
     ["encoded dot segments to protocol-relative", "/%2e%2e//evil.example"],
     ["dot segments to backslash host", "/..//\\evil.example"],
-  ])("falls back to / for %s", (_name, value) => {
-    expect(safeNext(value)).toBe("/");
+  ])("falls back to /portfolio for %s", (_name, value) => {
+    expect(safeNext(value)).toBe("/portfolio");
   });
 
   it("takes the first value of an array searchParam", () => {
     expect(safeNext(["/apps/2", "/apps/3"])).toBe("/apps/2");
-    expect(safeNext([])).toBe("/");
+    expect(safeNext([])).toBe("/portfolio");
   });
 });

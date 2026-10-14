@@ -68,7 +68,7 @@ describe("AppShell", () => {
     expect(
       await screen.findByRole("heading", { name: "Приложение не найдено или удалено" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveAttribute("href", "/portfolio");
     expect(screen.queryByText("Отчёт")).not.toBeInTheDocument();
   });
 

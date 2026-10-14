@@ -83,7 +83,7 @@ describe("CreateAppForm", () => {
     const platform = screen.getByRole("combobox", { name: /Платформа/ });
     expect(platform).toHaveAttribute("aria-required", "true");
     expect(platform).toHaveTextContent("Выберите платформу");
-    expect(screen.getByRole("link", { name: "Отмена" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Отмена" })).toHaveAttribute("href", "/portfolio");
 
     await user.click(platform);
     const options = await screen.findAllByRole("option");

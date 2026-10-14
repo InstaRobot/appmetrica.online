@@ -136,7 +136,7 @@ test("unknown docs page shows not found", async ({ page }) => {
 });
 
 test("footer shows DB-IP attribution", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/portfolio");
 
   const footer = page.getByRole("contentinfo");
   await expect(footer.getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveAttribute(

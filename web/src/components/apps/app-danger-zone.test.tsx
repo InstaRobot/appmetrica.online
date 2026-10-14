@@ -99,7 +99,7 @@ describe("AppDangerZone", () => {
     await user.click(confirm);
 
     await waitFor(() => expect(calls).toEqual(["delete:Notes iOS"]));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/portfolio"));
     expect(toasts.success).toHaveBeenCalledWith("Удаление запущено");
   });
 

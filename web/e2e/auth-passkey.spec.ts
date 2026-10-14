@@ -31,12 +31,12 @@ test("first setup registers passkey and lands on portfolio", async ({ page }) =>
   await page.getByRole("button", { name: "Создать passkey" }).click();
 
   await expect(page.getByText("Passkey создан. Переходим в дашборд…")).toBeVisible();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/portfolio");
   expect(await sessionCookie(page)).toMatchObject({ httpOnly: true, sameSite: "Lax", path: "/" });
 
   // Вошедшего владельца /login сразу отправляет в портфель.
   await page.goto("/login");
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/portfolio");
 
   // Ссылка одноразовая: повторная регистрация по ней показывает состояние expired.
   await page.goto(link);
@@ -75,7 +75,7 @@ test("login with passkey", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Войти с passkey" }).click();
   await authenticator.setUserPresence(true);
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/portfolio");
   expect(await sessionCookie(page)).toBeDefined();
 });
 

@@ -7,7 +7,7 @@ test("creates app from portfolio", async ({ page }) => {
   // Имя уникально на прогон: база e2e переживает прогоны, а имена приложений уникальны без учёта регистра.
   const name = `E2E ${Date.now().toString(36)}`;
 
-  await page.goto("/");
+  await page.goto("/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Портфель" })).toBeVisible();
   await page.getByRole("main").getByRole("link", { name: "Добавить приложение" }).first().click();
 
@@ -26,7 +26,7 @@ test("creates app from portfolio", async ({ page }) => {
   await expect(page).toHaveURL(/\/apps\/[0-9a-f-]{36}\/integration$/);
   const appId = new URL(page.url()).pathname.split("/")[2];
 
-  await page.goto("/");
+  await page.goto("/portfolio");
   const table = page.getByRole("table", { name: /Портфель приложений за/ });
   const link = table.getByRole("link", { name, exact: true });
   await expect(link).toBeVisible();
@@ -35,7 +35,7 @@ test("creates app from portfolio", async ({ page }) => {
 });
 
 test("portfolio keeps environment in the URL", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/portfolio");
   const env = page.getByRole("radiogroup", { name: "Окружение" });
   await env.getByRole("radio", { name: "development" }).click();
 
