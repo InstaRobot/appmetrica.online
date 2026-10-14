@@ -126,6 +126,15 @@ WHERE a.day >= c.cohort_start AND intDiv(dateDiff('day', c.cohort_start, toMonda
 GROUP BY cohort_start, period
 ORDER BY cohort_start, period`
 
+	// refPortfolioPlatforms — активные за дату по events.platform отдельным запросом: человек на двух платформах —
+	// в обеих строках.
+	refPortfolioPlatforms = `WITH ` + identity.LinksCTE + `
+SELECT e.platform AS platform, uniqExact(` + identity.PersonKeyExpr + `) AS active
+FROM events AS e
+LEFT JOIN links AS l ON l.install_id = e.install_id
+WHERE ` + eventsFilter + `
+GROUP BY platform`
+
 	refPortfolioDate = `WITH ` + identity.LinksCTE + `, ` + identity.PersonsFirstCTE + `, ` + evCTE + `,
 pp AS (
     SELECT person_key,
@@ -236,14 +245,43 @@ func refBreakdown(t *testing.T, svc *Service, p Params, d Dimension, m Metric) B
 	return out
 }
 
-// portfolioDate — метрики даты qPortfolioDate (или эталона) приложения p на дату day.
-func portfolioDate(t *testing.T, svc *Service, p Params, day time.Time, query string) [7]uint64 {
+// portfolioDate — метрики даты и активные за дату по платформам из qPortfolioDate приложения p на дату day.
+func portfolioDate(t *testing.T, svc *Service, p Params, day time.Time) ([7]uint64, map[string]uint64) {
 	t.Helper()
 	p.Period = Period{From: day.AddDate(0, 0, -7), To: day}
+	var (
+		v         [7]uint64
+		platforms map[string]uint64
+	)
+	require.NoError(t, svc.conn.QueryRow(p.bindWith(t.Context(), clickhouse.Parameters{"date": day.Format(time.DateOnly)}), qPortfolioDate).
+		Scan(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &platforms))
+	return v, platforms
+}
+
+// refPortfolio — то же по эталонам refPortfolioDate и refPortfolioPlatforms.
+func refPortfolio(t *testing.T, svc *Service, p Params, day time.Time) ([7]uint64, map[string]uint64) {
+	t.Helper()
+	dp := p
+	dp.Period = Period{From: day.AddDate(0, 0, -7), To: day}
 	var v [7]uint64
-	require.NoError(t, svc.conn.QueryRow(p.bindWith(t.Context(), clickhouse.Parameters{"date": day.Format(time.DateOnly)}), query).
+	require.NoError(t, svc.conn.QueryRow(dp.bindWith(t.Context(), clickhouse.Parameters{"date": day.Format(time.DateOnly)}), refPortfolioDate).
 		Scan(&v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]))
-	return v
+
+	p.Period = Period{From: day, To: day}
+	rows, err := svc.conn.Query(p.Bind(t.Context()), refPortfolioPlatforms)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	platforms := map[string]uint64{}
+	for rows.Next() {
+		var (
+			platform string
+			active   uint64
+		)
+		require.NoError(t, rows.Scan(&platform, &active))
+		platforms[platform] = active
+	}
+	require.NoError(t, rows.Err())
+	return v, platforms
 }
 
 func TestReports_MatchReferenceSQL(t *testing.T) {
@@ -357,8 +395,10 @@ func TestReports_MatchReferenceSQL(t *testing.T) {
 				}
 
 				for _, day := range []time.Time{last.AddDate(0, 0, -1), last.AddDate(0, 0, -7)} {
-					require.Equal(t, portfolioDate(t, svc, p, day, refPortfolioDate), portfolioDate(t, svc, p, day, qPortfolioDate),
-						"portfolio %s", day.Format(time.DateOnly))
+					wantMetrics, wantPlatforms := refPortfolio(t, svc, p, day)
+					gotMetrics, gotPlatforms := portfolioDate(t, svc, p, day)
+					require.Equal(t, wantMetrics, gotMetrics, "portfolio %s", day.Format(time.DateOnly))
+					require.Equal(t, wantPlatforms, gotPlatforms, "portfolio platforms %s", day.Format(time.DateOnly))
 				}
 			})
 		}
