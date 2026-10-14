@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"log/slog"
@@ -63,12 +64,26 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	stats := reports.NewService(ch.Conn(), c)
 	executor := deletion.NewExecutor(pg, deletion.NewClickHousePurger(ch.Conn()), c, logger,
 		deletion.WithOnFailed(worker.DeletionFailedNotifier(pg.Queries(), tg, logger)))
+	checkCfg := worker.SystemCheckConfig{
+		Store: pg.Queries(), ClickHouse: ch, Telegram: tg, Lock: pg, Clock: c, Logger: logger,
+		HealthchecksPingURL: cfg.HealthchecksPingURL,
+		DiskFreeAlertPct:    cfg.DiskFreeAlertPct,
+		IngestHealthURL:     cfg.IngestHealthURL,
+		APIHealthURL:        cfg.APIHealthURL,
+		IngestMetricsURL:    cfg.IngestMetricsURL,
+	}
+	if cfg.BackupAPIURL != "" {
+		checkCfg.Backups = chstore.NewBackupClient(cfg.BackupAPIURL, nil)
+	}
+	check := worker.NewSystemCheck(checkCfg)
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
+		check.Job(),
 		worker.DeletionJob(executor),
 		worker.CloseDayJob(pg.Queries(), stats, pg, c),
 		worker.DigestJob(pg.Queries(), stats, tg, c, logger, cfg.PublicBaseURL),
+		worker.SessionCleanupJob(pg.Queries(), c),
 	)
-	if err := sched.RegisterMetrics(reg); err != nil {
+	if err := errors.Join(sched.RegisterMetrics(reg), check.RegisterMetrics(reg)); err != nil {
 		logger.Error("metrics init failed", slog.Any("error", err))
 		return 1
 	}

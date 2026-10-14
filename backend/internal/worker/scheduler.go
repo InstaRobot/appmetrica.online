@@ -1,5 +1,5 @@
 // Package worker — фоновые задачи `appmetrica worker`: планировщик с журналом job_runs и сами задачи
-// (deletion, close_day, digest; system_check и session_cleanup — по мере реализации).
+// (deletion, close_day, digest, system_check, session_cleanup).
 package worker
 
 import (

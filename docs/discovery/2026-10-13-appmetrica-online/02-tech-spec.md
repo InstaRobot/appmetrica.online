@@ -2062,13 +2062,14 @@ AC-8.1.4 (happy path — тестовое сообщение):
 | Проверка | Источник | Условие firing | key в `alert_states` |
 |---|---|---|---|
 | Свободное место ClickHouse | `SELECT free_space, total_space FROM system.disks WHERE name='default'` | free < `DISK_FREE_ALERT_PCT` (20 %) | `disk_free` |
-| ClickHouse жив | `SELECT 1` за 5 с | ошибка | `clickhouse_down` |
-| Ошибки вставки | `INGEST_METRICS_URL`: прирост `ingest_clickhouse_insert_errors_total` / прирост батчей за 5 мин | > 1 % | `insert_errors` |
-| Свежесть бэкапа | `GET BACKUP_API_URL/backup/list/remote` → максимальный `created` | старше 26 ч | `backup_stale` |
-| Ingest жив | `GET INGEST_HEALTH_URL` за 3 с | не 200 два цикла подряд | `ingest_down` |
-| API жив | `GET API_HEALTH_URL` за 3 с | не 200 два цикла подряд | `api_down` |
+| ClickHouse жив | ping за 5 с | ошибка | `clickhouse_down` |
+| Ошибки вставки | `INGEST_METRICS_URL`: прирост `ingest_clickhouse_insert_errors_total` / прирост `ingest_clickhouse_insert_duration_seconds_count` с прошлого цикла | > 1 % | `insert_errors` |
+| Свежесть бэкапа | `GET BACKUP_API_URL/backup/list/remote` → максимальный `created` | старше 26 ч, бэкапов нет или список недоступен | `backup_stale` |
+| Ingest жив | `GET INGEST_HEALTH_URL` за 3 с | не 200 | `ingest_down` |
+| API жив | `GET API_HEALTH_URL` за 3 с | не 200 | `api_down` |
 
-Переход `firing false → true` → Telegram «🔴 <описание> (значение)»; пока firing — повтор раз в 6 ч;
+Алерт срабатывает, когда условие выполнено два цикла подряд (T-052): первый неудачный цикл только записывает
+`first_fired_at`. Переход `firing false → true` → Telegram «🔴 <описание> (значение)»; пока firing — повтор раз в 6 ч;
 `true → false` → «🟢 Восстановлено: <описание>». При `alerts_enabled = false` состояния обновляются, сообщения не
 шлются. После завершения цикла без исключений — `GET HEALTHCHECKS_PING_URL`; при панике/исключении цикла —
 `GET HEALTHCHECKS_PING_URL/fail`. Если worker или сервер мертвы, healthchecks.io сам алертит в Telegram по тишине
@@ -2079,9 +2080,10 @@ AC-8.1.4 (happy path — тестовое сообщение):
 ```
 AC-8.2.1 (happy path — алерт по диску и восстановление):
   Given: фейк CH: free 15 %; Telegram — httptest
-  When:  RunOnce("system_check"); затем free 30 %, RunOnce
-  Then:  первое — 1 сообщение «🔴 На диске ClickHouse свободно 15 %», alert_states.disk_free firing = true;
-         второе — «🟢 Восстановлено: свободное место на диске ClickHouse (30 %)», firing = false
+  When:  RunOnce("system_check") дважды; затем free 30 %, RunOnce
+  Then:  после первого сообщений нет; после второго — 1 сообщение «🔴 На диске ClickHouse свободно 15 %»,
+         alert_states.disk_free firing = true; третье — «🟢 Восстановлено: свободное место на диске ClickHouse (30 %)»,
+         firing = false
   Test:  backend/internal/worker/systemcheck_test.go::TestSystemCheck_DiskAlertAndRecovery
 ```
 
@@ -2104,7 +2106,7 @@ AC-8.2.3 (happy path — dead-man ping):
 ```
 AC-8.2.4 (error path — бэкап устарел):
   Given: backup list remote: последний бэкап 27 ч назад
-  When:  RunOnce
+  When:  RunOnce дважды
   Then:  alert backup_stale firing, сообщение «🔴 Последний бэкап ClickHouse 27 ч назад»
   Test:  backend/internal/worker/systemcheck_test.go::TestSystemCheck_BackupStale
 ```
@@ -2134,7 +2136,7 @@ AC-8.2.5 (edge case — флаппинг ingest):
 - Success state: таблица проверок и последних запусков jobs.
 
 **Tech notes (для разработчика)**:
-- Подход к реализации: `internal/worker/jobs_systemcheck.go`, `internal/worker/alerts.go` (машина состояний).
+- Подход к реализации: `internal/worker/systemcheck.go` (проверки и машина состояний), `internal/worker/cleanup.go`; допущения — OQ-067.
 - Связанные endpoints: `getSystemStatus`.
 - Связанные сущности БД: `alert_states`, `job_runs`, `settings`.
 - Feature flag (если нужен): `WORKER_JOBS_ENABLED`, `settings.alerts_enabled`.
