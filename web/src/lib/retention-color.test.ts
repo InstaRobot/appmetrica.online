@@ -23,11 +23,9 @@ describe("retentionStep", () => {
     expect(retentionStep(1.2)).toBe(5);
   });
 
-  it("uses dark text on light steps and white text on dark steps for AA contrast", () => {
-    expect(RETENTION_STEP_CLASSES[0]).toBe("bg-ret-0 text-foreground");
-    expect(RETENTION_STEP_CLASSES[2]).toBe("bg-ret-2 text-foreground");
-    expect(RETENTION_STEP_CLASSES[3]).toBe("bg-ret-3 text-(--color-neutral-950)");
-    expect(RETENTION_STEP_CLASSES[4]).toBe("bg-ret-4 text-white");
-    expect(RETENTION_STEP_CLASSES[5]).toBe("bg-ret-5 text-white");
+  // Цвет текста ячейки задаётся токеном темы (--ret-fg-N): в светлой теме тёмный текст на светлых
+  // шагах и белый на тёмных, в тёмной — наоборот на самом ярком шаге. Контраст проверяет globals.test.ts.
+  it.each([0, 1, 2, 3, 4, 5] as const)("step %s uses themed background and text tokens", (step) => {
+    expect(RETENTION_STEP_CLASSES[step]).toBe(`bg-ret-${step} text-(--ret-fg-${step})`);
   });
 });

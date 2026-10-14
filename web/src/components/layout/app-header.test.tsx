@@ -222,3 +222,13 @@ describe("AppHeader", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("AppHeader theme switch", () => {
+  it("offers the light/dark theme toggle next to the navigation", async () => {
+    document.documentElement.dataset.theme = "light";
+
+    renderWithClient(<AppHeader />);
+
+    expect(await screen.findByRole("button", { name: "Включить тёмную тему" })).toBeInTheDocument();
+  });
+});
