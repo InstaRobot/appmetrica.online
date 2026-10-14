@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, formatInt, formatPercent } from "./format";
+import {
+  formatDate,
+  formatDateShort,
+  formatDelta,
+  formatDuration,
+  formatInt,
+  formatPercent,
+  formatWeekdayDate,
+} from "./format";
 
 const NBSP = " ";
 
@@ -51,5 +59,30 @@ describe("format", () => {
 
   it("renders a dash for negative durations", () => {
     expect(formatDuration(-1)).toBe("—");
+  });
+
+  it.each([
+    [4.1, `+4,1${NBSP}%`],
+    [-1.2, `\u22121,2${NBSP}%`],
+    [12, `+12${NBSP}%`],
+    [0, `0${NBSP}%`],
+    [-0.04, `0${NBSP}%`],
+    [null, "—"],
+  ])("formats delta %s with an explicit sign", (value, want) => {
+    expect(formatDelta(value)).toBe(want);
+  });
+
+  it("formats report dates with short russian months", () => {
+    expect(formatDate("2026-10-12")).toBe(`12${NBSP}окт${NBSP}2026`);
+    expect(formatDate("2026-05-01")).toBe(`1${NBSP}мая${NBSP}2026`);
+    expect(formatDateShort("2026-09-29")).toBe(`29${NBSP}сен`);
+    expect(formatWeekdayDate("2026-10-05")).toBe(`пн${NBSP}5${NBSP}окт`);
+    expect(formatWeekdayDate("2026-10-11")).toBe(`вс${NBSP}11${NBSP}окт`);
+  });
+
+  it("formats timestamps as dates in the given time zone", () => {
+    expect(formatDate("2026-09-20T22:30:00Z", "Europe/Moscow")).toBe(`21${NBSP}сен${NBSP}2026`);
+    expect(formatDate("2026-09-20T22:30:00Z", "UTC")).toBe(`20${NBSP}сен${NBSP}2026`);
+    expect(formatDate("garbage")).toBe("—");
   });
 });

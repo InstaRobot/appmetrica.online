@@ -10,7 +10,12 @@ class ResizeObserverStub {
   disconnect() {}
 }
 globalThis.ResizeObserver ??= ResizeObserverStub;
-if (typeof Element !== "undefined") Element.prototype.scrollIntoView ??= () => {};
+if (typeof Element !== "undefined") {
+  Element.prototype.scrollIntoView ??= () => {};
+  // Radix Select (S-04 «Платформа») открывается по pointer-событиям и проверяет захват указателя.
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+}
 
 // Запрос без хендлера — ошибка теста: сеть в unit-тестах не используется (22-test-strategy.md §7).
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));

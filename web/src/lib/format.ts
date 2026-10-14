@@ -44,3 +44,20 @@ export function formatDuration(ms: number | null | undefined): string {
   }
   return parts.join(NBSP);
 }
+
+// TODO(T-037): заглушки форматирования дат и дельты.
+export function formatDelta(_value: number | null | undefined): string {
+  return "";
+}
+
+export function formatDate(_value: string, _timeZone?: string): string {
+  return "";
+}
+
+export function formatDateShort(_value: string): string {
+  return "";
+}
+
+export function formatWeekdayDate(_value: string): string {
+  return "";
+}
