@@ -1,0 +1,216 @@
+# appmetrica.online — the whole stack as one Dokploy Compose service.
+#
+#   Dokploy → Project → Create Service → Compose (type Docker Compose), provider GitHub,
+#   Compose Path: ./deploy/dokploy/docker-compose.yml
+#
+# Unlike deploy/selfhost/docker-compose.yml there is no Caddy: Dokploy's Traefik terminates HTTPS.
+# Add three domains in Dokploy → Domains (HTTPS on, certificate Let's Encrypt):
+#   APP_DOMAIN    → service appmetrica-web,    port 3000
+#   INGEST_DOMAIN → service appmetrica-ingest, port 8081
+#   API_DOMAIN    → service appmetrica-api,    port 8080
+#
+# Variables go to Dokploy → Environment (Dokploy writes them to .env next to this file); each one is
+# described in deploy/selfhost/.env.example. Services carry the appmetrica- prefix because Dokploy attaches
+# every service with a domain to the shared dokploy-network, where a bare name like "api" could resolve to
+# another project's container.
+
+x-backend-image: &backend-image
+  image: appmetrica-backend:dokploy
+  restart: unless-stopped
+  # Built once by appmetrica-api from ../../backend; ingest and worker reuse the same image.
+  pull_policy: never
+
+x-backend-common: &backend-common
+  APP_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  POSTGRES_URL: postgres://appmetrica:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Environment}@appmetrica-postgres:5432/appmetrica?sslmode=disable
+  CLICKHOUSE_ADDR: appmetrica-clickhouse:9000
+  CLICKHOUSE_DATABASE: appmetrica
+
+services:
+  appmetrica-clickhouse:
+    image: clickhouse/clickhouse-server:26.8.25.14@sha256:dd81097e2c38827a438287d8ae5d4dc8afafbdd0e61e83376fdd7ed4580673b9
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: appmetrica
+      CLICKHOUSE_USER: appmetrica_admin
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_ADMIN_PASSWORD:?set CLICKHOUSE_ADMIN_PASSWORD in Environment}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_RW_PASSWORD: ${CLICKHOUSE_RW_PASSWORD:?set CLICKHOUSE_RW_PASSWORD in Environment}
+      CLICKHOUSE_RO_PASSWORD: ${CLICKHOUSE_RO_PASSWORD:?set CLICKHOUSE_RO_PASSWORD in Environment}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ../clickhouse/config.d/appmetrica.xml:/etc/clickhouse-server/config.d/appmetrica.xml:ro
+      - ../clickhouse/users.d/appmetrica.xml:/etc/clickhouse-server/users.d/appmetrica.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user appmetrica_admin --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  appmetrica-postgres:
+    image: postgres:18.6-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: appmetrica
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Environment}
+      POSTGRES_DB: appmetrica
+    volumes:
+      # PostgreSQL 18+: PGDATA is /var/lib/postgresql/18/docker, mount the parent directory.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appmetrica -d appmetrica"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Dashboard API + Read API. Applies Postgres and ClickHouse migrations on start (MIGRATE_ON_START),
+  # so ingest, worker and web start only after it is healthy.
+  appmetrica-api:
+    <<: *backend-image
+    build:
+      context: ../../backend
+      args:
+        GEO_MONTH: ${GEO_MONTH:?set GEO_MONTH (YYYY-MM) in Environment}
+        VERSION: ${APP_VERSION:-dokploy}
+    command: ["api"]
+    environment:
+      <<: *backend-common
+      CLICKHOUSE_USER: appmetrica_ro
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_RO_PASSWORD}
+      CLICKHOUSE_MIGRATE_USER: appmetrica_admin
+      CLICKHOUSE_MIGRATE_PASSWORD: ${CLICKHOUSE_ADMIN_PASSWORD}
+      MIGRATE_ON_START: "true"
+      PUBLIC_BASE_URL: https://${APP_DOMAIN:?set APP_DOMAIN in Environment}
+      WEBAUTHN_RP_ID: ${APP_DOMAIN}
+      WEBAUTHN_RP_ORIGINS: https://${APP_DOMAIN}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-appmetrica.online}
+      KEY_HASH_PEPPER: ${KEY_HASH_PEPPER:?set KEY_HASH_PEPPER in Environment (openssl rand -base64 32)}
+      SESSION_TTL: ${SESSION_TTL:-720h}
+      SESSION_IDLE_TTL: ${SESSION_IDLE_TTL:-168h}
+      API_PUBLIC_BEARER_ENABLED: ${API_PUBLIC_BEARER_ENABLED:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BACKUP_API_URL: ${BACKUP_API_URL:-}
+    depends_on:
+      appmetrica-clickhouse:
+        condition: service_healthy
+      appmetrica-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/appmetrica", "healthcheck", "--url", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # Event ingestion (public endpoint of your apps: POST https://INGEST_DOMAIN/v1/events).
+  appmetrica-ingest:
+    <<: *backend-image
+    command: ["ingest"]
+    environment:
+      <<: *backend-common
+      CLICKHOUSE_USER: appmetrica_rw
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_RW_PASSWORD}
+      INGEST_MAX_BODY_BYTES: ${INGEST_MAX_BODY_BYTES:-1048576}
+      INGEST_MAX_EVENTS: ${INGEST_MAX_EVENTS:-500}
+      INGEST_LATE_WINDOW: ${INGEST_LATE_WINDOW:-168h}
+      INGEST_FUTURE_TOLERANCE: ${INGEST_FUTURE_TOLERANCE:-10m}
+      INGEST_ACCEPT_DEVELOPMENT: ${INGEST_ACCEPT_DEVELOPMENT:-true}
+      RATE_APP_EVENTS_PER_SEC: ${RATE_APP_EVENTS_PER_SEC:-2000}
+      RATE_APP_BURST: ${RATE_APP_BURST:-4000}
+      RATE_INSTALL_PER_MIN: ${RATE_INSTALL_PER_MIN:-100}
+      RATE_INSTALL_BURST: ${RATE_INSTALL_BURST:-1000}
+      KEY_CACHE_REFRESH: ${KEY_CACHE_REFRESH:-15s}
+    depends_on:
+      appmetrica-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/appmetrica", "healthcheck", "--url", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # Background jobs: day closing, Telegram digest and alerts, GDPR deletions, cleanup.
+  appmetrica-worker:
+    <<: *backend-image
+    command: ["worker"]
+    environment:
+      <<: *backend-common
+      CLICKHOUSE_USER: appmetrica_rw
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_RW_PASSWORD}
+      PUBLIC_BASE_URL: https://${APP_DOMAIN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      HEALTHCHECKS_PING_URL: ${HEALTHCHECKS_PING_URL:-}
+      BACKUP_API_URL: ${BACKUP_API_URL:-}
+      DISK_FREE_ALERT_PCT: ${DISK_FREE_ALERT_PCT:-20}
+      WORKER_JOBS_ENABLED: ${WORKER_JOBS_ENABLED:-system_check,digest,close_day,deletion,session_cleanup}
+      INGEST_HEALTH_URL: http://appmetrica-ingest:8081/health
+      API_HEALTH_URL: http://appmetrica-api:8080/health
+      INGEST_METRICS_URL: http://appmetrica-ingest:9090/metrics
+    depends_on:
+      appmetrica-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/appmetrica", "healthcheck", "--url", "http://127.0.0.1:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # Dashboard, landing and API docs (Next.js). Public URLs are baked in at build time.
+  appmetrica-web:
+    image: appmetrica-web:dokploy
+    pull_policy: never
+    restart: unless-stopped
+    build:
+      context: ../../web
+      args:
+        API_INTERNAL_URL: http://appmetrica-api:8080
+        NEXT_PUBLIC_INGEST_URL: https://${INGEST_DOMAIN:?set INGEST_DOMAIN in Environment}
+        NEXT_PUBLIC_API_URL: https://${API_DOMAIN:?set API_DOMAIN in Environment}
+    environment:
+      API_INTERNAL_URL: http://appmetrica-api:8080
+    depends_on:
+      appmetrica-api:
+        condition: service_healthy
+
+  # Optional: incremental ClickHouse backups to any S3-compatible storage. Enable with COMPOSE_PROFILES=backup
+  # and BACKUP_API_URL=http://appmetrica-clickhouse-backup:7171 in Environment.
+  appmetrica-clickhouse-backup:
+    profiles: ["backup"]
+    image: altinity/clickhouse-backup:2.8.1@sha256:08016b048f7e6035c048501315c2a788e5a782f15f168e042c7bd48d5a388cc4
+    restart: unless-stopped
+    command: ["server", "--watch"]
+    environment:
+      CLICKHOUSE_HOST: appmetrica-clickhouse
+      CLICKHOUSE_PORT: "9000"
+      CLICKHOUSE_USERNAME: appmetrica_admin
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_ADMIN_PASSWORD}
+      REMOTE_STORAGE: s3
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_REGION: ${S3_REGION:-}
+      BACKUPS_TO_KEEP_REMOTE: ${BACKUPS_TO_KEEP_REMOTE:-35}
+      WATCH_INTERVAL: ${WATCH_INTERVAL:-24h}
+      FULL_INTERVAL: ${FULL_INTERVAL:-168h}
+      API_LISTEN: 0.0.0.0:7171
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ../clickhouse-backup/config.yml:/etc/clickhouse-backup/config.yml:ro
+    depends_on:
+      appmetrica-clickhouse:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+  postgres-data:
