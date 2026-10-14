@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/feedback/confirm-delete-dialog";
 import { createDeletionRequest } from "@/lib/api/gen/endpoints/deletion/deletion";
 import type { DeletionRequest } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
 import { deletionSubject, formatPersonKey, type PersonKey } from "@/lib/person-key";
+import { toast } from "@/lib/toast";
 
 type ProfileDeleteDialogProps = {
   appId: string;

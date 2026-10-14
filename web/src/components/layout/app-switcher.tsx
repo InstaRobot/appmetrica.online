@@ -3,9 +3,7 @@
 import { Check, ChevronsUpDown } from "lucide-react";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { PlatformIcon } from "@/components/common/platform-icon";
-import { Button } from "@/components/ui/button";
+import { Suspense, useMemo, useState } from "react";
 import {
   Command,
   CommandEmpty,
@@ -14,7 +12,10 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+  CommandSkeleton,
+} from "@/components/common/lazy-command";
+import { PlatformIcon } from "@/components/common/platform-icon";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { App } from "@/lib/api/gen/model";
 import { cn } from "@/lib/utils";
@@ -63,39 +64,45 @@ export function AppSwitcher({ apps, currentAppId, currentTab = "" }: AppSwitcher
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
-        <Command shouldFilter={false}>
-          <CommandInput placeholder="Найти приложение…" value={search} onValueChange={setSearch} />
-          <CommandList>
-            <CommandEmpty>{needle ? "Ничего не найдено" : "Приложений пока нет"}</CommandEmpty>
-            {visible.length > 0 ? (
-              <CommandGroup>
-                {visible.map((app) => (
-                  <CommandItem
-                    key={app.id}
-                    value={app.id}
-                    onSelect={() => go(appTabHref(app.id, currentTab, query))}
-                  >
-                    <PlatformIcon platform={app.platform} />
-                    <span className="truncate">{app.name}</span>
-                    <Check
-                      aria-hidden="true"
-                      className={cn(
-                        "ml-auto",
-                        app.id === currentAppId ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                  </CommandItem>
-                ))}
+        <Suspense fallback={<CommandSkeleton />}>
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Найти приложение…"
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              <CommandEmpty>{needle ? "Ничего не найдено" : "Приложений пока нет"}</CommandEmpty>
+              {visible.length > 0 ? (
+                <CommandGroup>
+                  {visible.map((app) => (
+                    <CommandItem
+                      key={app.id}
+                      value={app.id}
+                      onSelect={() => go(appTabHref(app.id, currentTab, query))}
+                    >
+                      <PlatformIcon platform={app.platform} />
+                      <span className="truncate">{app.name}</span>
+                      <Check
+                        aria-hidden="true"
+                        className={cn(
+                          "ml-auto",
+                          app.id === currentAppId ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              <CommandSeparator alwaysRender />
+              <CommandGroup forceMount>
+                <CommandItem value="new" forceMount onSelect={() => go("/apps/new" as Route)}>
+                  + Добавить приложение
+                </CommandItem>
               </CommandGroup>
-            ) : null}
-            <CommandSeparator alwaysRender />
-            <CommandGroup forceMount>
-              <CommandItem value="new" forceMount onSelect={() => go("/apps/new" as Route)}>
-                + Добавить приложение
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
+            </CommandList>
+          </Command>
+        </Suspense>
       </PopoverContent>
     </Popover>
   );

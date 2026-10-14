@@ -21,7 +21,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 function mockActions(deleteResponse?: () => Response) {
   const calls: string[] = [];

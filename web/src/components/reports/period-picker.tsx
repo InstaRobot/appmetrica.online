@@ -3,9 +3,8 @@
 import { CalendarDays } from "lucide-react";
 import { useState } from "react";
 import type { DateRange } from "react-day-picker";
-import { ru } from "react-day-picker/locale";
+import { LazyCalendar } from "@/components/common/lazy-calendar";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatDateRange } from "@/lib/format";
@@ -114,9 +113,8 @@ export function PeriodPicker({
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-auto p-0">
-            <Calendar
+            <LazyCalendar
               mode="range"
-              locale={ru}
               numberOfMonths={2}
               showOutsideDays={false}
               selected={draft}

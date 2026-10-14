@@ -13,7 +13,7 @@ describe("TimezoneSelect", () => {
     expect(trigger).toHaveTextContent("Europe/Moscow (UTC+3)");
 
     await user.click(trigger);
-    await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "new_y");
+    await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "new_y");
     const listbox = screen.getByRole("listbox");
     expect(
       within(listbox)
@@ -31,11 +31,11 @@ describe("TimezoneSelect", () => {
 
     expect(screen.getByRole("combobox")).toHaveTextContent("Выберите часовой пояс");
     await user.click(screen.getByRole("combobox"));
-    await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "utc");
-    expect(screen.getByRole("option", { name: "UTC (UTC)" })).toBeInTheDocument();
+    await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "utc");
+    expect(await screen.findByRole("option", { name: "UTC (UTC)" })).toBeInTheDocument();
 
-    await user.clear(screen.getByPlaceholderText("Найти часовой пояс…"));
-    await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "Mars");
+    await user.clear(await screen.findByPlaceholderText("Найти часовой пояс…"));
+    await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "Mars");
     expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
   });
 });

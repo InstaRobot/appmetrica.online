@@ -1,18 +1,11 @@
 import { randomUUID } from "node:crypto";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-11 настройки приложения и S-12 глобальные настройки (T-043) против локального api с APP_ENV=e2e.
 // Ответ Telegram в тесте отправки подменяется через page.route: у e2e-стенда нет бота.
 
 type AppList = { items: { id: string; name: string }[] };
-
-async function expectNoA11yViolations(page: Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
-}
 
 async function seedAppId(page: Page): Promise<string> {
   const res = await page.request.get("/api/v1/apps");

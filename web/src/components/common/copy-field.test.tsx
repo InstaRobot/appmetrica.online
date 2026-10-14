@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CopyField } from "./copy-field";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 beforeEach(() => {
   toasts.success.mockReset();

@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-05 аудитория (T-038). Данные — `make seed` в базу e2e: приложение «Seed iOS» с 35 днями событий
 // по вчерашний день (версии 1.2.0, 1.3.0, 1.4.0). Владелец уже вошёл: storageState из global-setup.
@@ -48,10 +48,7 @@ test("filters and period are reflected in URL", async ({ page }) => {
   await expect(page.getByText("Версия приложения: 1.4.0")).toBeVisible();
   await expect(activeKpi(page).locator("[data-kpi-value]")).not.toHaveText(month);
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
+  await expectNoA11yViolations(page);
 
   await page.reload();
   await expect(page.getByText("Версия приложения: 1.4.0")).toBeVisible();

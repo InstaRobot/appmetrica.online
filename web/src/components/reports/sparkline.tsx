@@ -1,7 +1,3 @@
-"use client";
-
-import { Line, LineChart } from "recharts";
-
 type SparklineProps = {
   values: number[];
   width?: number;
@@ -10,44 +6,45 @@ type SparklineProps = {
   trendLabel: string;
 };
 
-type DotProps = { cx?: number; cy?: number; index?: number };
+const PAD = 4;
 
 // Мини-график без осей (14-ux-ui-spec.md §16.6): последняя точка отмечена кружком 3 px.
-// График декоративный, смысл передаёт trendLabel.
+// График декоративный, смысл передаёт trendLabel. Рисуется обычным SVG, а не Recharts:
+// sparkline есть в каждой строке портфеля, и Recharts в initial JS не укладывается в бюджет
+// 250 KB gz (NFR-006, OQ-061).
 export function Sparkline({ values, width = 96, height = 28, trendLabel }: SparklineProps) {
-  const data = values.map((value, index) => ({ index, value }));
-  const last = data.length - 1;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const stepX = values.length > 1 ? (width - 2 * PAD) / (values.length - 1) : 0;
+  const plotHeight = height - 2 * PAD;
+  const points = values.map((value, i) => ({
+    // Одна точка — у правого края, как последняя точка ряда.
+    x: values.length > 1 ? PAD + i * stepX : width - PAD,
+    // Ровный ряд — линия посередине; иначе максимум у верхнего края, минимум — у нижнего.
+    y: max === min ? height / 2 : PAD + ((max - value) / (max - min)) * plotHeight,
+  }));
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${round(p.x)} ${round(p.y)}`).join(" ");
+  const last = points.at(-1);
 
   return (
     <span className="inline-flex align-middle">
       <span data-sparkline aria-hidden="true" className="block" style={{ width, height }}>
-        <LineChart
-          width={width}
-          height={height}
-          data={data}
-          margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-          // Без слоя доступности Recharts: иначе <svg tabindex="0"> внутри aria-hidden ловит фокус.
-          accessibilityLayer={false}
-        >
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke="var(--chart-1)"
-            strokeWidth={1.5}
-            isAnimationActive={false}
-            dot={({ cx, cy, index }: DotProps) => (
-              <circle
-                key={index}
-                cx={cx}
-                cy={cy}
-                r={index === last ? 3 : 0}
-                fill="var(--chart-1)"
-                stroke="none"
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+          {last ? (
+            <>
+              <path
+                d={d}
+                fill="none"
+                stroke="var(--chart-1)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
               />
-            )}
-            activeDot={false}
-          />
-        </LineChart>
+              <circle cx={round(last.x)} cy={round(last.y)} r={3} fill="var(--chart-1)" />
+            </>
+          ) : null}
+        </svg>
       </span>
       <span className="sr-only">{trendLabel}</span>
     </span>

@@ -1,25 +1,28 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Ellipsis, LayoutGrid, LogOut, type LucideIcon, Settings } from "lucide-react";
+import {
+  BookOpen,
+  ChevronsUpDown,
+  Ellipsis,
+  LayoutGrid,
+  type LucideIcon,
+  Settings,
+} from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { logout } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
+import { usePathname } from "next/navigation";
+import { lazy, Suspense } from "react";
+import { buttonVariants } from "@/components/ui/button";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
-import { toUiError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-import { AppSwitcher } from "./app-switcher";
 import { parseAppPath } from "./app-tabs";
 import { Logo } from "./logo";
+
+// AppSwitcher (Radix Popover) и меню пользователя (Radix DropdownMenu) — отдельные чанки: их HTML
+// приходит с сервера, а код догружается сразу после первой загрузки страницы (бюджет initial JS
+// NFR-006, T-044). Заглушки того же размера видны только при монтировании на клиенте.
+const AppSwitcher = lazy(() => import("./app-switcher").then((m) => ({ default: m.AppSwitcher })));
+const UserMenu = lazy(() => import("./user-menu").then((m) => ({ default: m.UserMenu })));
 
 type NavItem = { href: string; label: string; icon: LucideIcon; active: (path: string) => boolean };
 
@@ -36,20 +39,9 @@ const NAV: NavItem[] = [
 // загружается на клиенте, чтобы после создания или архивации приложения обновляться без перезагрузки.
 export function AppHeader() {
   const pathname = usePathname();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const current = parseAppPath(pathname);
   const { data } = useListApps();
   const apps = data?.status === 200 ? data.data.items : [];
-
-  const signOut = useMutation({
-    mutationFn: () => logout(),
-    onSuccess: () => {
-      queryClient.clear();
-      router.replace("/login");
-    },
-    onError: (error) => toast.error(toUiError(error).message),
-  });
 
   return (
     <header className="sticky top-0 z-sticky h-14 border-b border-border bg-card">
@@ -57,7 +49,18 @@ export function AppHeader() {
         <Link href="/" aria-label="appmetrica.online — в портфель" className="rounded-md">
           <Logo />
         </Link>
-        <AppSwitcher apps={apps} currentAppId={current?.appId} currentTab={current?.tab} />
+        <Suspense
+          fallback={
+            <span
+              aria-hidden="true"
+              className={cn(buttonVariants({ variant: "ghost" }), "h-9 gap-2 px-2 text-body-md")}
+            >
+              <ChevronsUpDown className="text-fg-subtle" />
+            </span>
+          }
+        >
+          <AppSwitcher apps={apps} currentAppId={current?.appId} currentTab={current?.tab} />
+        </Suspense>
         <nav aria-label="Основная навигация" className="ml-auto">
           <ul className="flex items-center gap-1">
             {NAV.map(({ href, label, icon: Icon, active }) => {
@@ -80,19 +83,18 @@ export function AppHeader() {
             })}
           </ul>
         </nav>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-lg" aria-label="Меню пользователя">
-              <Ellipsis aria-hidden="true" className="size-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem disabled={signOut.isPending} onSelect={() => signOut.mutate()}>
-              <LogOut aria-hidden="true" />
-              Выйти
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Suspense
+          fallback={
+            <span
+              aria-hidden="true"
+              className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
+            >
+              <Ellipsis className="size-5" />
+            </span>
+          }
+        >
+          <UserMenu />
+        </Suspense>
       </div>
     </header>
   );

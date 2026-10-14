@@ -18,7 +18,7 @@ const APP_ID = "0192aaaa-0000-7000-8000-000000000022";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 type ProfileHandler = Parameters<typeof http.get>[1];
 

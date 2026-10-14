@@ -3,6 +3,8 @@ name: CI
 # Гейты 22-test-strategy.md §5 (T-008). Все jobs обязательны в branch protection для main.
 # Образы собирает и выкатывает deploy.yml после зелёного CI на main (T-024).
 # Jobs backend, web, gen-check, tdd-order и e2e идут параллельно, чтобы весь прогон укладывался в ~10 минут.
+# Бюджеты T-044 (NFR-006, NFR-008): initial JS страниц дашборда ≤ 250 KB gz — в job web после сборки;
+# axe WCAG 2.2 AA — в каждой E2E-спеке (e2e/helpers/a11y.ts); Lighthouse CI портфеля — в job e2e.
 # Перф-тест отчётов (job perf-reports, NFR-003, T-035) — еженедельно по cron, вручную и по метке perf на PR;
 # cron и ручной запуск прогоняют и остальные jobs на main (деплой запускает только push, см. deploy.yml).
 
@@ -159,6 +161,10 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: pnpm build
 
+      - name: Initial JS budget (≤ 250 KB gz per dashboard page)
+        shell: bash # pipefail: падение скрипта не теряется за tee
+        run: pnpm check:bundle | tee -a "$GITHUB_STEP_SUMMARY"
+
   e2e:
     name: e2e (Playwright against real ingest + api + ClickHouse + Postgres)
     runs-on: ubuntu-24.04
@@ -221,6 +227,18 @@ jobs:
           pnpm build
           pnpm e2e
 
+      # Портфель под сессией владельца из global-setup (e2e/.auth/owner.json): LCP ≤ 2,5 с, CLS < 0,1,
+      # TBT ≤ 200 мс (замена INP в лабораторном прогоне). Chrome — предустановленный google-chrome раннера.
+      - name: Lighthouse CI on the portfolio
+        working-directory: web
+        env:
+          API_INTERNAL_URL: http://localhost:8080
+        run: |
+          set -a; source ../.env; set +a
+          cookie="$(jq -r '.cookies[] | select(.name == "am_session") | "am_session=\(.value)"' e2e/.auth/owner.json)"
+          echo "::add-mask::${cookie#am_session=}"
+          pnpm lhci autorun --collect.settings.extraHeaders="{\"Cookie\":\"${cookie}\"}"
+
       - name: Upload Playwright report and backend logs
         if: failure()
         uses: actions/upload-artifact@v7.0.2
@@ -229,6 +247,7 @@ jobs:
           path: |
             web/playwright-report
             web/test-results
+            web/.lighthouseci
             ingest.log
             api.log
           retention-days: 7

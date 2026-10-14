@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useId, useState } from "react";
-import { toast } from "sonner";
 import { FieldError } from "@/components/common/form-field";
 import { ErrorState } from "@/components/feedback/error-state";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
@@ -46,6 +45,7 @@ import {
 import type { Passkey } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import { passkeyErrorMessage, registerAdditionalPasskey, validateDeviceName } from "@/lib/webauthn";
 import { TabHeader } from "./tab-header";
 

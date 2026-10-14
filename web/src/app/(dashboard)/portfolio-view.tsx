@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createParser, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { useId, useState } from "react";
-import { ru } from "react-day-picker/locale";
+import { LazyCalendar } from "@/components/common/lazy-calendar";
 import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -24,7 +24,6 @@ import { UnitBadge } from "@/components/reports/unit-badge";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -104,9 +103,8 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-auto p-0">
-          <Calendar
+          <LazyCalendar
             mode="single"
-            locale={ru}
             selected={toPickerDate(value)}
             defaultMonth={toPickerDate(value)}
             disabled={{ after: toPickerDate(max) }}

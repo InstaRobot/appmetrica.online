@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/feedback/confirm-delete-dialog";
 import {
   AlertDialog,
@@ -22,6 +21,7 @@ import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 
 // «Опасная зона» S-11 (FR-009): архивирование (ingest отвечает 403 app_archived), возврат из архива и
 // удаление навсегда вводом точного названия. Удаление выполняет worker, экран сразу уходит в портфель.

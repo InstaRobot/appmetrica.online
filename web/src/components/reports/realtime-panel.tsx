@@ -6,7 +6,6 @@ import { useState } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { EventFeed } from "@/components/realtime/event-feed";
-import { PerMinuteChart } from "@/components/realtime/per-minute-chart";
 import { RealtimeCounter } from "@/components/realtime/realtime-counter";
 import { RealtimeSkeleton } from "@/components/skeletons/realtime-skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,6 +18,7 @@ import type { App } from "@/lib/api/gen/model";
 import { formatClock } from "@/lib/format";
 import { useRealtimeState } from "@/lib/url-state";
 import { EnvironmentSwitch } from "./environment-switch";
+import { PerMinuteChart } from "./lazy-charts";
 
 // Опрос getRealtime раз в 5 с (14-ux-ui-spec.md S-07); после 3 неудачных опросов подряд — предупреждение.
 const POLL_MS = 5000;

@@ -6,7 +6,6 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { ProfileSkeleton } from "@/components/skeletons/profile-skeleton";
@@ -18,6 +17,7 @@ import { useGetDeletionRequest } from "@/lib/api/gen/endpoints/deletion/deletion
 import { getGetProfileQueryKey, getProfile } from "@/lib/api/gen/endpoints/profiles/profiles";
 import type { App, DeletionRequest } from "@/lib/api/gen/model";
 import { decodePersonKey, encodePersonKey, type PersonKey } from "@/lib/person-key";
+import { toast } from "@/lib/toast";
 import { InstallsTable } from "./installs-table";
 import { isDeletionActive, ProfileCard } from "./profile-card";
 import { ProfileDeleteDialog } from "./profile-delete-dialog";

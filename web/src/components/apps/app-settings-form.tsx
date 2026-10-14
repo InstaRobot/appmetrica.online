@@ -2,11 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
-import * as zod from "zod";
 import { FieldError, Required } from "@/components/common/form-field";
 import { PLATFORM_LABELS } from "@/components/common/platform-icon";
-import { isTimezone, TimezoneSelect } from "@/components/common/timezone-select";
+import { TimezoneSelect } from "@/components/common/timezone-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +14,9 @@ import { updateApp } from "@/lib/api/gen/endpoints/admin-apps/admin-apps";
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App, UpdateAppBody } from "@/lib/api/gen/model";
-import { CreateAppBody } from "@/lib/api/gen/zod/admin-apps/admin-apps.zod";
 import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { toast } from "@/lib/toast";
 
 // Job close_day закрывает день D−8 (02-tech-spec.md FR-022): у приложения старше 8 суток есть закрытые дни.
 const CLOSED_DAY_LAG_MS = 8 * 24 * 60 * 60 * 1000;
@@ -29,10 +27,7 @@ export function hasClosedDays(createdAt: string, now: Date = new Date()): boolea
 }
 
 // F-2 (14-ux-ui-spec.md §7.1): как F-1 — trim названия 1–64 и IANA-зона.
-const schema = zod.object({
-  name: zod.string().trim().pipe(CreateAppBody.shape.name),
-  timezone: zod.string().refine(isTimezone),
-});
+const schema = () => import("@/lib/forms/schemas").then((m) => m.appSettingsSchema);
 
 const messages = {
   name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },

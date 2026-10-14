@@ -10,7 +10,7 @@ import { AppSettingsForm, hasClosedDays } from "./app-settings-form";
 const APP_ID = "0192aaaa-0000-7000-8000-000000000043";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 // Приложение создано 1 сентября: дни старше D−8 уже закрыты job close_day.
 const OLD_APP = makeApp({
@@ -36,7 +36,7 @@ function mockUpdate(respond?: (body: Record<string, unknown>) => Response) {
 async function pickTimezone(name: RegExp) {
   const user = userEvent.setup();
   await user.click(screen.getByRole("combobox", { name: /Часовой пояс/ }));
-  await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "tokyo");
+  await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "tokyo");
   await user.click(await screen.findByRole("option", { name }));
 }
 
@@ -71,7 +71,7 @@ describe("AppSettingsForm", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("combobox", { name: /Часовой пояс/ }));
-    await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "moscow");
+    await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "moscow");
     await user.click(await screen.findByRole("option", { name: /Europe\/Moscow/ }));
     expect(screen.queryByText(/Закрытые дни не пересчитываются/)).not.toBeInTheDocument();
   });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-07 realtime (T-040). Приложение «Seed iOS» из `make seed`, его write-ключ — DEV_WRITE_KEY.
 // Событие отправляется в локальный ingest (E2E_INGEST_URL, по умолчанию :8081), который пишет
@@ -59,10 +59,7 @@ test("shows new event within 15 seconds", async ({ page }) => {
   await expect(counter).toBeVisible();
   const before = Number(await counter.getAttribute("data-value"));
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
+  await expectNoA11yViolations(page);
 
   const installId = randomUUID();
   await sendSessionStart(page, installId);

@@ -14,7 +14,7 @@ vi.mock("@simplewebauthn/browser", async (importOriginal) => {
   return { ...actual, startRegistration: vi.fn() };
 });
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 const MAC = passkey({ id: "0192dddd-0000-7000-8000-000000000001", name: "MacBook Pro" });
 const KEY = passkey({

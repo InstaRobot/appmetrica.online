@@ -1,8 +1,7 @@
 "use client";
 
 import { Check, ChevronsUpDown } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Suspense, useMemo, useState } from "react";
 import {
   Command,
   CommandEmpty,
@@ -10,7 +9,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+  CommandSkeleton,
+} from "@/components/common/lazy-command";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -111,36 +112,38 @@ export function TimezoneSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Найти часовой пояс…"
-            value={search}
-            onValueChange={setSearch}
-          />
-          <CommandList>
-            <CommandEmpty>Ничего не найдено</CommandEmpty>
-            {visible.length > 0 ? (
-              <CommandGroup>
-                {visible.map((tz) => (
-                  <CommandItem
-                    key={tz}
-                    value={tz}
-                    onSelect={() => {
-                      onChange(tz);
-                      toggle(false);
-                    }}
-                  >
-                    <span className="truncate">{timezoneLabel(tz)}</span>
-                    <Check
-                      aria-hidden="true"
-                      className={cn("ml-auto", tz === value ? "opacity-100" : "opacity-0")}
-                    />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-          </CommandList>
-        </Command>
+        <Suspense fallback={<CommandSkeleton />}>
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Найти часовой пояс…"
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              <CommandEmpty>Ничего не найдено</CommandEmpty>
+              {visible.length > 0 ? (
+                <CommandGroup>
+                  {visible.map((tz) => (
+                    <CommandItem
+                      key={tz}
+                      value={tz}
+                      onSelect={() => {
+                        onChange(tz);
+                        toggle(false);
+                      }}
+                    >
+                      <span className="truncate">{timezoneLabel(tz)}</span>
+                      <Check
+                        aria-hidden="true"
+                        className={cn("ml-auto", tz === value ? "opacity-100" : "opacity-0")}
+                      />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+            </CommandList>
+          </Command>
+        </Suspense>
       </PopoverContent>
     </Popover>
   );

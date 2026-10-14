@@ -4,11 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import * as zod from "zod";
 import { FieldError, Required } from "@/components/common/form-field";
 import { PLATFORM_LABELS } from "@/components/common/platform-icon";
-import { isTimezone, TimezoneSelect } from "@/components/common/timezone-select";
+import { TimezoneSelect } from "@/components/common/timezone-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,15 +24,12 @@ import { useGetSettings } from "@/lib/api/gen/endpoints/admin-settings/admin-set
 import { getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import { type CreateAppBody as CreateAppRequest, Platform } from "@/lib/api/gen/model";
-import { CreateAppBody } from "@/lib/api/gen/zod/admin-apps/admin-apps.zod";
 import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { toast } from "@/lib/toast";
 
 // F-1 (14-ux-ui-spec.md §7.1): правила — из контракта, плюс trim названия и проверка IANA-зоны.
-const schema = CreateAppBody.extend({
-  name: zod.string().trim().pipe(CreateAppBody.shape.name),
-  timezone: CreateAppBody.shape.timezone.refine(isTimezone),
-});
+const schema = () => import("@/lib/forms/schemas").then((m) => m.createAppSchema);
 
 const messages = {
   name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },

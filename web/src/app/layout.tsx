@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { Toaster } from "@/components/ui/sonner";
+import { LazyToaster } from "@/components/common/lazy-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru">
       <body className={cn(inter.variable, jetbrainsMono.variable, "font-sans antialiased")}>
         <TooltipProvider>{children}</TooltipProvider>
-        <Toaster />
+        <LazyToaster />
       </body>
     </html>
   );

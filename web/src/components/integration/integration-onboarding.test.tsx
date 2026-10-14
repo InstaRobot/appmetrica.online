@@ -8,7 +8,7 @@ import { renderWithClient } from "@/test/render";
 import { IntegrationPanel } from "./integration-panel";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000010";
 // 2026-10-13 14:32:05 по Москве.

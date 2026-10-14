@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CodeBlock } from "./code-block";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 const CODE = 'const ENDPOINT = "https://i.appmetrica.online/v1/events";\nsessionStart();\n';
 

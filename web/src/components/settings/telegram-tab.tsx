@@ -3,10 +3,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-import * as zod from "zod";
+import type * as zod from "zod";
 import { FieldError } from "@/components/common/form-field";
-import { isTimezone, TimezoneSelect } from "@/components/common/timezone-select";
+import { TimezoneSelect } from "@/components/common/timezone-select";
 import { ErrorState } from "@/components/feedback/error-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -24,20 +23,11 @@ import {
 import type { Settings, UpdateSettingsBody } from "@/lib/api/gen/model";
 import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { toast } from "@/lib/toast";
 import { TabHeader } from "./tab-header";
 
-// F-5: chat_id — пусто или число (контракт и проверка в Postgres, OQ-059: @username не поддерживается),
-// время дайджеста с шагом 15 минут.
-const schema = zod.object({
-  telegram_chat_id: zod
-    .string()
-    .trim()
-    .regex(/^(-?[0-9]{1,20})?$/),
-  owner_timezone: zod.string().refine(isTimezone),
-  digest_enabled: zod.boolean(),
-  digest_time: zod.string().regex(/^([01][0-9]|2[0-3]):(00|15|30|45)$/),
-  alerts_enabled: zod.boolean(),
-});
+// F-5 (lib/forms/schemas.ts): chat_id — пусто или число, время дайджеста с шагом 15 минут.
+const schema = () => import("@/lib/forms/schemas").then((m) => m.telegramSchema);
 
 const messages = {
   telegram_chat_id: "Chat ID — число (для групп с минусом)",
@@ -45,7 +35,7 @@ const messages = {
   digest_time: "Время с шагом 15 минут",
 };
 
-type FormData = zod.output<typeof schema>;
+type FormData = zod.output<Awaited<ReturnType<typeof schema>>>;
 
 // changes — тело PATCH: только поля, отличающиеся от сохранённых. Без chat_id дайджест выключен
 // (ограничение settings_digest_needs_chat в Postgres).
@@ -110,8 +100,9 @@ function TelegramForm({ settings }: { settings: Settings }) {
   const timezone = form.field("owner_timezone");
   const time = form.field("digest_time");
   const hasChat = form.values.telegram_chat_id.trim() !== "";
-  const parsed = schema.safeParse(form.values);
-  const dirty = !parsed.success || Object.keys(changes(settings, parsed.data)).length > 0;
+  // Схема отличается от значений формы только trim chat_id; невалидное значение не равно сохранённому.
+  const normalized = { ...form.values, telegram_chat_id: form.values.telegram_chat_id.trim() };
+  const dirty = Object.keys(changes(settings, normalized)).length > 0;
 
   return (
     <form noValidate onSubmit={form.handleSubmit} className="flex max-w-[720px] flex-col gap-5">

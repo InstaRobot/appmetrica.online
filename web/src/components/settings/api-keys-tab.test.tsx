@@ -9,7 +9,7 @@ import { renderWithClient } from "@/test/render";
 import { ApiKeysTab } from "./api-keys-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 const NOTES = appSummary({ id: "0192aaaa-0000-7000-8000-000000000046", name: "Notes iOS" });
 const READER = apiKey({ id: "0192eeee-0000-7000-8000-000000000001", label: "Telegram-отчёт" });

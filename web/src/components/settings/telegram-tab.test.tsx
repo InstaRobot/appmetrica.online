@@ -9,7 +9,7 @@ import { renderWithClient } from "@/test/render";
 import { TelegramTab } from "./telegram-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 function mockSettings(initial: Settings, test?: () => Response) {
   let current = initial;

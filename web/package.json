@@ -20,6 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
+    "check:bundle": "node scripts/check-bundle-size.ts",
     "gen:api": "orval --config orval.config.ts",
     "postinstall": "fumadocs-mdx"
   },
@@ -50,6 +51,7 @@
     "@axe-core/playwright": "4.13.0",
     "@biomejs/biome": "2.5.15",
     "@faker-js/faker": "10.6.0",
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "10.4.2",

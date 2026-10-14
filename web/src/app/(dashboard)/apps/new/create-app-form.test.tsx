@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 const created = makeApp({ id: "0192bbbb-0000-7000-8000-000000000001", name: "Notes iOS" });
 
@@ -202,7 +202,7 @@ describe("CreateAppForm", () => {
     await choosePlatform(user, "iOS");
     await user.click(screen.getByRole("combobox", { name: /Часовой пояс/ }));
     const listbox = await screen.findByRole("listbox");
-    await user.type(screen.getByPlaceholderText("Найти часовой пояс…"), "tokyo");
+    await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "tokyo");
     await user.click(within(listbox).getByRole("option", { name: /Asia\/Tokyo/ }));
     await user.click(screen.getByRole("button", { name: "Создать" }));
 

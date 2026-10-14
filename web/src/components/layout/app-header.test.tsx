@@ -162,10 +162,10 @@ describe("AppHeader", () => {
 
     await expectSwitcher("Notes iOS");
     await user.click(await switcher());
-    await user.type(screen.getByPlaceholderText("Найти приложение…"), "maps");
+    await user.type(await screen.findByPlaceholderText("Найти приложение…"), "maps");
     const options = screen.getAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual(["Maps Android", "+ Добавить приложение"]);
-    await user.click(screen.getByRole("option", { name: "Maps Android" }));
+    await user.click(await screen.findByRole("option", { name: "Maps Android" }));
 
     expect(nav.push).toHaveBeenCalledWith(`/apps/${maps.id}/retention?period=30d`);
   });
@@ -182,7 +182,7 @@ describe("AppHeader", () => {
       "Notes iOS",
       "+ Добавить приложение",
     ]);
-    await user.click(screen.getByRole("option", { name: "+ Добавить приложение" }));
+    await user.click(await screen.findByRole("option", { name: "+ Добавить приложение" }));
 
     expect(nav.push).toHaveBeenCalledWith("/apps/new");
   });

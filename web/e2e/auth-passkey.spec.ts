@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 import { createSetupLink, registerPasskey, resetAuth, saveOwnerSession } from "./helpers/seed";
 import { addVirtualAuthenticator } from "./helpers/webauthn";
 
@@ -15,13 +15,6 @@ test.beforeEach(async () => {
 test.afterAll(async ({ baseURL }) => {
   await saveOwnerSession(baseURL ?? "http://localhost:3000");
 });
-
-async function expectNoA11yViolations(page: Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
-}
 
 async function sessionCookie(page: Page) {
   return (await page.context().cookies()).find((c) => c.name === "am_session");

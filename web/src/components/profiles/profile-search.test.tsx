@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ProfileSearch } from "./profile-search";
@@ -12,7 +12,8 @@ describe("ProfileSearch", () => {
     const input = screen.getByRole("searchbox", { name: "install_id или user_id" });
     expect(input).toHaveValue("  u:42 ");
     await user.type(input, "{Enter}");
-    expect(onSearch).toHaveBeenLastCalledWith("u:42");
+    // Первая отправка дожидается загрузки чанка со схемой (lib/forms/schemas.ts).
+    await waitFor(() => expect(onSearch).toHaveBeenLastCalledWith("u:42"));
 
     await user.clear(input);
     await user.type(input, " 5d8e ");

@@ -4,10 +4,10 @@ import { CircleCheck, Loader2 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatClock } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type WaitingForFirstEventProps = {

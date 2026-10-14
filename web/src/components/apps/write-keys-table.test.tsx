@@ -25,7 +25,7 @@ const REVOKED = writeKey({
 });
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
-vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
 function mockKeys(items: WriteKey[] | { status: number }) {
   let current = Array.isArray(items) ? [...items] : [];

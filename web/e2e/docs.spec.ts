@@ -1,14 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // Каркас дашборда (T-036) и документация (T-047, T-048). Владелец уже вошёл: storageState из global-setup.
-
-async function expectNoA11yViolations(page: Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
-}
 
 test("footer shows DB-IP attribution", async ({ page }) => {
   await page.goto("/");

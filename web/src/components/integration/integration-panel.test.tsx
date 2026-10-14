@@ -93,7 +93,7 @@ describe("IntegrationPanel", () => {
     expect(rate.textContent).toContain(`0,29${NBSP}%`);
     expect(within(rate).queryByRole("img")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("img", { name: /^События по часам/ })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /^События по часам/ })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Причины отказов" })).toHaveTextContent(
       "Событие старше 7 дней",
     );

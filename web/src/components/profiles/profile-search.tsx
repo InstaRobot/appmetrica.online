@@ -1,7 +1,6 @@
 "use client";
 
 import { CircleAlert, Search } from "lucide-react";
-import * as zod from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +13,7 @@ type ProfileSearchProps = {
 };
 
 // F-8 (14-ux-ui-spec.md §7.1): значение обрезается по краям, 1–200 символов.
-const schema = zod.object({ q: zod.string().trim().min(1).max(200) });
+const schema = () => import("@/lib/forms/schemas").then((m) => m.profileSearchSchema);
 const messages = {
   q: { too_small: "Введите install_id или user_id", too_big: "Не длиннее 200 символов" },
 };

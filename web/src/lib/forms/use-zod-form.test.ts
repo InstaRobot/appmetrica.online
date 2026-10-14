@@ -135,4 +135,75 @@ describe("useZodForm", () => {
     expect(result.current.applyServerErrors(new Error("boom"))).toBe(false);
     expect(result.current.errors).toEqual({});
   });
+
+  describe("with a lazy schema loader", () => {
+    function deferred() {
+      let resolve: (value: typeof schema) => void = () => {};
+      let reject: (error: Error) => void = () => {};
+      const promise = new Promise<typeof schema>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    function setupLazy(load: () => Promise<typeof schema>) {
+      const onSubmit = vi.fn<(data: zod.output<typeof schema>) => Promise<void>>();
+      const hook = renderHook(() =>
+        useZodForm(load, { defaultValues: { name: "", kind: "" }, messages, onSubmit }),
+      );
+      return { ...hook, onSubmit };
+    }
+
+    it("shows no field errors until the schema arrives, then validates on blur", async () => {
+      const chunk = deferred();
+      const load = vi.fn(() => chunk.promise);
+      const { result, rerender } = setupLazy(load);
+
+      act(() => result.current.blur("name"));
+      expect(result.current.errors).toEqual({});
+
+      await act(async () => chunk.resolve(schema));
+      rerender();
+      act(() => result.current.blur("name"));
+      expect(result.current.errors).toEqual({ name: "Введите название" });
+      expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it("submit waits for the schema and then validates", async () => {
+      const chunk = deferred();
+      const { result, onSubmit } = setupLazy(() => chunk.promise);
+      act(() => {
+        result.current.setValue("name", " ok ");
+        result.current.setValue("kind", "b");
+      });
+
+      let submitted: Promise<void> | undefined;
+      act(() => {
+        submitted = result.current.handleSubmit();
+      });
+      expect(onSubmit).not.toHaveBeenCalled();
+
+      await act(async () => {
+        chunk.resolve(schema);
+        await submitted;
+      });
+      expect(onSubmit).toHaveBeenCalledWith({ name: "ok", kind: "b" });
+    });
+
+    it("retries loading on submit after the chunk failed to load", async () => {
+      const load = vi
+        .fn<() => Promise<typeof schema>>()
+        .mockRejectedValueOnce(new Error("ChunkLoadError"))
+        .mockResolvedValue(schema);
+      const { result, onSubmit } = setupLazy(load);
+      await act(async () => {});
+
+      await act(() => result.current.handleSubmit());
+
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(result.current.errors).toEqual({ name: "Введите название", kind: "Выберите вид" });
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
 });

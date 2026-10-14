@@ -4,18 +4,17 @@ import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { Copy, PlugZap } from "lucide-react";
 import type { Route } from "next";
 import { useParams } from "next/navigation";
-import { toast } from "sonner";
+import { lazy, Suspense } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { AudienceKpis } from "@/components/reports/audience-kpis";
-import { BreakdownTable } from "@/components/reports/breakdown-table";
 import { CompareToggle } from "@/components/reports/compare-toggle";
 import { EnvironmentSwitch } from "@/components/reports/environment-switch";
 import { FilterBar } from "@/components/reports/filter-bar";
 import { GRANULARITY_LABELS, GranularitySelect } from "@/components/reports/granularity-select";
-import { MetricChart } from "@/components/reports/metric-chart";
+import { MetricChart, RollingActiveChart } from "@/components/reports/lazy-charts";
 import { PeriodPicker } from "@/components/reports/period-picker";
-import { RollingActiveChart } from "@/components/reports/rolling-active-chart";
+import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +41,7 @@ import {
   type PeriodValue,
   todayIn,
 } from "@/lib/period";
+import { toast } from "@/lib/toast";
 import {
   type ChartMetric,
   FILTER_DIMENSIONS,
@@ -52,6 +52,12 @@ import {
   useAudienceState,
 } from "@/lib/url-state";
 import AudienceLoading from "./loading";
+
+// Разбивка — последняя карточка страницы: таблица с Radix Select грузится отдельным чанком
+// параллельно с данными (бюджет initial JS NFR-006, T-044).
+const BreakdownTable = lazy(() =>
+  import("@/components/reports/breakdown-table").then((m) => ({ default: m.BreakdownTable })),
+);
 
 const METRICS = Object.values(TimeSeriesMetric);
 const keep = { query: { placeholderData: keepPreviousData } };
@@ -274,16 +280,18 @@ function AudienceReport({ app }: { app: App }) {
 
           <Card className="gap-4 px-6">
             <h2 className="text-heading-3">Разбивка</h2>
-            <BreakdownTable
-              dimension={state.dim}
-              onDimensionChange={(dim) => void update({ dim })}
-              metric={state.bmetric}
-              onMetricChange={(bmetric) => void update({ bmetric })}
-              data={breakdownData}
-              onRowClick={addFilter}
-              loading={breakdown.isPending}
-              error={cardError(breakdown)}
-            />
+            <Suspense fallback={<TableSkeleton rows={6} />}>
+              <BreakdownTable
+                dimension={state.dim}
+                onDimensionChange={(dim) => void update({ dim })}
+                metric={state.bmetric}
+                onMetricChange={(bmetric) => void update({ bmetric })}
+                data={breakdownData}
+                onRowClick={addFilter}
+                loading={breakdown.isPending}
+                error={cardError(breakdown)}
+              />
+            </Suspense>
           </Card>
         </>
       )}

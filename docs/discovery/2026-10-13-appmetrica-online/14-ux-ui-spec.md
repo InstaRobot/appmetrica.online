@@ -621,7 +621,7 @@ Tailwind CSS 4.3.3 настраивается **в CSS** (`@theme`), файла 
 | `KpiCard` | `web/src/components/reports/kpi-card.tsx` | Card + Delta + Sparkline + Tooltip | Карточка метрики (FR-013) |
 | `MetricChart` | `web/src/components/reports/metric-chart.tsx` | ChartContainer + Recharts AreaChart/LineChart | Основной график метрики со сравнением |
 | `RollingActiveChart` | `web/src/components/reports/rolling-active-chart.tsx` | ChartContainer + LineChart (3 серии) | DAU/WAU/MAU |
-| `Sparkline` | `web/src/components/reports/sparkline.tsx` | Recharts LineChart без осей | Мини-график 30 дней |
+| `Sparkline` | `web/src/components/reports/sparkline.tsx` | SVG-линия без осей (без Recharts — бюджет initial JS, OQ-061) | Мини-график 30 дней |
 | `Delta` | `web/src/components/reports/delta.tsx` | `<span>` + ArrowUp/ArrowDown | Дельта в % с цветом и знаком |
 | `PeriodPicker` | `web/src/components/reports/period-picker.tsx` | ToggleGroup + Popover + Calendar | Период отчёта |
 | `GranularitySelect` | `web/src/components/reports/granularity-select.tsx` | ToggleGroup | Час / день / неделя / месяц |

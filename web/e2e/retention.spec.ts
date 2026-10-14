@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-06 retention (T-039). Данные — `make seed` в базу e2e: приложение «Seed iOS» с 35 днями событий
 // по вчерашний день. Владелец уже вошёл: storageState из global-setup.
@@ -27,10 +27,7 @@ test("switches cohort granularity", async ({ page }) => {
   await expect(days.locator("td[data-step]").first()).toBeVisible();
   await expect(page.getByRole("img", { name: /^Средняя кривая удержания по дням/ })).toBeVisible();
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
+  await expectNoA11yViolations(page);
 
   await page
     .getByRole("radiogroup", { name: "Когорты" })

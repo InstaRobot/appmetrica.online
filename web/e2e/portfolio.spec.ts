@@ -1,14 +1,7 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-03 портфель и S-04 создание приложения (T-037). Владелец уже вошёл: storageState из global-setup.
-
-async function expectNoA11yViolations(page: Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
-}
 
 test("creates app from portfolio", async ({ page }) => {
   // Имя уникально на прогон: база e2e переживает прогоны, а имена приложений уникальны без учёта регистра.

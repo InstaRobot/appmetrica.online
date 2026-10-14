@@ -45,7 +45,7 @@ describe("FilterBar", () => {
 
     await user.click(screen.getByRole("button", { name: "Фильтр" }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
-    const option = screen.getByRole("option", { name: /^2\.1\.0/ });
+    const option = await screen.findByRole("option", { name: /^2\.1\.0/ });
     expect(option).toHaveTextContent("300");
     await user.click(option);
     expect(onChange).toHaveBeenLastCalledWith({ app_version: ["2.1.0"] });
@@ -58,11 +58,11 @@ describe("FilterBar", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "Фильтр" }));
-    expect(screen.getByRole("option", { name: /^2\.1\.0/ })).toHaveAttribute(
+    expect(await screen.findByRole("option", { name: /^2\.1\.0/ })).toHaveAttribute(
       "data-checked",
       "true",
     );
-    await user.click(screen.getByRole("option", { name: /^RU/ }));
+    await user.click(await screen.findByRole("option", { name: /^RU/ }));
     expect(onChange).toHaveBeenLastCalledWith({ app_version: ["2.1.0"] });
   });
 

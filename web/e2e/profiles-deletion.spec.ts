@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-08/S-09 профили и удаление данных (T-042). Человек создаётся событием в локальный ingest
 // (E2E_INGEST_URL) для «Seed iOS» из `make seed`; user_id со слешем и пробелом проверяет кодирование
@@ -66,6 +66,8 @@ async function sendSession(page: Page, userId: string): Promise<void> {
 async function searchProfile(page: Page, appId: string, query: string): Promise<void> {
   await page.goto(`/apps/${appId}/profiles`);
   const box = page.getByRole("searchbox", { name: "install_id или user_id" });
+  await expect(box).toBeVisible();
+  await expectNoA11yViolations(page);
   await box.fill(query);
   await box.press("Enter");
 }
@@ -95,10 +97,7 @@ async function requestDeletion(page: Page): Promise<void> {
 test("requests deletion from the profile", async ({ page }) => {
   await openNewProfile(page);
 
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
+  await expectNoA11yViolations(page);
 
   await requestDeletion(page);
   await expect(page.getByRole("group", { name: "Статус удаления" })).toContainText(

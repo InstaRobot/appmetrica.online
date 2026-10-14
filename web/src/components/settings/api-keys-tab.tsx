@@ -3,8 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { KeySquare, Plus, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-import * as zod from "zod";
 import { CopyField } from "@/components/common/copy-field";
 import { FieldError, Required } from "@/components/common/form-field";
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -57,21 +55,17 @@ import {
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { type ApiKey, ApiKeyScope, type AppSummary } from "@/lib/api/gen/model";
-import { CreateApiKeyBody } from "@/lib/api/gen/zod/admin-keys/admin-keys.zod";
 import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime, shortId } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { toast } from "@/lib/toast";
 import { TabHeader } from "./tab-header";
 
 const ALL_APPS = "all";
 const SCOPES = Object.values(ApiKeyScope);
 
 // F-4 (14-ux-ui-spec.md §7.1): метка 1–64 после trim, хотя бы одно право; «Все приложения» — без app_id.
-const schema = zod.object({
-  label: zod.string().trim().pipe(CreateApiKeyBody.shape.label),
-  scopes: CreateApiKeyBody.shape.scopes,
-  app_id: zod.string(),
-});
+const schema = () => import("@/lib/forms/schemas").then((m) => m.apiKeySchema);
 
 const messages = {
   label: { too_small: "Введите метку", too_big: "Не длиннее 64 символов" },

@@ -3,8 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Plus } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-import * as zod from "zod";
 import { CopyField } from "@/components/common/copy-field";
 import { FieldError } from "@/components/common/form-field";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -48,11 +46,11 @@ import {
   useListWriteKeys,
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import type { WriteKey } from "@/lib/api/gen/model";
-import { createWriteKeyBodyLabelMax } from "@/lib/api/gen/zod/admin-keys/admin-keys.zod";
 import { copyText } from "@/lib/clipboard";
 import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { toast } from "@/lib/toast";
 
 // pk_7Hq2…Ab0: начало и конец ключа для таблицы и диалога отзыва (14-ux-ui-spec.md S-11).
 export function shortKey(key: string): string {
@@ -60,7 +58,7 @@ export function shortKey(key: string): string {
 }
 
 // F-3: метка необязательна, до 64 символов.
-const schema = zod.object({ label: zod.string().trim().max(createWriteKeyBodyLabelMax) });
+const schema = () => import("@/lib/forms/schemas").then((m) => m.writeKeySchema);
 
 function CreateWriteKeyForm({ appId }: { appId: string }) {
   const queryClient = useQueryClient();

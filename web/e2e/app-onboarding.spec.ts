@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // S-10 онбординг (T-041): новое приложение → curl-сниппет из буфера обмена → «Первое событие получено».
 // web собран с NEXT_PUBLIC_INGEST_URL = адрес локального ingest (E2E_INGEST_URL, по умолчанию :8081),
@@ -15,13 +15,6 @@ async function createApp(page: Page, name: string): Promise<void> {
   await page.getByRole("option", { name: "iOS" }).click();
   await page.getByRole("button", { name: "Создать" }).click();
   await expect(page).toHaveURL(/\/apps\/[0-9a-f-]{36}\/integration$/);
-}
-
-async function expectNoA11yViolations(page: Page): Promise<void> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
-  expect(violations).toEqual([]);
 }
 
 // runSnippet выполняет curl-сниппет в bash и возвращает ответ ingest.

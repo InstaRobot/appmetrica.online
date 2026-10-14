@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 // copyText копирует текст и объявляет результат через sonner (aria-live): кнопки копирования
 // CopyField, CodeBlock и «Код запроса» ErrorState.
