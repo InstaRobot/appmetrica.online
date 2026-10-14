@@ -83,4 +83,47 @@ describe("FilterBar", () => {
     await user.type(screen.getByRole("combobox"), "zzz");
     expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
   });
+
+  // Платформу на страницах приложения выбирает PlatformSwitcher, а не список фильтров.
+  it("offers only the given dimensions and keeps the others on reset", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <FilterBar
+        dims={["app_version", "os_name", "country"]}
+        value={{ platform: ["ios"], country: ["RU"] }}
+        onChange={onChange}
+        options={options}
+      />,
+    );
+
+    expect(screen.queryByText("Платформа: ios")).not.toBeInTheDocument();
+    expect(screen.getByText("Страна: RU")).toBeInTheDocument();
+
+    await user.click(await filterTrigger());
+    expect(await screen.findByRole("option", { name: /^2\.1\.0/ })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Платформа" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^ios/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /^2\.1\.0/ }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      platform: ["ios"],
+      country: ["RU"],
+      app_version: ["2.1.0"],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    expect(onChange).toHaveBeenLastCalledWith({ platform: ["ios"] });
+  });
+
+  it("offers no reset when only hidden dimensions are set", () => {
+    render(
+      <FilterBar
+        dims={["app_version", "os_name", "country"]}
+        value={{ platform: ["ios"] }}
+        onChange={vi.fn()}
+        options={options}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Сбросить фильтры" })).not.toBeInTheDocument();
+  });
 });

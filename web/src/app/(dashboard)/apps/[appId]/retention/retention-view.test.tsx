@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Breakdown, RetentionMatrix } from "@/lib/api/gen/model";
+import type { Breakdown, Platform, RetentionMatrix } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -35,10 +35,17 @@ const breakdown = (params: URLSearchParams): Breakdown => ({
   dimension: (params.get("dimension") ?? "platform") as Breakdown["dimension"],
   metric: "active",
   total: 100,
-  rows: [{ value: params.get("dimension") === "platform" ? "ios" : "2.1.0", count: 100, share: 1 }],
+  rows:
+    params.get("dimension") === "platform"
+      ? [
+          { value: "ios", count: 70, share: 0.7 },
+          { value: "android", count: 30, share: 0.3 },
+        ]
+      : [{ value: "2.1.0", count: 100, share: 1 }],
 });
 
 type MockOptions = {
+  platforms?: Platform[];
   size?: number;
   error?: { status: number; code: string };
 };
@@ -50,7 +57,9 @@ function mockApi(opts: MockOptions = {}) {
   };
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
-      HttpResponse.json(makeApp({ id: APP_ID, timezone: "Europe/Moscow" })),
+      HttpResponse.json(
+        makeApp({ id: APP_ID, timezone: "Europe/Moscow", platforms: opts.platforms ?? ["ios"] }),
+      ),
     ),
     http.get(`*/v1/apps/${APP_ID}/retention`, ({ request }) => {
       const params = new URL(request.url).searchParams;
@@ -114,7 +123,12 @@ describe("RetentionView", () => {
     expect(params?.getAll("platform")).toEqual(["ios"]);
     expect(params?.get("environment")).toBe("production");
     expect(params?.get("unit")).toBe("installs");
-    expect(screen.getByText("Платформа: ios")).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole("radiogroup", { name: "Платформа" })).getByRole("radio", {
+        name: "iOS",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText("Платформа: ios")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Выбрать даты: 13\sсен – 12\sокт\s2026$/ }),
     ).toBeVisible();
@@ -167,15 +181,41 @@ describe("RetentionView", () => {
   it("loads filter values only when the filter list opens", async () => {
     const requests = mockApi();
     const user = userEvent.setup();
-    renderView();
+    renderView("?country=RU");
     await dayTable();
-    expect(requests.breakdown).toHaveLength(0);
+    // Сразу — только наблюдаемые платформы для переключателя, без фильтров отчёта.
+    await waitFor(() => expect(requests.breakdown).toHaveLength(1));
+    const platform = requests.breakdown[0];
+    expect(platform?.get("dimension")).toBe("platform");
+    expect(platform?.get("from")).toBe("2026-09-13");
+    expect(platform?.get("to")).toBe("2026-10-12");
+    expect(platform?.has("country")).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "Фильтр" }));
     await waitFor(() => expect(requests.breakdown).toHaveLength(4));
-    const platform = requests.breakdown.find((p) => p.get("dimension") === "platform");
-    expect(platform?.get("from")).toBe("2026-09-13");
-    expect(platform?.get("to")).toBe("2026-10-12");
+    expect(requests.breakdown.slice(1).map((p) => p.get("dimension"))).toEqual([
+      "app_version",
+      "os_name",
+      "country",
+    ]);
+    expect(requests.breakdown[1]?.getAll("country")).toEqual(["RU"]);
+  });
+
+  it("narrows cohorts to the platform from the switcher", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const requests = mockApi();
+    const user = userEvent.setup();
+    renderView("?cohort=week", onUrlUpdate);
+    await weekTable();
+
+    // Явная платформа iOS и наблюдаемый Android.
+    const switcher = await screen.findByRole("radiogroup", { name: "Платформа" });
+    await user.click(await within(switcher).findByRole("radio", { name: "Android" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?cohort=week&platform=android");
+    await waitFor(() => expect(requests.retention.at(-1)?.getAll("platform")).toEqual(["android"]));
+
+    await user.click(within(switcher).getByRole("radio", { name: "Все" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?cohort=week");
   });
 
   it("shows the empty state when every cohort is empty", async () => {

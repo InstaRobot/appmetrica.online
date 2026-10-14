@@ -7,6 +7,7 @@ import type {
   AudienceSummary,
   Breakdown,
   IntegrationHealth,
+  Platform,
   TimeSeries,
 } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
@@ -66,10 +67,17 @@ const breakdown = (params: URLSearchParams): Breakdown => ({
   dimension: (params.get("dimension") ?? "app_version") as Breakdown["dimension"],
   metric: "active",
   total: 41230,
-  rows: [
-    { value: "2.1.1", count: 24001, share: 0.5821 },
-    { value: "2.1.0", count: 12330, share: 0.299 },
-  ],
+  rows:
+    params.get("dimension") === "platform"
+      ? [
+          { value: "ios", count: 24001, share: 0.5821 },
+          { value: "android", count: 12330, share: 0.299 },
+          { value: "web", count: 4899, share: 0.1189 },
+        ]
+      : [
+          { value: "2.1.1", count: 24001, share: 0.5821 },
+          { value: "2.1.0", count: 12330, share: 0.299 },
+        ],
 });
 
 const health = (firstEventAt: string | null): IntegrationHealth => ({
@@ -85,6 +93,7 @@ const health = (firstEventAt: string | null): IntegrationHealth => ({
 type Requests = Record<"summary" | "timeseries" | "rolling" | "breakdown", URLSearchParams[]>;
 
 type MockOptions = {
+  platforms?: Platform[];
   summary?: AudienceSummary | ((params: URLSearchParams) => Response | AudienceSummary);
   error?: { report: keyof Requests; status: number; code: string };
   firstEventAt?: string | null;
@@ -105,7 +114,9 @@ function mockApi(opts: MockOptions = {}): Requests {
     };
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
-      HttpResponse.json(makeApp({ id: APP_ID, timezone: "Europe/Moscow" })),
+      HttpResponse.json(
+        makeApp({ id: APP_ID, timezone: "Europe/Moscow", platforms: opts.platforms ?? ["ios"] }),
+      ),
     ),
     http.get(
       `*/v1/apps/${APP_ID}/audience/summary`,
@@ -188,7 +199,12 @@ describe("AudienceView", () => {
     expect(
       await screen.findByRole("table", { name: "Разбивка: Версия приложения" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Платформа: ios")).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole("radiogroup", { name: "Платформа" })).getByRole("radio", {
+        name: "iOS",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText("Платформа: ios")).not.toBeInTheDocument();
 
     // Спарклайны KPI — дневные ряды каждой метрики, график — текущая метрика.
     await waitFor(() =>
@@ -197,8 +213,57 @@ describe("AudienceView", () => {
       ),
     );
     expect(requests.timeseries.every((p) => p.get("granularity") === "day")).toBe(true);
-    expect(requests.breakdown[0]?.get("dimension")).toBe("app_version");
+    expect(requests.breakdown.map((p) => p.get("dimension"))).toContain("app_version");
     expect(requests.rolling[0]?.get("from")).toBe("2026-09-14");
+  });
+
+  it("switches reports between platforms", async () => {
+    const requests = mockApi({ platforms: ["ios", "android"] });
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderView("?period=30d&country=RU", onUrlUpdate);
+    await kpis();
+
+    // Опции — явные платформы и наблюдаемые за период (без фильтров отчёта).
+    const switcher = await screen.findByRole("radiogroup", { name: "Платформа" });
+    await waitFor(() =>
+      expect(within(switcher).getAllByRole("radio").map((r) => r.textContent)).toEqual([
+        "Все",
+        "iOS",
+        "Android",
+        "Веб",
+      ]),
+    );
+    const observed = requests.breakdown.find(
+      (p) => p.get("dimension") === "platform" && p.get("limit") === "50",
+    );
+    expect(observed?.get("from")).toBe("2026-09-14");
+    expect(observed?.has("country")).toBe(false);
+
+    await user.click(within(switcher).getByRole("radio", { name: "Android" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d&platform=android&country=RU"));
+    await waitFor(() =>
+      expect(requests.summary.some((p) => p.getAll("platform").join() === "android")).toBe(true),
+    );
+    expect(requests.timeseries.some((p) => p.getAll("platform").join() === "android")).toBe(true);
+
+    // Фильтры отчёта без платформы: «Сбросить фильтры» оставляет выбранную платформу.
+    await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d&platform=android"));
+
+    await user.click(within(switcher).getByRole("radio", { name: "Все" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d"));
+  });
+
+  it("replaces the platform from a breakdown row", async () => {
+    mockApi({ platforms: ["ios", "android"] });
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderView("?dim=platform&platform=ios", onUrlUpdate);
+    await kpis();
+
+    await user.click(await screen.findByRole("button", { name: "Фильтр: Платформа android" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?dim=platform&platform=android"));
   });
 
   it("puts period, metric, comparison and filters into the URL", async () => {

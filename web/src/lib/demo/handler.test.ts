@@ -383,6 +383,24 @@ describe("demoFetch read-only and errors", () => {
     expect(error.request_id).toBe("demo");
   });
 
+  it("narrows realtime to a platform", async () => {
+    const get = async (query: string) =>
+      (await (await demoFetch(`/v1/apps/${IOS}/realtime${query}`, undefined, NOW)).json()) as {
+        active_now: number;
+        per_minute: { sessions_started: number }[];
+        recent_events: { platform: string }[];
+      };
+    const all = await get("");
+    expect(all.active_now).toBeGreaterThan(0);
+    expect(all.recent_events.length).toBeGreaterThan(0);
+
+    expect(await get("?platform=ios")).toEqual(all);
+    const android = await get("?platform=android");
+    expect(android.active_now).toBe(0);
+    expect(android.per_minute.every((m) => m.sessions_started === 0)).toBe(true);
+    expect(android.recent_events).toEqual([]);
+  });
+
   it("previews a merge of another demo app and rejects the app itself", async () => {
     const res = await demoFetch(
       endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.notesAndroid }),
@@ -475,6 +493,12 @@ describe("demoFetch read-only and errors", () => {
       `/v1/apps/${IOS}/realtime?environment=staging`,
       "invalid_request",
       { field: "environment" },
+    ],
+    [
+      "bad realtime platform",
+      `/v1/apps/${IOS}/realtime?platform=symbian`,
+      "invalid_request",
+      { field: "platform" },
     ],
     [
       "bad country filter",

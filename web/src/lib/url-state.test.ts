@@ -28,12 +28,12 @@ const resolve = (search: string) => resolveAudienceState(loadAudienceSearch(sear
 
 describe("url-state", () => {
   it("round-trips filters through the URL", async () => {
-    const url = "?from=2026-10-01&to=2026-10-12&platform=ios&platform=android";
+    const url = "?from=2026-10-01&to=2026-10-12&platform=android&os_name=Android&os_name=HarmonyOS";
 
     const search = loadAudienceSearch(url);
     const state = resolveAudienceState(search, TODAY);
     expect(state.period).toEqual({ preset: "custom", from: "2026-10-01", to: "2026-10-12" });
-    expect(state.filters).toEqual({ platform: ["ios", "android"] });
+    expect(state.filters).toEqual({ platform: ["android"], os_name: ["Android", "HarmonyOS"] });
     expect(serializeAudienceSearch(search)).toBe(url);
 
     // «Перезагрузка» — тот же URL снова читается хуком: состояние совпадает.
@@ -51,9 +51,18 @@ describe("url-state", () => {
     // Каждое изменение — новая запись истории: «Назад» возвращает прежнее состояние.
     expect(update?.options.history).toBe("push");
     expect(result.current.state.filters).toEqual({
-      platform: ["ios", "android"],
+      platform: ["android"],
+      os_name: ["Android", "HarmonyOS"],
       app_version: ["2.1.0", "2.1.1"],
     });
+  });
+
+  // Платформу выбирает PlatformSwitcher — одно значение; старые ссылки с несколькими платформами берут первую.
+  it("keeps a single platform", () => {
+    expect(resolve("?platform=android&platform=ios").filters).toEqual({ platform: ["android"] });
+    expect(
+      resolveRetentionState(loadRetentionSearch("?platform=web&platform=ios"), TODAY).filters,
+    ).toEqual({ platform: ["web"] });
   });
 
   it("uses defaults for an empty URL", () => {

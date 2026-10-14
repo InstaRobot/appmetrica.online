@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Realtime, RecentEvent } from "@/lib/api/gen/model";
+import type { Breakdown, Platform, Realtime, RecentEvent } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -50,16 +50,35 @@ function realtime(poll: number, overrides: Partial<Realtime> = {}): Realtime {
 }
 
 type MockOptions = {
+  platforms?: Platform[];
   /** Ответ на n-й (с нуля) запрос; по умолчанию — данные. */
   respond?: (n: number) => Realtime | { status: number; code: string };
 };
 
+// Наблюдаемые платформы для переключателя.
+const platformBreakdown: Breakdown = {
+  dimension: "platform",
+  metric: "active",
+  total: 100,
+  rows: [
+    { value: "ios", count: 70, share: 0.7 },
+    { value: "android", count: 30, share: 0.3 },
+  ],
+};
+
 function mockApi(opts: MockOptions = {}) {
   const requests: URLSearchParams[] = [];
+  const breakdowns: URLSearchParams[] = [];
   server.use(
     http.get(`*/v1/apps/${APP_ID}`, () =>
-      HttpResponse.json(makeApp({ id: APP_ID, timezone: "Europe/Moscow" })),
+      HttpResponse.json(
+        makeApp({ id: APP_ID, timezone: "Europe/Moscow", platforms: opts.platforms ?? ["ios"] }),
+      ),
     ),
+    http.get(`*/v1/apps/${APP_ID}/audience/breakdown`, ({ request }) => {
+      breakdowns.push(new URL(request.url).searchParams);
+      return HttpResponse.json(platformBreakdown);
+    }),
     http.get(`*/v1/apps/${APP_ID}/realtime`, ({ request }) => {
       const n = requests.length;
       requests.push(new URL(request.url).searchParams);
@@ -70,7 +89,7 @@ function mockApi(opts: MockOptions = {}) {
       return HttpResponse.json(body);
     }),
   );
-  return requests;
+  return Object.assign(requests, { breakdowns });
 }
 
 function renderPanel(searchParams = "", onUrlUpdate?: OnUrlUpdateFunction) {
@@ -167,6 +186,50 @@ describe("RealtimePanel", () => {
     await user.click(screen.getByRole("radio", { name: "development" }));
     expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?env=development");
     await waitFor(() => expect(requests.at(-1)?.get("environment")).toBe("development"));
+  });
+
+  it("narrows realtime to the platform from the switcher", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const requests = mockApi({ platforms: ["ios", "android"] });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPanel("?platform=android&env=development", onUrlUpdate);
+    await counter();
+    expect(requests[0]?.getAll("platform")).toEqual(["android"]);
+
+    // Наблюдаемые платформы — за сегодня в TZ приложения и в выбранном окружении.
+    await waitFor(() => expect(requests.breakdowns).toHaveLength(1));
+    const observed = requests.breakdowns[0];
+    expect(observed?.get("dimension")).toBe("platform");
+    expect(observed?.get("from")).toBe("2026-10-13");
+    expect(observed?.get("to")).toBe("2026-10-13");
+    expect(observed?.get("environment")).toBe("development");
+    expect(observed?.has("platform")).toBe(false);
+
+    const switcher = screen.getByRole("radiogroup", { name: "Платформа" });
+    expect(within(switcher).getByRole("radio", { name: "Android" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.click(within(switcher).getByRole("radio", { name: "iOS" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios&env=development");
+    await waitFor(() => expect(requests.at(-1)?.getAll("platform")).toEqual(["ios"]));
+
+    await user.click(within(switcher).getByRole("radio", { name: "Все" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?env=development");
+    await waitFor(() => expect(requests.at(-1)?.has("platform")).toBe(false));
+  });
+
+  it("hides the switcher for a single-platform app", async () => {
+    const requests = mockApi({ platforms: ["ios"] });
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}/audience/breakdown`, () =>
+        HttpResponse.json({ ...platformBreakdown, rows: [platformBreakdown.rows[0]] }),
+      ),
+    );
+    renderPanel();
+    await counter();
+    await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+    expect(screen.queryByRole("radiogroup", { name: "Платформа" })).not.toBeInTheDocument();
   });
 
   it("shows skeletons until the first response", async () => {
