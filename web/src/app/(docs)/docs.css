@@ -13,7 +13,9 @@
 @source "../../../content";
 
 :root {
-  --color-fd-primary: var(--color-primary-600);
+  /* Активный пункт сайдбара и вкладки — text-fd-primary на bg-fd-primary/10: с primary-600 контраст 4.1:1,
+     ниже WCAG 1.4.3; primary-700 — 4.9:1 и выше. В тёмной теме primary-700 светлый — там остаётся 600. */
+  --color-fd-primary: var(--color-primary-700);
   --color-fd-background: var(--bg-base);
   --color-fd-muted: var(--bg-subtle);
   --color-fd-border: var(--border-base);
@@ -29,6 +31,10 @@
 
   /* Шапка дашборда (64 px) над layout Fumadocs. */
   --fd-banner-height: 4rem;
+}
+
+:root[data-theme="dark"] {
+  --color-fd-primary: var(--color-primary-600);
 }
 
 /* Метки HTTP-методов и кодов ответа fumadocs-openapi (text-*-600) на белом фоне не дотягивают

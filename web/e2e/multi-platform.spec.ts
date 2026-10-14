@@ -21,6 +21,8 @@ const activeValue = (page: Page) =>
     .locator("[data-kpi-value]");
 
 test("switches reports between platforms", async ({ page }) => {
+  // Новые ключи ingest видит после перезагрузки кэша (до 15 с).
+  test.setTimeout(90_000);
   const name = `E2E Notes ${run}`;
 
   await test.step("create an app with three platforms", async () => {
@@ -38,7 +40,7 @@ test("switches reports between platforms", async ({ page }) => {
   });
 
   await test.step("integration has a section per platform", async () => {
-    await expect(page.getByRole("heading", { level: 3 })).toHaveText(PLATFORMS);
+    await expect(page.getByRole("heading", { level: 3 })).toHaveText(["Эндпоинт", ...PLATFORMS]);
     for (const platform of PLATFORMS) {
       await expect(
         page
@@ -93,19 +95,21 @@ test("switches reports between platforms", async ({ page }) => {
 
   await test.step("chart by platform", async () => {
     await page.getByRole("link", { name: "Аудитория" }).click();
+    // Прежний маршрут остаётся в DOM скрытым: кликать по переключателю — после появления страницы аудитории.
+    await expect(page.getByRole("region", { name: "Ключевые метрики" })).toBeVisible();
     await page
       .getByRole("radiogroup", { name: "Платформа" })
       .getByRole("radio", { name: "Все" })
       .click();
     await expect(page).not.toHaveURL(/platform=/);
     await page
-      .getByRole("group", { name: "Режим графика" })
+      .getByRole("radiogroup", { name: "Режим графика" })
       .getByRole("radio", { name: "По платформам" })
       .click();
     await expect(page).toHaveURL(/[?&]split=platform/);
     await expect(
       page.getByRole("img", { name: /^График активных пользователей по дням по платформам/ }),
-    ).toHaveAttribute("aria-label", /iOS: .*Android: .*Веб: /);
+    ).toHaveAttribute("aria-label", /(?=.*iOS: )(?=.*Android: )(?=.*Веб: )/);
     await expectNoA11yViolations(page);
   });
 });
@@ -117,9 +121,7 @@ test("shows platform shares in the portfolio", async ({ page }) => {
     .getByRole("row")
     .filter({ has: page.getByRole("link", { name: "Seed Notes", exact: true }) });
   await expect(row, "нет «Seed Notes»: выполните `make seed` для базы e2e").toHaveCount(1);
-  for (const platform of PLATFORMS) {
-    await expect(row.getByTitle(platform, { exact: true })).toBeVisible();
-  }
+  await expect(row.getByTitle(PLATFORMS.join(", "), { exact: true })).toBeVisible();
 
   // 5 % людей «Seed Notes» — на iOS и Web: сумма по платформам больше активных за день.
   const shares = row.getByRole("img", { name: /iOS \d+/ });
@@ -133,6 +135,8 @@ test("shows platform shares in the portfolio", async ({ page }) => {
 });
 
 test("merges two apps", async ({ page }) => {
+  // Перезагрузка кэша ключей ingest (до 15 с) и запуск app_merge worker-а раз в минуту.
+  test.setTimeout(240_000);
   const targetName = `E2E iOS ${run}`;
   const sourceName = `E2E Android ${run}`;
   const target = await createApp(page.request, targetName, ["ios"]);
@@ -152,6 +156,8 @@ test("merges two apps", async ({ page }) => {
     await combobox.click();
     await page.getByPlaceholder("Найти приложение…").fill(sourceName);
     await page.getByRole("option", { name: sourceName }).click();
+    await expect(page.getByRole("listbox")).toBeHidden();
+    await expect(combobox).toHaveText(sourceName);
     const preview = dialog.getByRole("region", { name: "Что переедет" });
     await expect(preview.getByRole("definition").first()).toHaveText("1");
 
@@ -163,6 +169,8 @@ test("merges two apps", async ({ page }) => {
     await expect(submit).toBeDisabled();
     await confirm.fill(sourceName);
     await expect(submit).toBeEnabled();
+    // Кнопка проявляется из opacity 0.5 (transition): axe — после окончания перехода.
+    await expect(submit).toHaveCSS("opacity", "1");
     await expectNoA11yViolations(page);
     await submit.click();
     await expect(page.getByText("Объединение запущено")).toBeVisible();

@@ -296,7 +296,8 @@ function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceCombo
           <ChevronsUpDown aria-hidden="true" className="text-fg-subtle" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
+      {/* z-modal: z-dropdown ниже диалога, и список оказался бы под ним; портал popover идёт после диалога. */}
+      <PopoverContent align="start" className="z-modal w-(--radix-popover-trigger-width) p-0">
         <Suspense fallback={<CommandSkeleton />}>
           <Command shouldFilter={false}>
             <CommandInput
