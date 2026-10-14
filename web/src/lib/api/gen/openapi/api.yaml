@@ -760,6 +760,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/v1/apps/{app_id}/write-keys:
     parameters:
       - $ref: '#/components/parameters/AppId'
@@ -800,6 +801,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/v1/apps/{app_id}/write-keys/{key_id}/revoke:
     parameters:
       - $ref: '#/components/parameters/AppId'
@@ -1082,7 +1084,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: last_passkey | app_name_taken | confirm_name_mismatch
+      description: last_passkey | app_name_taken | confirm_name_mismatch | deletion_pending
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1480,7 +1482,11 @@ components:
       required: [subject_type, subject_value]
       properties:
         subject_type: { type: string, enum: [install, user] }
-        subject_value: { type: string, minLength: 1, maxLength: 128 }
+        subject_value:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: install — install_id (UUID); user — user_id как в ingest (1..128 символов после обрезки пробелов, без символа U+0000).
     DeletionRequest:
       type: object
       required: [id, app_id, subject_type, subject_value, status, source, requested_at, started_at, completed_at, error]

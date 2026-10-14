@@ -33,6 +33,7 @@ import { apiFetch } from "../../../fetcher";
 import type {
   ApiKeyList,
   BadRequestResponse,
+  ConflictResponse,
   CreateApiKeyBody,
   CreateApiKeyResult,
   CreateWriteKeyBody,
@@ -325,6 +326,11 @@ export type createWriteKeyResponse404 = {
   status: 404;
 };
 
+export type createWriteKeyResponse409 = {
+  data: ConflictResponse;
+  status: 409;
+};
+
 export type createWriteKeyResponseSuccess = createWriteKeyResponse201 & {
   headers: Headers;
 };
@@ -333,6 +339,7 @@ export type createWriteKeyResponseError = (
   | createWriteKeyResponse401
   | createWriteKeyResponse403
   | createWriteKeyResponse404
+  | createWriteKeyResponse409
 ) & {
   headers: Headers;
 };
@@ -384,7 +391,12 @@ export const getCreateWriteKeyQueryKey = (
 
 export const getCreateWriteKeyQueryOptions = <
   TData = Awaited<ReturnType<typeof createWriteKey>>,
-  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
 >(
   appId: string,
   createWriteKeyBody: CreateWriteKeyBody,
@@ -415,11 +427,17 @@ export type CreateWriteKeyQueryError =
   | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
-  | NotFoundResponse;
+  | NotFoundResponse
+  | ConflictResponse;
 
 export function useCreateWriteKey<
   TData = Awaited<ReturnType<typeof createWriteKey>>,
-  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
 >(
   appId: string,
   createWriteKeyBody: CreateWriteKeyBody,
@@ -439,7 +457,12 @@ export function useCreateWriteKey<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useCreateWriteKey<
   TData = Awaited<ReturnType<typeof createWriteKey>>,
-  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
 >(
   appId: string,
   createWriteKeyBody: CreateWriteKeyBody,
@@ -459,7 +482,12 @@ export function useCreateWriteKey<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useCreateWriteKey<
   TData = Awaited<ReturnType<typeof createWriteKey>>,
-  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
 >(
   appId: string,
   createWriteKeyBody: CreateWriteKeyBody,
@@ -472,7 +500,12 @@ export function useCreateWriteKey<
 
 export function useCreateWriteKey<
   TData = Awaited<ReturnType<typeof createWriteKey>>,
-  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | ConflictResponse,
 >(
   appId: string,
   createWriteKeyBody: CreateWriteKeyBody,

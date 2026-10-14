@@ -58,6 +58,12 @@ func TestClickHouseGrants(t *testing.T) {
 		require.Equal(t, uint64(0), countEvents(t, admin, appID))
 	})
 
+	// job deletion перед удалением сбрасывает очередь async insert сервера (deletion.chPurger).
+	t.Run("rw flushes async insert queue", func(t *testing.T) {
+		require.NoError(t, rw.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
+		require.Error(t, ro.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
+	})
+
 	t.Run("rw and ro have no DDL", func(t *testing.T) {
 		ctx := t.Context()
 		requireCode(t, rw.Exec(ctx, "CREATE TABLE appmetrica.rw_probe (x UInt8) ENGINE = Memory"), codeAccessDenied)

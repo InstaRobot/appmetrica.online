@@ -13,10 +13,14 @@ import (
 )
 
 type Querier interface {
+	// Есть ли невыполненная заявка на удаление самого приложения (createWriteKey и unarchiveApp отвечают 409).
+	AppDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error)
 	// Копия deletion-запроса subject_type app в details.deleted_apps цикла — до удаления строки apps (каскад снимет запрос).
 	AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
-	ClaimNextDeletionRequest(ctx context.Context, now *time.Time) (DeletionRequest, error)
+	// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
+	// снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
+	ClaimNextDeletionRequest(ctx context.Context, arg ClaimNextDeletionRequestParams) (DeletionRequest, error)
 	CompleteDeletionRequest(ctx context.Context, arg CompleteDeletionRequestParams) error
 	CountPasskeys(ctx context.Context) (int64, error)
 	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (CreateApiKeyRow, error)
@@ -47,6 +51,9 @@ type Querier interface {
 	GetAlertState(ctx context.Context, key string) (AlertState, error)
 	GetApiKey(ctx context.Context, id uuid.UUID) (GetApiKeyRow, error)
 	GetApp(ctx context.Context, id uuid.UUID) (App, error)
+	// Блокировка строки на транзакцию: deleteApp, createWriteKey и unarchiveApp сериализуются, иначе ключ,
+	// выпущенный параллельно с заявкой на удаление, остался бы активным.
+	GetAppForUpdate(ctx context.Context, id uuid.UUID) (App, error)
 	GetDeletionRequest(ctx context.Context, arg GetDeletionRequestParams) (DeletionRequest, error)
 	// Запуски digest с начала суток владельца: отправлен ли дайджест (ok с details.sent_on) и неудачные попытки;
 	// без неудач last_failed_at = since.
@@ -70,6 +77,9 @@ type Querier interface {
 	// Колонки ListPasskeys, CreatePasskey и RenamePasskey совпадают: строки приводятся к ListPasskeysRow.
 	ListPasskeys(ctx context.Context) ([]ListPasskeysRow, error)
 	ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]WriteKey, error)
+	// Ключи приложения с ожидающей заявкой на удаление (deleteApp) в снимок не попадают, даже если выпущены или
+	// приложение разархивировано после заявки (гонка с отзывом в deleteApp): ingest отвечает на них
+	// 401 invalid_app_key и не пишет для приложения ничего ни до purge, ни после.
 	LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow, error)
 	LockOwner(ctx context.Context) (uuid.UUID, error)
 	LockSetupToken(ctx context.Context, tokenHash []byte) (LockSetupTokenRow, error)
@@ -80,6 +90,9 @@ type Querier interface {
 	// следующий claim нарушил бы CHECK attempts ≤ 5.
 	RequeueStuckDeletionRequests(ctx context.Context, staleBefore time.Time) (int64, error)
 	RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) (RevokeApiKeyRow, error)
+	// deleteApp: все активные ключи приложения отзываются вместе с заявкой на удаление — со следующим снимком
+	// ingest не знает их (401 invalid_app_key) и ничего не пишет для приложения ни в events, ни в rejected_events.
+	RevokeAppWriteKeys(ctx context.Context, arg RevokeAppWriteKeysParams) error
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
 	RevokeWriteKey(ctx context.Context, arg RevokeWriteKeyParams) (WriteKey, error)
 	StartJobRun(ctx context.Context, arg StartJobRunParams) (uuid.UUID, error)

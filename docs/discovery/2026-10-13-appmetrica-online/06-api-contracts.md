@@ -76,7 +76,7 @@
 | 401 | Нет или неверная аутентификация: `missing_app_key`, `invalid_app_key`, `unauthenticated` |
 | 403 | Аутентифицирован, но нельзя: `app_archived` (ingest), `insufficient_scope`, `csrf_check_failed` |
 | 404 | Не найдено или нет доступа по `app_id` ключа: `app_not_found`, `profile_not_found`, `not_found` |
-| 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch` |
+| 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch`, `deletion_pending` |
 | 410 | Ссылка установки passkey истекла или использована: `setup_token_expired` |
 | 413 | Тело больше лимита: `payload_too_large` (ingest > 1 048 576 байт после распаковки; api > 65 536 байт) |
 | 415 | Неподдерживаемый Content-Type: `unsupported_media_type` |
@@ -327,16 +327,16 @@ Response `201` (`CreateAppResult`): приложение + первый write-к
 
 #### POST /admin/v1/apps/{app_id}/archive (archiveApp), POST /admin/v1/apps/{app_id}/unarchive (unarchiveApp)
 
-`204`. Архив: `status=archived`, `archived_at=now()`; ingest отвечает `403 app_archived` на все его ключи (кэш ≤15 с); данные и отчёты остаются; приложение скрыто из портфеля без `include_archived=true`. Разархивирование возвращает приём.
+`204`. Архив: `status=archived`, `archived_at=now()`; ingest отвечает `403 app_archived` на все его ключи (кэш ≤15 с); данные и отчёты остаются; приложение скрыто из портфеля без `include_archived=true`. Разархивирование возвращает приём; у приложения с невыполненной заявкой `deleteApp` (`pending`/`running`) оно отвечает `409 deletion_pending`.
 
 #### DELETE /admin/v1/apps/{app_id} (deleteApp)
 
-Тело `{"confirm_name": "Notes iOS"}` — должно совпасть с `apps.name` точно (с учётом регистра), иначе `409 confirm_name_mismatch`. Создаёт `deletion_requests` (`subject_type=app`, `subject_value=<app_id>`, `source=dashboard`), сразу архивирует приложение, ответ `202` `DeletionRequest`. Worker (job `deletion`) удаляет данные ClickHouse, затем строку `apps` (каскадом — ключи, `closed_days`, сами `deletion_requests` этого приложения; итог копируется в `job_runs.details`).
+Тело `{"confirm_name": "Notes iOS"}` — должно совпасть с `apps.name` точно (с учётом регистра), иначе `409 confirm_name_mismatch`. Создаёт `deletion_requests` (`subject_type=app`, `subject_value=<app_id>`, `source=dashboard`), сразу архивирует приложение и отзывает все его write-ключи (ingest не позже чем через 15 с отвечает `401 invalid_app_key`, а не `403 app_archived`, и ничего не пишет для приложения), ответ `202` `DeletionRequest`. Worker (job `deletion`) не раньше чем через 16 мин (`deletion.AppPurgeDelay`, срок жизни снимка ключей ingest) удаляет данные ClickHouse, затем строку `apps` (каскадом — ключи, `closed_days`, сами `deletion_requests` этого приложения; итог копируется в `job_runs.details`).
 
 #### Write keys: GET/POST /admin/v1/apps/{app_id}/write-keys, POST …/write-keys/{key_id}/revoke
 
 - `listWriteKeys` → `200 {"items": WriteKey[]}` включая отозванные (UI показывает серым).
-- `createWriteKey` тело `{"label": "android-2026"}` (0..64) → `201 WriteKey`. Активных ключей у приложения может быть несколько — ротация без поломки старых версий приложений.
+- `createWriteKey` тело `{"label": "android-2026"}` (0..64) → `201 WriteKey`. Активных ключей у приложения может быть несколько — ротация без поломки старых версий приложений. Приложению с невыполненной заявкой `deleteApp` ключ не выпускается — `409 deletion_pending`; ключ, всё же записанный параллельно с заявкой, в снимок ingest не попадает (`LoadWriteKeyCache` исключает приложения с заявкой `pending`/`running`).
 - `revokeWriteKey` → `204`; повторно — `204`. После отзыва ingest отвечает `401 invalid_app_key` не позже чем через 15 с.
 - `pk_` хранится открыто (`write_keys.key`) — он публичный и нужен для подстановки в сниппеты.
 
@@ -464,7 +464,7 @@ Response `201` (`CreateAppResult`): приложение + первый write-к
 **Семантика полей и ограничения** — полностью в YAML §9.1 (`EventBatch`, `EventContext`, `Event`). Ключевое:
 - `install_id` — UUID, сгенерированный приложением один раз (iOS — Keychain, переживает переустановку; Android — SharedPreferences + Auto Backup; Web — `localStorage`; боты — стабильный UUID на чат).
 - `session_id` — UUID, генерируется при выходе на передний план; один `session_id` у `session_start` и `session_end`.
-- `user_id` — непрозрачный ID из бэкенда приложения (1..128). Email и телефоны отклоняются; чисто цифровые строки разрешены (Telegram ID рекомендуется передавать как HMAC-SHA256 на стороне бота).
+- `user_id` — непрозрачный ID из бэкенда приложения (1..128). Email и телефоны отклоняются, символ U+0000 — тоже (`invalid_field`: Postgres не хранит его в `deletion_requests.subject_value`, такой ID нельзя было бы удалить по FR-019); чисто цифровые строки разрешены (Telegram ID рекомендуется передавать как HMAC-SHA256 на стороне бота).
 - `duration_ms` — время на переднем плане, измеренное клиентом; обязателен для `session_end`, игнорируется у `session_start`.
 - `context.ip` — только для server-to-server источников (бот передаёт IP пользователя, если знает), иначе не заполнять.
 
@@ -3596,3 +3596,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 2026-10-13 | 1.0 | Initial API contracts: ingest.yaml (POST /v1/events, health), api.yaml (Read API /v1, Admin API /admin/v1), test vectors, codegen configs |
 | 2026-10-14 | 1.1 | `listApps`, `getApp`, `getRealtime`: добавлен ответ `400 BadRequest` (как в `contracts/openapi/api.yaml` и contract-тестах); вектор `future_null` приведён к правилу «только завершённые периоды» и имени теста |
 | 2026-10-14 | 1.2 | 413 `payload_too_large` и для api: тело любого запроса `/v1`, `/admin/v1` ограничено 65 536 байт (`http.MaxBytesReader`, сквозное правило в `info.description` api.yaml) |
+| 2026-10-14 | 1.3 | `deleteApp` отзывает write-ключи приложения вместе с архивацией: ingest отвечает `401 invalid_app_key`; worker берёт запрос `app` не раньше чем через 16 мин (OQ-073) |

@@ -23,7 +23,13 @@ export const createDeletionRequestBodySubjectValueMax = 128;
 
 export const CreateDeletionRequestBody = zod.object({
   subject_type: zod.enum(["install", "user"]),
-  subject_value: zod.string().min(1).max(createDeletionRequestBodySubjectValueMax),
+  subject_value: zod
+    .string()
+    .min(1)
+    .max(createDeletionRequestBodySubjectValueMax)
+    .describe(
+      "install — install_id (UUID); user — user_id как в ingest (1..128 символов после обрезки пробелов, без символа U+0000).",
+    ),
 });
 
 export const CreateDeletionRequestResponse = zod.object({

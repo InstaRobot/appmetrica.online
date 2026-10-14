@@ -109,8 +109,13 @@ func newIngestServer(cfg config.Ingest, deps ingestDeps, reg prometheus.Register
 	}
 	rejectedLog := chstore.NewRejectedLog(chstore.RejectedLogConfig{
 		Inserter: deps.Rejected,
+		Clock:    clk,
 		OnError: func(err error) {
 			logger.Warn("rejected_events insert failed", slog.Any("error", err))
+		},
+		OnDropped: func(n int) {
+			metrics.RejectedLogDropped.Add(float64(n))
+			logger.Warn("rejected_events rows dropped: buffered too long", slog.Int("rows", n))
 		},
 	})
 	rejected := ingest.RejectedLogger{Sink: rejectedLog, Keys: keys, Metrics: metrics}

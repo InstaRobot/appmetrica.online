@@ -9,6 +9,13 @@ RETURNING id, app_id, subject_type, subject_value, status, source, api_key_id, r
 SELECT id, app_id, subject_type, subject_value, status, source, api_key_id, requested_at, started_at, completed_at, attempts, error
 FROM deletion_requests WHERE id = sqlc.arg(id) AND app_id = sqlc.arg(app_id);
 
+-- name: AppDeletionPending :one
+-- Есть ли невыполненная заявка на удаление самого приложения (createWriteKey и unarchiveApp отвечают 409).
+SELECT EXISTS (
+    SELECT 1 FROM deletion_requests
+    WHERE app_id = sqlc.arg(app_id) AND subject_type = 'app' AND status IN ('pending', 'running')
+)::boolean AS pending;
+
 -- name: ListDeletionRequests :many
 SELECT id, app_id, subject_type, subject_value, status, source, api_key_id, requested_at, started_at, completed_at, attempts, error
 FROM deletion_requests
@@ -17,11 +24,14 @@ ORDER BY requested_at DESC
 LIMIT 200;
 
 -- name: ClaimNextDeletionRequest :one
+-- Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
+-- снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
 UPDATE deletion_requests
 SET status = 'running', started_at = sqlc.arg(now), attempts = attempts + 1
 WHERE id = (
     SELECT id FROM deletion_requests
     WHERE status = 'pending'
+      AND (subject_type <> 'app' OR requested_at <= sqlc.arg(app_requested_before)::timestamptz)
     ORDER BY requested_at
     LIMIT 1
     FOR UPDATE SKIP LOCKED

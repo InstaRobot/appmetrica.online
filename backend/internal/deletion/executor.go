@@ -27,6 +27,22 @@ const (
 	staleRunning = time.Hour
 	// maxErrorLen — байт текста ошибки в deletion_requests.error (его показывают API и S-12).
 	maxErrorLen = 1000
+	// AppPurgeDelay — запрос subject_type=app берётся не раньше этого срока после requested_at. Вместе с
+	// заявкой приложение архивируется и его write-ключи отзываются, но ingest работает по снимку ключей:
+	// обычно он перезагружается раз в KEY_CACHE_REFRESH (15 с), а при недоступном Postgres живёт до
+	// ingest.KeyCacheMaxAge (15 мин) от начала его загрузки, после чего ingest отвечает 503 и ничего не пишет.
+	// Заявка становится видна ingest (commit) не позже apps.DeleteTimeout после requested_at, который берётся
+	// под блокировкой строки apps; снимок, начатый до commit, ещё принимает события приложения (вставка
+	// синхронная, не дольше ingest.DefaultInsertTimeout) и ставит отказы в буфер rejected_events, где строка
+	// живёт не дольше chstore.DefaultRejectedLogMaxAge и пишется не дольше chstore.DefaultRejectedLogInsertTimeout;
+	// purge раньше последней такой записи оставил бы в ClickHouse строки удалённого приложения без второй
+	// попытки очистки. Поэтому задержка — KeyCacheMaxAge плюс эти пределы плюс запас на расхождение часов
+	// worker и ingest (executor_test проверяет неравенство; константа не общая, чтобы worker не зависел от
+	// ingest). Блоки, которые сервер ClickHouse принял в очередь async insert, но ещё не записал (клиент
+	// отвалился по таймауту раньше ack), в задержку не входят: purge сбрасывает очередь сам (chPurger).
+	// Ключи, выпущенные после заявки, и возврат из архива в снимок не попадают (LoadWriteKeyCache, 409
+	// deletion_pending). Запросы user и install не ждут: их данные могут приходить и дальше по определению.
+	AppPurgeDelay = 17 * time.Minute
 )
 
 // Purger — ClickHouse-часть удаления (05-data-model.md, job deletion). Реализация — NewClickHousePurger.
@@ -48,8 +64,9 @@ type Result struct {
 // queue — deletion_requests в Postgres; в unit-тестах подменяется.
 type queue interface {
 	requeueStuck(ctx context.Context, staleBefore time.Time) (int64, error)
-	// claim берёт старейший pending (FOR UPDATE SKIP LOCKED) и переводит в running; ok=false — очередь пуста.
-	claim(ctx context.Context, now time.Time) (dr sqlc.DeletionRequest, ok bool, err error)
+	// claim берёт старейший pending (FOR UPDATE SKIP LOCKED) и переводит в running; запросы app —
+	// только с requested_at ≤ appRequestedBefore; ok=false — брать нечего.
+	claim(ctx context.Context, now, appRequestedBefore time.Time) (dr sqlc.DeletionRequest, ok bool, err error)
 	complete(ctx context.Context, id uuid.UUID, now time.Time) error
 	fail(ctx context.Context, id uuid.UUID, msg string) error
 	// deleteApp в одной транзакции копирует запрос (completed_at уже выставлен) в job_runs.details цикла
@@ -92,7 +109,8 @@ func (e *Executor) RunOnce(ctx context.Context, jobRunID uuid.UUID) (Result, err
 	}
 	res.Requeued = n
 	for range batchSize {
-		dr, ok, err := e.queue.claim(ctx, e.clock.Now())
+		now := e.clock.Now()
+		dr, ok, err := e.queue.claim(ctx, now, now.Add(-AppPurgeDelay))
 		if err != nil {
 			return res, fmt.Errorf("deletion: claim request: %w", err)
 		}
@@ -189,8 +207,10 @@ func (q pgQueue) requeueStuck(ctx context.Context, staleBefore time.Time) (int64
 	return q.store.Queries().RequeueStuckDeletionRequests(ctx, staleBefore)
 }
 
-func (q pgQueue) claim(ctx context.Context, now time.Time) (sqlc.DeletionRequest, bool, error) {
-	dr, err := q.store.Queries().ClaimNextDeletionRequest(ctx, &now)
+func (q pgQueue) claim(ctx context.Context, now, appRequestedBefore time.Time) (sqlc.DeletionRequest, bool, error) {
+	dr, err := q.store.Queries().ClaimNextDeletionRequest(ctx, sqlc.ClaimNextDeletionRequestParams{
+		Now: &now, AppRequestedBefore: appRequestedBefore,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return sqlc.DeletionRequest{}, false, nil

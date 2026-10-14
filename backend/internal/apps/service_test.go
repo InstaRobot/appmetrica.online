@@ -3,6 +3,7 @@
 package apps_test
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
@@ -453,9 +455,21 @@ func TestDeleteApp_CreatesDeletionRequest(t *testing.T) {
 	require.Nil(t, dr.CompletedAt)
 	require.Nil(t, dr.Error)
 
-	// Приложение сразу в архиве: ingest перестаёт принимать его ключи, строку удалит worker.
+	// Приложение сразу в архиве, а его write-ключи отозваны: со следующим снимком ingest не знает ключ
+	// (401 invalid_app_key, а не 403 app_archived) и не пишет для него ни события, ни batch-ошибки
+	// в rejected_events — иначе строки удалённого приложения появлялись бы после purge. Строку удалит worker.
 	require.Equal(t, "archived", e.get(t, app.ID).Status)
-	requireIngestError(t, e.keyCache(t), key.Key, "app_archived")
+	cache := e.keyCache(t)
+	requireIngestError(t, cache, key.Key, "invalid_app_key")
+	_, known := cache.Peek(key.Key)
+	require.False(t, known, "журнал отказов не привязывает batch-ошибки к удаляемому приложению")
+	rec = e.call(t, http.MethodGet, "/admin/v1/apps/"+app.ID+"/write-keys", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	for _, wk := range decode[struct {
+		Items []writeKeyJSON `json:"items"`
+	}](t, rec).Items {
+		require.NotNil(t, wk.RevokedAt, "ключ %s отозван вместе с заявкой", wk.ID)
+	}
 
 	// Повторное удаление возвращает ту же заявку.
 	e.clock.Advance(time.Minute)
@@ -465,6 +479,42 @@ func TestDeleteApp_CreatesDeletionRequest(t *testing.T) {
 	require.Equal(t, dr.ID, again.ID)
 	require.True(t, t0.Equal(again.RequestedAt))
 	require.Equal(t, 1, e.count(t, "deletion_requests"))
+}
+
+// Пока заявка на удаление не выполнена, приложение нельзя вернуть из архива и выпустить ему ключ (409
+// deletion_pending), а ключ, всё же появившийся в write_keys (гонка с отзывом в deleteApp), в снимок ingest не
+// попадает: иначе ingest снова писал бы строки приложения, в том числе после purge.
+func TestDeleteApp_FencesNewKeysAndUnarchive(t *testing.T) {
+	e := newEnv(t)
+	app, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
+	path := "/admin/v1/apps/" + app.ID
+	rec := e.call(t, http.MethodDelete, path, map[string]any{"confirm_name": "Notes iOS"})
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+
+	requireAPIError(t, e.call(t, http.MethodPost, path+"/write-keys", map[string]any{"label": "late"}), http.StatusConflict, "deletion_pending")
+	requireAPIError(t, e.call(t, http.MethodPost, path+"/unarchive", nil), http.StatusConflict, "deletion_pending")
+	require.Equal(t, "archived", e.get(t, app.ID).Status)
+	for _, wk := range e.listWriteKeys(t, app.ID) {
+		require.NotNil(t, wk.RevokedAt, "новых активных ключей нет")
+	}
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, path+"/archive", nil).Code, "архивация идемпотентна и разрешена")
+
+	raced, err := e.pg.Queries().CreateWriteKey(t.Context(), sqlc.CreateWriteKeyParams{
+		AppID: uuid.MustParse(app.ID), Key: "pk_RacedRacedRacedRacedRacedRacedRa", Label: "raced",
+	})
+	require.NoError(t, err)
+	cache := e.keyCache(t)
+	requireIngestError(t, cache, raced.Key, "invalid_app_key")
+	_, known := cache.Peek(raced.Key)
+	require.False(t, known)
+
+	// Заявка выполнена или снята — ограничения уходят вместе с ней.
+	_, err = e.pg.Pool().Exec(t.Context(), "UPDATE deletion_requests SET status = 'failed' WHERE app_id = $1", app.ID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, path+"/unarchive", nil).Code)
+	e.createWriteKey(t, app.ID, map[string]any{"label": "after"})
+	_, err = e.keyCache(t).Lookup(raced.Key)
+	require.NoError(t, err)
 }
 
 func TestApps_RequireSessionAndCSRF(t *testing.T) {
@@ -490,4 +540,43 @@ func TestApps_RequireSessionAndCSRF(t *testing.T) {
 	}
 	require.Equal(t, app, e.get(t, app.ID))
 	require.Equal(t, 1, e.count(t, "apps"))
+}
+
+// requested_at заявки — момент после захвата блокировки строки apps, а не начала запроса: при долгом ожидании
+// блокировки заявка становилась бы видна ingest позже requested_at, снимок ключей, начатый в это окно, жил бы
+// дольше deletion.AppPurgeDelay, и его строки появлялись бы в ClickHouse после purge.
+func TestDeleteApp_RequestedAtAfterLockWait(t *testing.T) {
+	e := newEnv(t)
+	app, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
+	appID := uuid.MustParse(app.ID)
+	ctx := t.Context()
+
+	holder, err := e.pg.Pool().Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = holder.Rollback(context.WithoutCancel(ctx)) }()
+	_, err = holder.Exec(ctx, "SELECT id FROM apps WHERE id = $1 FOR UPDATE", appID)
+	require.NoError(t, err)
+
+	type result struct {
+		dr  sqlc.DeletionRequest
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		dr, err := apps.NewService(e.pg, e.clock, slog.New(slog.DiscardHandler)).Delete(ctx, appID, "Notes iOS")
+		done <- result{dr: dr, err: err}
+	}()
+	require.Eventually(t, func() bool {
+		var n int
+		err := e.pg.Pool().QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&n)
+		return err == nil && n > 0
+	}, 5*time.Second, 10*time.Millisecond, "Delete ждёт блокировку строки apps")
+
+	e.clock.Advance(2 * time.Minute)
+	require.NoError(t, holder.Rollback(ctx))
+	res := <-done
+	require.NoError(t, res.err)
+	require.True(t, t0.Add(2*time.Minute).Equal(res.dr.RequestedAt), res.dr.RequestedAt)
+	require.Equal(t, "archived", e.get(t, app.ID).Status)
 }

@@ -117,6 +117,12 @@ func TestCreateDeletionRequest_Validation(t *testing.T) {
 			http.StatusBadRequest, "invalid_request", "subject_value",
 		},
 		{
+			// Codex review: NUL проходил валидацию, а Postgres text его не хранит — был 500.
+			"user_nul", msk,
+			map[string]string{"subject_type": "user", "subject_value": "user\x00suffix"},
+			http.StatusBadRequest, "invalid_request", "subject_value",
+		},
+		{
 			"subject_app_rejected", msk,
 			map[string]string{"subject_type": "app", "subject_value": msk.String()},
 			http.StatusBadRequest, "invalid_request", "subject_type",

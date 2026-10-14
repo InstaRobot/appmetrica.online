@@ -12,12 +12,28 @@ import (
 	"github.com/google/uuid"
 )
 
+const appDeletionPending = `-- name: AppDeletionPending :one
+SELECT EXISTS (
+    SELECT 1 FROM deletion_requests
+    WHERE app_id = $1 AND subject_type = 'app' AND status IN ('pending', 'running')
+)::boolean AS pending
+`
+
+// Есть ли невыполненная заявка на удаление самого приложения (createWriteKey и unarchiveApp отвечают 409).
+func (q *Queries) AppDeletionPending(ctx context.Context, appID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, appDeletionPending, appID)
+	var pending bool
+	err := row.Scan(&pending)
+	return pending, err
+}
+
 const claimNextDeletionRequest = `-- name: ClaimNextDeletionRequest :one
 UPDATE deletion_requests
 SET status = 'running', started_at = $1, attempts = attempts + 1
 WHERE id = (
     SELECT id FROM deletion_requests
     WHERE status = 'pending'
+      AND (subject_type <> 'app' OR requested_at <= $2::timestamptz)
     ORDER BY requested_at
     LIMIT 1
     FOR UPDATE SKIP LOCKED
@@ -25,8 +41,15 @@ WHERE id = (
 RETURNING id, app_id, subject_type, subject_value, status, source, api_key_id, requested_at, started_at, completed_at, attempts, error
 `
 
-func (q *Queries) ClaimNextDeletionRequest(ctx context.Context, now *time.Time) (DeletionRequest, error) {
-	row := q.db.QueryRow(ctx, claimNextDeletionRequest, now)
+type ClaimNextDeletionRequestParams struct {
+	Now                *time.Time
+	AppRequestedBefore time.Time
+}
+
+// Запрос app берётся не раньше app_requested_before (deletion.AppPurgeDelay после requested_at): ingest со
+// снимком ключей, загруженным до заявки, ещё принимает события приложения — снимок живёт до KeyCacheMaxAge.
+func (q *Queries) ClaimNextDeletionRequest(ctx context.Context, arg ClaimNextDeletionRequestParams) (DeletionRequest, error) {
+	row := q.db.QueryRow(ctx, claimNextDeletionRequest, arg.Now, arg.AppRequestedBefore)
 	var i DeletionRequest
 	err := row.Scan(
 		&i.ID,

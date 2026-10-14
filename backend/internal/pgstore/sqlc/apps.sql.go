@@ -98,6 +98,28 @@ func (q *Queries) GetApp(ctx context.Context, id uuid.UUID) (App, error) {
 	return i, err
 }
 
+const getAppForUpdate = `-- name: GetAppForUpdate :one
+SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at FROM apps WHERE id = $1 FOR UPDATE
+`
+
+// Блокировка строки на транзакцию: deleteApp, createWriteKey и unarchiveApp сериализуются, иначе ключ,
+// выпущенный параллельно с заявкой на удаление, остался бы активным.
+func (q *Queries) GetAppForUpdate(ctx context.Context, id uuid.UUID) (App, error) {
+	row := q.db.QueryRow(ctx, getAppForUpdate, id)
+	var i App
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Platform,
+		&i.Timezone,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const listApps = `-- name: ListApps :many
 SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at
 FROM apps

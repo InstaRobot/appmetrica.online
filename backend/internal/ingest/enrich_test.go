@@ -410,12 +410,57 @@ func TestPayloadSample(t *testing.T) {
 		require.JSONEq(t, `{"context":"ios"}`, ingest.PayloadSample([]byte(`{"context":"ios"}`)))
 	})
 
-	t.Run("truncated_to_4096_bytes_on_rune_boundary", func(t *testing.T) {
+	t.Run("truncated_to_4096_bytes_on_token_boundary", func(t *testing.T) {
+		events := make([]any, 0, 300)
+		for i := range 300 {
+			events = append(events, map[string]any{"name": "session_start", "user_id": fmt.Sprintf("юзер_%03d", i)})
+		}
+		raw, err := json.Marshal(map[string]any{"events": events})
+		require.NoError(t, err)
+		sample := ingest.PayloadSample(raw)
+		require.LessOrEqual(t, len(sample), ingest.MaxPayloadSampleBytes)
+		require.Greater(t, len(sample), ingest.MaxPayloadSampleBytes-64)
+		require.True(t, utf8.ValidString(sample))
+		// Строка не режется посередине: число кавычек чётное, хвост — полный токен.
+		require.Zero(t, strings.Count(sample, `"`)%2, sample[len(sample)-40:])
+	})
+
+	t.Run("value_longer_than_limit_dropped_whole", func(t *testing.T) {
 		raw := eventJSON(t, map[string]any{"user_id": strings.Repeat("я", 5000)})
 		sample := ingest.PayloadSample(raw)
 		require.LessOrEqual(t, len(sample), ingest.MaxPayloadSampleBytes)
-		require.Greater(t, len(sample), ingest.MaxPayloadSampleBytes-4)
-		require.True(t, utf8.ValidString(sample))
+		require.NotContains(t, sample, "я")
+		require.Contains(t, sample, `"name":"session_start"`)
+	})
+
+	// Codex review: экранированные ключи и значения ("\u0069p", "\u0040") проходили мимо шаблонов
+	// неразбираемого тела; дубликат context с пустым объектом оставлял первый ip в исходных байтах.
+	t.Run("escaped_key_and_value_in_invalid_json", func(t *testing.T) {
+		body := `{"context":{"\u0069p":"` + londonIP + `","Ip":"2a02:6b8::1"},"events":[{"user_id":"ivan\u0040example.com"},{"user_id":"\u007542"},`
+		sample := ingest.PayloadSample([]byte(body))
+		require.NotContains(t, sample, "81.2.69")
+		require.NotContains(t, sample, "2a02")
+		require.NotContains(t, sample, "ivan")
+		require.Equal(t, `{"context":{},"events":[{"user_id":"[redacted]"},{"user_id":"u42"}`, sample) //nolint:testifylint // сравниваются байты: важна каноничная форма, а не равенство JSON
+	})
+
+	t.Run("duplicate_context_keeps_no_ip", func(t *testing.T) {
+		body := `{"context":{"ip":"` + londonIP + `"},"context":{},"events":[],"user_id":"ivan@example.com","user_id":"+79161234567"}`
+		sample := ingest.PayloadSample([]byte(body))
+		require.NotContains(t, sample, "81.2.69")
+		require.Equal(t, `{"context":{},"context":{},"events":[],"user_id":"[redacted]","user_id":"[redacted]"}`, sample) //nolint:testifylint // сравниваются байты: важна каноничная форма, а не равенство JSON
+	})
+
+	t.Run("canonical_escaping_for_deletion_needles", func(t *testing.T) {
+		// Удаление ищет user_id в сэмпле как JSON-строку encoding/json: экранирование клиента снимается.
+		body := `{"user_id":"\u007531","name":"a\/b","ip":"\u0038.8.8.8","nested":{"ip":[1,{"x":2}],"n":1.50,"t":true,"z":null}}`
+		require.Equal(t, `{"user_id":"u31","name":"a/b","nested":{"n":1.50,"t":true,"z":null}}`, ingest.PayloadSample([]byte(body))) //nolint:testifylint // сравниваются байты: важна каноничная форма, а не равенство JSON
+	})
+
+	t.Run("invalid_utf8_and_garbage", func(t *testing.T) {
+		require.Empty(t, ingest.PayloadSample([]byte("not json")))
+		require.Empty(t, ingest.PayloadSample(nil))
+		require.Equal(t, "{\"a\":\"\ufffd\"}", ingest.PayloadSample([]byte("{\"a\":\"\xff\"}")), "невалидный UTF-8 — U+FFFD") //nolint:testifylint // сравниваются байты
 	})
 
 	t.Run("invalid_json_ip_scrubbed", func(t *testing.T) {

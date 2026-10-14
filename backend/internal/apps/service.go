@@ -23,6 +23,10 @@ const (
 	nameMaxLen     = 64
 	timezoneMaxLen = 64
 	nameUniqueIdx  = "apps_name_lower_uq"
+	// DeleteTimeout — предел транзакции Delete: заявка на удаление становится видна (commit) не позже чем через
+	// этот срок после requested_at, который берётся уже под блокировкой строки apps. На него опирается
+	// deletion.AppPurgeDelay: снимок ключей ingest, начатый до commit, ещё содержит ключи приложения.
+	DeleteTimeout = 10 * time.Second
 )
 
 var (
@@ -32,6 +36,9 @@ var (
 	ErrNameTaken = errors.New("apps: name taken")
 	// ErrConfirmNameMismatch — confirm_name при удалении не совпал с именем приложения.
 	ErrConfirmNameMismatch = errors.New("apps: confirm name mismatch")
+	// ErrDeletionPending — у приложения есть невыполненная заявка на удаление: новые ключи и возврат из архива
+	// запрещены, иначе ingest снова писал бы строки приложения, в том числе после purge.
+	ErrDeletionPending = errors.New("apps: deletion pending")
 )
 
 // ValidationError — некорректное поле запроса; Field пуст, если ошибка не относится к одному полю.
@@ -170,31 +177,72 @@ func (s *Service) Archive(ctx context.Context, id uuid.UUID) error {
 	return s.idempotent(ctx, id, err, "archive")
 }
 
-// Unarchive возвращает приложение из архива; для активного ничего не меняет.
+// Unarchive возвращает приложение из архива; для активного ничего не меняет. Приложение с ожидающей заявкой
+// на удаление (Delete) не возвращается — ErrDeletionPending.
 func (s *Service) Unarchive(ctx context.Context, id uuid.UUID) error {
-	_, err := s.store.Queries().UnarchiveApp(ctx, sqlc.UnarchiveAppParams{ID: id, Now: s.clock.Now()})
-	return s.idempotent(ctx, id, err, "unarchive")
+	now := s.clock.Now()
+	return s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		if err := s.lockNotDeleting(ctx, q, id); err != nil {
+			return err
+		}
+		_, err := q.UnarchiveApp(ctx, sqlc.UnarchiveAppParams{ID: id, Now: now})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("apps: unarchive: %w", err)
+		}
+		return nil
+	})
 }
 
-// Delete сверяет confirmName с именем (точно, с учётом регистра), архивирует приложение и создаёт заявку
-// на удаление subject_type=app. Строку apps удаляет worker после очистки ClickHouse.
+// lockNotDeleting блокирует строку приложения до конца транзакции (ErrNotFound, если его нет) и проверяет, что
+// заявки на его удаление нет (ErrDeletionPending). Delete берёт ту же блокировку, поэтому ключ или возврат из
+// архива не проскочат между архивацией и отзывом ключей.
+func (s *Service) lockNotDeleting(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
+	if _, err := q.GetAppForUpdate(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("apps: lock: %w", err)
+	}
+	pending, err := q.AppDeletionPending(ctx, id)
+	if err != nil {
+		return fmt.Errorf("apps: deletion pending: %w", err)
+	}
+	if pending {
+		return ErrDeletionPending
+	}
+	return nil
+}
+
+// Delete сверяет confirmName с именем (точно, с учётом регистра), архивирует приложение, отзывает все его
+// write-ключи и создаёт заявку на удаление subject_type=app. Отзыв нужен, чтобы ingest после перезагрузки
+// снимка не писал для приложения ничего: архивный ключ ещё даёт 403 app_archived в rejected_events, а
+// отозванный — 401 invalid_app_key без строки в журнале, иначе записи появлялись бы после purge.
+// Строку apps удаляет worker после очистки ClickHouse (deletion.AppPurgeDelay).
 // Повторный вызов возвращает ту же заявку, пока она pending или running.
 func (s *Service) Delete(ctx context.Context, id uuid.UUID, confirmName string) (sqlc.DeletionRequest, error) {
-	now := s.clock.Now()
+	ctx, cancel := context.WithTimeout(ctx, DeleteTimeout)
+	defer cancel()
 	var dr sqlc.DeletionRequest
 	err := s.store.InTx(ctx, func(q *sqlc.Queries) error {
-		app, err := q.GetApp(ctx, id)
+		// Блокировка строки: параллельные CreateWriteKey и Unarchive ждут и затем видят заявку.
+		app, err := q.GetAppForUpdate(ctx, id)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return ErrNotFound
 		case err != nil:
 			return fmt.Errorf("apps: get: %w", err)
 		}
+		// requested_at — после захвата блокировки: ожидание не должно отодвигать commit от requested_at дальше
+		// DeleteTimeout, иначе снимок ключей, начатый во время ожидания, пережил бы deletion.AppPurgeDelay.
+		now := s.clock.Now()
 		if confirmName != app.Name {
 			return ErrConfirmNameMismatch
 		}
 		if _, err := q.ArchiveApp(ctx, sqlc.ArchiveAppParams{ID: id, Now: &now}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("apps: archive: %w", err)
+		}
+		if err := q.RevokeAppWriteKeys(ctx, sqlc.RevokeAppWriteKeysParams{Now: &now, AppID: id}); err != nil {
+			return fmt.Errorf("apps: revoke write keys: %w", err)
 		}
 		dr, err = q.CreateDeletionRequest(ctx, sqlc.CreateDeletionRequestParams{
 			AppID:        id,

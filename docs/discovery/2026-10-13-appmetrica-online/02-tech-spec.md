@@ -1003,9 +1003,11 @@ AC-3.3.5 (invariant — open redirect невозможен):
 - `updateApp {name?, timezone?}`: смена TZ влияет на будущие расчёты; закрытые дни (`closed_days`) не
   пересчитываются — UI показывает предупреждение.
 - `archiveApp` → `status=archived`, `archived_at=now`; ingest отвечает 403 `app_archived` не позднее чем через 15 с.
-  `unarchiveApp` — обратное.
+  `unarchiveApp` — обратное; при невыполненной заявке `deleteApp` — 409 `deletion_pending` (как и `createWriteKey`).
 - `deleteApp {confirm_name}`: точное совпадение с `name`, иначе 409 `confirm_name_mismatch`; приложение сразу
-  `archived`, создаётся `deletion_requests(subject_type=app, source=dashboard)`, ответ 202 `DeletionRequest`;
+  `archived`, все его write-ключи отзываются (ingest со следующим снимком отвечает 401 `invalid_app_key` и не
+  пишет для приложения ни событий, ни batch-ошибок в `rejected_events`), создаётся
+  `deletion_requests(subject_type=app, source=dashboard)`, ответ 202 `DeletionRequest`;
   строку `apps` удаляет worker после очистки ClickHouse (Story 6.2).
 
 **Acceptance criteria (TDD — Given/When/Then, executable)**:
@@ -1820,7 +1822,14 @@ AC-6.1.4 (invariant — одинаковый результат cookie и Bearer
   - `user`: установки `I*` с `linked_user = U` + события с `user_id = U`; удаление как выше для всех `I*`, плюс
     `user_first_seen` по `U`;
   - `app`: все таблицы по `app_id`, затем `DELETE FROM apps WHERE id = A` (каскад ключей, `closed_days`,
-    `deletion_requests`) — перед этим копия запроса в `job_runs.details`.
+    `deletion_requests`) — перед этим копия запроса в `job_runs.details`. Запрос `app` берётся из очереди не
+    раньше чем через 16 мин после `requested_at` (`deletion.AppPurgeDelay` = `ingest.KeyCacheMaxAge` 15 мин от
+    начала чтения снимка + `InsertTimeout` 5 с незавершённой вставки events + `MaxAge` 20 с ожидания строки в
+    буфере rejected_events + 5 с её INSERT + 30 с на расхождение часов): ingest со снимком ключей, начатым до
+    заявки, ещё принимает события приложения и журналирует его batch-ошибки, пока снимок не перезагрузится
+    (`KEY_CACHE_REFRESH`, 15 с) или не стухнет (503, ничего не пишется); снимки после заявки ключей приложения
+    не содержат (отозваны `deleteApp`, а выпущенные позже и ключи разархивированного приложения исключает
+    `LoadWriteKeyCache`, пока заявка `pending`/`running`).
   - Успех → `done`, `completed_at`; ошибка → `pending` до 5 попыток, затем `failed` + Telegram-сообщение.
 - `daily_stats` не очищается (агрегаты без персональных данных). Новые события после удаления снова создадут данные —
   документация предписывает клиенту сбросить `install_id`.

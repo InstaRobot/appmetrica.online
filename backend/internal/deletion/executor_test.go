@@ -16,11 +16,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"appmetrica.online/backend/internal/apps"
+	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
+	"appmetrica.online/backend/internal/ingest"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
-var testNow = time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+var (
+	testNow = time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	// afterAppPurgeDelay — все запросы fakeQueue.add (requested_at = testNow + i с) уже доступны для claim.
+	afterAppPurgeDelay = testNow.Add(AppPurgeDelay + time.Minute)
+)
 
 // fakeQueue — очередь deletion_requests в памяти с семантикой запросов deletion_requests.sql.
 type fakeQueue struct {
@@ -72,7 +79,7 @@ func (q *fakeQueue) requeueStuck(_ context.Context, staleBefore time.Time) (int6
 	return n, nil
 }
 
-func (q *fakeQueue) claim(_ context.Context, now time.Time) (sqlc.DeletionRequest, bool, error) {
+func (q *fakeQueue) claim(_ context.Context, now, appRequestedBefore time.Time) (sqlc.DeletionRequest, bool, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.claimErr != nil {
@@ -80,6 +87,9 @@ func (q *fakeQueue) claim(_ context.Context, now time.Time) (sqlc.DeletionReques
 	}
 	for i := range q.rows {
 		r := &q.rows[i]
+		if r.SubjectType == sqlc.DeletionSubjectApp && r.RequestedAt.After(appRequestedBefore) {
+			continue
+		}
 		if r.Status == sqlc.DeletionStatusPending {
 			r.Status = sqlc.DeletionStatusRunning
 			r.StartedAt = &now
@@ -251,7 +261,7 @@ func TestDeletion_AppDeletesRowAfterClickHouse(t *testing.T) {
 	var failed []failedCall
 	runID := uuid.New()
 
-	res, err := newTestExecutor(q, p, clock.NewFixed(testNow), &failed).RunOnce(t.Context(), runID)
+	res, err := newTestExecutor(q, p, clock.NewFixed(afterAppPurgeDelay), &failed).RunOnce(t.Context(), runID)
 	require.NoError(t, err)
 	require.Equal(t, Result{Done: 2}, res)
 	require.Equal(t, []string{"app " + appID.String(), "user " + other.String() + " u2"}, p.calls)
@@ -267,10 +277,49 @@ func TestDeletion_AppNotDeletedWhenClickHouseFails(t *testing.T) {
 	p := &fakePurger{purgeErr: errors.New("timeout")}
 	var failed []failedCall
 
-	_, err := newTestExecutor(q, p, clock.NewFixed(testNow), &failed).RunOnce(t.Context(), uuid.New())
+	_, err := newTestExecutor(q, p, clock.NewFixed(afterAppPurgeDelay), &failed).RunOnce(t.Context(), uuid.New())
 	require.Error(t, err)
 	require.Empty(t, q.deleted)
 	require.Equal(t, sqlc.DeletionStatusPending, q.get(id).Status)
+}
+
+// Codex review: ingest держит снимок ключей KEY_CACHE_REFRESH и после архивации ещё принимает события
+// приложения; purge раньше их вставки оставил бы строки без приложения. Запрос app берётся не раньше
+// AppPurgeDelay после requested_at; запросы user/install той же очереди не ждут.
+func TestDeletion_AppWaitsForPurgeDelay(t *testing.T) {
+	appID := uuid.New()
+	q := &fakeQueue{}
+	appReq := q.add(sqlc.DeletionSubjectApp, appID.String(), appID)
+	userReq := q.add(sqlc.DeletionSubjectUser, "u1", uuid.New())
+	p := &fakePurger{}
+	var failed []failedCall
+
+	tooEarly := q.get(appReq).RequestedAt.Add(AppPurgeDelay - time.Second)
+	res, err := newTestExecutor(q, p, clock.NewFixed(tooEarly), &failed).RunOnce(t.Context(), uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, Result{Done: 1}, res)
+	require.Equal(t, sqlc.DeletionStatusPending, q.get(appReq).Status)
+	require.Equal(t, sqlc.DeletionStatusDone, q.get(userReq).Status)
+	require.Empty(t, q.deleted)
+
+	ready := q.get(appReq).RequestedAt.Add(AppPurgeDelay)
+	res, err = newTestExecutor(q, p, clock.NewFixed(ready), &failed).RunOnce(t.Context(), uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, Result{Done: 1}, res)
+	require.Equal(t, []uuid.UUID{appID}, q.deleted)
+}
+
+// AppPurgeDelay не короче жизни снимка ключей ingest плюс незавершённые записи: ingest со снимком, загруженным
+// до заявки (ключи ещё активны, Postgres недоступен для refresh), отвечает 503 после KeyCacheMaxAge от начала
+// чтения снимка; заявка становится видна не позже apps.DeleteTimeout после requested_at (снимок, начатый в это
+// окно, ключи ещё содержит), уже начатая вставка events длится не дольше InsertTimeout, строка rejected_events
+// ждёт в буфере не дольше MaxAge и пишется не дольше InsertTimeout журнала; остаток — расхождение часов worker
+// и ingest. Очередь async insert сервера purge сбрасывает сам (chPurger).
+// Иначе purge обгонял бы последние записи, и строки удалённого приложения оставались бы в ClickHouse.
+func TestDeletion_AppPurgeDelayCoversKeyCacheLifetime(t *testing.T) {
+	const clockSkew = 30 * time.Second
+	inFlight := apps.DeleteTimeout + ingest.DefaultInsertTimeout + chstore.DefaultRejectedLogMaxAge + chstore.DefaultRejectedLogInsertTimeout
+	require.GreaterOrEqual(t, AppPurgeDelay, ingest.KeyCacheMaxAge+inFlight+clockSkew)
 }
 
 // Ошибка прерывает цикл: иначе тот же запрос снова встал бы первым в очереди и потратил все попытки за минуту.
@@ -324,7 +373,7 @@ func TestDeletion_RequeuesStuckRequests(t *testing.T) {
 	ex := newTestExecutor(q, &fakePurger{}, c, &failed)
 
 	// Первый claim «зависает»: имитируем падение worker-а сразу после взятия запроса.
-	_, ok, err := q.claim(t.Context(), c.Now())
+	_, ok, err := q.claim(t.Context(), c.Now(), c.Now())
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -386,6 +435,10 @@ func TestRejectedNeedles(t *testing.T) {
 	require.Equal(t, []string{`"Юзер"`}, userNeedles("Юзер"))
 	// JSONEncoder в Swift экранирует слеш: ищем обе записи; HTML-символы не экранируются.
 	require.Equal(t, []string{`"a/b <x>"`, `"a\/b <x>"`}, userNeedles("a/b <x>"))
+	// Codex review: сэмпл хранится в каноничном виде ingest.PayloadSample (encoding/json без HTML-экранирования),
+	// поэтому первый needle совпадает и с user_id, который клиент прислал экранированным ("\u007531");
+	// проверка самого сэмпла — ingest TestPayloadSample/canonical_escaping_for_deletion_needles.
+	require.Equal(t, `"u31"`, userNeedles("u31")[0])
 
 	ids := make([]uuid.UUID, 450)
 	for i := range ids {

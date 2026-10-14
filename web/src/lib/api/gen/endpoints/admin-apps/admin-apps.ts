@@ -813,6 +813,11 @@ export type unarchiveAppResponse404 = {
   status: 404;
 };
 
+export type unarchiveAppResponse409 = {
+  data: ConflictResponse;
+  status: 409;
+};
+
 export type unarchiveAppResponseSuccess = unarchiveAppResponse204 & {
   headers: Headers;
 };
@@ -820,6 +825,7 @@ export type unarchiveAppResponseError = (
   | unarchiveAppResponse401
   | unarchiveAppResponse403
   | unarchiveAppResponse404
+  | unarchiveAppResponse409
 ) & {
   headers: Headers;
 };
@@ -846,7 +852,7 @@ export const getUnarchiveAppQueryKey = (appId: string) => {
 
 export const getUnarchiveAppQueryOptions = <
   TData = Awaited<ReturnType<typeof unarchiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -872,11 +878,15 @@ export const getUnarchiveAppQueryOptions = <
 };
 
 export type UnarchiveAppQueryResult = NonNullable<Awaited<ReturnType<typeof unarchiveApp>>>;
-export type UnarchiveAppQueryError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse;
+export type UnarchiveAppQueryError =
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | ConflictResponse;
 
 export function useUnarchiveApp<
   TData = Awaited<ReturnType<typeof unarchiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options: {
@@ -895,7 +905,7 @@ export function useUnarchiveApp<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useUnarchiveApp<
   TData = Awaited<ReturnType<typeof unarchiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -914,7 +924,7 @@ export function useUnarchiveApp<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useUnarchiveApp<
   TData = Awaited<ReturnType<typeof unarchiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {
@@ -926,7 +936,7 @@ export function useUnarchiveApp<
 
 export function useUnarchiveApp<
   TData = Awaited<ReturnType<typeof unarchiveApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse,
+  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse,
 >(
   appId: string,
   options?: {

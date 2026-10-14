@@ -250,6 +250,11 @@ func TestValidateEvent(t *testing.T) {
 			wantCode: ingestapi.RejectionCodeInvalidField, wantField: "events[0].user_id", wantInsertID: validInsertID,
 		},
 		{
+			// Codex review: NUL принимался, но deletion_requests.subject_value (Postgres text) его не хранит.
+			name: "user_id_nul", raw: eventJSON(t, map[string]any{"user_id": "user\x00suffix"}),
+			wantCode: ingestapi.RejectionCodeInvalidField, wantField: "events[0].user_id", wantInsertID: validInsertID,
+		},
+		{
 			name: "user_id_email", index: 5, raw: eventJSON(t, map[string]any{"user_id": "ivan@example.com"}),
 			wantCode: ingestapi.RejectionCodeUserIdLooksLikePii, wantField: "events[5].user_id", wantInsertID: validInsertID,
 		},

@@ -41,6 +41,7 @@
             <access_management>0</access_management>
             <grants>
                 <query>GRANT SELECT, INSERT, ALTER DELETE ON appmetrica.*</query>
+                <query>GRANT SYSTEM FLUSH ASYNC INSERT QUEUE ON *.*</query>
                 <query>GRANT SELECT ON system.disks</query>
                 <query>GRANT SELECT ON system.parts</query>
                 <query>GRANT SELECT ON system.mutations</query>

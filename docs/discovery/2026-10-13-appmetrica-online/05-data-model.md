@@ -437,7 +437,7 @@ Skip-индексы: `idx_user_id`, `idx_session_id`, `idx_install_id` — `bloo
 | event_name | LowCardinality(String) | '' для batch-уровня |
 | app_version | LowCardinality(String) | Из context, если удалось разобрать |
 | platform | LowCardinality(String) | |
-| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча); `context.ip` вырезается до записи, `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` (и при batch-ошибке, до проверки событий) |
+| payload_sample | String | ≤ 4096 байт JSON одного события (или начала тела батча), переписанного ingest токен за токеном в каноничный компактный вид (`encoding/json` без HTML-экранирования, обрезка по границе токена); пары с ключом `ip` на любом уровне вырезаются, `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` (и при batch-ошибке, до проверки событий); экранирование клиента (`"\u0069p"`) снимается при разборе, у неразбираемого тела остаётся префикс до последнего полного токена |
 
 `daily_stats` — `ReplacingMergeTree(closed_at)`, `ORDER BY (app_id, environment, unit, day)`, **без TTL**:
 
@@ -1448,6 +1448,7 @@ DROP TABLE IF EXISTS rejected_events;
             <access_management>0</access_management>
             <grants>
                 <query>GRANT SELECT, INSERT, ALTER DELETE ON appmetrica.*</query>
+                <query>GRANT SYSTEM FLUSH ASYNC INSERT QUEUE ON *.*</query>
                 <query>GRANT SELECT ON system.disks</query>
                 <query>GRANT SELECT ON system.parts</query>
                 <query>GRANT SELECT ON system.mutations</query>

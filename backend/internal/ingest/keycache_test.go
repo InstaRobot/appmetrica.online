@@ -41,12 +41,16 @@ type fakeKeyStore struct {
 	touchErr error
 	loads    int
 	touches  []sqlc.TouchWriteKeysLastUsedParams
+	onLoad   func() // вызывается внутри LoadWriteKeyCache: медленный запрос Postgres
 }
 
 func (s *fakeKeyStore) LoadWriteKeyCache(context.Context) ([]sqlc.LoadWriteKeyCacheRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.loads++
+	if s.onLoad != nil {
+		s.onLoad()
+	}
 	if s.loadErr != nil {
 		return nil, s.loadErr
 	}
@@ -241,6 +245,27 @@ func TestKeyCache_KeepsStaleOnError(t *testing.T) {
 	require.NoError(t, h.cache.Refresh(t.Context()))
 	requireAccepted(t, h.post(t, testKey), 2)
 	require.NotContains(t, h.logs.String(), testKey)
+}
+
+// Возраст снимка считается от начала чтения: ключ, отозванный во время долгого запроса, в снимке ещё есть, и
+// такой снимок не должен жить дольше KeyCacheMaxAge после момента, когда он ещё был верен.
+func TestKeyCache_SnapshotAgeCountsFromReadStart(t *testing.T) {
+	h := newKeyHarness(t, ingest.KeyCacheConfig{})
+	h.store.set(keyRow(wk1, testKey, appA, sqlc.AppStatusActive))
+	h.store.onLoad = func() { h.clock.Advance(2 * time.Minute) }
+	require.NoError(t, h.cache.Refresh(t.Context()))
+	require.InDelta(t, float64(receivedAt.Unix()), metricValue(t, h.reg, "ingest_key_cache_last_refresh_timestamp_seconds"), 0,
+		"метрика показывает начало чтения")
+
+	h.store.onLoad = nil
+	h.store.fail(errors.New("dial tcp: connection refused"), nil)
+	h.clock.Set(receivedAt.Add(15 * time.Minute))
+	requireAccepted(t, h.post(t, testKey), 2)
+
+	h.clock.Set(receivedAt.Add(15*time.Minute + time.Second))
+	requireError(t, h.post(t, testKey), http.StatusServiceUnavailable, "storage_unavailable")
+	_, known := h.cache.Peek(testKey)
+	require.False(t, known, "журнал отказов тоже не использует снимок старше KeyCacheMaxAge от начала чтения")
 }
 
 func TestKeyCache_NotLoadedYet(t *testing.T) {

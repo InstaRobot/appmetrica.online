@@ -248,6 +248,10 @@ SELECT k.id AS write_key_id, k.key, k.app_id, a.status AS app_status, a.platform
 FROM write_keys AS k
 JOIN apps AS a ON a.id = k.app_id
 WHERE k.revoked_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM deletion_requests AS d
+    WHERE d.app_id = k.app_id AND d.subject_type = 'app' AND d.status IN ('pending', 'running')
+  )
 `
 
 type LoadWriteKeyCacheRow struct {
@@ -258,6 +262,9 @@ type LoadWriteKeyCacheRow struct {
 	AppPlatform AppPlatform
 }
 
+// Ключи приложения с ожидающей заявкой на удаление (deleteApp) в снимок не попадают, даже если выпущены или
+// приложение разархивировано после заявки (гонка с отзывом в deleteApp): ingest отвечает на них
+// 401 invalid_app_key и не пишет для приложения ничего ни до purge, ни после.
 func (q *Queries) LoadWriteKeyCache(ctx context.Context) ([]LoadWriteKeyCacheRow, error) {
 	rows, err := q.db.Query(ctx, loadWriteKeyCache)
 	if err != nil {
@@ -319,6 +326,22 @@ func (q *Queries) RevokeApiKey(ctx context.Context, arg RevokeApiKeyParams) (Rev
 		&i.LastUsedAt,
 	)
 	return i, err
+}
+
+const revokeAppWriteKeys = `-- name: RevokeAppWriteKeys :exec
+UPDATE write_keys SET revoked_at = $1 WHERE app_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeAppWriteKeysParams struct {
+	Now   *time.Time
+	AppID uuid.UUID
+}
+
+// deleteApp: все активные ключи приложения отзываются вместе с заявкой на удаление — со следующим снимком
+// ingest не знает их (401 invalid_app_key) и ничего не пишет для приложения ни в events, ни в rejected_events.
+func (q *Queries) RevokeAppWriteKeys(ctx context.Context, arg RevokeAppWriteKeysParams) error {
+	_, err := q.db.Exec(ctx, revokeAppWriteKeys, arg.Now, arg.AppID)
+	return err
 }
 
 const revokeWriteKey = `-- name: RevokeWriteKey :one

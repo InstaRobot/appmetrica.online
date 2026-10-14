@@ -21,6 +21,7 @@ export const API_ERRORS = {
   last_passkey: "Нельзя удалить последний passkey — сначала добавьте другой.",
   app_name_taken: "Приложение с таким названием уже есть",
   confirm_name_mismatch: "Название не совпадает",
+  deletion_pending: "Приложение ожидает удаления: ключи и возврат из архива недоступны",
   setup_token_expired: "Ссылка устарела или уже использована",
   webauthn_verification_failed:
     "Не удалось проверить passkey. Попробуйте ещё раз или используйте другой ключ.",

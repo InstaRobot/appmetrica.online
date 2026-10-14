@@ -10,16 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
-const (
-	writeKeyLabelMaxLen = 64
-	// foreignKeyViolation — SQLSTATE нарушения внешнего ключа (write_keys.app_id → apps).
-	foreignKeyViolation = "23503"
-)
+const writeKeyLabelMaxLen = 64
 
 // ErrWriteKeyNotFound — у приложения нет write-ключа с таким id.
 var ErrWriteKeyNotFound = errors.New("apps: write key not found")
@@ -38,6 +33,7 @@ func (s *Service) ListWriteKeys(ctx context.Context, appID uuid.UUID) ([]sqlc.Wr
 
 // CreateWriteKey выпускает ещё один write-ключ: активных ключей у приложения может быть несколько,
 // чтобы ротировать ключ без поломки старых версий клиентов. Label обрезается по краям, 0..64 символа.
+// Приложению с ожидающей заявкой на удаление ключ не выпускается — ErrDeletionPending.
 func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label string) (sqlc.WriteKey, error) {
 	label = strings.TrimSpace(label)
 	if utf8.RuneCountInString(label) > writeKeyLabelMaxLen || !utf8.ValidString(label) {
@@ -47,13 +43,19 @@ func (s *Service) CreateWriteKey(ctx context.Context, appID uuid.UUID, label str
 	if err != nil {
 		return sqlc.WriteKey{}, err
 	}
-	wk, err := s.store.Queries().CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: appID, Key: key, Label: label})
-	var pgErr *pgconn.PgError
-	switch {
-	case errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation:
-		return sqlc.WriteKey{}, ErrNotFound
-	case err != nil:
-		return sqlc.WriteKey{}, fmt.Errorf("apps: create write key: %w", err)
+	var wk sqlc.WriteKey
+	err = s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		if err := s.lockNotDeleting(ctx, q, appID); err != nil {
+			return err
+		}
+		wk, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: appID, Key: key, Label: label})
+		if err != nil {
+			return fmt.Errorf("apps: create write key: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return sqlc.WriteKey{}, err
 	}
 	s.logger.InfoContext(ctx, "write key created",
 		slog.String("app_id", appID.String()), slog.String("write_key_id", wk.ID.String()))

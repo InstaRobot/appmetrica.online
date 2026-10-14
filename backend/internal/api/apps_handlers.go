@@ -16,6 +16,7 @@ const (
 	msgAppNotFound         = "Приложение не найдено"
 	msgAppNameTaken        = "Приложение с таким названием уже есть"
 	msgConfirmNameMismatch = "Название не совпадает"
+	msgDeletionPending     = "Приложение ожидает удаления"
 )
 
 // ListApps — для Bearer-ключа с app_id только его приложение; чужие app_id в остальных маршрутах
@@ -120,6 +121,8 @@ func (s *Server) UnarchiveApp(ctx context.Context, req gen.UnarchiveAppRequestOb
 	switch {
 	case errors.Is(err, apps.ErrNotFound):
 		return gen.UnarchiveApp404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
+	case errors.Is(err, apps.ErrDeletionPending):
+		return gen.UnarchiveApp409JSONResponse{ConflictJSONResponse: deletionPending(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -128,6 +131,11 @@ func (s *Server) UnarchiveApp(ctx context.Context, req gen.UnarchiveAppRequestOb
 
 func appNotFound(ctx context.Context) gen.NotFoundJSONResponse {
 	return gen.NotFoundJSONResponse(apiError(ctx, "app_not_found", msgAppNotFound, nil))
+}
+
+// deletionPending — 409 deletion_pending: у приложения невыполненная заявка на удаление (deleteApp).
+func deletionPending(ctx context.Context) gen.ConflictJSONResponse {
+	return gen.ConflictJSONResponse(apiError(ctx, "deletion_pending", msgDeletionPending, nil))
 }
 
 func appNameTaken(ctx context.Context) gen.ConflictJSONResponse {

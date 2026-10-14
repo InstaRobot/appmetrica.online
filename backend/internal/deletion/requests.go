@@ -108,7 +108,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (sqlc.DeletionRequ
 }
 
 // validSubject: install — UUID в каноничной форме 8-4-4-4-12 (регистр любой), не nil, хранится в нижнем
-// регистре; user — 1..128 символов после TrimSpace, как user_id в ingest.
+// регистре; user — 1..128 символов после TrimSpace без U+0000, как user_id в ingest (Postgres text NUL не хранит).
 func validSubject(subjectType, value string) (sqlc.DeletionSubject, string, error) {
 	switch sqlc.DeletionSubject(subjectType) {
 	case sqlc.DeletionSubjectInstall:
@@ -119,8 +119,8 @@ func validSubject(subjectType, value string) (sqlc.DeletionSubject, string, erro
 		return sqlc.DeletionSubjectInstall, id.String(), nil
 	case sqlc.DeletionSubjectUser:
 		v := strings.TrimSpace(value)
-		if n := utf8.RuneCountInString(v); n == 0 || n > maxUserIDLen {
-			return "", "", &ValidationError{Field: "subject_value", Message: "Для user нужен user_id длиной от 1 до 128 символов."}
+		if n := utf8.RuneCountInString(v); n == 0 || n > maxUserIDLen || strings.ContainsRune(v, 0) {
+			return "", "", &ValidationError{Field: "subject_value", Message: "Для user нужен user_id длиной от 1 до 128 символов без символа U+0000."}
 		}
 		return sqlc.DeletionSubjectUser, v, nil
 	default:

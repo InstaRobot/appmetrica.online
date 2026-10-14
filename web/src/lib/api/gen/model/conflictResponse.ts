@@ -13,6 +13,6 @@
 import type { Error } from "./error";
 
 /**
- * last_passkey | app_name_taken | confirm_name_mismatch
+ * last_passkey | app_name_taken | confirm_name_mismatch | deletion_pending
  */
 export type ConflictResponse = Error;

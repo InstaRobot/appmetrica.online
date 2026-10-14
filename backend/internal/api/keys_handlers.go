@@ -43,6 +43,8 @@ func (s *Server) CreateWriteKey(ctx context.Context, req gen.CreateWriteKeyReque
 		return gen.CreateWriteKey400JSONResponse{BadRequestJSONResponse: appValidation(ctx, verr)}, nil
 	case errors.Is(err, apps.ErrNotFound):
 		return gen.CreateWriteKey404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
+	case errors.Is(err, apps.ErrDeletionPending):
+		return gen.CreateWriteKey409JSONResponse{ConflictJSONResponse: deletionPending(ctx)}, nil
 	case err != nil:
 		return nil, err
 	}

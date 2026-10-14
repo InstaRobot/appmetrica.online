@@ -15,6 +15,7 @@ import type { CreateDeletionRequestBodySubjectType } from "./createDeletionReque
 export interface CreateDeletionRequestBody {
   subject_type: CreateDeletionRequestBodySubjectType;
   /**
+   * install — install_id (UUID); user — user_id как в ingest (1..128 символов после обрезки пробелов, без символа U+0000).
    * @minLength 1
    * @maxLength 128
    */

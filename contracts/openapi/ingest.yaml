@@ -261,7 +261,7 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-          description: Непрозрачный ID пользователя из бэкенда приложения. Email и телефоны отклоняются.
+          description: Непрозрачный ID пользователя из бэкенда приложения. Email, телефоны и строки с символом U+0000 отклоняются.
         duration_ms:
           type: integer
           format: int64

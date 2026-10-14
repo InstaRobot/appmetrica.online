@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/netip"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/gen/ingestapi"
@@ -100,127 +99,177 @@ func NewEventRow(b *Batch, ev *Event) chstore.EventRow {
 	}
 }
 
-// PayloadSample — rejected_events.payload_sample: JSON события или тела батча без context.ip
-// (верхний уровень и events[i]) и без user_id, похожих на email или телефон (AC-1.5.2 — такие значения
-// заменяются на "[redacted]" и при batch-ошибке, когда до проверки событий дело не дошло), длиной не
-// больше MaxPayloadSampleBytes, обрезанный по границе символа. Если JSON не разбирается (invalid_json,
-// обрезанное тело), значения ключей "ip" и PII-подобных "user_id" затираются по шаблону.
+// PayloadSample — rejected_events.payload_sample: тело батча или JSON события, переписанные токен за
+// токеном в компактный каноничный JSON (encoding/json без HTML-экранирования). Пары с ключом "ip" на любом
+// уровне (контекст батча, события, вложенные объекты) выбрасываются целиком, строковые user_id, похожие
+// на email или телефон, заменяются на "[redacted]" (AC-1.5.2 — и при batch-ошибке, когда до проверки
+// событий дело не дошло). Ключи и значения сравниваются после снятия JSON-экранирования, поэтому
+// "\u0069p" и "ivan\u0040example.com" распознаются, а дубликаты ключей обрабатываются каждый. Неразбираемое
+// тело (invalid_json, обрезанное) даёт префикс до последнего полного токена: незакрытая строка в сэмпл не
+// попадает. Длина ≤ MaxPayloadSampleBytes, обрезка только по границе токена — значение длиннее лимита
+// выбрасывается целиком. Удаление ищет user_id в сэмпле в этом же каноничном виде (deletion.userNeedles).
 func PayloadSample(raw []byte) string {
-	if sample, ok := stripContextIP(raw); ok {
-		return truncateUTF8(sample, MaxPayloadSampleBytes)
-	}
-	// Берём запас, чтобы пара "ip": "…" на границе обрезки попала под шаблон целиком.
-	head := []byte(truncateUTF8(raw, 2*MaxPayloadSampleBytes))
-	head = ipValueRe.ReplaceAll(head, []byte(`"ip":null`))
-	head = userIDValueRe.ReplaceAllFunc(head, redactPIIUserIDMatch)
-	return truncateUTF8(head, MaxPayloadSampleBytes)
+	s := sampler{dec: json.NewDecoder(bytes.NewReader(raw))}
+	s.dec.UseNumber()
+	s.enc = json.NewEncoder(&s.tmp)
+	s.enc.SetEscapeHTML(false)
+	s.run()
+	return s.out.String()
 }
 
-// ipValueRe — пара "ip": значение, включая незакрытую строку в конце обрезанного тела.
-var ipValueRe = regexp.MustCompile(`(?i)"ip"\s*:\s*(?:"(?:[^"\\]|\\.)*"?|[^,}\]\s]*)`)
-
-// userIDValueRe — пара "user_id": "строка", включая незакрытую строку в конце обрезанного тела.
-var userIDValueRe = regexp.MustCompile(`(?i)"user_id"\s*:\s*"((?:[^"\\]|\\.)*)"?`)
-
-// redactPIIUserIDMatch заменяет найденную по шаблону пару на "user_id":"[redacted]", если значение
-// (как есть, с JSON-экранированием) похоже на email или телефон. Незакрытая строка в конце обрезанного
-// тела может быть началом email или телефона — она затирается всегда. Иначе пара остаётся как есть.
-func redactPIIUserIDMatch(match []byte) []byte {
-	sub := userIDValueRe.FindSubmatch(match)
-	if len(sub) < 2 {
-		return match
-	}
-	closed := bytes.HasSuffix(match, append(append([]byte(`"`), sub[1]...), '"'))
-	if closed && !LooksLikePII(string(sub[1])) {
-		return match
-	}
-	return []byte(`"user_id":"` + redactedUserID + `"`)
+// sampler — потоковый переписчик JSON для PayloadSample.
+type sampler struct {
+	dec   *json.Decoder
+	enc   *json.Encoder
+	tmp   bytes.Buffer // буфер enc для одной строки
+	out   bytes.Buffer
+	stack []sampleFrame
+	// skipDepth > 0 — внутри пропускаемого объекта или массива (значение ключа ip).
+	skipDepth int
+	// skipValue — следующий токен (значение ключа ip) пропустить.
+	skipValue bool
+	// userID — следующий токен — значение ключа user_id.
+	userID bool
 }
 
-// stripContextIP удаляет ip из context объекта и из context каждого элемента events и заменяет
-// PII-подобные user_id (объекта и каждого события) на "[redacted]". ok=false — raw не JSON-объект.
-// Без изменений возвращается исходный raw (форматирование клиента сохраняется).
-func stripContextIP(raw []byte) (out []byte, ok bool) {
-	var obj map[string]json.RawMessage
-	if json.Unmarshal(raw, &obj) != nil || obj == nil {
-		return nil, false
-	}
-	changed := dropContextIP(obj)
-	changed = redactPIIUserID(obj) || changed
-	for k, v := range obj {
-		if !strings.EqualFold(k, "events") {
-			continue
+// sampleFrame — открытый контейнер: для объекта key=true, когда ожидается ключ; n — выведено элементов или пар.
+type sampleFrame struct {
+	object bool
+	key    bool
+	n      int
+}
+
+func (s *sampler) run() {
+	for {
+		tok, err := s.dec.Token()
+		if err != nil {
+			return
 		}
-		var events []json.RawMessage
-		if json.Unmarshal(v, &events) != nil {
-			continue
-		}
-		eventsChanged := false
-		for i, ev := range events {
-			var evObj map[string]json.RawMessage
-			if json.Unmarshal(ev, &evObj) != nil || evObj == nil {
-				continue
+		if s.skipValue || s.skipDepth > 0 {
+			s.skipValue = false
+			if d, ok := tok.(json.Delim); ok {
+				if d == '{' || d == '[' {
+					s.skipDepth++
+				} else {
+					s.skipDepth--
+				}
 			}
-			ipDropped := dropContextIP(evObj)
-			if redactPIIUserID(evObj) || ipDropped {
-				events[i] = marshalCompact(evObj)
-				eventsChanged = true
-			}
+			continue
 		}
-		if eventsChanged {
-			obj[k] = marshalCompact(events)
-			changed = true
+		if !s.emit(tok) {
+			return
+		}
+		if len(s.stack) == 0 {
+			return // корневое значение закончилось; хвост тела не интересен
 		}
 	}
-	if !changed {
-		return raw, true
-	}
-	return marshalCompact(obj), true
 }
 
-// dropContextIP удаляет ip из всех ключей context объекта. Регистр ключей не важен: encoding/json
-// сопоставляет поля структур без учёта регистра.
-func dropContextIP(obj map[string]json.RawMessage) bool {
-	changed := false
-	for k, v := range obj {
-		if !strings.EqualFold(k, "context") {
-			continue
+// emit выводит токен в позиции ключа или значения. false — лимит длины исчерпан.
+func (s *sampler) emit(tok json.Token) bool {
+	top := s.top()
+	if top != nil && top.object && top.key {
+		if _, ok := tok.(json.Delim); ok { // "}"
+			return s.closeContainer("}")
 		}
-		var ctx map[string]json.RawMessage
-		if json.Unmarshal(v, &ctx) != nil || ctx == nil {
-			continue
+		key, _ := tok.(string) // Token выдаёт ключи объекта только строками
+		switch {
+		case strings.EqualFold(key, "ip"):
+			s.skipValue = true
+			return true
+		case strings.EqualFold(key, "user_id"):
+			s.userID = true
 		}
-		dropped := false
-		for ck := range ctx {
-			if strings.EqualFold(ck, "ip") {
-				delete(ctx, ck)
-				dropped = true
-			}
+		sep := ""
+		if top.n > 0 {
+			sep = ","
 		}
-		if dropped {
-			obj[k] = marshalCompact(ctx)
-			changed = true
+		if !s.write(sep + s.encodeString(key) + ":") {
+			return false
 		}
+		top.n++
+		top.key = false
+		return true
 	}
-	return changed
+	sep := ""
+	if top != nil && !top.object && top.n > 0 {
+		sep = ","
+	}
+	switch v := tok.(type) {
+	case json.Delim:
+		if v == '}' || v == ']' {
+			return s.closeContainer(string(v))
+		}
+		s.userID = false
+		if !s.write(sep + string(v)) {
+			return false
+		}
+		if top != nil {
+			top.n++
+		}
+		s.stack = append(s.stack, sampleFrame{object: v == '{', key: v == '{'})
+		return true
+	case string:
+		if s.userID && LooksLikePII(v) {
+			v = redactedUserID
+		}
+		return s.finishValue(sep + s.encodeString(v))
+	case json.Number:
+		return s.finishValue(sep + v.String())
+	case bool:
+		return s.finishValue(sep + strconv.FormatBool(v))
+	default: // nil
+		return s.finishValue(sep + "null")
+	}
 }
 
-// redactPIIUserID заменяет строковые значения ключей user_id объекта, похожие на email или телефон,
-// на "[redacted]" (AC-1.5.2). Регистр ключа не важен, как и в dropContextIP.
-func redactPIIUserID(obj map[string]json.RawMessage) bool {
-	changed := false
-	for k, v := range obj {
-		if !strings.EqualFold(k, "user_id") {
-			continue
-		}
-		var s string
-		if json.Unmarshal(v, &s) != nil || !LooksLikePII(s) {
-			continue
-		}
-		obj[k] = json.RawMessage(`"` + redactedUserID + `"`)
-		changed = true
+// finishValue выводит скалярное значение и переводит родителя к следующему элементу или ключу.
+func (s *sampler) finishValue(text string) bool {
+	s.userID = false
+	if !s.write(text) {
+		return false
 	}
-	return changed
+	if top := s.top(); top != nil {
+		if top.object {
+			top.key = true
+		} else {
+			top.n++
+		}
+	}
+	return true
+}
+
+func (s *sampler) closeContainer(text string) bool {
+	if !s.write(text) {
+		return false
+	}
+	s.stack = s.stack[:len(s.stack)-1]
+	if top := s.top(); top != nil && top.object {
+		top.key = true
+	}
+	return true
+}
+
+func (s *sampler) top() *sampleFrame {
+	if len(s.stack) == 0 {
+		return nil
+	}
+	return &s.stack[len(s.stack)-1]
+}
+
+// write добавляет text, если он помещается в MaxPayloadSampleBytes.
+func (s *sampler) write(text string) bool {
+	if s.out.Len()+len(text) > MaxPayloadSampleBytes {
+		return false
+	}
+	s.out.WriteString(text)
+	return true
+}
+
+func (s *sampler) encodeString(v string) string {
+	s.tmp.Reset()
+	_ = s.enc.Encode(v) // строку json кодирует всегда
+	return strings.TrimSuffix(s.tmp.String(), "\n")
 }
 
 // marshalCompact — JSON без HTML-экранирования: сэмпл показывается владельцу как есть.
@@ -228,17 +277,6 @@ func marshalCompact(v any) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(v) // map[string]json.RawMessage и []json.RawMessage из разобранного JSON кодируются всегда
+	_ = enc.Encode(v) // map[string]json.RawMessage из разобранного JSON кодируется всегда
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
-}
-
-// truncateUTF8 обрезает b до n байт, не разрезая многобайтовый символ.
-func truncateUTF8(b []byte, n int) string {
-	if len(b) <= n {
-		return string(b)
-	}
-	for n > 0 && !utf8.RuneStart(b[n]) {
-		n--
-	}
-	return string(b[:n])
 }

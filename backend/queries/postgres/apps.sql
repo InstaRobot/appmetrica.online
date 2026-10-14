@@ -7,6 +7,11 @@ ORDER BY lower(name);
 -- name: GetApp :one
 SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at FROM apps WHERE id = sqlc.arg(id);
 
+-- name: GetAppForUpdate :one
+-- Блокировка строки на транзакцию: deleteApp, createWriteKey и unarchiveApp сериализуются, иначе ключ,
+-- выпущенный параллельно с заявкой на удаление, остался бы активным.
+SELECT id, name, platform, timezone, status, created_at, updated_at, archived_at FROM apps WHERE id = sqlc.arg(id) FOR UPDATE;
+
 -- name: CreateApp :one
 INSERT INTO apps (name, platform, timezone) VALUES (sqlc.arg(name), sqlc.arg(platform), sqlc.arg(timezone))
 RETURNING id, name, platform, timezone, status, created_at, updated_at, archived_at;

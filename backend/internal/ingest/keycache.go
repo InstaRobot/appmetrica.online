@@ -30,6 +30,8 @@ const (
 
 	keyCacheRetryAfter = 60
 	flushTimeout       = 10 * time.Second
+	// refreshTimeout — предел одной загрузки снимка: зависший запрос не должен останавливать цикл Run.
+	refreshTimeout = 10 * time.Second
 )
 
 // KeyInfo — запись кэша по write-ключу pk_.
@@ -83,8 +85,13 @@ func NewKeyCache(cfg KeyCacheConfig) *KeyCache {
 }
 
 // Refresh полностью перезагружает снимок из Postgres. При ошибке остаётся прежний снимок,
-// ошибка логируется и считается в ingest_key_cache_refresh_errors_total.
+// ошибка логируется и считается в ingest_key_cache_refresh_errors_total. Возраст снимка отсчитывается от
+// начала чтения, а не от его конца: ключ, отозванный во время долгого запроса, в снимке ещё есть, и срок его
+// жизни KeyCacheMaxAge (на который опирается deletion.AppPurgeDelay) не должен удлиняться на время чтения.
 func (c *KeyCache) Refresh(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
+	defer cancel()
+	now := c.cfg.Clock.Now()
 	rows, err := c.cfg.Store.LoadWriteKeyCache(ctx)
 	if err != nil {
 		c.cfg.Metrics.KeyCacheRefreshErrors.Inc()
@@ -95,7 +102,6 @@ func (c *KeyCache) Refresh(ctx context.Context) error {
 	for _, r := range rows {
 		keys[r.Key] = KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus, AppPlatform: r.AppPlatform}
 	}
-	now := c.cfg.Clock.Now()
 	c.snap.Store(&keySnapshot{keys: keys, loadedAt: now})
 	c.cfg.Metrics.KeyCacheSize.Set(float64(len(keys)))
 	c.cfg.Metrics.KeyCacheLastRefresh.Set(float64(now.Unix()))
@@ -134,11 +140,13 @@ func (c *KeyCache) Lookup(key string) (KeyInfo, error) {
 	return info, nil
 }
 
-// Peek возвращает запись ключа из последнего загруженного снимка без проверки его возраста и статуса
-// приложения и без учёта last_used_at — для журнала отказов, а не для приёма событий.
+// Peek возвращает запись ключа из актуального снимка без проверки статуса приложения и без учёта
+// last_used_at — для журнала отказов, а не для приёма событий. Снимок старше KeyCacheMaxAge не годится и
+// журналу: за это время ключ могли отозвать, а приложение — удалить (deletion.AppPurgeDelay рассчитан на
+// то, что после него ни один ingest не пишет строки приложения ни в events, ни в rejected_events).
 func (c *KeyCache) Peek(key string) (KeyInfo, bool) {
-	s := c.snap.Load()
-	if s == nil {
+	s, ok := c.fresh()
+	if !ok {
 		return KeyInfo{}, false
 	}
 	info, ok := s.keys[key]

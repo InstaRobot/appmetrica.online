@@ -280,12 +280,21 @@ func TestKeyCache_Peek(t *testing.T) {
 	_, ok = h.cache.Peek("pk_unknown")
 	require.False(t, ok)
 
-	h.clock.Advance(ingest.KeyCacheMaxAge + 1)
-	_, ok = h.cache.Peek(testKey)
-	require.True(t, ok, "для журнала отказов устаревший снимок допустим")
 	require.Empty(t, h.store.touchCalls())
 	require.NoError(t, h.cache.FlushLastUsed(t.Context()))
 	require.Empty(t, h.store.touchCalls(), "Peek не обновляет last_used_at")
+
+	// Снимок старше KeyCacheMaxAge не годится и для журнала: ключи могли быть отозваны, приложение — удалено,
+	// и строка rejected_events с его app_id пережила бы purge. Peek молчит, пока снимок не перезагрузится.
+	h.clock.Advance(ingest.KeyCacheMaxAge + 1)
+	_, ok = h.cache.Peek(testKey)
+	require.False(t, ok, "устаревший снимок не используется журналом отказов")
+	h.store.set(keyRow(wk1, testKey, appA, "active"))
+	require.NoError(t, h.cache.Refresh(t.Context()))
+	_, ok = h.cache.Peek(testKey)
+	require.True(t, ok)
+	_, ok = h.cache.Peek(archivedKey)
+	require.False(t, ok, "ключ, пропавший из снимка (отозван), журналу неизвестен")
 }
 
 // TestRejectedLogger_BatchSampleRedactsPII — user_id, похожий на email или телефон, не попадает в сэмпл

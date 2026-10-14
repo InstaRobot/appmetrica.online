@@ -254,10 +254,19 @@ func TestDeletion_AppRemovesEverything(t *testing.T) {
 	dr, err := apps.NewService(h.env.PG, h.clock, h.logger).Delete(ctx, appB, "App B")
 	require.NoError(t, err)
 
+	// Запрос app ждёт AppPurgeDelay после requested_at: ingest мог загрузить снимок ключей до заявки.
 	runID := h.jobRun(t)
 	res, err := h.executor(nil).RunOnce(ctx, runID)
 	require.NoError(t, err)
-	require.Equal(t, deletion.Result{Done: 2}, res)
+	require.Equal(t, deletion.Result{Done: 1}, res, "user-запрос выполнен, app ждёт")
+	_, err = h.env.PG.Queries().GetApp(ctx, appB)
+	require.NoError(t, err)
+
+	h.clock = clock.NewFixed(now.Add(deletion.AppPurgeDelay))
+	runID = h.jobRun(t)
+	res, err = h.executor(nil).RunOnce(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, deletion.Result{Done: 1}, res)
 
 	q := h.env.PG.Queries()
 	_, err = q.GetApp(ctx, appB)
@@ -306,7 +315,7 @@ func TestDeletion_AppRemovesEverything(t *testing.T) {
 	require.Equal(t, "dashboard", got.Source)
 	require.Equal(t, "done", got.Status)
 	require.Equal(t, 1, got.Attempts)
-	require.True(t, now.Equal(got.CompletedAt))
+	require.True(t, h.clock.Now().Equal(got.CompletedAt))
 }
 
 type failingPurger struct{ deletion.Purger }
@@ -371,4 +380,27 @@ func uuidUpper(id uuid.UUID) string {
 		}
 	}
 	return string(b)
+}
+
+// Блок, который ClickHouse уже принял в очередь async insert, но ещё не сбросил в таблицу (клиент ingest отвалился
+// по InsertTimeout раньше ack — принятого это не отменяет), не должен пережить purge: PurgeApp сначала сбрасывает
+// очередь сервера (SYSTEM FLUSH ASYNC INSERT QUEUE), затем удаляет. Отложенный сброс моделирует вставка с
+// wait_for_async_insert=0 и минутным busy timeout.
+func TestDeletion_AppPurgeDrainsAsyncInsertQueue(t *testing.T) {
+	h := newHarness(t)
+	appID := uuid.New()
+	queued := clickhouse.Context(t.Context(), clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 1, "wait_for_async_insert": 0, "async_insert_use_adaptive_busy_timeout": 0,
+		"async_insert_busy_timeout_min_ms": 60_000, "async_insert_busy_timeout_max_ms": 60_000,
+	}))
+	require.NoError(t, h.env.CH.Conn().Exec(queued,
+		"INSERT INTO events (app_id, event_date, name) VALUES (?, today(), 'session_start')", appID))
+	where, params := "app_id = {app_id:UUID}", clickhouse.Parameters{"app_id": appID.String()}
+	require.Equal(t, uint64(0), count(t, h.env, "events", where, params), "строка ещё в очереди сервера")
+
+	require.NoError(t, deletion.NewClickHousePurger(h.env.CH.Conn()).PurgeApp(t.Context(), appID))
+
+	// Без сброса очереди в purge строка записалась бы следующим сбросом — уже после DELETE.
+	require.NoError(t, h.env.CH.Conn().Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
+	require.Equal(t, uint64(0), count(t, h.env, "events", where, params))
 }

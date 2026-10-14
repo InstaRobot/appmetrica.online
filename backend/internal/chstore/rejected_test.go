@@ -12,19 +12,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/chstore"
+	"appmetrica.online/backend/internal/clock"
 )
 
-// fakeRejectedInserter запоминает вызовы InsertRejected; err — ошибка каждого вызова.
+// fakeRejectedInserter запоминает вызовы InsertRejected и дедлайны их контекстов; err — ошибка каждого вызова.
 type fakeRejectedInserter struct {
-	mu    sync.Mutex
-	calls [][]chstore.RejectedRow
-	err   error
+	mu        sync.Mutex
+	calls     [][]chstore.RejectedRow
+	deadlines []time.Duration // дедлайн ctx относительно момента вызова; 0 — без дедлайна
+	err       error
 }
 
-func (f *fakeRejectedInserter) InsertRejected(_ context.Context, rows []chstore.RejectedRow) error {
+func (f *fakeRejectedInserter) InsertRejected(ctx context.Context, rows []chstore.RejectedRow) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, slices.Clone(rows))
+	var left time.Duration
+	if deadline, ok := ctx.Deadline(); ok {
+		left = time.Until(deadline)
+	}
+	f.deadlines = append(f.deadlines, left)
 	return f.err
 }
 
@@ -108,6 +115,55 @@ func TestRejectedLog_InsertErrorIsReported(t *testing.T) {
 	require.Zero(t, log.Len(), "best effort: строки не возвращаются в буфер")
 }
 
+// Строка, пролежавшая в буфере дольше MaxAge (ClickHouse завис), отбрасывается при сбросе, а не пишется с
+// опозданием: deletion.AppPurgeDelay рассчитан на то, что отказ попадает в rejected_events не позже чем через
+// MaxAge + InsertTimeout после постановки в буфер.
+func TestRejectedLog_DropsRowsOlderThanMaxAge(t *testing.T) {
+	ins := &fakeRejectedInserter{}
+	clk := clock.NewFixed(time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC))
+	var dropped []int
+	log := chstore.NewRejectedLog(chstore.RejectedLogConfig{
+		Inserter: ins, Clock: clk, BatchSize: 2, MaxAge: 20 * time.Second,
+		OnDropped: func(n int) { dropped = append(dropped, n) },
+	})
+
+	log.Add(rejectedRows(3)...)
+	clk.Advance(20 * time.Second)
+	fresh := []chstore.RejectedRow{{Code: "fresh"}}
+	log.Add(fresh...)
+	require.NoError(t, log.Flush(t.Context()))
+	require.Equal(t, []string{"c0", "c1", "c2", "fresh"}, ins.codes(), "ровно MaxAge — строка ещё пишется")
+
+	log.Add(rejectedRows(3)...)
+	clk.Advance(20*time.Second + time.Millisecond)
+	log.Add(fresh...)
+	require.NoError(t, log.Flush(t.Context()))
+	require.Equal(t, []string{"c0", "c1", "c2", "fresh", "fresh"}, ins.codes(), "старые строки не пишутся")
+	require.Equal(t, 3, sum(dropped), "отброшенные строки считаются")
+	require.Zero(t, log.Len())
+}
+
+func sum(ns []int) (total int) {
+	for _, n := range ns {
+		total += n
+	}
+	return total
+}
+
+// Каждый INSERT ограничен InsertTimeout: иначе зависшая вставка держала бы остальные строки в буфере до
+// таймаута чтения драйвера (5 мин).
+func TestRejectedLog_InsertHasDeadline(t *testing.T) {
+	ins := &fakeRejectedInserter{}
+	log := chstore.NewRejectedLog(chstore.RejectedLogConfig{Inserter: ins, BatchSize: 1, InsertTimeout: 3 * time.Second})
+	log.Add(rejectedRows(2)...)
+	require.NoError(t, log.Flush(t.Context()))
+	require.Len(t, ins.deadlines, 2)
+	for _, left := range ins.deadlines {
+		require.Greater(t, left, time.Second)
+		require.LessOrEqual(t, left, 3*time.Second)
+	}
+}
+
 func TestRejectedLog_DefaultConfig(t *testing.T) {
 	ins := &fakeRejectedInserter{}
 	log := chstore.NewRejectedLog(chstore.RejectedLogConfig{Inserter: ins})
@@ -117,6 +173,10 @@ func TestRejectedLog_DefaultConfig(t *testing.T) {
 	sizes := ins.sizes()
 	require.Len(t, sizes, chstore.DefaultRejectedLogCapacity/chstore.DefaultRejectedLogBatchSize)
 	require.Equal(t, chstore.DefaultRejectedLogBatchSize, sizes[0])
+	for _, left := range ins.deadlines {
+		require.Greater(t, left, time.Duration(0), "INSERT по умолчанию ограничен DefaultRejectedLogInsertTimeout")
+		require.LessOrEqual(t, left, chstore.DefaultRejectedLogInsertTimeout)
+	}
 }
 
 func TestRejectedLog_RunFlushesOnInterval(t *testing.T) {

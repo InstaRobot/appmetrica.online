@@ -196,7 +196,8 @@ func durationField(index int, insertID string, name ingestapi.EventName, raw jso
 }
 
 // userIDField: после TrimSpace пустая строка — user_id не передан; длина в символах ≤ 128; email и телефоны
-// отклоняются PII-guard.
+// отклоняются PII-guard; U+0000 отклоняется: deletion_requests.subject_value (Postgres text) его не хранит,
+// и такой user_id нельзя было бы удалить по FR-019.
 func userIDField(index int, insertID string, raw json.RawMessage) (string, *ingestapi.Rejection) {
 	s, _, ok := stringField(raw)
 	if !ok {
@@ -207,6 +208,9 @@ func userIDField(index int, insertID string, raw json.RawMessage) (string, *inge
 	case utf8.RuneCountInString(s) > MaxUserIDLength:
 		return "", reject(index, insertID, ingestapi.RejectionCodeInvalidField, "user_id",
 			"user_id длиннее 128 символов.")
+	case strings.ContainsRune(s, 0):
+		return "", reject(index, insertID, ingestapi.RejectionCodeInvalidField, "user_id",
+			"user_id содержит символ U+0000.")
 	case LooksLikePII(s):
 		return "", reject(index, insertID, ingestapi.RejectionCodeUserIdLooksLikePii, "user_id",
 			"user_id похож на email или телефон. Передавайте непрозрачный ID.")

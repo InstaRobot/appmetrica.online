@@ -20,7 +20,8 @@ import (
 //     с событиями U: на общем устройстве с первым владельцем u2 удаляются лишь события U (FR-019);
 //   - rejected_events ищутся по install_id без учёта регистра и по user_id в виде JSON-строки
 //     ("u-42", а также "a\/b" для слеша), а не по подстроке user_id: короткий user_id вроде "1"
-//     совпал бы с чужими событиями;
+//     совпал бы с чужими событиями; payload_sample хранится в каноничном виде ingest.PayloadSample,
+//     поэтому экранирование клиента ("\u007531") на поиск не влияет;
 //   - mutations_sync и lightweight_deletes_sync задаются в контексте запроса, а не только в профиле пользователя.
 const (
 	qLinkedInstalls = `SELECT install_id FROM identity_links
@@ -48,6 +49,12 @@ WHERE app_id = {app_id:UUID} AND install_id IN {install_ids:Array(UUID)}`
 
 	// subject_type=app: все таблицы приложения, включая daily_stats.
 	qDeleteAppTemplate = `ALTER TABLE %s DELETE WHERE app_id = {app_id:UUID}`
+
+	// qFlushAsyncInserts — сброс очереди async insert сервера перед удалением. Блок, который сервер уже принял
+	// в очередь, остаётся в ней и после того, как клиент ingest отвалился по таймауту, не дождавшись ack
+	// (wait_for_async_insert=1 принятого не отменяет), и пишется по таймеру сервера — при задержке сброса уже
+	// после DELETE. Сброс синхронный: по возвращении все принятые блоки лежат в таблицах и попадают под DELETE.
+	qFlushAsyncInserts = `SYSTEM FLUSH ASYNC INSERT QUEUE`
 )
 
 // appScopedTables — таблицы ClickHouse с app_id; events — первой, агрегаты после неё.
@@ -71,6 +78,9 @@ func (p chPurger) Ping(ctx context.Context) error {
 // PurgeInstall — события, first-seen, связь с пользователем и упоминания в rejected_events установки.
 // user_first_seen не трогается: пользователь мог быть и на других установках.
 func (p chPurger) PurgeInstall(ctx context.Context, appID, installID uuid.UUID) error {
+	if err := p.flushAsyncInserts(ctx); err != nil {
+		return err
+	}
 	installs := []uuid.UUID{installID}
 	params := clickhouse.Parameters{"app_id": appID.String(), "install_ids": chstore.UUIDArrayParam(installs)}
 	if err := p.exec(ctx, "events", qDeleteEventsByInstalls, params); err != nil {
@@ -82,6 +92,9 @@ func (p chPurger) PurgeInstall(ctx context.Context, appID, installID uuid.UUID) 
 // PurgeUser — установки, первый владелец которых user, и все события с user_id = user. Порядок: события,
 // first-seen, rejected_events и в конце identity_links — повтор после сбоя снова найдёт установки.
 func (p chPurger) PurgeUser(ctx context.Context, appID uuid.UUID, userID string) error {
+	if err := p.flushAsyncInserts(ctx); err != nil {
+		return err
+	}
 	installs, err := p.linkedInstalls(ctx, appID, userID)
 	if err != nil {
 		return err
@@ -97,6 +110,9 @@ func (p chPurger) PurgeUser(ctx context.Context, appID uuid.UUID, userID string)
 }
 
 func (p chPurger) PurgeApp(ctx context.Context, appID uuid.UUID) error {
+	if err := p.flushAsyncInserts(ctx); err != nil {
+		return err
+	}
 	params := clickhouse.Parameters{"app_id": appID.String()}
 	for _, table := range appScopedTables {
 		if err := p.exec(ctx, table, fmt.Sprintf(qDeleteAppTemplate, table), params); err != nil {
@@ -157,6 +173,14 @@ func (p chPurger) linkedInstalls(ctx context.Context, appID uuid.UUID, userID st
 	return out, nil
 }
 
+// flushAsyncInserts записывает в таблицы всё, что сервер принял в очередь async insert (qFlushAsyncInserts).
+func (p chPurger) flushAsyncInserts(ctx context.Context) error {
+	if err := p.conn.Exec(ctx, qFlushAsyncInserts); err != nil {
+		return fmt.Errorf("clickhouse: flush async insert queue: %w", err)
+	}
+	return nil
+}
+
 // exec выполняет DELETE / ALTER … DELETE и ждёт завершения мутации на всех репликах.
 func (p chPurger) exec(ctx context.Context, table, query string, params clickhouse.Parameters) error {
 	ctx = clickhouse.Context(ctx,
@@ -169,8 +193,9 @@ func (p chPurger) exec(ctx context.Context, table, query string, params clickhou
 	return nil
 }
 
-// userNeedles — user_id так, как он записан JSON-строкой в payload_sample: с кавычками, без
-// HTML-экранирования; для user_id со слешем — ещё и вариант "\/" (JSONEncoder в Swift).
+// userNeedles — user_id так, как он записан JSON-строкой в payload_sample: с кавычками, кодировка
+// encoding/json без HTML-экранирования — та же, что у ingest.PayloadSample, который снимает экранирование
+// клиента; вариант "\/" для слеша (JSONEncoder в Swift) — для строк, записанных до канонизации (TTL 7 дней).
 func userNeedles(userID string) []string {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
