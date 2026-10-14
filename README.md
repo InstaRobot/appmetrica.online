@@ -12,7 +12,7 @@ user profiles and a Read API. Users are counted as people, not devices (`install
 
 - **No SDK.** One documented endpoint: `POST https://<ingest-domain>/v1/events`, batches of up to 500 events,
   idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, Go, curl and bots
-  are built into the dashboard docs.
+  are in the public [documentation](https://appmetrica.online/docs).
 - **Privacy by design.** The client IP is used only in memory for a country/city lookup and is never stored —
   not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
   GDPR deletion by API or from the dashboard.
@@ -28,6 +28,7 @@ user profiles and a Read API. Users are counted as people, not devices (`install
 - [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Installation with Docker Compose](#installation-with-docker-compose)
+- [Deploying with Dokploy](#deploying-with-dokploy)
 - [Configuration reference](#configuration-reference)
 - [Sending your first events](#sending-your-first-events)
 - [Operations](#operations)
@@ -47,10 +48,12 @@ user profiles and a Read API. Users are counted as people, not devices (`install
                                                                     └────────────┘
 ```
 
+Under [Dokploy](#deploying-with-dokploy), Dokploy's Traefik takes Caddy's place.
+
 | Service | Role |
 |---|---|
-| `caddy` | Reverse proxy on ports 80/443, automatic HTTPS certificates from Let's Encrypt |
-| `web` | Next.js dashboard, public landing page, API documentation (behind sign-in), demo mode |
+| `caddy` | Reverse proxy on ports 80/443, automatic HTTPS certificates from Let's Encrypt (Docker Compose stack only) |
+| `web` | Next.js dashboard, public landing page, public API documentation, demo mode |
 | `api` | Dashboard API and public Read API; applies database migrations on start |
 | `ingest` | Event ingestion: validation, clock correction, deduplication, geo lookup, rate limits |
 | `worker` | Background jobs: closing days into aggregates, Telegram digest and alerts, GDPR deletions, cleanup |
@@ -169,10 +172,117 @@ Face ID, Windows Hello or a security key. You are signed in. Add more passkeys (
 3. Send a test batch (see [Sending your first events](#sending-your-first-events)) — the status turns to
    "received" and the app appears in the portfolio.
 
+## Deploying with Dokploy
+
+[Dokploy](https://dokploy.com) builds the same stack from Git and serves it through its own Traefik, so there is
+no Caddy. The public instance at [appmetrica.online](https://appmetrica.online) runs this way. The compose file is
+[`deploy/dokploy/docker-compose.yml`](deploy/dokploy/docker-compose.yml); tested with Dokploy v0.30.8.
+
+The [requirements](#requirements) are the same: a server with Dokploy installed, three DNS records pointing to it
+and ports 80/443 open.
+
+### 1. Create the Compose service
+
+**Project → Create Service → Compose**, type **Docker Compose**. On the **General** tab:
+
+| Field | Value |
+|---|---|
+| Provider | GitHub (or Git): this repository or your fork |
+| Branch | `main` |
+| Compose Path | `./deploy/dokploy/docker-compose.yml` |
+| Trigger Type | On Push (autodeploy) |
+| Watch Paths | `backend/**`, `web/**`, `deploy/**`, so README changes do not trigger a rebuild |
+
+Click **Save**.
+
+### 2. Fill in the environment
+
+On the **Environment** tab set the variables from [Configuration reference](#configuration-reference), except
+`ACME_EMAIL`, `HTTP_PORT` and `HTTPS_PORT`: Traefik takes care of certificates and ports. Keep
+**Create Environment File** on, so Dokploy writes the variables to `.env` next to the compose file.
+
+Generate the block on your machine, replace the domains and paste it:
+
+```bash
+cat <<EOF
+APP_DOMAIN=analytics.example.com
+INGEST_DOMAIN=i.analytics.example.com
+API_DOMAIN=api.analytics.example.com
+GEO_MONTH=$(date +%Y-%m)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_ADMIN_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_RW_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_RO_PASSWORD=$(openssl rand -hex 24)
+KEY_HASH_PEPPER=$(openssl rand -base64 32)
+EOF
+```
+
+Click **Save** and keep a copy in a password manager. The database passwords are applied on the first start with
+empty volumes; changing them later needs `ALTER USER`, not just a new value here.
+
+### 3. Add the domains
+
+On the **Domains** tab add three domains with HTTPS on and the Let's Encrypt certificate provider. If the
+service list is empty, press the refresh button next to **Service Name**: Dokploy reads the services from the
+repository.
+
+| Host | Service | Container port |
+|---|---|---|
+| `APP_DOMAIN` | `appmetrica-web` | `3000` |
+| `INGEST_DOMAIN` | `appmetrica-ingest` | `8081` |
+| `API_DOMAIN` | `appmetrica-api` | `8080` |
+
+Services carry the `appmetrica-` prefix because Dokploy attaches every service with a domain to the shared
+`dokploy-network`, where a short name like `api` could resolve to another project's container.
+
+### 4. Deploy
+
+Click **Deploy**. The first build takes 5–15 minutes: the Go binary, the Next.js dashboard and the DB-IP database
+are built on the server.
+
+> Do not open **Preview Compose** or refresh the service list in the domain dialog while a deployment is running.
+> Both re-clone the repository into the directory the build runs from, and the build fails with
+> `getwd: no such file or directory`. If that happens, deploy again.
+
+Check that the services are ready:
+
+```bash
+curl -fsS https://api.analytics.example.com/ready    # {"checks":{"clickhouse":"ok","postgres":"ok"},"status":"ready"}
+curl -fsS https://i.analytics.example.com/ready
+```
+
+### 5. Register the first passkey
+
+The backend image is distroless and has no shell, so Dokploy's **Open Terminal** cannot attach to it. Run the
+command on the server over SSH:
+
+```bash
+docker exec $(docker ps -qf name=appmetrica-api) /app/appmetrica admin passkey-link
+```
+
+Then continue with [Connect your first app](#6-connect-your-first-app).
+
+### Operations under Dokploy
+
+- **Updates.** With autodeploy on, every push that touches the watched paths rebuilds the stack; otherwise click
+  **Deploy**. Autodeploy does not wait for CI. `api` applies the migrations on start.
+- **Geo database.** Set `GEO_MONTH` to the current month on the **Environment** tab and deploy.
+- **Logs.** The **Logs** tab of the service, or `docker logs` on the server.
+- **Postgres backups.** On the **Backups** tab add a PostgreSQL backup of the `appmetrica-postgres` service
+  (database and user `appmetrica`) to an S3 destination from **Settings → S3 Destinations**.
+- **ClickHouse backups.** On the **Environment** tab set `COMPOSE_PROFILES=backup`,
+  `BACKUP_API_URL=http://appmetrica-clickhouse-backup:7171` and the `S3_*` variables, then deploy.
+- **Lost access.** Run the `passkey-link` command from step 5 again.
+
+An alternative pipeline, where GitHub Actions builds images into GHCR and rolls them out through the Dokploy API
+over Tailscale (`.github/workflows/deploy.yml`), is described in [`deploy/dokploy/README.md`](deploy/dokploy/README.md)
+(in Russian).
+
 ## Configuration reference
 
 All variables live in `deploy/selfhost/.env`. Values are read by `docker-compose.yml`; changing them requires
-`docker compose up -d` (and `--build` for variables marked *build time*).
+`docker compose up -d` (and `--build` for variables marked *build time*). Under Dokploy the same variables are set
+on the **Environment** tab and applied with **Deploy**.
 
 ### Required
 
@@ -181,7 +291,7 @@ All variables live in `deploy/selfhost/.env`. Values are read by `docker-compose
 | `APP_DOMAIN` | `analytics.example.com` | Dashboard, landing and docs domain. Also the passkey (WebAuthn) relying party: passkeys are bound to it, so changing it later requires registering passkeys again | — |
 | `INGEST_DOMAIN` | `i.analytics.example.com` | Event ingestion domain used by your apps. *Build time* for the dashboard snippets | — |
 | `API_DOMAIN` | `api.analytics.example.com` | Read API domain. *Build time* for the dashboard docs | — |
-| `ACME_EMAIL` | `you@example.com` | E-mail for Let's Encrypt (expiry and incident notices) | — |
+| `ACME_EMAIL` | `you@example.com` | E-mail for Let's Encrypt (expiry and incident notices). Not used under Dokploy | — |
 | `POSTGRES_PASSWORD` | 48 hex chars | Password of the `appmetrica` Postgres user | `openssl rand -hex 24` |
 | `CLICKHOUSE_ADMIN_PASSWORD` | 48 hex chars | ClickHouse `appmetrica_admin`: migrations and backups | `openssl rand -hex 24` |
 | `CLICKHOUSE_RW_PASSWORD` | 48 hex chars | ClickHouse `appmetrica_rw`: used by ingest and worker | `openssl rand -hex 24` |
@@ -207,7 +317,7 @@ Any S3-compatible storage works (AWS S3, Hetzner Object Storage, Cloudflare R2, 
 | Variable | Default | Description |
 |---|---|---|
 | `COMPOSE_PROFILES` | empty | Set to `backup` to start the `clickhouse-backup` service |
-| `BACKUP_API_URL` | empty | Set to `http://clickhouse-backup:7171` so the worker checks backup freshness and **Settings → System** shows the last backup |
+| `BACKUP_API_URL` | empty | Set to `http://clickhouse-backup:7171` (under Dokploy `http://appmetrica-clickhouse-backup:7171`) so the worker checks backup freshness and **Settings → System** shows the last backup |
 | `S3_ENDPOINT` | — | Storage endpoint, e.g. `https://s3.eu-central-1.amazonaws.com` |
 | `S3_BUCKET` | — | Existing bucket for the backups (path `clickhouse/` inside it) |
 | `S3_REGION` | — | Bucket region |
@@ -221,7 +331,7 @@ Any S3-compatible storage works (AWS S3, Hetzner Object Storage, Cloudflare R2, 
 | Variable | Default | Description |
 |---|---|---|
 | `WEBAUTHN_RP_NAME` | `appmetrica.online` | Name the browser shows when registering a passkey |
-| `HTTP_PORT`, `HTTPS_PORT` | `80`, `443` | Host ports of Caddy. Let's Encrypt needs 80 and 443 reachable from the internet |
+| `HTTP_PORT`, `HTTPS_PORT` | `80`, `443` | Host ports of Caddy (Docker Compose stack only). Let's Encrypt needs 80 and 443 reachable from the internet |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` (JSON logs to stdout) |
 | `SESSION_TTL` | `720h` | Absolute lifetime of a dashboard session |
 | `SESSION_IDLE_TTL` | `168h` | Idle timeout of a dashboard session |
@@ -261,12 +371,14 @@ curl -sS -X POST "https://i.analytics.example.com/v1/events" \
 ```
 
 The full API reference (ingestion and Read API), session and offline-queue recipes for each platform and the
-error/retry policy are in the dashboard: **Documentation** (`https://APP_DOMAIN/docs`, behind sign-in). The
-OpenAPI contracts are in [`contracts/openapi/`](contracts/openapi/).
+error/retry policy are in the public documentation at `https://APP_DOMAIN/docs`, no sign-in needed; the live copy
+is at [appmetrica.online/docs](https://appmetrica.online/docs). The OpenAPI contracts are in
+[`contracts/openapi/`](contracts/openapi/).
 
 ## Operations
 
-All commands run from `deploy/selfhost`.
+All commands run from `deploy/selfhost` (Docker Compose stack). Under Dokploy see
+[Operations under Dokploy](#operations-under-dokploy).
 
 **Logs and status**
 
@@ -343,7 +455,8 @@ Repository layout:
 - `backend/` — Go module, one binary `appmetrica` (`ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck`).
 - `web/` — Next.js 16 dashboard, landing page, demo mode and API documentation (`web/content/docs/`).
 - `contracts/openapi/` — OpenAPI 3.0 contracts; Go and TypeScript code is generated from them.
-- `deploy/selfhost/` — Docker Compose stack for self-hosting; `deploy/clickhouse/` — ClickHouse configuration.
+- `deploy/selfhost/` — Docker Compose stack for self-hosting; `deploy/dokploy/` — the same stack for Dokploy and
+  the GitHub Actions → GHCR → Dokploy pipeline; `deploy/clickhouse/` — ClickHouse configuration.
 - `scripts/` — CI and deploy scripts; `scripts/reconcile` — reconciliation of numbers with AppMetrica exports.
 - `docs/discovery/` — product and technical specification (in Russian).
 
@@ -353,7 +466,8 @@ Repository layout:
   [`docs/discovery/2026-10-13-appmetrica-online/`](docs/discovery/2026-10-13-appmetrica-online/) (Russian)
 - Developer runbook: [12-dev-runbook.md](docs/discovery/2026-10-13-appmetrica-online/12-dev-runbook.md)
 - Operations runbooks: [21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md)
-- API documentation for integrations: in the dashboard at `/docs`, sources in [`web/content/docs/`](web/content/docs/)
+- API documentation for integrations: public, at `/docs` of every installation
+  ([appmetrica.online/docs](https://appmetrica.online/docs)), sources in [`web/content/docs/`](web/content/docs/)
 
 ## License
 

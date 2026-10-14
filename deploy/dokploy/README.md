@@ -1,5 +1,9 @@
 # Dokploy: ручная настройка и деплой из GitHub Actions
 
+> Простой путь — один Compose-сервис из [`docker-compose.yml`](docker-compose.yml) рядом с этим файлом: Dokploy сам
+> собирает стек из Git. Так работает appmetrica.online; пошагово — в [README.ru.md](../../README.ru.md#развёртывание-в-dokploy).
+> Ниже описан альтернативный конвейер: образы собирает GitHub Actions, а выкатывает их API Dokploy.
+
 Как настроить production один раз и как потом выкатывать новые версии, откатывать их и обновлять гео-базу (T-024).
 Сервер, firewall и установку Dokploy описывают `docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md` §5.5
 и `12-dev-runbook.md` §9.5. Этот файл — про то, что нужно GitHub Actions: Applications, ключи и секреты.
@@ -34,13 +38,16 @@ Geo DB refresh (`geo-refresh.yml`) запускается 2-го числа ка
 2. **Project `appmetrica`**: Postgres `postgres` и compose `clickhouse-stack` — по `21-ops-runbooks.md` §5.5, пункты 8–9.
 3. **Applications** в проекте `appmetrica`. App Name задаётся ровно так, без суффикса: это DNS-имена внутри `dokploy-network`.
 
-   | App Name | Provider → Docker image | Command | Порт / домен |
+   | App Name | Provider → Docker image | Advanced → Run Command → Args | Порт / домен |
    |---|---|---|---|
    | `appmetrica-api` | `ghcr.io/<owner>/appmetrica-backend:main` | `api` | 8080 → `api.appmetrica.online` |
    | `appmetrica-ingest` | `ghcr.io/<owner>/appmetrica-backend:main` | `ingest` | 8081 → `i.appmetrica.online` |
    | `appmetrica-worker` | `ghcr.io/<owner>/appmetrica-backend:main` | `worker` | — (без домена) |
    | `appmetrica-web` | `ghcr.io/<owner>/appmetrica-web:main` | — | 3000 → `appmetrica.online` |
 
+   - Роль задаётся одним аргументом в **Args**, поле **Command** остаётся пустым. Dokploy передаёт Command в Swarm как
+     `ContainerSpec.Command`, а оно заменяет ENTRYPOINT образа (`/app/appmetrica`): с `Command: api` контейнер ищет
+     несуществующий бинарник `api` и не стартует.
    - Тег `:main` нужен только для первого старта. Первый же запуск `deploy.yml` переключит Applications на `<sha>`.
    - Environment — матрица `12-dev-runbook.md` §3.3, значения из `.env.example`.
    - Domains: HTTPS, Let's Encrypt.

@@ -12,8 +12,8 @@
 `user_id`).
 
 - **Без SDK.** Один документированный эндпоинт `POST https://<ingest-домен>/v1/events`: батчи до 500 событий,
-  идемпотентность по `insert_id`, офлайн-очередь до 7 дней. Рецепты для Swift, Kotlin, JavaScript, Go, curl и ботов
-  встроены в документацию дашборда.
+  идемпотентность по `insert_id`, офлайн-очередь до 7 дней. Рецепты для Swift, Kotlin, JavaScript, Go, curl и ботов —
+  в открытой [документации](https://appmetrica.online/docs).
 - **Приватность по умолчанию.** IP клиента используется только в памяти для определения страны и города и нигде не
   сохраняется — ни в базах, ни в логах. `user_id`, похожие на e-mail или телефон, отклоняются. Удаление данных по
   GDPR — через API или из дашборда.
@@ -29,6 +29,7 @@
 - [Архитектура](#архитектура)
 - [Требования](#требования)
 - [Установка через Docker Compose](#установка-через-docker-compose)
+- [Развёртывание в Dokploy](#развёртывание-в-dokploy)
 - [Справочник параметров](#справочник-параметров)
 - [Первые события](#первые-события)
 - [Эксплуатация](#эксплуатация)
@@ -48,10 +49,12 @@
                                                                        └────────────┘
 ```
 
+В [Dokploy](#развёртывание-в-dokploy) место Caddy занимает встроенный Traefik.
+
 | Сервис | Назначение |
 |---|---|
-| `caddy` | Обратный прокси на портах 80/443, автоматические HTTPS-сертификаты Let's Encrypt |
-| `web` | Дашборд на Next.js, публичный лендинг, документация API (после входа), демо-режим |
+| `caddy` | Обратный прокси на портах 80/443, автоматические HTTPS-сертификаты Let's Encrypt (только стек Docker Compose) |
+| `web` | Дашборд на Next.js, публичный лендинг, открытая документация API, демо-режим |
 | `api` | API дашборда и публичный Read API; при старте применяет миграции баз |
 | `ingest` | Приём событий: валидация, коррекция часов, дедупликация, геолокация, лимиты |
 | `worker` | Фоновые задачи: закрытие дней в агрегаты, дайджест и алерты в Telegram, удаления по GDPR, очистка |
@@ -170,10 +173,114 @@ Face ID, Windows Hello или аппаратный ключ. Вход выпол
 3. Отправьте тестовый батч (см. [Первые события](#первые-события)) — статус сменится на «Получено», и приложение
    появится в портфеле.
 
+## Развёртывание в Dokploy
+
+[Dokploy](https://dokploy.com) собирает тот же стек из Git и отдаёт его через свой Traefik, поэтому Caddy не нужен.
+Так работает публичный экземпляр [appmetrica.online](https://appmetrica.online). Compose-файл —
+[`deploy/dokploy/docker-compose.yml`](deploy/dokploy/docker-compose.yml); проверено на Dokploy v0.30.8.
+
+[Требования](#требования) те же: сервер с установленным Dokploy, три DNS-записи на него и открытые порты 80/443.
+
+### 1. Создайте Compose-сервис
+
+**Project → Create Service → Compose**, тип **Docker Compose**. Вкладка **General**:
+
+| Поле | Значение |
+|---|---|
+| Provider | GitHub (или Git): этот репозиторий или ваш форк |
+| Branch | `main` |
+| Compose Path | `./deploy/dokploy/docker-compose.yml` |
+| Trigger Type | On Push (автодеплой) |
+| Watch Paths | `backend/**`, `web/**`, `deploy/**`, чтобы правки README не запускали пересборку |
+
+Нажмите **Save**.
+
+### 2. Заполните переменные
+
+Во вкладке **Environment** задайте параметры из [Справочника параметров](#справочник-параметров), кроме
+`ACME_EMAIL`, `HTTP_PORT` и `HTTPS_PORT`: сертификаты и порты берёт на себя Traefik. Переключатель
+**Create Environment File** оставьте включённым: Dokploy пишет переменные в `.env` рядом с compose-файлом.
+
+Сгенерируйте блок на своём компьютере, замените домены и вставьте:
+
+```bash
+cat <<EOF
+APP_DOMAIN=analytics.example.com
+INGEST_DOMAIN=i.analytics.example.com
+API_DOMAIN=api.analytics.example.com
+GEO_MONTH=$(date +%Y-%m)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_ADMIN_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_RW_PASSWORD=$(openssl rand -hex 24)
+CLICKHOUSE_RO_PASSWORD=$(openssl rand -hex 24)
+KEY_HASH_PEPPER=$(openssl rand -base64 32)
+EOF
+```
+
+Нажмите **Save** и сохраните копию в менеджере паролей. Пароли баз применяются при первом старте на пустых томах;
+чтобы сменить их потом, нужен `ALTER USER`, а не новое значение здесь.
+
+### 3. Добавьте домены
+
+Во вкладке **Domains** добавьте три домена с включённым HTTPS и провайдером сертификатов Let's Encrypt. Если
+список сервисов пуст, нажмите кнопку обновления рядом с **Service Name**: Dokploy прочитает сервисы из репозитория.
+
+| Host | Service | Container port |
+|---|---|---|
+| `APP_DOMAIN` | `appmetrica-web` | `3000` |
+| `INGEST_DOMAIN` | `appmetrica-ingest` | `8081` |
+| `API_DOMAIN` | `appmetrica-api` | `8080` |
+
+У сервисов префикс `appmetrica-`, потому что Dokploy подключает каждый сервис с доменом к общей сети
+`dokploy-network`, где короткое имя вроде `api` может указать на контейнер другого проекта.
+
+### 4. Запустите деплой
+
+Нажмите **Deploy**. Первая сборка занимает 5–15 минут: Go-бинарник, дашборд на Next.js и база DB-IP собираются
+на сервере.
+
+> Пока идёт деплой, не открывайте **Preview Compose** и не обновляйте список сервисов в окне домена. Оба действия
+> заново клонируют репозиторий в каталог, из которого идёт сборка, и она падает с
+> `getwd: no such file or directory`. В этом случае просто запустите деплой ещё раз.
+
+Проверьте готовность сервисов:
+
+```bash
+curl -fsS https://api.analytics.example.com/ready    # {"checks":{"clickhouse":"ok","postgres":"ok"},"status":"ready"}
+curl -fsS https://i.analytics.example.com/ready
+```
+
+### 5. Зарегистрируйте первый passkey
+
+Образ backend собран на distroless и не содержит shell, поэтому **Open Terminal** в Dokploy к нему не подключится.
+Выполните команду на сервере по SSH:
+
+```bash
+docker exec $(docker ps -qf name=appmetrica-api) /app/appmetrica admin passkey-link
+```
+
+Дальше — [Подключите первое приложение](#6-подключите-первое-приложение).
+
+### Эксплуатация в Dokploy
+
+- **Обновления.** С автодеплоем каждый пуш, затрагивающий Watch Paths, пересобирает стек; без него нажмите
+  **Deploy**. Автодеплой не ждёт CI. Миграции применяет `api` при старте.
+- **Гео-база.** Поставьте в `GEO_MONTH` текущий месяц во вкладке **Environment** и запустите деплой.
+- **Логи.** Вкладка **Logs** сервиса или `docker logs` на сервере.
+- **Бэкап Postgres.** Во вкладке **Backups** добавьте бэкап PostgreSQL сервиса `appmetrica-postgres` (база и
+  пользователь `appmetrica`) в S3-хранилище из **Settings → S3 Destinations**.
+- **Бэкап ClickHouse.** Во вкладке **Environment** задайте `COMPOSE_PROFILES=backup`,
+  `BACKUP_API_URL=http://appmetrica-clickhouse-backup:7171` и переменные `S3_*`, затем запустите деплой.
+- **Потерян доступ.** Ещё раз выполните команду `passkey-link` из шага 5.
+
+Альтернативный конвейер, в котором GitHub Actions собирает образы в GHCR и выкатывает их через API Dokploy по
+Tailscale (`.github/workflows/deploy.yml`), описан в [`deploy/dokploy/README.md`](deploy/dokploy/README.md).
+
 ## Справочник параметров
 
 Все параметры задаются в `deploy/selfhost/.env` и читаются `docker-compose.yml`. После изменения выполните
-`docker compose up -d`, а для параметров с пометкой *при сборке* — `docker compose up -d --build`.
+`docker compose up -d`, а для параметров с пометкой *при сборке* — `docker compose up -d --build`. В Dokploy те же
+параметры задаются во вкладке **Environment** и применяются кнопкой **Deploy**.
 
 ### Обязательные
 
@@ -182,7 +289,7 @@ Face ID, Windows Hello или аппаратный ключ. Вход выпол
 | `APP_DOMAIN` | `analytics.example.com` | Домен дашборда, лендинга и документации. Это же relying party для passkey (WebAuthn): ключи привязаны к домену, поэтому после его смены passkey придётся зарегистрировать заново | — |
 | `INGEST_DOMAIN` | `i.analytics.example.com` | Домен приёма событий, который используют ваши приложения. *При сборке* — для сниппетов в дашборде | — |
 | `API_DOMAIN` | `api.analytics.example.com` | Домен Read API. *При сборке* — для документации в дашборде | — |
-| `ACME_EMAIL` | `you@example.com` | E-mail для Let's Encrypt (уведомления об истечении и инцидентах) | — |
+| `ACME_EMAIL` | `you@example.com` | E-mail для Let's Encrypt (уведомления об истечении и инцидентах). В Dokploy не используется | — |
 | `POSTGRES_PASSWORD` | 48 hex-символов | Пароль пользователя `appmetrica` в Postgres | `openssl rand -hex 24` |
 | `CLICKHOUSE_ADMIN_PASSWORD` | 48 hex-символов | ClickHouse `appmetrica_admin`: миграции и бэкапы | `openssl rand -hex 24` |
 | `CLICKHOUSE_RW_PASSWORD` | 48 hex-символов | ClickHouse `appmetrica_rw`: используют ingest и worker | `openssl rand -hex 24` |
@@ -208,7 +315,7 @@ Face ID, Windows Hello или аппаратный ключ. Вход выпол
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `COMPOSE_PROFILES` | пусто | `backup` — запустить сервис `clickhouse-backup` |
-| `BACKUP_API_URL` | пусто | `http://clickhouse-backup:7171` — worker проверяет свежесть бэкапа, а **Настройки → Система** показывает последний бэкап |
+| `BACKUP_API_URL` | пусто | `http://clickhouse-backup:7171` (в Dokploy — `http://appmetrica-clickhouse-backup:7171`): worker проверяет свежесть бэкапа, а **Настройки → Система** показывает последний бэкап |
 | `S3_ENDPOINT` | — | Адрес хранилища, например `https://s3.eu-central-1.amazonaws.com` |
 | `S3_BUCKET` | — | Существующий бакет для бэкапов (внутри него — путь `clickhouse/`) |
 | `S3_REGION` | — | Регион бакета |
@@ -222,7 +329,7 @@ Face ID, Windows Hello или аппаратный ключ. Вход выпол
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `WEBAUTHN_RP_NAME` | `appmetrica.online` | Название, которое браузер показывает при регистрации passkey |
-| `HTTP_PORT`, `HTTPS_PORT` | `80`, `443` | Порты Caddy на хосте. Для Let's Encrypt порты 80 и 443 должны быть доступны из интернета |
+| `HTTP_PORT`, `HTTPS_PORT` | `80`, `443` | Порты Caddy на хосте (только стек Docker Compose). Для Let's Encrypt порты 80 и 443 должны быть доступны из интернета |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` или `error` (JSON-логи в stdout) |
 | `SESSION_TTL` | `720h` | Максимальный срок сессии дашборда |
 | `SESSION_IDLE_TTL` | `168h` | Срок сессии без активности |
@@ -262,12 +369,14 @@ curl -sS -X POST "https://i.analytics.example.com/v1/events" \
 ```
 
 Полный справочник API (приём событий и Read API), рецепты сессий и офлайн-очереди для каждой платформы и политика
-ошибок и повторов — в дашборде: **Документация** (`https://APP_DOMAIN/docs`, после входа). OpenAPI-контракты лежат в
+ошибок и повторов — в открытой документации по адресу `https://APP_DOMAIN/docs`, вход не нужен; живая копия —
+[appmetrica.online/docs](https://appmetrica.online/docs). OpenAPI-контракты лежат в
 [`contracts/openapi/`](contracts/openapi/).
 
 ## Эксплуатация
 
-Все команды выполняются из `deploy/selfhost`.
+Все команды выполняются из `deploy/selfhost` (стек Docker Compose). Для Dokploy см.
+[Эксплуатация в Dokploy](#эксплуатация-в-dokploy).
 
 **Логи и состояние**
 
@@ -344,7 +453,8 @@ make passkey-link # одноразовая ссылка регистрации p
 - `backend/` — Go-модуль, один бинарник `appmetrica` (`ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck`).
 - `web/` — дашборд на Next.js 16, лендинг, демо-режим и документация API (`web/content/docs/`).
 - `contracts/openapi/` — контракты OpenAPI 3.0; из них генерируется код Go и TypeScript.
-- `deploy/selfhost/` — стек Docker Compose для установки на свой сервер; `deploy/clickhouse/` — конфигурация ClickHouse.
+- `deploy/selfhost/` — стек Docker Compose для установки на свой сервер; `deploy/dokploy/` — тот же стек для Dokploy
+  и конвейер GitHub Actions → GHCR → Dokploy; `deploy/clickhouse/` — конфигурация ClickHouse.
 - `scripts/` — скрипты CI и деплоя; `scripts/reconcile` — сверка цифр с выгрузками AppMetrica.
 - `docs/discovery/` — продуктовая и техническая спецификация.
 
@@ -354,7 +464,8 @@ make passkey-link # одноразовая ссылка регистрации p
   [`docs/discovery/2026-10-13-appmetrica-online/`](docs/discovery/2026-10-13-appmetrica-online/)
 - Команды разработки: [12-dev-runbook.md](docs/discovery/2026-10-13-appmetrica-online/12-dev-runbook.md)
 - Эксплуатация: [21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md)
-- Документация API для интеграций: в дашборде по адресу `/docs`, исходники — [`web/content/docs/`](web/content/docs/)
+- Документация API для интеграций: открыта по адресу `/docs` любой установки
+  ([appmetrica.online/docs](https://appmetrica.online/docs)), исходники — [`web/content/docs/`](web/content/docs/)
 
 ## Лицензия
 
