@@ -279,8 +279,10 @@ describe("demo audience", () => {
         expect(b.metric).toBe("active");
         expect(b.rows.length).toBeGreaterThan(0);
         const share = b.rows.reduce((sum, r) => sum + r.share, 0);
-        // По платформам люди «Notes» с двух платформ попадают в обе строки.
-        const max = id === NOTES && dimension === "platform" ? 1.12 : 1.03;
+        // По платформам люди «Notes» с двух платформ попадают в обе строки, по версиям — люди,
+        // обновившиеся за период.
+        const max =
+          (id === NOTES && dimension === "platform") || dimension === "app_version" ? 1.12 : 1.03;
         expect(share, `${id} ${dimension}`).toBeGreaterThan(0.97);
         expect(share, `${id} ${dimension}`).toBeLessThan(max);
         const counts = b.rows.map((r) => r.count);
@@ -712,12 +714,13 @@ describe("demo stories", () => {
     const campaign = await daily(NOTES, "2026-05-20", "2026-05-24", android);
     expect(mean(campaign)).toBeGreaterThanOrEqual(1.4 * mean(before));
     // Кампания в RU не меняет новых из других стран.
-    const kzBefore = await daily(NOTES, "2026-05-13", "2026-05-19", { ...android, country: "KZ" });
-    const kzCampaign = await daily(NOTES, "2026-05-20", "2026-05-24", {
+    const byBefore = await daily(NOTES, "2026-05-13", "2026-05-19", { ...android, country: "BY" });
+    const byCampaign = await daily(NOTES, "2026-05-20", "2026-05-24", {
       ...android,
-      country: "KZ",
+      country: "BY",
     });
-    expect(mean(kzCampaign)).toBeLessThan(1.2 * mean(kzBefore));
+    expect(mean(byCampaign)).toBeGreaterThan(0);
+    expect(mean(byCampaign)).toBeLessThan(1.2 * mean(byBefore));
 
     const m = await get<RetentionMatrix>(
       `/v1/apps/${NOTES}/retention?from=2026-05-13&to=2026-05-31&periods=7&platform=android`,

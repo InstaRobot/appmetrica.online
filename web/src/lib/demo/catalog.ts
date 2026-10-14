@@ -1,6 +1,7 @@
 // Параметры синтетической модели демо-приложений. Приложение — набор сегментов-платформ: у каждого
-// свой масштаб DAU, тренд, дата запуска, сезонность, retention и распределения значений измерений
-// breakdown. Веса относительные, нормируются в model.ts.
+// свой масштаб DAU, тренд, дата запуска, сезонность, retention, релизы и распределения значений
+// измерений breakdown. Сюжеты (календарь, выход в страну, кампании, баги релизов, всплески отказов,
+// сбои приёма) — данные, model.ts и live.ts их применяют. Веса относительные, нормируются в model.ts.
 import type { BreakdownDimension, Platform } from "@/lib/api/gen/model";
 import { DEMO_APP_IDS } from "./apps";
 import type { Weighted } from "./random";
@@ -11,9 +12,20 @@ export type ParentDim = "os_name" | "country";
 // Ключ "*" — значения для родителя без собственного списка.
 export type ChildWeights = Readonly<Record<string, Weights>>;
 
+// Releases — версии сегмента от старой к новой с днём выхода; первая есть у всех до выхода второй.
+// Обновление на вышедшую версию — логистика: половина аудитории обновляется за halfDays дней, после
+// выхода следующей версии на прежнюю больше не обновляются. laggards — доля аудитории, которая отстаёт
+// от остальных на lagDays дней (старые версии не исчезают сразу).
+export type Releases = {
+  readonly versions: readonly (readonly [version: string, released: string])[];
+  readonly halfDays: number;
+  readonly laggards: number;
+  readonly lagDays: number;
+};
+
 export type SegmentDims = {
   readonly os_name: Weights;
-  readonly app_version: Weights;
+  readonly app_version: Releases;
   readonly country: Weights;
   readonly os_version: ChildWeights;
   readonly device_model: ChildWeights;
@@ -50,6 +62,38 @@ export type SegmentModel = {
   dims: SegmentDims;
 };
 
+// Season — множитель активности в окне from…to (MM-DD, каждый год; окно может переходить через Новый
+// год); smooth — множитель нарастает к середине окна и спадает к краям.
+export type Season = { from: string; to: string; factor: number; smooth?: boolean };
+
+// Market — выход в страну: вес страны в сегментах растёт с нуля за rampDays дней с launch, а
+// аудитория — вместе с ним (baseDau — уже с этой страной).
+export type Market = { country: string; launch: string; rampDays: number };
+
+// Campaign — маркетинговая кампания: days дней с from сегмент platform получает newBoost × обычных
+// новых из страны country; retention — множитель удержания когорт сегмента в эти дни.
+export type Campaign = {
+  platform: Platform;
+  country: string;
+  from: string;
+  days: number;
+  newBoost: number;
+  retention: number;
+};
+
+// ReleaseBug — дефект версии с from до until (не включая): сессии короче в durationFactor раз.
+export type ReleaseBug = { version: string; from: string; until: string; durationFactor: number };
+
+// RejectBurst — всплеск отказов code с from до until (не включая): rate от принятых событий; с version —
+// от событий этой версии, которые шлют context.app_version числом.
+export type RejectBurst = {
+  code: string;
+  from: string;
+  until: string;
+  rate: number;
+  version?: string;
+};
+
 export type AppModel = {
   segments: readonly SegmentModel[];
   // Доля людей, активных сразу на нескольких платформах: итог по людям меньше суммы сегментов.
@@ -58,7 +102,38 @@ export type AppModel = {
   stickiness: number;
   rejectRate: number;
   rejections: Weights;
+  calendar: readonly Season[];
+  markets: readonly Market[];
+  campaigns: readonly Campaign[];
+  bugs: readonly ReleaseBug[];
+  rejectBursts: readonly RejectBurst[];
 };
+
+// IngestOutage — недоступность приёма с from до to (UTC) у всех приложений: доходит residual событий,
+// resend потерянных досылается офлайн-очередью SDK за resendHours часов после восстановления.
+export type IngestOutage = {
+  from: string;
+  to: string;
+  residual: number;
+  resend: number;
+  resendHours: number;
+};
+
+export const INGEST_OUTAGES: readonly IngestOutage[] = [
+  // 10:00–14:00 MSK.
+  {
+    from: "2026-09-23T07:00:00Z",
+    to: "2026-09-23T11:00:00Z",
+    residual: 0.03,
+    resend: 0.7,
+    resendHours: 2,
+  },
+];
+
+// Российский календарь: новогодние каникулы, майские праздники, летние отпуска.
+const NEW_YEAR = { from: "12-31", to: "01-08" };
+const MAY_HOLIDAYS = { from: "05-01", to: "05-11" };
+const SUMMER = { from: "06-10", to: "08-25", smooth: true };
 
 const WEEKLY_MOBILE = [1.0, 1.02, 1.03, 1.02, 0.98, 0.88, 0.85];
 const WEEKLY_WEB = [1.05, 1.07, 1.06, 1.04, 0.97, 0.74, 0.72];
@@ -284,7 +359,7 @@ const IOS_DEVICE_TYPES: Readonly<Record<string, Weights>> = {
   iPadOS: [["tablet", 1]],
 };
 
-function iosDims(appVersions: Weights): SegmentDims {
+function iosDims(appVersions: Releases, kz = 6): SegmentDims {
   return {
     os_name: IOS_OS,
     os_version: IOS_OS_VERSIONS,
@@ -293,7 +368,7 @@ function iosDims(appVersions: Weights): SegmentDims {
     device_type: IOS_DEVICE_TYPES,
     country: [
       ["RU", 78],
-      ["KZ", 6],
+      ["KZ", kz],
       ["BY", 5],
       ["UZ", 3],
       ["AM", 2],
@@ -418,15 +493,26 @@ const WEB_DIMS: Omit<SegmentDims, "app_version" | "country"> = {
   locale: LOCALES,
 };
 
-const NOTES_VERSIONS: Weights = [
-  ["3.4.0", 58],
-  ["3.3.2", 25],
-  ["3.3.1", 9],
-  ["3.2.0", 5],
-  ["3.1.4", 3],
+// Версии «Notes»: 3.4.0 вышла с багом, 3.4.1 — хотфикс через четыре дня.
+const NOTES_RELEASES: Releases["versions"] = [
+  ["3.0.2", "2025-03-17"],
+  ["3.1.0", "2026-02-10"],
+  ["3.1.4", "2026-04-21"],
+  ["3.2.0", "2026-06-16"],
+  ["3.3.0", "2026-08-04"],
+  ["3.4.0", "2026-09-08"],
+  ["3.4.1", "2026-09-12"],
+  ["3.5.0", "2026-10-06"],
 ];
+const NOTES_MOBILE_VERSIONS: Releases = {
+  versions: NOTES_RELEASES,
+  halfDays: 6,
+  laggards: 0.03,
+  lagDays: 45,
+};
 
-// «Notes»: iOS растёт, Android ровный, веб запущен 2026-08-14 и набирает аудиторию с нуля.
+// «Notes»: iOS растёт, Android ровный, веб запущен 2026-08-14 и набирает аудиторию с нуля. Сюжеты:
+// выход в Казахстан, кампании в RU на Android и в KZ на iOS, баг релиза 3.4.0.
 const NOTES: AppModel = {
   crossPlatformShare: 0.15,
   stickiness: 0.6,
@@ -435,6 +521,40 @@ const NOTES: AppModel = {
     ["duration_required", 50],
     ["event_too_old", 35],
     ["invalid_field", 15],
+  ],
+  calendar: [
+    { ...NEW_YEAR, factor: 1.15 },
+    { ...MAY_HOLIDAYS, factor: 0.9 },
+    { ...SUMMER, factor: 0.86 },
+  ],
+  markets: [{ country: "KZ", launch: "2026-06-01", rampDays: 30 }],
+  campaigns: [
+    {
+      platform: "android",
+      country: "RU",
+      from: "2026-05-20",
+      days: 5,
+      newBoost: 0.6,
+      retention: 0.65,
+    },
+    {
+      platform: "ios",
+      country: "KZ",
+      from: "2026-09-15",
+      days: 5,
+      newBoost: 0.25,
+      retention: 0.65,
+    },
+  ],
+  bugs: [{ version: "3.4.0", from: "2026-09-08", until: "2026-09-12", durationFactor: 0.7 }],
+  rejectBursts: [
+    {
+      code: "invalid_field",
+      from: "2026-09-08",
+      until: "2026-09-12",
+      rate: 0.25,
+      version: "3.4.0",
+    },
   ],
   segments: [
     {
@@ -451,7 +571,7 @@ const NOTES: AppModel = {
       weekly: WEEKLY_MOBILE,
       hourly: HOURLY_MOBILE,
       retention: { d1: 0.36, d30: 0.07, w1: 0.42, w12: 0.12 },
-      dims: iosDims(NOTES_VERSIONS),
+      dims: iosDims(NOTES_MOBILE_VERSIONS, 9),
     },
     {
       platform: "android",
@@ -469,10 +589,10 @@ const NOTES: AppModel = {
       retention: { d1: 0.33, d30: 0.062, w1: 0.39, w12: 0.1 },
       dims: {
         ...ANDROID_DIMS,
-        app_version: NOTES_VERSIONS,
+        app_version: NOTES_MOBILE_VERSIONS,
         country: [
           ["RU", 74],
-          ["KZ", 8],
+          ["KZ", 9],
           ["BY", 6],
           ["UZ", 6],
           ["AM", 2],
@@ -499,10 +619,13 @@ const NOTES: AppModel = {
       retention: { d1: 0.24, d30: 0.035, w1: 0.28, w12: 0.06 },
       dims: {
         ...WEB_DIMS,
-        app_version: [
-          ["3.4.0", 72],
-          ["3.3.2", 28],
-        ],
+        // Веб-версия обновляется при перезагрузке страницы.
+        app_version: {
+          versions: NOTES_RELEASES.slice(4),
+          halfDays: 0.5,
+          laggards: 0.04,
+          lagDays: 3,
+        },
         country: [
           ["RU", 82],
           ["KZ", 5],
@@ -526,6 +649,16 @@ const SITE: AppModel = {
     ["user_id_looks_like_pii", 58],
     ["invalid_field", 42],
   ],
+  calendar: [
+    { ...NEW_YEAR, factor: 0.75 },
+    { ...MAY_HOLIDAYS, factor: 0.85 },
+    { ...SUMMER, factor: 0.9 },
+  ],
+  markets: [],
+  campaigns: [],
+  bugs: [],
+  // Форма отправляла timestamp в локальном формате.
+  rejectBursts: [{ code: "invalid_field", from: "2026-10-02", until: "2026-10-03", rate: 0.04 }],
   segments: [
     {
       platform: "web",
@@ -543,12 +676,23 @@ const SITE: AppModel = {
       retention: { d1: 0.2, d30: 0.03, w1: 0.24, w12: 0.05 },
       dims: {
         ...WEB_DIMS,
-        app_version: [
-          ["2026.10.2", 64],
-          ["2026.10.1", 24],
-          ["2026.09.4", 9],
-          ["2026.09.3", 3],
-        ],
+        app_version: {
+          versions: [
+            ["2025.06.1", "2025-06-10"],
+            ["2025.12.2", "2025-12-15"],
+            ["2026.03.1", "2026-03-02"],
+            ["2026.06.2", "2026-06-15"],
+            ["2026.09.1", "2026-09-01"],
+            ["2026.09.2", "2026-09-08"],
+            ["2026.09.3", "2026-09-21"],
+            ["2026.09.4", "2026-09-28"],
+            ["2026.10.1", "2026-10-05"],
+            ["2026.10.2", "2026-10-12"],
+          ],
+          halfDays: 1,
+          laggards: 0.12,
+          lagDays: 8,
+        },
         country: [
           ["RU", 85],
           ["KZ", 4],
@@ -572,6 +716,14 @@ const BOT: AppModel = {
     ["duration_required", 70],
     ["unknown_event_name", 30],
   ],
+  calendar: [
+    { ...NEW_YEAR, factor: 1.1 },
+    { ...SUMMER, factor: 0.95 },
+  ],
+  markets: [],
+  campaigns: [],
+  bugs: [],
+  rejectBursts: [],
   segments: [
     {
       platform: "bot",
@@ -596,11 +748,17 @@ const BOT: AppModel = {
           ["Linux", 2],
         ],
         os_version: { "*": UNKNOWN },
-        app_version: [
-          ["1.8.0", 68],
-          ["1.7.3", 24],
-          ["1.7.0", 8],
-        ],
+        app_version: {
+          versions: [
+            ["1.6.0", "2025-11-20"],
+            ["1.7.0", "2026-05-12"],
+            ["1.7.3", "2026-07-21"],
+            ["1.8.0", "2026-09-29"],
+          ],
+          halfDays: 6,
+          laggards: 0.08,
+          lagDays: 60,
+        },
         device_model: { "*": UNKNOWN },
         device_type: { Windows: DESKTOP, macOS: DESKTOP, Linux: DESKTOP, "*": [["phone", 1]] },
         country: [
@@ -622,6 +780,11 @@ const OLD_GAME: AppModel = {
   stickiness: 0.6,
   rejectRate: 0,
   rejections: [["app_archived", 1]],
+  calendar: [{ ...NEW_YEAR, factor: 1.2 }],
+  markets: [],
+  campaigns: [],
+  bugs: [],
+  rejectBursts: [],
   segments: [
     {
       platform: "ios",
@@ -637,11 +800,17 @@ const OLD_GAME: AppModel = {
       weekly: WEEKLY_MOBILE,
       hourly: HOURLY_MOBILE,
       retention: { d1: 0.34, d30: 0.065, w1: 0.38, w12: 0.09 },
-      dims: iosDims([
-        ["1.12.0", 71],
-        ["1.11.3", 22],
-        ["1.10.0", 7],
-      ]),
+      dims: iosDims({
+        versions: [
+          ["1.9.2", "2024-09-02"],
+          ["1.10.0", "2025-02-11"],
+          ["1.11.3", "2025-05-27"],
+          ["1.12.0", "2025-08-19"],
+        ],
+        halfDays: 6,
+        laggards: 0.1,
+        lagDays: 90,
+      }),
     },
   ],
 };

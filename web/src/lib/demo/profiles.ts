@@ -12,7 +12,7 @@ import type {
 import { addDays, todayIn } from "@/lib/period";
 import { DEMO_APP_IDS } from "./apps";
 import type { SegmentModel } from "./catalog";
-import { type DemoApp, type InstallAttrs, sampleAttrs, segmentOf } from "./model";
+import { type DemoApp, type InstallAttrs, releaseVersions, sampleAttrs, segmentOf } from "./model";
 import { hexFrom, pickWeighted, rand, seeded, uuidFrom, type Weighted } from "./random";
 import { eachDay, HOUR_MS, isoUtc, maxDay, minDay, zonedMidnight } from "./time";
 
@@ -49,7 +49,7 @@ const CURATED: readonly Spec[] = [
           os_version: "26.0.1",
           device_model: "iPhone17,3",
           device_type: "phone",
-          app_version: "3.4.0",
+          app_version: "3.5.0",
           country: "RU",
           city: "Moscow",
           locale: "ru-RU",
@@ -63,7 +63,7 @@ const CURATED: readonly Spec[] = [
           os_version: "15.6.1",
           device_model: "Macintosh",
           device_type: "desktop",
-          app_version: "3.4.0",
+          app_version: "3.5.0",
           country: "RU",
           city: "Moscow",
           locale: "ru-RU",
@@ -87,7 +87,7 @@ const CURATED: readonly Spec[] = [
           os_version: "18.6.2",
           device_model: "iPhone15,4",
           device_type: "phone",
-          app_version: "3.3.2",
+          app_version: "3.4.1",
           country: "RU",
           city: "Saint Petersburg",
           locale: "ru-RU",
@@ -111,7 +111,7 @@ const CURATED: readonly Spec[] = [
           os_version: "26.0.1",
           device_model: "iPhone16,2",
           device_type: "phone",
-          app_version: "3.4.0",
+          app_version: "3.5.0",
           country: "RU",
           city: "Moscow",
           locale: "ru-RU",
@@ -136,7 +136,7 @@ const CURATED: readonly Spec[] = [
           os_version: "16",
           device_model: "Pixel 8",
           device_type: "phone",
-          app_version: "3.4.0",
+          app_version: "3.5.0",
           country: "RU",
           city: "Novosibirsk",
           locale: "ru-RU",
@@ -150,7 +150,7 @@ const CURATED: readonly Spec[] = [
           os_version: "14",
           device_model: "SM-X710",
           device_type: "tablet",
-          app_version: "3.3.2",
+          app_version: "3.4.1",
           country: "RU",
           city: "Novosibirsk",
           locale: "ru-RU",
@@ -174,7 +174,7 @@ const CURATED: readonly Spec[] = [
           os_version: "13",
           device_model: "23129RAA4G",
           device_type: "phone",
-          app_version: "3.3.1",
+          app_version: "3.3.0",
           country: "UZ",
           city: "Tashkent",
           locale: "ru-UZ",
@@ -438,7 +438,7 @@ function install(demo: DemoApp, id: string, overrides: Partial<InstallAttrs>): D
   const seg = segmentOf(demo, overrides.platform ?? "") ?? demo.model.segments[0];
   if (!seg) throw new Error(`demo app ${demo.app.id} has no segments`);
   const attrs = { ...sampleAttrs(seg, seeded(demo.app.id, "install", id)), ...overrides };
-  const versions = seg.dims.app_version.map(([v]) => v);
+  const versions = releaseVersions(seg);
   return {
     ...attrs,
     installId: id,

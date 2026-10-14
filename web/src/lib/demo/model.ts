@@ -1,23 +1,29 @@
 // Синтетическая модель метрик демо-приложения. Приложение — набор сегментов-платформ (catalog.ts): у
 // каждого своя дневная серия по ключу (приложение, платформа, environment, дата) — тренд, рост после
 // запуска, недельная сезонность и шум mulberry32. Метрики приложения — сумма сегментов; фильтры
-// уменьшают каждый сегмент на долю выбранных значений в его распределениях. Люди сразу на нескольких
-// платформах (crossPlatformShare) делают итог unit=persons меньше суммы сегментов; unit=installs
-// добавляет installsExtra, «сегодня» обрезается долей уже прошедшего дня в TZ приложения.
+// уменьшают каждый сегмент на долю выбранных значений в его распределениях. Доли версий (переходы на
+// релизы) и стран (выход в страну) меняются по дням. Сюжеты каталога: календарь, кампании (новые сверх
+// обычных и слабее удержание), баги релизов (короче сессии), сбои приёма (провал и досыл по часам).
+// Люди сразу на нескольких платформах (crossPlatformShare) делают итог unit=persons меньше суммы
+// сегментов; unit=installs добавляет installsExtra, «сегодня» обрезается долей уже прошедшего дня в TZ
+// приложения.
 import type { App, BreakdownDimension, Environment, Platform, Unit } from "@/lib/api/gen/model";
 import { addDays, todayIn } from "@/lib/period";
 import { DEMO_APPS } from "./apps";
 import {
   APP_MODELS,
   type AppModel,
+  type Campaign,
   type ChildWeights,
   DIM_PARENT,
+  INGEST_OUTAGES,
   type ParentDim,
+  type Releases,
   type SegmentModel,
   type Weights,
 } from "./catalog";
 import { jitter, pickWeighted, rand } from "./random";
-import { dayDiff, eachDay, localTime, weekdayIndex } from "./time";
+import { dayDiff, eachDay, HOUR_MS, localTime, weekdayIndex, zonedMidnight } from "./time";
 
 // Точка отсчёта тренда: значения прошлых дней не зависят от «сейчас».
 const TREND_ANCHOR = "2026-10-14";
@@ -66,8 +72,9 @@ export type Scope = {
   env: Environment;
   unit: Unit;
   filters: Filters;
-  // Доля аудитории каждого сегмента под фильтрами; null — платформа сегмента не выбрана.
-  shares: readonly (number | null)[];
+  // Доля аудитории каждого сегмента под фильтрами ОС (страны и версии — по дням); null — платформа
+  // сегмента не выбрана.
+  osShares: readonly (number | null)[];
   now: number;
   today: string;
   cache: Map<string, SegmentDay[]>;
@@ -84,7 +91,7 @@ export function makeScope(
     env: opts.env ?? "production",
     unit: opts.unit ?? "persons",
     filters,
-    shares: demo.model.segments.map((seg) => segmentShare(seg, filters)),
+    osShares: demo.model.segments.map((seg) => osShare(seg, filters)),
     now,
     today: todayIn(demo.app.timezone, new Date(now)),
     cache: new Map(),
@@ -95,7 +102,7 @@ export function withFilters(scope: Scope, filters: Filters): Scope {
   return {
     ...scope,
     filters,
-    shares: scope.demo.model.segments.map((seg) => segmentShare(seg, filters)),
+    osShares: scope.demo.model.segments.map((seg) => osShare(seg, filters)),
     cache: new Map(),
   };
 }
@@ -103,7 +110,7 @@ export function withFilters(scope: Scope, filters: Filters): Scope {
 // scopePlatforms — платформы сегментов, которые проходят фильтр platform, в порядке каталога.
 export function scopePlatforms(scope: Scope): Platform[] {
   return scope.demo.model.segments
-    .filter((_, i) => scope.shares[i] !== null)
+    .filter((_, i) => scope.osShares[i] !== null)
     .map((s) => s.platform);
 }
 
@@ -124,6 +131,7 @@ function childWeights(children: ChildWeights, parent: string): Weights {
 }
 
 // dimEntries — доли значений измерения в сегменте (сумма 1); у дочерних измерений — по родителю.
+// Версии и страны — на TREND_ANCHOR (по дням — versionEntries и countryDay).
 export function dimEntries(seg: SegmentModel, dim: BreakdownDimension): DimEntry[] {
   let byDim = entriesCache.get(seg);
   if (!byDim) {
@@ -135,7 +143,9 @@ export function dimEntries(seg: SegmentModel, dim: BreakdownDimension): DimEntry
   let out: DimEntry[];
   if (dim === "platform") {
     out = [{ value: seg.platform, parent: null, weight: 1 }];
-  } else if (dim === "os_name" || dim === "country" || dim === "app_version") {
+  } else if (dim === "app_version") {
+    out = versionEntries(seg, TREND_ANCHOR);
+  } else if (dim === "os_name" || dim === "country") {
     out = normalized(seg.dims[dim]);
   } else {
     const parent = DIM_PARENT[dim] ?? "os_name";
@@ -161,14 +171,19 @@ function chosenShare(entries: readonly DimEntry[], chosen: readonly string[]): n
   return entries.filter((e) => chosen.includes(e.value)).reduce((s, e) => s + e.weight, 0);
 }
 
-// groupShare — доля сегмента по родителю (ОС, страна) и его дочерним измерениям: дочерние значения
-// независимы внутри значения родителя.
-function groupShare(seg: SegmentModel, filters: Filters, parent: ParentDim): number {
+// groupShare — доля сегмента по родителю (ОС, страна) с долями entries и его дочерним измерениям:
+// дочерние значения независимы внутри значения родителя.
+function groupShare(
+  seg: SegmentModel,
+  filters: Filters,
+  parent: ParentDim,
+  entries: readonly DimEntry[],
+): number {
   const own = filters[parent] ?? [];
   const children = CHILDREN[parent].filter((c) => (filters[c] ?? []).length > 0);
   if (own.length === 0 && children.length === 0) return 1;
   let share = 0;
-  for (const p of dimEntries(seg, parent)) {
+  for (const p of entries) {
     if (own.length > 0 && !own.includes(p.value)) continue;
     let w = p.weight;
     for (const c of children) {
@@ -179,14 +194,179 @@ function groupShare(seg: SegmentModel, filters: Filters, parent: ParentDim): num
   return share;
 }
 
-function segmentShare(seg: SegmentModel, filters: Filters): number | null {
+// osShare — доля сегмента под фильтрами ОС (не меняется со временем); null — платформа не выбрана.
+function osShare(seg: SegmentModel, filters: Filters): number | null {
   const platforms = filters.platform ?? [];
   if (platforms.length > 0 && !platforms.includes(seg.platform)) return null;
-  const versions = filters.app_version ?? [];
-  return (
-    groupShare(seg, filters, "os_name") *
-    groupShare(seg, filters, "country") *
-    (versions.length > 0 ? chosenShare(dimEntries(seg, "app_version"), versions) : 1)
+  return groupShare(seg, filters, "os_name", dimEntries(seg, "os_name"));
+}
+
+// countryOnly — доля людей страны country под фильтрами страны, города и языка.
+function countryOnly(seg: SegmentModel, filters: Filters, country: string): number {
+  const own = filters.country ?? [];
+  if (own.length > 0 && !own.includes(country)) return 0;
+  let share = 1;
+  for (const c of CHILDREN.country) {
+    const chosen = filters[c] ?? [];
+    if (chosen.length > 0) {
+      share *= chosenShare(normalized(childWeights(seg.dims[c], country)), chosen);
+    }
+  }
+  return share;
+}
+
+// --- сюжеты: версии, страны, календарь, кампании, сбои ---
+
+// adoption — доля аудитории, обновившейся за days дней после выхода версии (половина — за halfDays).
+function adoption(days: number, halfDays: number): number {
+  return days < 0 ? 0 : 1 / (1 + Math.exp((4 * (halfDays - days)) / halfDays));
+}
+
+// chain — доли аудитории на i-й версии и новее (i = 0…last, у первой — 1). Кто обновляется после
+// выхода следующей версии, получает её: bases[i] — доля на (i−1)-й версии и новее в день выхода i-й.
+function chain(rel: Releases, bases: readonly number[], day: string, last: number): number[] {
+  const out = [1];
+  for (let i = 1; i <= last; i++) {
+    const d = dayDiff(rel.versions[i]?.[1] ?? day, day);
+    if (d < 0) {
+      out.push(0);
+      continue;
+    }
+    const base = bases[i] ?? 0;
+    out.push((out[i - 1] ?? 0) - base + base * adoption(d, rel.halfDays));
+  }
+  return out;
+}
+
+const releaseBases = new WeakMap<Releases, number[]>();
+
+function atLeast(rel: Releases, day: string): number[] {
+  let bases = releaseBases.get(rel);
+  if (!bases) {
+    bases = [1];
+    for (let i = 1; i < rel.versions.length; i++) {
+      bases.push(chain(rel, bases, rel.versions[i]?.[1] ?? day, i - 1)[i - 1] ?? 0);
+    }
+    releaseBases.set(rel, bases);
+  }
+  return chain(rel, bases, day, rel.versions.length - 1);
+}
+
+function versionSharesAt(rel: Releases, day: string): number[] {
+  const up = atLeast(rel, day);
+  return up.map((v, i) => v - (up[i + 1] ?? 0));
+}
+
+const versionCache = new WeakMap<SegmentModel, Map<string, DimEntry[]>>();
+
+// versionEntries — доли версий сегмента в день day (от старой к новой): отстающие (laggards) видят
+// релизы на lagDays дней позже остальных.
+export function versionEntries(seg: SegmentModel, day: string): DimEntry[] {
+  let byDay = versionCache.get(seg);
+  if (!byDay) {
+    byDay = new Map();
+    versionCache.set(seg, byDay);
+  }
+  const cached = byDay.get(day);
+  if (cached) return cached;
+  const rel = seg.dims.app_version;
+  const current = versionSharesAt(rel, day);
+  const late = versionSharesAt(rel, addDays(day, -rel.lagDays));
+  const out = rel.versions.map(([value], i) => ({
+    value,
+    parent: null,
+    weight: (1 - rel.laggards) * (current[i] ?? 0) + rel.laggards * (late[i] ?? 0),
+  }));
+  byDay.set(day, out);
+  return out;
+}
+
+// releaseVersions — версии сегмента от новой к старой.
+export function releaseVersions(seg: SegmentModel): string[] {
+  return seg.dims.app_version.versions.map(([v]) => v).toReversed();
+}
+
+function bugFactor(model: AppModel, version: string, day: string): number {
+  return model.bugs
+    .filter((b) => b.version === version && day >= b.from && day < b.until)
+    .reduce((k, b) => k * b.durationFactor, 1);
+}
+
+// versionMix — доля выбранных версий сегмента в день day и множитель длительности их сессий.
+function versionMix(
+  model: AppModel,
+  seg: SegmentModel,
+  filters: Filters,
+  day: string,
+): { share: number; duration: number } {
+  const chosen = filters.app_version ?? [];
+  let share = 0;
+  let duration = 0;
+  for (const e of versionEntries(seg, day)) {
+    if (chosen.length > 0 && !chosen.includes(e.value)) continue;
+    share += e.weight;
+    duration += e.weight * bugFactor(model, e.value, day);
+  }
+  return { share: chosen.length > 0 ? share : 1, duration: share > 0 ? duration / share : 1 };
+}
+
+type CountryDay = { entries: DimEntry[]; scale: number };
+
+const countryCache = new WeakMap<SegmentModel, Map<string, CountryDay>>();
+
+// countryDay — доли стран сегмента в день day и доля его аудитории от итоговой (scale): страна рынка
+// набирает вес с нуля за rampDays дней после выхода.
+function countryDay(model: AppModel, seg: SegmentModel, day: string): CountryDay {
+  if (model.markets.length === 0) return { entries: dimEntries(seg, "country"), scale: 1 };
+  let byDay = countryCache.get(seg);
+  if (!byDay) {
+    byDay = new Map();
+    countryCache.set(seg, byDay);
+  }
+  const cached = byDay.get(day);
+  if (cached) return cached;
+  let full = 0;
+  let total = 0;
+  const weights = seg.dims.country.map(([value, w]) => {
+    const market = model.markets.find((m) => m.country === value);
+    const k = market
+      ? Math.min(1, Math.max(0, (dayDiff(market.launch, day) + 1) / market.rampDays))
+      : 1;
+    full += w;
+    total += w * k;
+    return [value, w * k] as const;
+  });
+  const out = {
+    entries: weights.map(([value, w]) => ({
+      value,
+      parent: null,
+      weight: total > 0 ? w / total : 0,
+    })),
+    scale: full > 0 ? total / full : 1,
+  };
+  byDay.set(day, out);
+  return out;
+}
+
+// seasonFactor — множитель календаря приложения в день day.
+function seasonFactor(model: AppModel, day: string): number {
+  let k = 1;
+  const year = Number(day.slice(0, 4));
+  for (const s of model.calendar) {
+    for (const y of [year - 1, year]) {
+      const start = `${y}-${s.from}`;
+      const end = `${s.to < s.from ? y + 1 : y}-${s.to}`;
+      if (day < start || day > end) continue;
+      const pos = (dayDiff(start, day) + 0.5) / (dayDiff(start, end) + 1);
+      k *= s.smooth ? 1 + (s.factor - 1) * Math.sin(Math.PI * pos) ** 2 : s.factor;
+    }
+  }
+  return k;
+}
+
+function campaignOf(model: AppModel, seg: SegmentModel, day: string): Campaign | undefined {
+  return model.campaigns.find(
+    (c) => c.platform === seg.platform && day >= c.from && day <= addDays(c.from, c.days - 1),
   );
 }
 
@@ -194,22 +374,23 @@ function segmentShare(seg: SegmentModel, filters: Filters): number | null {
 export function dimValues(scope: Scope, dim: BreakdownDimension): string[] {
   const out = new Set<string>();
   scope.demo.model.segments.forEach((seg, i) => {
-    if (scope.shares[i] === null) return;
+    if (scope.osShares[i] === null) return;
     for (const e of dimEntries(seg, dim)) out.add(e.value);
   });
   return [...out];
 }
 
-// versionShares — доли версий приложения по всем сегментам (вес сегмента — его базовый DAU).
-export function versionShares(model: AppModel): DimEntry[] {
+// versionShares — доли версий приложения в день day по всем сегментам (вес сегмента — его базовый DAU).
+export function versionShares(model: AppModel, day: string): DimEntry[] {
   const total = model.segments.reduce((s, seg) => s + seg.baseDau, 0);
   const byVersion = new Map<string, number>();
   for (const seg of model.segments) {
-    for (const e of dimEntries(seg, "app_version")) {
+    for (const e of versionEntries(seg, day)) {
       byVersion.set(e.value, (byVersion.get(e.value) ?? 0) + (e.weight * seg.baseDau) / total);
     }
   }
   return [...byVersion]
+    .filter(([, weight]) => weight > 0)
     .map(([value, weight]) => ({ value, parent: null, weight }))
     .sort((a, b) => b.weight - a.weight || b.value.localeCompare(a.value));
 }
@@ -242,8 +423,12 @@ export function sampleAttrs(seg: SegmentModel, next: () => number): InstallAttrs
   };
   for (const dim of SAMPLE_ORDER) {
     const parent = DIM_PARENT[dim];
-    const spec = seg.dims[dim];
-    const weights = parent ? childWeights(spec as ChildWeights, out[parent]) : (spec as Weights);
+    const weights: Weights =
+      dim === "app_version"
+        ? dimEntries(seg, dim).map((e) => [e.value, e.weight] as const)
+        : parent
+          ? childWeights(seg.dims[dim] as ChildWeights, out[parent])
+          : (seg.dims[dim] as Weights);
     out[dim] = pickWeighted(weights, next());
   }
   return out;
@@ -262,6 +447,47 @@ export function hourShares(seg: SegmentModel): number[] {
     shareCache.set(seg, shares);
   }
   return shares;
+}
+
+type HourProfile = { shares: readonly number[]; factor: number };
+
+const profileCache = new Map<string, HourProfile>();
+
+// hourProfile — доли суток сегмента по часам дня day и доля дошедших событий дня (factor): сбой приёма
+// оставляет в часах сбоя residual, resend потерянного досылается в следующие часы того же дня.
+export function hourProfile(demo: DemoApp, seg: SegmentModel, day: string): HourProfile {
+  const base = hourShares(seg);
+  const tz = demo.app.timezone;
+  const start = zonedMidnight(day, tz);
+  const end = start + 24 * HOUR_MS;
+  const outages = INGEST_OUTAGES.filter(
+    (o) => Date.parse(o.from) < end && Date.parse(o.to) + o.resendHours * HOUR_MS > start,
+  );
+  if (outages.length === 0) return { shares: base, factor: 1 };
+  const key = `${demo.app.id}:${seg.platform}|${day}`;
+  const cached = profileCache.get(key);
+  if (cached) return cached;
+  const k = base.map(() => 1);
+  for (const o of outages) {
+    const from = Date.parse(o.from);
+    const to = Date.parse(o.to);
+    let lost = 0;
+    const resendHours: number[] = [];
+    base.forEach((share, h) => {
+      const t = start + h * HOUR_MS;
+      const down = Math.max(0, Math.min(t + HOUR_MS, to) - Math.max(t, from)) / HOUR_MS;
+      k[h] = (k[h] ?? 1) - down * (1 - o.residual);
+      lost += share * down * (1 - o.residual);
+      if (t >= to && t < to + o.resendHours * HOUR_MS) resendHours.push(h);
+    });
+    const target = resendHours.reduce((s, h) => s + (base[h] ?? 0), 0);
+    for (const h of resendHours) k[h] = (k[h] ?? 1) + (lost * o.resend) / target;
+  }
+  const weighted = base.map((share, h) => share * (k[h] ?? 1));
+  const factor = weighted.reduce((s, w) => s + w, 0);
+  const out = { shares: weighted.map((w) => w / factor), factor };
+  profileCache.set(key, out);
+  return out;
 }
 
 // dayFraction — доля суточной активности сегмента, уже прошедшая к now в TZ приложения.
@@ -301,10 +527,18 @@ function rawDay(demo: DemoApp, seg: SegmentModel, env: Environment, day: string)
       const trend = Math.max(0.25, 1 + (seg.growthPerYear * t) / 365);
       const wave = 1 + 0.035 * Math.sin((2 * Math.PI * t) / 47 + rand(id, "phase") * 2 * Math.PI);
       active =
-        seg.baseDau * trend * ramp * wave * (seg.weekly[wd] ?? 1) * jitter(0.06, id, env, day, "a");
+        seg.baseDau *
+        trend *
+        ramp *
+        wave *
+        (seg.weekly[wd] ?? 1) *
+        jitter(0.06, id, env, day, "a") *
+        seasonFactor(demo.model, day) *
+        countryDay(demo.model, seg, day).scale;
     } else {
       active = seg.devDau * ramp * (weekend ? 0.35 : 1) * jitter(0.5, id, env, day, "a");
     }
+    active *= hourProfile(demo, seg, day).factor;
     const [minNew, maxNew] = seg.newShare;
     // Пока платформа набирает аудиторию, новых больше обычного.
     const newShare = (minNew + (maxNew - minNew) * rand(id, env, day, "n")) * (2 - ramp);
@@ -323,13 +557,15 @@ function rawDay(demo: DemoApp, seg: SegmentModel, env: Environment, day: string)
 }
 
 // SegmentDay — сегмент за день в scope: all — активные платформы без остальных фильтров (для
-// пересечения людей), active/new — с фильтрами и unit, sessions — дробные.
+// пересечения людей), active/new — с фильтрами и unit (с новыми из кампании), sessions — дробные,
+// retained — new с множителем удержания кампании.
 type SegmentDay = {
   seg: SegmentModel;
   all: number;
   active: number;
   new: number;
   sessions: number;
+  retained: number;
   durationMs: number;
   medianMs: number;
 };
@@ -339,22 +575,35 @@ function segmentDays(scope: Scope, day: string, full: boolean): SegmentDay[] {
   const cached = scope.cache.get(key);
   if (cached) return cached;
   const out: SegmentDay[] = [];
-  scope.demo.model.segments.forEach((seg, i) => {
-    const share = scope.shares[i];
-    if (share === null || share === undefined) return;
+  const model = scope.demo.model;
+  model.segments.forEach((seg, i) => {
+    const os = scope.osShares[i];
+    if (os === null || os === undefined) return;
     const raw = rawDay(scope.demo, seg, scope.env, day);
     if (!raw) return;
     const f = !full && day === scope.today ? dayFraction(scope, seg) : 1;
     const unit = scope.unit === "installs" ? 1 + seg.installsExtra : 1;
-    const all = raw.active * f ** 0.75;
+    const versions = versionMix(model, seg, scope.filters, day);
+    const share =
+      os *
+      groupShare(seg, scope.filters, "country", countryDay(model, seg, day).entries) *
+      versions.share;
+    // Новые из кампании — сверх обычных и все из страны кампании.
+    const campaign = scope.env === "production" ? campaignOf(model, seg, day) : undefined;
+    const extra = campaign ? raw.new * campaign.newBoost : 0;
+    const extraShare = campaign
+      ? os * countryOnly(seg, scope.filters, campaign.country) * versions.share
+      : 0;
+    const created = (raw.new * share + extra * extraShare) * f * unit;
     out.push({
       seg,
-      all,
-      active: all * share * unit,
-      new: raw.new * f * share * unit,
-      sessions: raw.sessions * f * share,
-      durationMs: raw.durationMs,
-      medianMs: raw.medianMs,
+      all: (raw.active + extra) * f ** 0.75,
+      active: (raw.active * share + extra * extraShare) * f ** 0.75 * unit,
+      new: created,
+      sessions: (raw.sessions * share + (extra * extraShare * raw.sessions) / raw.active) * f,
+      retained: created * (campaign?.retention ?? 1),
+      durationMs: raw.durationMs * versions.duration,
+      medianMs: raw.medianMs * versions.duration,
     });
   });
   scope.cache.set(key, out);
@@ -431,7 +680,7 @@ export function hourStats(scope: Scope, day: string, hour: number, start: number
   const out = combine(
     scope,
     segmentDays(scope, day, true).map((d) => {
-      const share = hourShares(d.seg)[hour] ?? 0;
+      const share = hourProfile(scope.demo, d.seg, day).shares[hour] ?? 0;
       const k = Math.min(1, HOURLY_UNIQUE_RATIO * share) * unique;
       return {
         all: d.all * k,
@@ -458,9 +707,21 @@ export function hourStats(scope: Scope, day: string, hour: number, start: number
 // hourSessions — ожидаемое (дробное) число сессий часа hour дня day целиком.
 export function hourSessions(scope: Scope, day: string, hour: number): number {
   return segmentDays(scope, day, true).reduce(
-    (s, d) => s + d.sessions * (hourShares(d.seg)[hour] ?? 0),
+    (s, d) => s + d.sessions * (hourProfile(scope.demo, d.seg, day).shares[hour] ?? 0),
     0,
   );
+}
+
+// versionSessionShare — доля сессий версии version среди сессий scope за день day.
+export function versionSessionShare(scope: Scope, day: string, version: string): number {
+  let all = 0;
+  let matched = 0;
+  for (const d of segmentDays(scope, day, true)) {
+    all += d.sessions;
+    matched +=
+      d.sessions * (versionEntries(d.seg, day).find((e) => e.value === version)?.weight ?? 0);
+  }
+  return all > 0 ? matched / all : 0;
 }
 
 // uniqueActive — уникальные за from…to: средний DAU дней с данными × n^stickiness (n = 1 → DAU).
@@ -531,7 +792,8 @@ function segmentRates(
   return out;
 }
 
-// retentionRates — доли когорты приложения: кривые сегментов, взвешенные новыми когорты в сегменте.
+// retentionRates — доли когорты приложения: кривые сегментов, взвешенные новыми когорты в сегменте;
+// когорты дней кампании удерживаются хуже (retained).
 export function retentionRates(
   scope: Scope,
   cohortStart: string,
@@ -540,13 +802,14 @@ export function retentionRates(
 ): number[] {
   const step = granularity === "week" ? 7 : 1;
   const weights = new Map<SegmentModel, number>();
+  let total = 0;
   for (const day of eachDay(cohortStart, addDays(cohortStart, step - 1))) {
     if (day > scope.today) break;
     for (const d of segmentDays(scope, day, false)) {
-      weights.set(d.seg, (weights.get(d.seg) ?? 0) + d.new);
+      weights.set(d.seg, (weights.get(d.seg) ?? 0) + d.retained);
+      total += d.new;
     }
   }
-  const total = [...weights.values()].reduce((s, w) => s + w, 0);
   const out: number[] = new Array(periods + 1).fill(0);
   if (total <= 0) return out.map((_, p) => (p === 0 ? 1 : 0));
   for (const [seg, w] of weights) {

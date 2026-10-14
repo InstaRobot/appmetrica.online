@@ -1,5 +1,6 @@
 // «Живые» отчёты демо-режима: realtime (S-07) и здоровье интеграции (S-10). События лежат на сетке
-// абсолютных минут, поэтому при опросе каждые 5 с лента сдвигается, а не перегенерируется.
+// абсолютных минут, поэтому при опросе каждые 5 с лента сдвигается, а не перегенерируется. Отказы —
+// фоновая доля rejectRate и всплески каталога (rejectBursts).
 import type {
   Environment,
   IntegrationHealth,
@@ -9,6 +10,7 @@ import type {
   Realtime,
   RecentEvent,
 } from "@/lib/api/gen/model";
+import type { RejectBurst } from "./catalog";
 import {
   type DemoApp,
   dayStats,
@@ -16,6 +18,7 @@ import {
   hourSessions,
   makeScope,
   type Scope,
+  versionSessionShare,
   versionShares,
 } from "./model";
 import { appPersons, POOL_SIZE } from "./profiles";
@@ -141,8 +144,17 @@ const REJECTION_MESSAGES: Readonly<Record<string, string>> = {
   app_archived: "Приложение в архиве, приём событий остановлен.",
 };
 
+const APP_VERSION_NOT_STRING = "context.app_version должен быть строкой.";
+
 // examplePayload — payload_sample отказа в каноничном виде ingest: без IP, user_id-PII уже заменён.
-function examplePayload(demo: DemoApp, code: string, at: number, version: string): string {
+// burst с версией — релиз, который шлёт context.app_version числом.
+function examplePayload(
+  demo: DemoApp,
+  code: string,
+  at: number,
+  version: string,
+  burst: RejectBurst | undefined,
+): string {
   const id = demo.app.id;
   const seg = demo.model.segments[0];
   const os = seg ? (dimEntries(seg, "os_name")[0]?.value ?? "") : "";
@@ -161,7 +173,7 @@ function examplePayload(demo: DemoApp, code: string, at: number, version: string
       event.timestamp = isoUtc(at - 9 * 24 * HOUR_MS - 3_812_000);
       break;
     case "invalid_field":
-      event.timestamp = "14.10.2026 12:03:11";
+      if (!burst?.version) event.timestamp = "14.10.2026 12:03:11";
       break;
     case "missing_field":
       delete event.session_id;
@@ -176,7 +188,7 @@ function examplePayload(demo: DemoApp, code: string, at: number, version: string
   event.context = {
     platform: demo.app.platform,
     os_name: os,
-    app_version: version,
+    app_version: burst?.version ? Number.parseFloat(burst.version) : version,
     environment: "production",
   };
   if (code === "app_archived") {
@@ -194,7 +206,10 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
   const hourStart = now - (now % 1000) - (local.minute * 60 + local.second) * 1000;
   const first = hourStart - (hours - 1) * HOUR_MS;
   const archived = demo.lastDay !== null;
+  let baseTotal = 0;
 
+  const bursts = demo.model.rejectBursts;
+  const burstTotals: number[] = bursts.map(() => 0);
   let lastRejectedHour: number | null = null;
   const hourly: IntegrationHour[] = [];
   for (let i = 0; i < hours; i++) {
@@ -204,11 +219,20 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
     const events =
       (hourSessions(prod, at.date, at.hour) + hourSessions(dev, at.date, at.hour)) * 2 * elapsed;
     const accepted = Math.round(events * jitter(0.1, id, t, "acc"));
-    const rejected = archived
+    let rejected = archived
       ? roundRandom(1.4 * elapsed * jitter(1, id, t, "rej"), id, t, "rej")
       : roundRandom(accepted * demo.model.rejectRate * jitter(0.8, id, t, "rej"), id, t, "rej");
+    const base = rejected;
+    bursts.forEach((b, j) => {
+      if (at.date < b.from || at.date >= b.until) return;
+      const share = b.version ? versionSessionShare(prod, at.date, b.version) : 1;
+      const n = roundRandom(accepted * b.rate * share * jitter(0.3, id, t, b.code), id, t, b.code);
+      burstTotals[j] = (burstTotals[j] ?? 0) + n;
+      rejected += n;
+    });
     if (rejected > 0) lastRejectedHour = t;
     hourly.push({ hour: formatZoned(t, tz), accepted, rejected });
+    baseTotal += base;
   }
   const acceptedTotal = hourly.reduce((s, h) => s + h.accepted, 0);
   const rejectedTotal = hourly.reduce((s, h) => s + h.rejected, 0);
@@ -220,26 +244,38 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
         Math.floor(
           rand(id, "last-reject", lastRejectedHour) * Math.min(HOUR_MS, now - lastRejectedHour),
         );
-  const versions = versionShares(demo.model).slice(0, 4);
+  const versions = versionShares(demo.model, local.date).slice(0, 4);
   const oldest = versions.at(-1)?.value ?? "";
 
-  const codes = demo.model.rejections;
-  const reasonCounts = splitTotal(
-    rejectedTotal,
-    codes.map(([, w]) => w),
+  const codes = demo.model.rejections.map(([code]) => code);
+  for (const b of bursts) if (!codes.includes(b.code)) codes.push(b.code);
+  const baseCounts = splitTotal(
+    baseTotal,
+    demo.model.rejections.map(([, w]) => w),
   );
   const reasons: IntegrationReason[] = codes
-    .map(([code], i) => {
+    .map((code, i) => {
+      const own = baseCounts[i] ?? 0;
+      // Пример — от всплеска, если его отказов больше фоновых.
+      const burst = bursts
+        .map((b, j) => ({ b, n: burstTotals[j] ?? 0 }))
+        .filter((x) => x.b.code === code && x.n > own)
+        .sort((x, y) => y.n - x.n)[0]?.b;
+      const fromBursts = bursts.reduce(
+        (s, b, j) => s + (b.code === code ? (burstTotals[j] ?? 0) : 0),
+        0,
+      );
       const lastSeen = Math.max(
         first,
         latestReject - i * 7 * MINUTE_MS - Math.floor(rand(id, code, "seen") * 5 * MINUTE_MS),
       );
       return {
         code,
-        count: reasonCounts[i] ?? 0,
+        count: own + fromBursts,
         last_seen: isoUtc(lastSeen),
-        example_payload: examplePayload(demo, code, lastSeen, oldest),
-        example_message: REJECTION_MESSAGES[code] ?? "",
+        example_payload: examplePayload(demo, code, lastSeen, oldest, burst),
+        example_message:
+          burst?.version !== undefined ? APP_VERSION_NOT_STRING : (REJECTION_MESSAGES[code] ?? ""),
       };
     })
     .filter((r) => r.count > 0)
@@ -249,8 +285,12 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
     acceptedTotal,
     versions.map((v) => v.weight),
   );
+  // Отказы всплесков с версией — у этой версии, остальные — больше у старых версий.
+  const versionBursts = versions.map((v) =>
+    bursts.reduce((s, b, j) => s + (b.version === v.value ? (burstTotals[j] ?? 0) : 0), 0),
+  );
   const rejectedByVersion = splitTotal(
-    rejectedTotal,
+    rejectedTotal - versionBursts.reduce((s, n) => s + n, 0),
     versions.map((v, i) => v.weight * (i + 1) ** 2),
   );
   const freshest = archived
@@ -259,7 +299,7 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
   const versionRows: IntegrationVersion[] = versions.map((v, i) => ({
     app_version: v.value,
     accepted: acceptedByVersion[i] ?? 0,
-    rejected: rejectedByVersion[i] ?? 0,
+    rejected: (rejectedByVersion[i] ?? 0) + (versionBursts[i] ?? 0),
     last_seen: isoUtc(
       Math.max(first, freshest - i * (40 + Math.floor(rand(id, v.value, "seen") * 30)) * MINUTE_MS),
     ),
