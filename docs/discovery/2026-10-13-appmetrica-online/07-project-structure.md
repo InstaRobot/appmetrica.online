@@ -128,7 +128,7 @@ web/src/components/               # имена и props — источник и�
 ├── realtime/
 │   └── realtime-counter.tsx  per-minute-chart.tsx  event-feed.tsx          # S-07
 ├── profiles/
-│   └── profile-search.tsx  profile-card.tsx  installs-table.tsx  sessions-table.tsx  deletion-status-badge.tsx  # S-08, S-09
+│   └── profile-search-panel.tsx  profile-search.tsx  profile-panel.tsx  profile-card.tsx  installs-table.tsx  sessions-table.tsx  deletion-status-badge.tsx  profile-delete-dialog.tsx  # S-08, S-09
 ├── integration/
 │   └── integration-panel.tsx  integration-onboarding.tsx  snippet-tabs.tsx  waiting-for-first-event.tsx  hourly-ingest-chart.tsx  rejection-reasons-table.tsx  versions-health-table.tsx  rejection-rate-warning.tsx  # S-10
 ├── apps/
@@ -308,7 +308,7 @@ web/
     ├── global-setup.ts                         # passkey-link → виртуальный аутентификатор CDP → e2e/.auth/owner.json
     ├── helpers/webauthn.ts  helpers/ingest.ts  # регистрация виртуального ключа; отправка батчей в :8081
     ├── auth.spec.ts  onboarding.spec.ts  portfolio.spec.ts  audience.spec.ts  retention.spec.ts
-    ├── realtime.spec.ts  profile-deletion.spec.ts  settings.spec.ts
+    ├── realtime.spec.ts  profiles-deletion.spec.ts  settings.spec.ts
     └── a11y.spec.ts                            # @axe-core/playwright на S-01, S-03, S-05, S-06, S-10, S-12
 ```
 

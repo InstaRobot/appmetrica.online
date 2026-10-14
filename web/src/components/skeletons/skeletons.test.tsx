@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntegrationSkeleton } from "./integration-skeleton";
 import { KpiSkeleton } from "./kpi-skeleton";
+import { ProfileSkeleton } from "./profile-skeleton";
 import { RealtimeSkeleton } from "./realtime-skeleton";
 import { RetentionSkeleton } from "./retention-skeleton";
 import { TableSkeleton } from "./table-skeleton";
@@ -41,5 +42,13 @@ describe("skeletons", () => {
 
     expect(screen.getByRole("status", { name: "Загрузка…" })).toBeInTheDocument();
     expect(container.querySelector("[data-skeleton-code]")).toHaveClass("h-80");
+  });
+
+  it("renders the profile card and two tables", () => {
+    const { container } = render(<ProfileSkeleton />);
+
+    expect(screen.getAllByRole("status", { name: "Загрузка…" })).toHaveLength(1);
+    expect(container.querySelectorAll("[data-skeleton-card]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-skeleton-row]")).toHaveLength(7);
   });
 });

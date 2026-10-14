@@ -32,6 +32,13 @@ const GLYPHS: Record<Platform, (props: PlatformGlyphProps) => React.JSX.Element>
   other: OtherIcon,
 };
 
+// Подпись платформы устройства: известное значение — по-русски, неизвестное — как есть, пустое — «—».
+export function platformLabel(platform: string): string {
+  return Object.hasOwn(PLATFORM_LABELS, platform)
+    ? PLATFORM_LABELS[platform as Platform]
+    : platform || "—";
+}
+
 type PlatformIconProps = { platform: Platform | string; className?: string; title?: string };
 
 // Иконка платформы приложения (`app.platform`) или устройства (`context.platform`); неизвестное

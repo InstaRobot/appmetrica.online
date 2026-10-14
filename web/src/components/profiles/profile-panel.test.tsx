@@ -62,7 +62,8 @@ describe("ProfilePanel", () => {
       "href",
       `/apps/${APP_ID}/profiles`,
     );
-    expect(screen.getByRole("textbox", { name: "person_key" })).toHaveValue("u:a/b c");
+    expect(screen.getByRole("button", { name: "Копировать person_key" })).toBeInTheDocument();
+    expect(screen.getByText("user_id:").parentElement).toHaveTextContent("a/b c");
     expect(screen.getByText(/Первый визит/).parentElement).toHaveTextContent("3 мар 2026");
 
     const installs = screen.getByRole("table", { name: "Устройства" });

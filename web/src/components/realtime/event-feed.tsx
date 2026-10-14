@@ -3,7 +3,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
-import { PLATFORM_LABELS } from "@/components/common/platform-icon";
+import { platformLabel } from "@/components/common/platform-icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import type { RecentEvent } from "@/lib/api/gen/model";
@@ -26,12 +26,6 @@ const COLUMNS = [
   "Install",
   "Человек",
 ] as const;
-
-function platformLabel(platform: string): string {
-  return Object.hasOwn(PLATFORM_LABELS, platform)
-    ? PLATFORM_LABELS[platform as keyof typeof PLATFORM_LABELS]
-    : platform || "—";
-}
 
 function place(e: RecentEvent): string {
   if (!e.country) return "—";

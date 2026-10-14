@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Platform } from "@/lib/api/gen/model";
-import { PLATFORM_LABELS, PlatformIcon } from "./platform-icon";
+import { PLATFORM_LABELS, PlatformIcon, platformLabel } from "./platform-icon";
 
 describe("PlatformIcon", () => {
   it.each(Object.values(Platform))("renders labelled icon for %s", (platform) => {
@@ -34,5 +34,14 @@ describe("PlatformIcon", () => {
     expect(svg).toHaveAttribute("aria-hidden", "true");
     expect(svg).toHaveClass("size-5");
     expect(screen.queryByRole("img")).toBeNull();
+  });
+});
+
+describe("platformLabel", () => {
+  it("labels known, unknown and empty platforms", () => {
+    expect(platformLabel("ios")).toBe("iOS");
+    expect(platformLabel("server")).toBe("Бэкенд");
+    expect(platformLabel("tvos")).toBe("tvos");
+    expect(platformLabel("")).toBe("—");
   });
 });

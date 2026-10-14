@@ -38,7 +38,7 @@ function mockSearch(respond: (q: string) => ProfileSummary[] | { status: number 
 
 function renderPanel(searchParams = "", onUrlUpdate: OnUrlUpdateFunction = vi.fn()) {
   return renderWithClient(<ProfileSearchPanel appId={APP_ID} />, {
-    wrapper: withNuqsTestingAdapter({ searchParams, onUrlUpdate }),
+    wrapper: withNuqsTestingAdapter({ searchParams, onUrlUpdate, hasMemory: true }),
   });
 }
 

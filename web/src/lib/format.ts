@@ -194,6 +194,12 @@ export function formatClock(ts: string, timeZone: string): string {
   return formatInstant(ts, timeZone, true);
 }
 
+// Дата и минута в timeZone: «12 окт 2026 14:01» (профиль S-09).
+export function formatDateTime(ts: string, timeZone: string): string {
+  const date = formatDate(ts, timeZone);
+  return date === DASH ? DASH : `${date} ${formatTime(ts, timeZone)}`;
+}
+
 // Длинный идентификатор → «первые4…последние4» (14-ux-ui-spec.md S-07); короткий — как есть.
 export function shortId(value: string): string {
   if (!value) return DASH;

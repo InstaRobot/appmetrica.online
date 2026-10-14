@@ -5,6 +5,7 @@ import {
   formatDate,
   formatDateRange,
   formatDateShort,
+  formatDateTime,
   formatDelta,
   formatDuration,
   formatInt,
@@ -146,5 +147,17 @@ describe("integration formatting", () => {
     expect(formatRejectionRate(0, 10)).toBe(`0${NBSP}%`);
     expect(formatRejectionRate(5, 0)).toBe(`100${NBSP}%`);
     expect(formatRejectionRate(0, 0)).toBe("—");
+  });
+});
+
+describe("profile formatting", () => {
+  it("formats date and minute in the app timezone", () => {
+    expect(formatDateTime("2026-10-12T11:01:30Z", "Europe/Moscow")).toBe(
+      `12${NBSP}окт${NBSP}2026 14:01`,
+    );
+    expect(formatDateTime("2026-10-12T22:30:00Z", "Europe/Moscow")).toBe(
+      `13${NBSP}окт${NBSP}2026 01:30`,
+    );
+    expect(formatDateTime("nope", "UTC")).toBe("—");
   });
 });

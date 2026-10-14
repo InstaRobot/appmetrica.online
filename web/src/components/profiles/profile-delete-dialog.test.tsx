@@ -27,7 +27,7 @@ vi.mock("sonner", () => ({ toast: toasts }));
 type MockOptions = {
   profile?: Profile;
   listed?: DeletionRequest[];
-  create?: (body: unknown) => HttpResponse<string> | Response;
+  create?: (body: unknown) => Response;
   poll?: () => DeletionRequest;
 };
 
@@ -111,7 +111,9 @@ describe("ProfileDeleteDialog", () => {
       expect(input).toHaveAccessibleDescription("Ошибка сервера. Повторите через минуту."),
     );
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Статус удаления" })).toHaveTextContent("—");
+    expect(screen.getByRole("group", { name: "Статус удаления", hidden: true })).toHaveTextContent(
+      "—",
+    );
   });
 
   it("disables deletion while a request is in progress", async () => {
@@ -164,7 +166,9 @@ describe("ProfileDeleteDialog", () => {
     });
     renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
 
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Данные удалены"));
+    await waitFor(() =>
+      expect(toasts.success).toHaveBeenCalledWith("Данные удалены", expect.anything()),
+    );
     expect(nav.push).not.toHaveBeenCalled();
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${APP_ID}/profiles`), {
       timeout: 3000,
