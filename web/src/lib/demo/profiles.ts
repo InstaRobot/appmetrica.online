@@ -11,7 +11,8 @@ import type {
 } from "@/lib/api/gen/model";
 import { addDays, todayIn } from "@/lib/period";
 import { DEMO_APP_IDS } from "./apps";
-import { type DemoApp, type InstallAttrs, sampleAttrs } from "./model";
+import type { SegmentModel } from "./catalog";
+import { type DemoApp, type InstallAttrs, sampleAttrs, segmentOf } from "./model";
 import { hexFrom, pickWeighted, rand, seeded, uuidFrom, type Weighted } from "./random";
 import { eachDay, HOUR_MS, isoUtc, maxDay, minDay, zonedMidnight } from "./time";
 
@@ -36,13 +37,14 @@ type Spec = {
 
 const CURATED: readonly Spec[] = [
   {
-    appId: DEMO_APP_IDS.notesIos,
+    appId: DEMO_APP_IDS.notes,
     userId: "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90",
-    label: "Активный пользователь: iPhone и iPad",
+    label: "Активный пользователь: iPhone и веб-версия",
     installs: [
       {
         id: "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
         attrs: {
+          platform: "ios",
           os_name: "iOS",
           os_version: "26.0.1",
           device_model: "iPhone17,3",
@@ -56,10 +58,11 @@ const CURATED: readonly Spec[] = [
       {
         id: "9b2e4d6f-8a1c-4e3b-a5d7-c9e1f3a5b7d9",
         attrs: {
-          os_name: "iPadOS",
-          os_version: "26.0.1",
-          device_model: "iPad14,3",
-          device_type: "tablet",
+          platform: "web",
+          os_name: "macOS",
+          os_version: "15.6.1",
+          device_model: "Macintosh",
+          device_type: "desktop",
           app_version: "3.4.0",
           country: "RU",
           city: "Moscow",
@@ -72,13 +75,14 @@ const CURATED: readonly Spec[] = [
     perDay: 2.6,
   },
   {
-    appId: DEMO_APP_IDS.notesIos,
+    appId: DEMO_APP_IDS.notes,
     userId: "user_48213",
     label: "Пользователь с одним устройством",
     installs: [
       {
         id: "3d5f7a9b-1c3e-4a5b-8c7d-9e1f2a3b4c5d",
         attrs: {
+          platform: "ios",
           os_name: "iOS",
           os_version: "18.6.2",
           device_model: "iPhone15,4",
@@ -95,36 +99,14 @@ const CURATED: readonly Spec[] = [
     perDay: 1.4,
   },
   {
-    appId: DEMO_APP_IDS.notesIos,
-    userId: null,
-    label: "Анонимная установка без user_id",
-    installs: [
-      {
-        id: "c4e6a8b0-2d4f-4a6b-9c8d-0e2f4a6b8c0d",
-        attrs: {
-          os_name: "iOS",
-          os_version: "17.7.2",
-          device_model: "iPhone12,1",
-          device_type: "phone",
-          app_version: "3.3.1",
-          country: "KZ",
-          city: "Almaty",
-          locale: "ru-KZ",
-        },
-      },
-    ],
-    since: "2026-09-21",
-    activity: 0.4,
-    perDay: 1.3,
-  },
-  {
-    appId: DEMO_APP_IDS.notesIos,
+    appId: DEMO_APP_IDS.notes,
     userId: "qa-tester-01",
     label: "Тестировщик: сессии development",
     installs: [
       {
         id: "e7a9c1e3-5b7d-4f9a-b1c3-d5e7f9a1b3c5",
         attrs: {
+          platform: "ios",
           os_name: "iOS",
           os_version: "26.0.1",
           device_model: "iPhone16,2",
@@ -142,36 +124,14 @@ const CURATED: readonly Spec[] = [
     devShare: 0.85,
   },
   {
-    appId: DEMO_APP_IDS.notesAndroid,
-    userId: "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
-    label: "Активный пользователь",
-    installs: [
-      {
-        id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-        attrs: {
-          os_name: "Android",
-          os_version: "15",
-          device_model: "SM-S928B",
-          device_type: "phone",
-          app_version: "3.4.0",
-          country: "RU",
-          city: "Kazan",
-          locale: "ru-RU",
-        },
-      },
-    ],
-    since: "2026-05-11",
-    activity: 0.85,
-    perDay: 2.4,
-  },
-  {
-    appId: DEMO_APP_IDS.notesAndroid,
+    appId: DEMO_APP_IDS.notes,
     userId: "user_10577",
-    label: "Телефон и планшет одного пользователя",
+    label: "Телефон и планшет на Android",
     installs: [
       {
         id: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
         attrs: {
+          platform: "android",
           os_name: "Android",
           os_version: "16",
           device_model: "Pixel 8",
@@ -185,6 +145,7 @@ const CURATED: readonly Spec[] = [
       {
         id: "3c4d5e6f-7a8b-4c9d-a0e1-2f3a4b5c6d7e",
         attrs: {
+          platform: "android",
           os_name: "Android",
           os_version: "14",
           device_model: "SM-X710",
@@ -201,13 +162,14 @@ const CURATED: readonly Spec[] = [
     perDay: 1.8,
   },
   {
-    appId: DEMO_APP_IDS.notesAndroid,
+    appId: DEMO_APP_IDS.notes,
     userId: null,
     label: "Анонимная установка без user_id",
     installs: [
       {
         id: "4d5e6f7a-8b9c-4dae-b1f2-3a4b5c6d7e8f",
         attrs: {
+          platform: "android",
           os_name: "Android",
           os_version: "13",
           device_model: "23129RAA4G",
@@ -222,29 +184,6 @@ const CURATED: readonly Spec[] = [
     since: "2026-09-02",
     activity: 0.3,
     perDay: 1.5,
-  },
-  {
-    appId: DEMO_APP_IDS.notesAndroid,
-    userId: "org/42",
-    label: "user_id со слешем",
-    installs: [
-      {
-        id: "5e6f7a8b-9cad-4ebf-82a3-4b5c6d7e8f90",
-        attrs: {
-          os_name: "Android",
-          os_version: "15",
-          device_model: "SM-A556E",
-          device_type: "phone",
-          app_version: "3.4.0",
-          country: "BY",
-          city: "Minsk",
-          locale: "ru-BY",
-        },
-      },
-    ],
-    since: "2026-08-18",
-    activity: 0.5,
-    perDay: 1.7,
   },
   {
     appId: DEMO_APP_IDS.site,
@@ -458,7 +397,14 @@ export function demoProfileExamples(appId: string): DemoProfileExample[] {
 
 // --- люди приложения ---
 
-export type DemoInstall = InstallAttrs & { installId: string; previousVersion: string };
+// launch — день запуска платформы установки: раньше у неё нет сессий.
+export type DemoInstall = InstallAttrs & {
+  installId: string;
+  previousVersion: string;
+  launch: string;
+  avgDurationSec: number;
+  hours: Weighted<number>;
+};
 
 export type DemoPerson = {
   key: string;
@@ -474,17 +420,33 @@ export type DemoPerson = {
 export const POOL_SIZE = 300;
 // Дата, от которой отсчитаны начала пула: история профилей не зависит от «сейчас».
 const POOL_ANCHOR = "2026-10-14";
+// Доля людей пула со второй установкой на другой платформе приложения.
+const CROSS_PLATFORM_SHARE = 0.5;
 
-function previousVersion(demo: DemoApp, current: string): string {
-  const spec = demo.model.dims.app_version;
-  const versions = "weights" in spec ? spec.weights.map(([v]) => v) : [];
-  const i = versions.indexOf(current);
-  return versions[i + 1] ?? current;
+const hourWeights = new WeakMap<SegmentModel, Weighted<number>>();
+
+function hoursOf(seg: SegmentModel): Weighted<number> {
+  let w = hourWeights.get(seg);
+  if (!w) {
+    w = seg.hourly.map((weight, hour) => [hour, weight] as const);
+    hourWeights.set(seg, w);
+  }
+  return w;
 }
 
 function install(demo: DemoApp, id: string, overrides: Partial<InstallAttrs>): DemoInstall {
-  const attrs = { ...sampleAttrs(demo.model, seeded(demo.app.id, "install", id)), ...overrides };
-  return { ...attrs, installId: id, previousVersion: previousVersion(demo, attrs.app_version) };
+  const seg = segmentOf(demo, overrides.platform ?? "") ?? demo.model.segments[0];
+  if (!seg) throw new Error(`demo app ${demo.app.id} has no segments`);
+  const attrs = { ...sampleAttrs(seg, seeded(demo.app.id, "install", id)), ...overrides };
+  const versions = seg.dims.app_version.map(([v]) => v);
+  return {
+    ...attrs,
+    installId: id,
+    previousVersion: versions[versions.indexOf(attrs.app_version) + 1] ?? attrs.app_version,
+    launch: maxDay(demo.firstDay, seg.launch),
+    avgDurationSec: seg.avgDurationSec,
+    hours: hoursOf(seg),
+  };
 }
 
 function poolUserId(demo: DemoApp, i: number): string {
@@ -499,15 +461,32 @@ function poolUserId(demo: DemoApp, i: number): string {
   }
 }
 
+// poolPerson — человек пула: основная платформа — по базовому DAU сегментов; вторая установка — то же
+// устройство другой платформы или второе устройство той же.
 function poolPerson(demo: DemoApp, i: number): DemoPerson {
   const id = demo.app.id;
   const r = seeded(id, "pool", i);
+  const segments = demo.model.segments;
+  const platforms: Weighted<string> = segments.map((s) => [s.platform, s.baseDau] as const);
+  const primary = pickWeighted(platforms, r());
   const linked = demo.app.platform === "bot" || r() < 0.68;
   const twoDevices = linked && r() < 0.15;
-  const installs = [install(demo, uuidFrom(id, "pool", i, 0), {})];
-  if (twoDevices) installs.push(install(demo, uuidFrom(id, "pool", i, 1), {}));
+  const crossDraw = r();
+  const otherDraw = r();
+  const installs = [install(demo, uuidFrom(id, "pool", i, 0), { platform: primary })];
+  if (twoDevices) {
+    const others = platforms.filter(([p]) => p !== primary);
+    const second =
+      others.length > 0 && crossDraw < CROSS_PLATFORM_SHARE
+        ? pickWeighted(others, otherDraw)
+        : primary;
+    installs.push(install(demo, uuidFrom(id, "pool", i, 1), { platform: second }));
+  }
   const anchor = demo.lastDay ?? POOL_ANCHOR;
-  const since = maxDay(demo.firstDay, addDays(anchor, -(3 + Math.floor(r() * 200))));
+  const since = maxDay(
+    installs[0]?.launch ?? demo.firstDay,
+    addDays(anchor, -(3 + Math.floor(r() * 200))),
+  );
   const userId = linked ? poolUserId(demo, i) : null;
   return {
     key: userId !== null ? `u:${userId}` : `i:${installs[0]?.installId ?? ""}`,
@@ -570,19 +549,9 @@ type Session = {
   environment: Environment;
 };
 
-const hourWeights = new Map<DemoApp, Weighted<number>>();
-
-function hoursOf(demo: DemoApp): Weighted<number> {
-  let w = hourWeights.get(demo);
-  if (!w) {
-    w = demo.model.hourly.map((weight, hour) => [hour, weight] as const);
-    hourWeights.set(demo, w);
-  }
-  return w;
-}
-
 // sessionsOf — сессии человека до now, новые первыми. Первый день истории всегда активен, поэтому
-// у каждого человека есть хотя бы одна сессия.
+// у каждого человека есть хотя бы одна сессия; до запуска платформы установки её сессии уходят на
+// первую установку.
 function sessionsOf(demo: DemoApp, person: DemoPerson, now: number): Session[] {
   const tz = demo.app.timezone;
   const id = demo.app.id;
@@ -599,17 +568,22 @@ function sessionsOf(demo: DemoApp, person: DemoPerson, now: number): Session[] {
     if (!active) continue;
     const midnight = zonedMidnight(day, tz);
     for (let j = 0; j < count; j++) {
-      const hour = pickWeighted(hoursOf(demo), r());
-      const start = midnight + hour * HOUR_MS + Math.floor(r() * HOUR_MS);
-      const inst = person.installs[r() < 0.75 ? 0 : Math.floor(r() * person.installs.length)];
+      const hourDraw = r();
+      const minuteDraw = r();
+      const picked = person.installs[r() < 0.75 ? 0 : Math.floor(r() * person.installs.length)];
+      const inst = picked && picked.launch <= day ? picked : person.installs[0];
+      const durationDraw = r();
+      if (!inst) continue;
+      const hour = pickWeighted(inst.hours, hourDraw);
+      const start = midnight + hour * HOUR_MS + Math.floor(minuteDraw * HOUR_MS);
       const duration = Math.round(
         Math.min(
           3 * HOUR_MS,
-          Math.max(4_000, demo.model.avgDurationSec * 1000 * Math.exp((r() - 0.5) * 1.6)),
+          Math.max(4_000, inst.avgDurationSec * 1000 * Math.exp((durationDraw - 0.5) * 1.6)),
         ),
       );
       const environment: Environment = r() < person.devShare ? "development" : "production";
-      if (!inst || start > now) continue;
+      if (start > now) continue;
       const end = start + duration;
       out.push({
         id: uuidFrom(id, person.key, day, j),

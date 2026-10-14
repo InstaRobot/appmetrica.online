@@ -10,6 +10,7 @@ import type {
   JobRun,
   MergePreview,
   PasskeyList,
+  Platform,
   ReadyStatus,
   Settings,
   SystemStatus,
@@ -17,7 +18,7 @@ import type {
   WriteKeyList,
 } from "@/lib/api/gen/model";
 import { DEMO_APP_IDS, DEMO_APPS, DEMO_OWNER_TIMEZONE } from "./apps";
-import { type DemoApp, dayStats, makeScope } from "./model";
+import { type DemoApp, dayStats, demoApp, makeScope, segmentOf } from "./model";
 import { alnumFrom, uuidFrom } from "./random";
 import { DAY_MS, eachDay, HOUR_MS, isoUtc, localTime, MINUTE_MS, zonedMidnight } from "./time";
 
@@ -105,22 +106,43 @@ export function mergePreview(target: DemoApp, source: DemoApp, now: number): Mer
   };
 }
 
+// Подписи ключей, как при создании приложения (PLATFORM_LABELS в components/common/platform-icon.tsx).
+const KEY_LABELS: Readonly<Record<Platform, string>> = {
+  ios: "iOS",
+  android: "Android",
+  web: "Веб",
+  macos: "macOS",
+  windows: "Windows",
+  linux: "Linux",
+  bot: "Бот",
+  server: "Бэкенд",
+  other: "Другое",
+};
+
+// writeKeys — ключ на каждую платформу приложения; ключ платформы, добавленной позже, создан за два дня
+// до её запуска. У мобильных приложений есть и отозванный ключ без платформы.
 export function writeKeys(appId: string, now: number): WriteKeyList {
-  const app = DEMO_APPS.find((a) => a.id === appId);
-  if (!app) return { items: [] };
-  const items: WriteKey[] = [
-    {
-      id: uuidFrom(appId, "write-key", 1),
+  const demo = demoApp(appId);
+  if (!demo) return { items: [] };
+  const { app } = demo;
+  const items: WriteKey[] = app.platforms.map((platform, i) => {
+    const launch = segmentOf(demo, platform)?.launch ?? demo.firstDay;
+    const created =
+      launch > demo.firstDay
+        ? isoUtc(zonedMidnight(launch, app.timezone) - 2 * DAY_MS + 9 * HOUR_MS + 15 * MINUTE_MS)
+        : app.created_at;
+    return {
+      id: uuidFrom(appId, "write-key", i === 0 ? 1 : platform),
       app_id: appId,
-      key: demoWriteKey(appId, 1),
-      label: "Production",
-      platform: null,
-      created_at: app.created_at,
+      key: demoWriteKey(appId, i === 0 ? 1 : 3 + i),
+      label: KEY_LABELS[platform],
+      platform,
+      created_at: created,
       revoked_at: null,
-      last_used_at: app.archived_at ?? isoUtc(now - 1_800),
-    },
-  ];
-  if (app.platform === "ios" || app.platform === "android") {
+      last_used_at: app.archived_at ?? isoUtc(now - 1_800 - i * 700),
+    };
+  });
+  if (app.platforms.includes("ios") || app.platforms.includes("android")) {
     items.push({
       id: uuidFrom(appId, "write-key", 2),
       app_id: appId,
@@ -153,7 +175,7 @@ export function apiKeys(now: number): ApiKeyList {
         key_prefix: "sk_demoGdpr",
         label: "Удаление данных по запросу",
         scopes: ["read", "delete"],
-        app_id: DEMO_APP_IDS.notesIos,
+        app_id: DEMO_APP_IDS.notes,
         created_at: "2025-09-12T14:30:00.000Z",
         revoked_at: null,
         last_used_at: isoUtc(now - 2 * DAY_MS - 3 * HOUR_MS),
@@ -249,7 +271,7 @@ const DELETIONS: readonly (Omit<DeletionRequest, "requested_at" | "started_at" |
   },
   {
     id: "0199d6d0-2222-7bbb-9ccc-1d1e1f201002",
-    app_id: DEMO_APP_IDS.notesIos,
+    app_id: DEMO_APP_IDS.notes,
     subject_type: "install",
     subject_value: "5a7c9e1b-3d5f-4a7c-9e1b-3d5f7a9c1e3b",
     status: "running",
@@ -261,7 +283,7 @@ const DELETIONS: readonly (Omit<DeletionRequest, "requested_at" | "started_at" |
   },
   {
     id: "0199d6d0-3333-7ccc-addd-2e2f30311003",
-    app_id: DEMO_APP_IDS.notesIos,
+    app_id: DEMO_APP_IDS.notes,
     subject_type: "user",
     subject_value: "a7c4e1b9-0d2f-4e6a-8b3c-5d7e9f1a2b4c",
     status: "done",
@@ -273,7 +295,7 @@ const DELETIONS: readonly (Omit<DeletionRequest, "requested_at" | "started_at" |
   },
   {
     id: "0199d6d0-4444-7ddd-beee-3f4041421004",
-    app_id: DEMO_APP_IDS.notesAndroid,
+    app_id: DEMO_APP_IDS.notes,
     subject_type: "install",
     subject_value: "f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a0b",
     status: "done",

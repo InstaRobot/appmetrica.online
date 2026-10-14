@@ -410,7 +410,7 @@ describe("demoFetch read-only and errors", () => {
   });
 
   it("narrows realtime to a platform", async () => {
-    const get = async (query: string, app = SITE) =>
+    const get = async (query: string, app: string = SITE) =>
       (await (await demoFetch(`/v1/apps/${app}/realtime${query}`, undefined, NOW)).json()) as {
         active_now: number;
         per_minute: { sessions_started: number }[];

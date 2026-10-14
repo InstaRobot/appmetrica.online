@@ -1,10 +1,9 @@
-// Приложения демо-режима: фиксированные UUID, имена и порядок (ID Notes iOS совпадает с примерами
+// Приложения демо-режима: фиксированные UUID, имена и порядок (ID «Notes» совпадает с примерами
 // 06-api-contracts.md, поэтому curl-рецепты документации открывают то же приложение).
 import type { App } from "@/lib/api/gen/model";
 
 export const DEMO_APP_IDS = {
-  notesIos: "0199d5f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
-  notesAndroid: "0199d5f0-2b3c-7d4e-9f50-6b7c8d9e0f1a",
+  notes: "0199d5f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
   site: "0199d5f0-3c4d-7e5f-a061-7c8d9e0f1a2b",
   bot: "0199d5f0-4d5e-7f60-b172-8d9e0f1a2b3c",
   oldGame: "0199d5f0-5e6f-7071-8283-9e0f1a2b3c4d",
@@ -15,25 +14,14 @@ export const DEMO_OWNER_TIMEZONE = "Europe/Moscow";
 
 export const DEMO_APPS: readonly App[] = [
   {
-    id: DEMO_APP_IDS.notesIos,
-    name: "Notes iOS",
+    id: DEMO_APP_IDS.notes,
+    name: "Notes",
     platform: "ios",
-    platforms: ["ios"],
+    platforms: ["ios", "android", "web"],
     timezone: "Europe/Moscow",
     status: "active",
     created_at: "2025-03-17T08:12:44.000Z",
-    updated_at: "2026-09-02T10:40:00.000Z",
-    archived_at: null,
-  },
-  {
-    id: DEMO_APP_IDS.notesAndroid,
-    name: "Notes Android",
-    platform: "android",
-    platforms: ["android"],
-    timezone: "Europe/Moscow",
-    status: "active",
-    created_at: "2025-04-02T11:05:19.000Z",
-    updated_at: "2026-09-02T10:41:00.000Z",
+    updated_at: "2026-08-12T09:15:00.000Z",
     archived_at: null,
   },
   {

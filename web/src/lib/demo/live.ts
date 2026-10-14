@@ -13,10 +13,10 @@ import {
   type DemoApp,
   dayStats,
   dimEntries,
-  hourShares,
+  hourSessions,
   makeScope,
-  NO_FILTERS,
   type Scope,
+  versionShares,
 } from "./model";
 import { appPersons, POOL_SIZE } from "./profiles";
 import { jitter, rand, roundRandom, seeded, splitTotal, uuidFrom } from "./random";
@@ -34,8 +34,7 @@ function isLive(demo: DemoApp, today: string): boolean {
 // sessionsPerMinute — ожидаемое число начатых сессий в минуту момента t (по суточной модели и часу).
 function sessionsPerMinute(scope: Scope, t: number): number {
   const local = localTime(t, scope.demo.app.timezone);
-  const share = hourShares(scope.demo.model)[local.hour] ?? 0;
-  return (dayStats(scope, local.date, true).sessions * share) / 60;
+  return hourSessions(scope, local.date, local.hour) / 60;
 }
 
 // recentEvents — лента realtime; platforms (не пусто) оставляет события этих платформ, не сдвигая остальные.
@@ -107,7 +106,7 @@ export function realtime(
   now: number,
   platforms: readonly string[] = [],
 ): Realtime {
-  const scope = makeScope(demo, now, { env, filters: { ...NO_FILTERS, platform: platforms } });
+  const scope = makeScope(demo, now, { env, filters: { platform: platforms } });
   const tz = demo.app.timezone;
   const id = demo.app.id;
   const live = isLive(demo, scope.today);
@@ -145,7 +144,8 @@ const REJECTION_MESSAGES: Readonly<Record<string, string>> = {
 // examplePayload — payload_sample отказа в каноничном виде ingest: без IP, user_id-PII уже заменён.
 function examplePayload(demo: DemoApp, code: string, at: number, version: string): string {
   const id = demo.app.id;
-  const os = dimEntries(demo.model, "os_name")[0]?.value ?? "";
+  const seg = demo.model.segments[0];
+  const os = seg ? (dimEntries(seg, "os_name")[0]?.value ?? "") : "";
   const event: Record<string, unknown> = {
     insert_id: uuidFrom(id, code, "insert"),
     name: "session_start",
@@ -194,7 +194,6 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
   const hourStart = now - (now % 1000) - (local.minute * 60 + local.second) * 1000;
   const first = hourStart - (hours - 1) * HOUR_MS;
   const archived = demo.lastDay !== null;
-  const shares = hourShares(demo.model);
 
   let lastRejectedHour: number | null = null;
   const hourly: IntegrationHour[] = [];
@@ -203,10 +202,7 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
     const at = localTime(t, tz);
     const elapsed = Math.min(1, (now - t) / HOUR_MS);
     const events =
-      (dayStats(prod, at.date, true).sessions + dayStats(dev, at.date, true).sessions) *
-      2 *
-      (shares[at.hour] ?? 0) *
-      elapsed;
+      (hourSessions(prod, at.date, at.hour) + hourSessions(dev, at.date, at.hour)) * 2 * elapsed;
     const accepted = Math.round(events * jitter(0.1, id, t, "acc"));
     const rejected = archived
       ? roundRandom(1.4 * elapsed * jitter(1, id, t, "rej"), id, t, "rej")
@@ -224,7 +220,7 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
         Math.floor(
           rand(id, "last-reject", lastRejectedHour) * Math.min(HOUR_MS, now - lastRejectedHour),
         );
-  const versions = dimEntries(demo.model, "app_version").slice(0, 4);
+  const versions = versionShares(demo.model).slice(0, 4);
   const oldest = versions.at(-1)?.value ?? "";
 
   const codes = demo.model.rejections;

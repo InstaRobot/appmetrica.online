@@ -8,6 +8,7 @@ import type {
   Environment,
   Granularity,
   Platform,
+  SplitParameter,
   TimeSeriesMetric,
   Unit,
 } from "@/lib/api/gen/model";
@@ -58,6 +59,7 @@ const ENVIRONMENTS: readonly Environment[] = ["production", "development"];
 const UNITS: readonly Unit[] = ["persons", "installs"];
 const GRANULARITIES: readonly Granularity[] = ["hour", "day", "week", "month"];
 const TS_METRICS: readonly TimeSeriesMetric[] = ["active", "new", "sessions", "avg_duration_ms"];
+const SPLITS: readonly SplitParameter[] = ["none", "platform"];
 const BREAKDOWN_METRICS: readonly BreakdownMetric[] = ["active", "new", "sessions"];
 const COHORT_GRANULARITIES: readonly CohortGranularity[] = ["day", "week"];
 const DIMENSIONS: readonly BreakdownDimension[] = [
@@ -256,7 +258,8 @@ const ROUTES: readonly Route[] = [
     const granularity = oneOf(query, "granularity", GRANULARITIES, "day");
     const { from, to } = period(query, granularity);
     const metric = oneOf(query, "metric", TS_METRICS, "active");
-    return json(timeseries(scope, from, to, granularity, metric, compareOf(query)));
+    const split = oneOf(query, "split", SPLITS, "none") === "platform";
+    return json(timeseries(scope, from, to, granularity, metric, compareOf(query), split));
   }),
   route("/v1/apps/:app_id/audience/rolling-active", ({ params, query, now }) => {
     const app = requireApp(params.app_id);
@@ -288,7 +291,7 @@ const ROUTES: readonly Route[] = [
     const app = requireApp(params.app_id);
     const env = oneOf(query, "environment", ENVIRONMENTS, "production");
     // Из фильтров отчётов realtime принимает только platform.
-    return json(realtime(app, env, now, filters(query).platform));
+    return json(realtime(app, env, now, filters(query).platform ?? []));
   }),
   route("/v1/apps/:app_id/profiles", ({ params, query, now }) => {
     const app = requireApp(params.app_id);

@@ -16,6 +16,7 @@ import type {
   TimeSeries,
   TimeSeriesMetric,
   TimeSeriesPoint,
+  TimeSeriesSplit,
   Unit,
 } from "@/lib/api/gen/model";
 import { Platform } from "@/lib/api/gen/model";
@@ -25,15 +26,13 @@ import {
   cohortReturned,
   dayStats,
   demoApp,
-  dimEntries,
-  dimParent,
-  type FilterDim,
+  dimValues,
   hourStats,
-  isFilterDim,
   makeScope,
   type PeriodStats,
   periodStats,
   type Scope,
+  scopePlatforms,
   uniqueActive,
   withFilters,
 } from "./model";
@@ -229,6 +228,8 @@ function series(
   }));
 }
 
+// timeseries — ряд метрики; split — ещё ряд на каждую платформу, у которой в периоде есть сессии
+// (по алфавиту, как ORDER BY platform в Go), без compare_points.
 export function timeseries(
   scope: Scope,
   from: string,
@@ -236,13 +237,22 @@ export function timeseries(
   granularity: Granularity,
   metric: TimeSeriesMetric,
   compare: boolean,
+  split = false,
 ): TimeSeries {
   const out: TimeSeries = {
     metric,
     granularity,
     points: series(scope, from, to, granularity, metric),
   };
-  if (compare) {
+  if (split) {
+    out.splits = scopePlatforms(scope)
+      .toSorted()
+      .flatMap((platform): TimeSeriesSplit[] => {
+        const one = withFilters(scope, { ...scope.filters, platform: [platform] });
+        if (periodStats(one, from, to).sessions === 0) return [];
+        return [{ platform, points: series(one, from, to, granularity, metric) }];
+      });
+  } else if (compare) {
     const [pFrom, pTo] = previousPeriod(from, to);
     out.compare_points = series(scope, pFrom, pTo, granularity, metric);
   }
@@ -260,8 +270,9 @@ export function rollingActive(scope: Scope, from: string, to: string): RollingAc
   };
 }
 
-// breakdown — строки измерения: total периода с фильтрами, распределённый по долям значений. Фильтр по
-// самому измерению (или его родителю: страна для города) оставляет только выбранные значения.
+// breakdown — строки измерения: значение строки добавляется к фильтрам, поэтому строка совпадает с
+// отчётом под таким фильтром. Фильтр по самому измерению оставляет только выбранные значения, фильтр по
+// родителю (страна для города) — значения внутри выбранных родителей.
 export function breakdown(
   scope: Scope,
   from: string,
@@ -270,29 +281,19 @@ export function breakdown(
   metric: BreakdownMetric,
   limit: number,
 ): Breakdown {
-  const { model } = scope.demo;
-  const parent = dimParent(model, dimension);
-  const own = isFilterDim(dimension) ? scope.filters[dimension] : [];
-  const ofParent = parent ? scope.filters[parent] : [];
-  const base: Record<FilterDim, readonly string[]> = { ...scope.filters };
-  if (isFilterDim(dimension)) base[dimension] = [];
-  if (parent) base[parent] = [];
-
   const metricOf = (s: Scope) => {
     const p = periodStats(s, from, to);
     return metric === "active" ? p.active : metric === "new" ? p.new : p.sessions;
   };
-  const baseTotal = metricOf(withFilters(scope, base));
   const total = metricOf(scope);
-
-  const weights = new Map<string, number>();
-  for (const e of dimEntries(model, dimension)) {
-    if (own.length > 0 && !own.includes(e.value)) continue;
-    if (ofParent.length > 0 && (e.parent === null || !ofParent.includes(e.parent))) continue;
-    weights.set(e.value, (weights.get(e.value) ?? 0) + e.weight);
-  }
-  const rows: BreakdownRow[] = [...weights]
-    .map(([value, w]) => ({ value, count: Math.round(baseTotal * w), share: 0 }))
+  const own = scope.filters[dimension] ?? [];
+  const rows: BreakdownRow[] = dimValues(scope, dimension)
+    .filter((value) => own.length === 0 || own.includes(value))
+    .map((value) => ({
+      value,
+      count: metricOf(withFilters(scope, { ...scope.filters, [dimension]: [value] })),
+      share: 0,
+    }))
     .filter((r) => r.count > 0)
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
     .slice(0, limit)

@@ -1,23 +1,45 @@
-// Параметры синтетической модели каждого демо-приложения: масштаб DAU, сезонность, retention и
-// распределения значений девяти измерений breakdown. Веса относительные, нормируются в model.ts.
-import type { BreakdownDimension } from "@/lib/api/gen/model";
+// Параметры синтетической модели демо-приложений. Приложение — набор сегментов-платформ: у каждого
+// свой масштаб DAU, тренд, дата запуска, сезонность, retention и распределения значений измерений
+// breakdown. Веса относительные, нормируются в model.ts.
+import type { BreakdownDimension, Platform } from "@/lib/api/gen/model";
 import { DEMO_APP_IDS } from "./apps";
 import type { Weighted } from "./random";
 
 export type Weights = Weighted<string>;
 export type ParentDim = "os_name" | "country";
-// Измерение задано либо общими весами, либо весами внутри значения родителя (город внутри страны,
-// версия ОС внутри ОС). Ключ "*" — значения для родителя без собственного списка.
-export type DimSpec =
-  | { readonly weights: Weights }
-  | { readonly parent: ParentDim; readonly children: Readonly<Record<string, Weights>> };
+// Веса дочернего измерения внутри значения родителя (город внутри страны, версия ОС внутри ОС).
+// Ключ "*" — значения для родителя без собственного списка.
+export type ChildWeights = Readonly<Record<string, Weights>>;
 
-export type AppModel = {
+export type SegmentDims = {
+  readonly os_name: Weights;
+  readonly app_version: Weights;
+  readonly country: Weights;
+  readonly os_version: ChildWeights;
+  readonly device_model: ChildWeights;
+  readonly device_type: ChildWeights;
+  readonly city: ChildWeights;
+  readonly locale: ChildWeights;
+};
+export type SegmentDim = keyof SegmentDims;
+
+export const DIM_PARENT: Readonly<Partial<Record<BreakdownDimension, ParentDim>>> = {
+  os_version: "os_name",
+  device_model: "os_name",
+  device_type: "os_name",
+  city: "country",
+  locale: "country",
+};
+
+// SegmentModel — одна платформа приложения. События платформы начинаются в launch; rampDays > 0 —
+// аудитория растёт с нуля (1 − e^(−дни/rampDays)), иначе сразу в масштабе тренда.
+export type SegmentModel = {
+  platform: Platform;
+  launch: string;
+  rampDays: number;
   baseDau: number;
   devDau: number;
   growthPerYear: number;
-  // Уникальные за n дней ≈ средний DAU × n^stickiness.
-  stickiness: number;
   newShare: readonly [number, number];
   sessionsPerUser: number;
   avgDurationSec: number;
@@ -25,9 +47,17 @@ export type AppModel = {
   weekly: readonly number[];
   hourly: readonly number[];
   retention: { d1: number; d30: number; w1: number; w12: number };
+  dims: SegmentDims;
+};
+
+export type AppModel = {
+  segments: readonly SegmentModel[];
+  // Доля людей, активных сразу на нескольких платформах: итог по людям меньше суммы сегментов.
+  crossPlatformShare: number;
+  // Уникальные за n дней ≈ средний DAU × n^stickiness.
+  stickiness: number;
   rejectRate: number;
   rejections: Weights;
-  dims: Readonly<Record<BreakdownDimension, DimSpec>>;
 };
 
 const WEEKLY_MOBILE = [1.0, 1.02, 1.03, 1.02, 0.98, 0.88, 0.85];
@@ -254,349 +284,370 @@ const IOS_DEVICE_TYPES: Readonly<Record<string, Weights>> = {
   iPadOS: [["tablet", 1]],
 };
 
-function iosDims(appVersions: Weights): AppModel["dims"] {
+function iosDims(appVersions: Weights): SegmentDims {
   return {
-    platform: { weights: [["ios", 1]] },
-    os_name: { weights: IOS_OS },
-    os_version: { parent: "os_name", children: IOS_OS_VERSIONS },
-    app_version: { weights: appVersions },
-    device_model: { parent: "os_name", children: IOS_DEVICES },
-    device_type: { parent: "os_name", children: IOS_DEVICE_TYPES },
-    country: {
-      weights: [
-        ["RU", 78],
-        ["KZ", 6],
-        ["BY", 5],
-        ["UZ", 3],
-        ["AM", 2],
-        ["GE", 2],
-        ["DE", 2],
-        ["RS", 1],
-        ["TR", 1],
-      ],
-    },
-    city: { parent: "country", children: CITIES },
-    locale: { parent: "country", children: LOCALES },
+    os_name: IOS_OS,
+    os_version: IOS_OS_VERSIONS,
+    app_version: appVersions,
+    device_model: IOS_DEVICES,
+    device_type: IOS_DEVICE_TYPES,
+    country: [
+      ["RU", 78],
+      ["KZ", 6],
+      ["BY", 5],
+      ["UZ", 3],
+      ["AM", 2],
+      ["GE", 2],
+      ["DE", 2],
+      ["RS", 1],
+      ["TR", 1],
+    ],
+    city: CITIES,
+    locale: LOCALES,
   };
 }
 
-const NOTES_IOS: AppModel = {
-  baseDau: 12_000,
-  devDau: 34,
-  growthPerYear: 0.12,
-  stickiness: 0.6,
-  newShare: [0.08, 0.12],
-  sessionsPerUser: 2.35,
-  avgDurationSec: 262,
-  installsExtra: 0.06,
-  weekly: WEEKLY_MOBILE,
-  hourly: HOURLY_MOBILE,
-  retention: { d1: 0.36, d30: 0.07, w1: 0.42, w12: 0.12 },
-  rejectRate: 0.0022,
-  rejections: [
-    ["duration_required", 62],
-    ["event_too_old", 28],
-    ["invalid_field", 10],
-  ],
-  dims: iosDims([
-    ["3.4.0", 61],
-    ["3.3.2", 23],
-    ["3.3.1", 8],
-    ["3.2.0", 5],
-    ["3.1.4", 3],
-  ]),
-};
-
-const NOTES_ANDROID: AppModel = {
-  baseDau: 8_900,
-  devDau: 26,
-  growthPerYear: 0.15,
-  stickiness: 0.6,
-  newShare: [0.08, 0.12],
-  sessionsPerUser: 2.3,
-  avgDurationSec: 236,
-  installsExtra: 0.05,
-  weekly: WEEKLY_MOBILE,
-  hourly: HOURLY_MOBILE,
-  retention: { d1: 0.33, d30: 0.062, w1: 0.39, w12: 0.1 },
-  rejectRate: 0.003,
-  rejections: [
-    ["event_too_old", 55],
-    ["install_rate_limited", 30],
-    ["missing_field", 15],
-  ],
-  dims: {
-    platform: { weights: [["android", 1]] },
-    os_name: { weights: [["Android", 1]] },
-    os_version: {
-      parent: "os_name",
-      children: {
-        Android: [
-          ["16", 18],
-          ["15", 33],
-          ["14", 21],
-          ["13", 13],
-          ["12", 8],
-          ["11", 5],
-          ["10", 2],
-        ],
-      },
-    },
-    app_version: {
-      weights: [
-        ["3.4.0", 52],
-        ["3.3.2", 27],
-        ["3.3.1", 10],
-        ["3.2.0", 7],
-        ["3.1.4", 4],
-      ],
-    },
-    device_model: {
-      parent: "os_name",
-      children: {
-        Android: [
-          ["SM-A556E", 9],
-          ["23129RAA4G", 9],
-          ["SM-A356E", 7],
-          ["SM-S928B", 6],
-          ["24069RA21G", 6],
-          ["M2101K6G", 6],
-          ["SM-S921B", 5],
-          ["2312DRA50G", 5],
-          ["CPH2581", 5],
-          ["RMX3852", 5],
-          ["V2324", 4],
-          ["TECNO KJ5", 4],
-          ["Pixel 8", 3],
-          ["Infinix X6853", 3],
-          ["SM-X710", 3],
-          ["Pixel 9 Pro", 2],
-        ],
-      },
-    },
-    device_type: {
-      parent: "os_name",
-      children: {
-        Android: [
-          ["phone", 95],
-          ["tablet", 5],
-        ],
-      },
-    },
-    country: {
-      weights: [
-        ["RU", 74],
-        ["KZ", 8],
-        ["BY", 6],
-        ["UZ", 6],
-        ["AM", 2],
-        ["GE", 1],
-        ["TR", 1],
-        ["DE", 1],
-        ["RS", 1],
-      ],
-    },
-    city: { parent: "country", children: CITIES },
-    locale: { parent: "country", children: LOCALES },
+const ANDROID_DIMS: Omit<SegmentDims, "app_version" | "country"> = {
+  os_name: [["Android", 1]],
+  os_version: {
+    Android: [
+      ["16", 18],
+      ["15", 33],
+      ["14", 21],
+      ["13", 13],
+      ["12", 8],
+      ["11", 5],
+      ["10", 2],
+    ],
   },
+  device_model: {
+    Android: [
+      ["SM-A556E", 9],
+      ["23129RAA4G", 9],
+      ["SM-A356E", 7],
+      ["SM-S928B", 6],
+      ["24069RA21G", 6],
+      ["M2101K6G", 6],
+      ["SM-S921B", 5],
+      ["2312DRA50G", 5],
+      ["CPH2581", 5],
+      ["RMX3852", 5],
+      ["V2324", 4],
+      ["TECNO KJ5", 4],
+      ["Pixel 8", 3],
+      ["Infinix X6853", 3],
+      ["SM-X710", 3],
+      ["Pixel 9 Pro", 2],
+    ],
+  },
+  device_type: {
+    Android: [
+      ["phone", 95],
+      ["tablet", 5],
+    ],
+  },
+  city: CITIES,
+  locale: LOCALES,
 };
 
 const DESKTOP: Weights = [["desktop", 1]];
 
+// Браузеры: ОС и устройство из User-Agent, модель телефона — только у части Android.
+const WEB_DIMS: Omit<SegmentDims, "app_version" | "country"> = {
+  os_name: [
+    ["Windows", 38],
+    ["Android", 27],
+    ["iOS", 17],
+    ["macOS", 12],
+    ["Linux", 4],
+    ["", 2],
+  ],
+  os_version: {
+    Windows: [
+      ["10", 58],
+      ["11", 42],
+    ],
+    Android: [
+      ["15", 35],
+      ["14", 30],
+      ["13", 20],
+      ["12", 15],
+    ],
+    iOS: [
+      ["26.0.1", 45],
+      ["18.6.2", 35],
+      ["17.7.2", 20],
+    ],
+    macOS: [
+      ["15.6.1", 50],
+      ["26.0", 30],
+      ["14.7.6", 20],
+    ],
+    "*": UNKNOWN,
+  },
+  device_model: {
+    Android: [
+      ["SM-A556E", 20],
+      ["23129RAA4G", 20],
+      ["Pixel 8", 10],
+      ["SM-S928B", 10],
+      ["", 40],
+    ],
+    iOS: [
+      ["iPhone", 85],
+      ["iPad", 15],
+    ],
+    macOS: [["Macintosh", 1]],
+    "*": UNKNOWN,
+  },
+  device_type: {
+    Windows: DESKTOP,
+    macOS: DESKTOP,
+    Linux: DESKTOP,
+    Android: [
+      ["phone", 92],
+      ["tablet", 8],
+    ],
+    iOS: [
+      ["phone", 85],
+      ["tablet", 15],
+    ],
+    "*": UNKNOWN,
+  },
+  city: CITIES,
+  locale: LOCALES,
+};
+
+const NOTES_VERSIONS: Weights = [
+  ["3.4.0", 58],
+  ["3.3.2", 25],
+  ["3.3.1", 9],
+  ["3.2.0", 5],
+  ["3.1.4", 3],
+];
+
+// «Notes»: iOS растёт, Android ровный, веб запущен 2026-08-14 и набирает аудиторию с нуля.
+const NOTES: AppModel = {
+  crossPlatformShare: 0.15,
+  stickiness: 0.6,
+  rejectRate: 0.0025,
+  rejections: [
+    ["duration_required", 50],
+    ["event_too_old", 35],
+    ["invalid_field", 15],
+  ],
+  segments: [
+    {
+      platform: "ios",
+      launch: "2025-03-17",
+      rampDays: 0,
+      baseDau: 11_500,
+      devDau: 30,
+      growthPerYear: 0.35,
+      newShare: [0.08, 0.12],
+      sessionsPerUser: 2.35,
+      avgDurationSec: 262,
+      installsExtra: 0.06,
+      weekly: WEEKLY_MOBILE,
+      hourly: HOURLY_MOBILE,
+      retention: { d1: 0.36, d30: 0.07, w1: 0.42, w12: 0.12 },
+      dims: iosDims(NOTES_VERSIONS),
+    },
+    {
+      platform: "android",
+      launch: "2025-04-02",
+      rampDays: 0,
+      baseDau: 8_400,
+      devDau: 22,
+      growthPerYear: 0.02,
+      newShare: [0.08, 0.12],
+      sessionsPerUser: 2.3,
+      avgDurationSec: 236,
+      installsExtra: 0.05,
+      weekly: WEEKLY_MOBILE,
+      hourly: HOURLY_MOBILE,
+      retention: { d1: 0.33, d30: 0.062, w1: 0.39, w12: 0.1 },
+      dims: {
+        ...ANDROID_DIMS,
+        app_version: NOTES_VERSIONS,
+        country: [
+          ["RU", 74],
+          ["KZ", 8],
+          ["BY", 6],
+          ["UZ", 6],
+          ["AM", 2],
+          ["GE", 1],
+          ["TR", 1],
+          ["DE", 1],
+          ["RS", 1],
+        ],
+      },
+    },
+    {
+      platform: "web",
+      launch: "2026-08-14",
+      rampDays: 24,
+      baseDau: 3_300,
+      devDau: 10,
+      growthPerYear: 0,
+      newShare: [0.09, 0.12],
+      sessionsPerUser: 2.1,
+      avgDurationSec: 214,
+      installsExtra: 0.07,
+      weekly: WEEKLY_WEB,
+      hourly: HOURLY_WEB,
+      retention: { d1: 0.24, d30: 0.035, w1: 0.28, w12: 0.06 },
+      dims: {
+        ...WEB_DIMS,
+        app_version: [
+          ["3.4.0", 72],
+          ["3.3.2", 28],
+        ],
+        country: [
+          ["RU", 82],
+          ["KZ", 5],
+          ["BY", 4],
+          ["DE", 3],
+          ["UZ", 2],
+          ["US", 2],
+          ["NL", 1],
+          ["", 1],
+        ],
+      },
+    },
+  ],
+};
+
 const SITE: AppModel = {
-  baseDau: 3_100,
-  devDau: 14,
-  growthPerYear: 0.08,
+  crossPlatformShare: 0,
   stickiness: 0.68,
-  newShare: [0.09, 0.12],
-  sessionsPerUser: 2.15,
-  avgDurationSec: 198,
-  installsExtra: 0.07,
-  weekly: WEEKLY_WEB,
-  hourly: HOURLY_WEB,
-  retention: { d1: 0.2, d30: 0.03, w1: 0.24, w12: 0.05 },
   rejectRate: 0.004,
   rejections: [
     ["user_id_looks_like_pii", 58],
     ["invalid_field", 42],
   ],
-  dims: {
-    platform: { weights: [["web", 1]] },
-    os_name: {
-      weights: [
-        ["Windows", 38],
-        ["Android", 27],
-        ["iOS", 17],
-        ["macOS", 12],
-        ["Linux", 4],
-        ["", 2],
-      ],
-    },
-    os_version: {
-      parent: "os_name",
-      children: {
-        Windows: [
-          ["10", 58],
-          ["11", 42],
+  segments: [
+    {
+      platform: "web",
+      launch: "2025-06-10",
+      rampDays: 0,
+      baseDau: 3_100,
+      devDau: 14,
+      growthPerYear: 0.08,
+      newShare: [0.09, 0.12],
+      sessionsPerUser: 2.15,
+      avgDurationSec: 198,
+      installsExtra: 0.07,
+      weekly: WEEKLY_WEB,
+      hourly: HOURLY_WEB,
+      retention: { d1: 0.2, d30: 0.03, w1: 0.24, w12: 0.05 },
+      dims: {
+        ...WEB_DIMS,
+        app_version: [
+          ["2026.10.2", 64],
+          ["2026.10.1", 24],
+          ["2026.09.4", 9],
+          ["2026.09.3", 3],
         ],
-        Android: [
-          ["15", 35],
-          ["14", 30],
-          ["13", 20],
-          ["12", 15],
+        country: [
+          ["RU", 85],
+          ["KZ", 4],
+          ["BY", 4],
+          ["UZ", 2],
+          ["DE", 2],
+          ["US", 1],
+          ["NL", 1],
+          ["", 1],
         ],
-        iOS: [
-          ["26.0.1", 45],
-          ["18.6.2", 35],
-          ["17.7.2", 20],
-        ],
-        macOS: [
-          ["15.6.1", 50],
-          ["26.0", 30],
-          ["14.7.6", 20],
-        ],
-        "*": UNKNOWN,
       },
     },
-    app_version: {
-      weights: [
-        ["2026.10.2", 64],
-        ["2026.10.1", 24],
-        ["2026.09.4", 9],
-        ["2026.09.3", 3],
-      ],
-    },
-    device_model: {
-      parent: "os_name",
-      children: {
-        Android: [
-          ["SM-A556E", 20],
-          ["23129RAA4G", 20],
-          ["Pixel 8", 10],
-          ["SM-S928B", 10],
-          ["", 40],
-        ],
-        iOS: [
-          ["iPhone", 85],
-          ["iPad", 15],
-        ],
-        macOS: [["Macintosh", 1]],
-        "*": UNKNOWN,
-      },
-    },
-    device_type: {
-      parent: "os_name",
-      children: {
-        Windows: DESKTOP,
-        macOS: DESKTOP,
-        Linux: DESKTOP,
-        Android: [
-          ["phone", 92],
-          ["tablet", 8],
-        ],
-        iOS: [
-          ["phone", 85],
-          ["tablet", 15],
-        ],
-        "*": UNKNOWN,
-      },
-    },
-    country: {
-      weights: [
-        ["RU", 85],
-        ["KZ", 4],
-        ["BY", 4],
-        ["UZ", 2],
-        ["DE", 2],
-        ["US", 1],
-        ["NL", 1],
-        ["", 1],
-      ],
-    },
-    city: { parent: "country", children: CITIES },
-    locale: { parent: "country", children: LOCALES },
-  },
+  ],
 };
 
 const BOT: AppModel = {
-  baseDau: 1_000,
-  devDau: 12,
-  growthPerYear: 0.2,
+  crossPlatformShare: 0,
   stickiness: 0.55,
-  newShare: [0.08, 0.12],
-  sessionsPerUser: 2.5,
-  avgDurationSec: 305,
-  installsExtra: 0.04,
-  weekly: WEEKLY_BOT,
-  hourly: HOURLY_BOT,
-  retention: { d1: 0.31, d30: 0.055, w1: 0.36, w12: 0.09 },
   rejectRate: 0.0035,
   rejections: [
     ["duration_required", 70],
     ["unknown_event_name", 30],
   ],
-  dims: {
-    platform: { weights: [["bot", 1]] },
-    os_name: {
-      weights: [
-        ["Android", 52],
-        ["iOS", 31],
-        ["Windows", 10],
-        ["macOS", 5],
-        ["Linux", 2],
-      ],
+  segments: [
+    {
+      platform: "bot",
+      launch: "2025-11-20",
+      rampDays: 0,
+      baseDau: 1_000,
+      devDau: 12,
+      growthPerYear: 0.2,
+      newShare: [0.08, 0.12],
+      sessionsPerUser: 2.5,
+      avgDurationSec: 305,
+      installsExtra: 0.04,
+      weekly: WEEKLY_BOT,
+      hourly: HOURLY_BOT,
+      retention: { d1: 0.31, d30: 0.055, w1: 0.36, w12: 0.09 },
+      dims: {
+        os_name: [
+          ["Android", 52],
+          ["iOS", 31],
+          ["Windows", 10],
+          ["macOS", 5],
+          ["Linux", 2],
+        ],
+        os_version: { "*": UNKNOWN },
+        app_version: [
+          ["1.8.0", 68],
+          ["1.7.3", 24],
+          ["1.7.0", 8],
+        ],
+        device_model: { "*": UNKNOWN },
+        device_type: { Windows: DESKTOP, macOS: DESKTOP, Linux: DESKTOP, "*": [["phone", 1]] },
+        country: [
+          ["RU", 88],
+          ["KZ", 5],
+          ["BY", 4],
+          ["UZ", 2],
+          ["AM", 1],
+        ],
+        city: CITIES,
+        locale: BOT_LOCALES,
+      },
     },
-    os_version: { parent: "os_name", children: { "*": UNKNOWN } },
-    app_version: {
-      weights: [
-        ["1.8.0", 68],
-        ["1.7.3", 24],
-        ["1.7.0", 8],
-      ],
-    },
-    device_model: { parent: "os_name", children: { "*": UNKNOWN } },
-    device_type: {
-      parent: "os_name",
-      children: { Windows: DESKTOP, macOS: DESKTOP, Linux: DESKTOP, "*": [["phone", 1]] },
-    },
-    country: {
-      weights: [
-        ["RU", 88],
-        ["KZ", 5],
-        ["BY", 4],
-        ["UZ", 2],
-        ["AM", 1],
-      ],
-    },
-    city: { parent: "country", children: CITIES },
-    locale: { parent: "country", children: BOT_LOCALES },
-  },
+  ],
 };
 
 const OLD_GAME: AppModel = {
-  baseDau: 2_600,
-  devDau: 8,
-  growthPerYear: -0.45,
+  crossPlatformShare: 0,
   stickiness: 0.6,
-  newShare: [0.06, 0.09],
-  sessionsPerUser: 2.6,
-  avgDurationSec: 340,
-  installsExtra: 0.04,
-  weekly: WEEKLY_MOBILE,
-  hourly: HOURLY_MOBILE,
-  retention: { d1: 0.34, d30: 0.065, w1: 0.38, w12: 0.09 },
   rejectRate: 0,
   rejections: [["app_archived", 1]],
-  dims: iosDims([
-    ["1.12.0", 71],
-    ["1.11.3", 22],
-    ["1.10.0", 7],
-  ]),
+  segments: [
+    {
+      platform: "ios",
+      launch: "2024-09-02",
+      rampDays: 0,
+      baseDau: 2_600,
+      devDau: 8,
+      growthPerYear: -0.45,
+      newShare: [0.06, 0.09],
+      sessionsPerUser: 2.6,
+      avgDurationSec: 340,
+      installsExtra: 0.04,
+      weekly: WEEKLY_MOBILE,
+      hourly: HOURLY_MOBILE,
+      retention: { d1: 0.34, d30: 0.065, w1: 0.38, w12: 0.09 },
+      dims: iosDims([
+        ["1.12.0", 71],
+        ["1.11.3", 22],
+        ["1.10.0", 7],
+      ]),
+    },
+  ],
 };
 
 export const APP_MODELS: Readonly<Record<string, AppModel>> = {
-  [DEMO_APP_IDS.notesIos]: NOTES_IOS,
-  [DEMO_APP_IDS.notesAndroid]: NOTES_ANDROID,
+  [DEMO_APP_IDS.notes]: NOTES,
   [DEMO_APP_IDS.site]: SITE,
   [DEMO_APP_IDS.bot]: BOT,
   [DEMO_APP_IDS.oldGame]: OLD_GAME,
