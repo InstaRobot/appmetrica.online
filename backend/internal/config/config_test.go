@@ -123,6 +123,8 @@ func TestLoad_DefaultsAndRequired(t *testing.T) {
 		require.False(t, api.MigrateOnStart)
 		require.True(t, api.PublicBearerEnabled)
 		require.Equal(t, "appmetrica_admin", api.ClickHouseMigrate.User)
+		require.Empty(t, api.TelegramBotToken)
+		require.Empty(t, api.BackupAPIURL)
 
 		w, err := config.LoadWorker()
 		require.NoError(t, err)
@@ -179,6 +181,27 @@ func TestLoad_AppEnvE2E(t *testing.T) {
 	api, err := config.LoadAPI()
 	require.NoError(t, err)
 	require.Equal(t, config.Env("e2e"), api.AppEnv)
+}
+
+// api читает те же TELEGRAM_BOT_TOKEN и BACKUP_API_URL, что и worker: тестовое сообщение и статус бэкапа.
+func TestLoad_APITelegramAndBackup(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		"POSTGRES_URL":       "postgres://u:p@localhost:5432/db",
+		"KEY_HASH_PEPPER":    devPepper,
+		"TELEGRAM_BOT_TOKEN": "123:abc",
+		"BACKUP_API_URL":     "http://clickhouse-backup:7171",
+	})
+
+	api, err := config.LoadAPI()
+	require.NoError(t, err)
+	require.Equal(t, "123:abc", api.TelegramBotToken)
+	require.Equal(t, "http://clickhouse-backup:7171", api.BackupAPIURL)
+
+	w, err := config.LoadWorker()
+	require.NoError(t, err)
+	require.Equal(t, api.TelegramBotToken, w.TelegramBotToken)
+	require.Equal(t, api.BackupAPIURL, w.BackupAPIURL)
 }
 
 func TestLoad_InvalidValues(t *testing.T) {

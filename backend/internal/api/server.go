@@ -12,6 +12,7 @@ import (
 
 	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
+	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
 	"appmetrica.online/backend/internal/deletion"
 	gen "appmetrica.online/backend/internal/gen/api"
@@ -29,6 +30,10 @@ type Server struct {
 	reports       *reports.Service  // nil — отчёты не подключены (WithReports)
 	deletion      *deletion.Service // nil — запросы на удаление не подключены (WithDeletion)
 	settings      SettingsReader
+	settingsStore SettingsStore  // nil — настройки не подключены (WithSettings)
+	telegram      TelegramSender // nil — TELEGRAM_BOT_TOKEN не задан
+	system        *SystemSources // nil — статус системы не подключён (WithSystemStatus)
+	clock         clock.Clock
 	ready         []httpx.ReadyCheck
 	metrics       *metrics // nil — метрики не подключены (RegisterMetrics)
 	logger        *slog.Logger
@@ -143,6 +148,15 @@ func (s *Server) Register(mux *http.ServeMux) {
 		apiAccess(auth.ScopeDelete)("POST /v1/apps/{app_id}/deletion-requests", w.CreateDeletionRequest)
 		apiAccess(auth.ScopeRead, auth.ScopeDelete)("GET /v1/apps/{app_id}/deletion-requests/{request_id}", w.GetDeletionRequest)
 		owner("GET /admin/v1/deletion-requests", w.ListDeletionRequests)
+	}
+
+	if s.settingsStore != nil {
+		owner("GET /admin/v1/settings", w.GetSettings)
+		owner("PATCH /admin/v1/settings", w.UpdateSettings)
+		owner("POST /admin/v1/settings/telegram/test", w.SendTelegramTest)
+	}
+	if s.system != nil {
+		owner("GET /admin/v1/system/status", w.GetSystemStatus)
 	}
 
 	owner("POST /admin/v1/apps", w.CreateApp)

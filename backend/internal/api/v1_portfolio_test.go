@@ -40,6 +40,11 @@ type portfolioEnv struct {
 	metrics    *prometheus.Registry
 	all        string // sk_ read на все приложения
 	restricted string // sk_ read только на nyc
+
+	// Источники настроек и статуса системы; меняются тестом до rebuild.
+	telegram api.TelegramSender
+	backup   api.BackupLister
+	pgPing   func(context.Context) error
 }
 
 // newPortfolioEnv — Read API поверх сценария фикстур: msk и nyc активны, tyo в архиве;
@@ -97,6 +102,13 @@ func (e *portfolioEnv) newHandler(t *testing.T, rep *reports.Service, ch *chstor
 	srv := api.NewServer(e.auth, apps.NewService(e.env.PG, e.clock, logger), logger, e.cfg).
 		WithReports(rep, e.env.PG.Queries()).
 		WithDeletion(deletion.NewService(e.env.PG, e.clock, logger)).
+		WithSettings(e.env.PG.Queries(), e.telegram, e.clock).
+		WithSystemStatus(api.SystemSources{
+			ClickHouse: ch,
+			Postgres:   e.postgresPing(),
+			Ops:        e.env.PG.Queries(),
+			Backup:     e.backup,
+		}).
 		WithReadyChecks(
 			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return e.env.PG.Pool().Ping(ctx) }},
 			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},
@@ -105,6 +117,19 @@ func (e *portfolioEnv) newHandler(t *testing.T, rep *reports.Service, ch *chstor
 	mux := http.NewServeMux()
 	srv.Register(mux)
 	return httpx.Chain(mux, httpx.RequestID(e.clock))
+}
+
+func (e *portfolioEnv) postgresPing() func(context.Context) error {
+	if e.pgPing != nil {
+		return e.pgPing
+	}
+	return func(ctx context.Context) error { return e.env.PG.Pool().Ping(ctx) }
+}
+
+// rebuild пересобирает обработчик после смены источников (telegram, backup, pgPing).
+func (e *portfolioEnv) rebuild(t *testing.T) {
+	t.Helper()
+	e.handler = e.newHandler(t, e.reports, e.env.CH, prometheus.NewRegistry())
 }
 
 func (e *portfolioEnv) get(t *testing.T, path, secret string) *httptest.ResponseRecorder {

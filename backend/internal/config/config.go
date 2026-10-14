@@ -72,6 +72,10 @@ type API struct {
 	KeyHashPepper       []byte
 	MigrateOnStart      bool
 	PublicBearerEnabled bool
+	// TelegramBotToken — тестовое сообщение из настроек; пусто — sendTelegramTest отвечает sent=false.
+	TelegramBotToken string
+	// BackupAPIURL — REST clickhouse-backup для статуса системы; пусто — бэкап в статусе не показывается.
+	BackupAPIURL string
 	// ClickHouseMigrate — пользователь для DDL при MIGRATE_ON_START=true.
 	ClickHouseMigrate ClickHouse
 }
@@ -127,6 +131,8 @@ func LoadAPI() (API, error) {
 		KeyHashPepper:       r.pepper("KEY_HASH_PEPPER"),
 		MigrateOnStart:      r.bool("MIGRATE_ON_START", false),
 		PublicBearerEnabled: r.bool("API_PUBLIC_BEARER_ENABLED", true),
+		TelegramBotToken:    r.str("TELEGRAM_BOT_TOKEN", ""),
+		BackupAPIURL:        r.str("BACKUP_API_URL", ""),
 		ClickHouseMigrate:   r.clickHouseMigrate(),
 	}
 	for _, o := range r.list("WEBAUTHN_RP_ORIGINS", "http://localhost:3000") {
