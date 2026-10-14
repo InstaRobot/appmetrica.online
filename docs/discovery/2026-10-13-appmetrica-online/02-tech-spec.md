@@ -2355,7 +2355,9 @@ AC-8.4.4 (UI — вкладки настроек):
 - Secrets management: переменные окружения Dokploy (Applications → Environment) и GitHub Actions secrets; в репозитории
   только `.env.example`.
 - Access logging: access-лог Traefik выключен на `i.appmetrica.online` (содержит IP); api логирует `operation`,
-  `status`, `duration_ms`, `auth_kind` (session|api_key), `api_key_prefix` — без IP.
+  `status`, `duration_ms`, `auth_kind` (session|api_key), `api_key_prefix` — без IP. В поле `path` — шаблон
+  маршрута `ServeMux` (`/admin/v1/auth/setup/{token}/begin`), а при 404/405 — константа `<unmatched>`:
+  сырой путь не пишется никогда, в нём может стоять токен ссылки регистрации passkey.
 
 #### Threat model highlights
 - Утечка/извлечение `pk_` из приложения и спам событиями → лимиты per app и per install, отзыв ключа, флаг

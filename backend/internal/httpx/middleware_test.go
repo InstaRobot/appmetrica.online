@@ -89,7 +89,7 @@ func TestRequestID_GeneratesULID(t *testing.T) {
 	require.Len(t, lines, 1)
 	require.Equal(t, id, lines[0]["request_id"])
 	require.Equal(t, "GET", lines[0]["method"])
-	require.Equal(t, "/v1/events", lines[0]["path"])
+	require.Equal(t, httpx.UnmatchedPath, lines[0]["path"], "без ServeMux нет Pattern — сырой путь не пишется")
 	require.EqualValues(t, http.StatusNoContent, lines[0]["status"])
 }
 
@@ -146,9 +146,11 @@ func TestRequestID_IncomingHeader(t *testing.T) {
 
 func TestAccessLog_NoClientIP(t *testing.T) {
 	var buf bytes.Buffer
-	h := stack(newLogger(&buf), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/events", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
-	}))
+	})
+	h := stack(newLogger(&buf), mux)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events?app_key=pk_secret", strings.NewReader("{}"))
 	req.RemoteAddr = "203.0.113.7:5000"
