@@ -1,64 +1,362 @@
 # appmetrica.online
 
-Внутренняя аналитика портфеля приложений (iOS/macOS, Android, сайты, боты, бэкенды) — замена Яндекс AppMetrica
-без SDK. Клиенты шлют `session_start` / `session_end` по HTTP на `https://i.appmetrica.online/v1/events`,
-владелец смотрит портфель, аудиторию, retention, realtime и профили в дашборде `https://appmetrica.online`
-(вход по passkey) и читает те же данные через Read API `https://api.appmetrica.online/v1`.
+**English** | [Русский](README.ru.md)
 
-- `backend/` — Go-модуль, один бинарник `appmetrica` (роли `ingest`, `api`, `worker` и служебные `migrate`, `admin`, `healthcheck`), ClickHouse 26.8 + PostgreSQL 18.6.
-- `web/` — Next.js 16.4: дашборд и документация API за логином.
-- `contracts/openapi/` — OpenAPI-контракты, из них генерируется код Go и TS.
-- `deploy/` — стек ClickHouse + clickhouse-backup для Dokploy.
-- `scripts/` — скрипты CI и деплоя, `scripts/reconcile` — сверка цифр с AppMetrica.
+Open-source, self-hosted analytics for mobile apps, websites, bots and backends — **without an SDK**.
+Your apps send `session_start` / `session_end` events with a plain HTTP request; you get a portfolio of all
+apps, audience (DAU/WAU/MAU, new users, sessions, duration, breakdowns), classic retention cohorts, realtime,
+user profiles and a Read API. Users are counted as people, not devices (`install_id` + optional `user_id`).
 
-## Запуск за 5 минут
+- **No SDK.** One documented endpoint: `POST https://<ingest-domain>/v1/events`, batches of up to 500 events,
+  idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, Go, curl and bots
+  are built into the dashboard docs.
+- **Privacy by design.** The client IP is used only in memory for a country/city lookup and is never stored —
+  not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
+  GDPR deletion by API or from the dashboard.
+- **Passkey-only sign-in.** No passwords to leak; the first passkey is registered with a one-time link from the CLI.
+- **Light and dark themes**, a public landing page and a read-only demo mode on a synthetic dataset.
+- **Fast on one server.** ClickHouse for events, PostgreSQL for metadata, Go services, Next.js dashboard.
 
-Нужны Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker; для `make check` — golangci-lint 2.14, для перф-тестов и деплой-скриптов — `jq`.
+> Not affiliated with Yandex. "AppMetrica" is a trademark of its owner; this project is an independent
+> open-source alternative.
 
-```bash
-make env          # .env из .env.example с рабочими dev-значениями
-make install      # Go-модули и pnpm-зависимости
-make dev-infra    # ClickHouse и Postgres в Docker, ждёт healthcheck
-make dev          # миграции + ingest :8081, api :8080, worker :8082, web :3000
+## Contents
+
+- [Architecture](#architecture)
+- [Requirements](#requirements)
+- [Installation with Docker Compose](#installation-with-docker-compose)
+- [Configuration reference](#configuration-reference)
+- [Sending your first events](#sending-your-first-events)
+- [Operations](#operations)
+- [Development](#development)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Architecture
+
+```
+            your apps ──► https://INGEST_DOMAIN/v1/events ─┐
+                                                           │        ┌────────────┐
+ browser ──► https://APP_DOMAIN  (dashboard, landing, docs)├─ Caddy ─┤  ingest    ├──► ClickHouse (events)
+ scripts ──► https://API_DOMAIN/v1 (Read API, sk_ keys)    ┘ (HTTPS) │  api       ├──► PostgreSQL (apps, keys,
+                                                                    │  worker    │     passkeys, settings)
+                                                                    │  web       │
+                                                                    └────────────┘
 ```
 
-Если порт 5432 занят другим Postgres, поменяй `POSTGRES_HOST_PORT` и порт в `POSTGRES_URL` в `.env`.
-Web требует именно Node 24 (`engines`): под Node 22 `pnpm typecheck` падает.
+| Service | Role |
+|---|---|
+| `caddy` | Reverse proxy on ports 80/443, automatic HTTPS certificates from Let's Encrypt |
+| `web` | Next.js dashboard, public landing page, API documentation (behind sign-in), demo mode |
+| `api` | Dashboard API and public Read API; applies database migrations on start |
+| `ingest` | Event ingestion: validation, clock correction, deduplication, geo lookup, rate limits |
+| `worker` | Background jobs: closing days into aggregates, Telegram digest and alerts, GDPR deletions, cleanup |
+| `clickhouse` | Event storage (raw events kept 25 months, daily aggregates forever) |
+| `postgres` | Metadata: apps, write/read keys, passkeys, sessions, settings, deletion requests |
+| `clickhouse-backup` | Optional: incremental ClickHouse backups to any S3-compatible storage |
 
-После `make dev`: `make seed` — демо-данные (3 приложения, 35 дней событий), `make passkey-link` — ссылка регистрации
-passkey для первого входа, `make send-test-batch` — тестовый батч в локальный ingest.
+`api`, `ingest` and `worker` are one Go binary (`backend/`) started with different roles.
 
-Все команды — `make help`. Перед коммитом — `make check`. Проверка каркаса — `scripts/check-bootstrap.sh --infra`.
+## Requirements
 
-## Проверки
+- A Linux server (x86_64 or arm64) with a public IP address and [Docker Engine](https://docs.docker.com/engine/install/)
+  with the Compose v2 plugin (`docker compose version` must work).
+- Resources: **2 vCPU, 4 GB RAM, 20 GB SSD** is enough for a small portfolio; **4 vCPU, 8 GB RAM** is recommended.
+  The first build of the images needs about 2 GB of free RAM and internet access (Go modules, npm packages,
+  the DB-IP geo database). Storage grows by roughly 10 GB per year per 100 000 daily active users.
+- Three DNS records (A and/or AAAA) pointing to the server, for example:
+
+  | Record | Purpose |
+  |---|---|
+  | `analytics.example.com` | dashboard (`APP_DOMAIN`) |
+  | `i.analytics.example.com` | event ingestion (`INGEST_DOMAIN`) — this URL goes into your apps |
+  | `api.analytics.example.com` | Read API (`API_DOMAIN`) |
+
+- Inbound ports **80** and **443** (TCP; also 443/UDP for HTTP/3) open to the internet — Let's Encrypt needs them
+  to issue certificates. No other port has to be exposed.
+
+> The ingest URL is compiled into your apps. Pick a domain you will keep for years.
+
+## Installation with Docker Compose
+
+### 1. Install Docker
 
 ```bash
-make check              # gen-check + линтеры + unit-тесты Go, web и скриптов
-make test-integration   # интеграционные тесты Go (testcontainers, нужен Docker)
-make coverage           # покрытие Go с гейтом ≥ 80 % для ключевых пакетов
-make e2e                # Playwright; сначала make dev-infra migrate-up geo-db seed, затем run-ingest, run-api-e2e (APP_ENV=e2e) и run-worker
-make perf-ingest        # k6: 500 rps × 10 мин (NFR-001); сначала make seed и make run-ingest-perf (лимит 20 000 событий/с), baseline — backend/perf/reports/baseline.json
-make perf-reports       # отчёты на 100k DAU × 90 дней (NFR-003, ~16 ГБ RAM)
-cd web && pnpm build && pnpm check:bundle   # бюджет initial JS 250 KB gzip (NFR-006)
+curl -fsSL https://get.docker.com | sh
+docker compose version
 ```
 
-## Сверка с AppMetrica
+(Any official installation method works; see the [Docker docs](https://docs.docker.com/engine/install/).)
 
-14 дней параллельной работы с AppMetrica до удаления SDK (NFR-010): DAU и новые ≤ 5 %, D1 ≤ 3 п.п.
+### 2. Get the code
 
 ```bash
-AM_SK=sk_… make reconcile ARGS="-csv appmetrica-audience.csv -api https://api.appmetrica.online/v1 -app <app_id>"
+git clone https://github.com/InstaRobot/appmetrica.online.git
+cd appmetrica.online/deploy/selfhost
 ```
 
-Процедура и формат экспорта — [docs/reconciliation/README.md](docs/reconciliation/README.md).
+### 3. Create the configuration
 
-## Документация
+```bash
+cp .env.example .env
+chmod 600 .env
+```
 
-- Правила разработки (TDD, запреты, Validation Commands): [AGENTS.md](AGENTS.md)
-- Discovery-пакет (PRD, архитектура, модель данных, контракты, UX): [docs/discovery/2026-10-13-appmetrica-online/](docs/discovery/2026-10-13-appmetrica-online/)
-- Структура репозитория и «куда положить файл»: [07-project-structure.md](docs/discovery/2026-10-13-appmetrica-online/07-project-structure.md)
-- Команды разработки: [12-dev-runbook.md](docs/discovery/2026-10-13-appmetrica-online/12-dev-runbook.md)
-- Эксплуатация (деплой, бэкапы, алерты, инциденты): [21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md),
-  ручные шаги Dokploy — [deploy/dokploy/README.md](deploy/dokploy/README.md)
-- Документация API для интеграций: `https://appmetrica.online/docs` (за логином, исходники — `web/content/docs/`)
-- План работ: [docs/plans/20261013-appmetrica-online.md](docs/plans/20261013-appmetrica-online.md)
+Generate all secrets and the geo database month in one go (GNU sed, i.e. on the Linux server):
+
+```bash
+sed -i \
+  -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" \
+  -e "s|^CLICKHOUSE_ADMIN_PASSWORD=.*|CLICKHOUSE_ADMIN_PASSWORD=$(openssl rand -hex 24)|" \
+  -e "s|^CLICKHOUSE_RW_PASSWORD=.*|CLICKHOUSE_RW_PASSWORD=$(openssl rand -hex 24)|" \
+  -e "s|^CLICKHOUSE_RO_PASSWORD=.*|CLICKHOUSE_RO_PASSWORD=$(openssl rand -hex 24)|" \
+  -e "s|^KEY_HASH_PEPPER=.*|KEY_HASH_PEPPER=$(openssl rand -base64 32)|" \
+  -e "s|^GEO_MONTH=.*|GEO_MONTH=$(date +%Y-%m)|" \
+  .env
+```
+
+Then open `.env` and set your domains and e-mail:
+
+```dotenv
+APP_DOMAIN=analytics.example.com
+INGEST_DOMAIN=i.analytics.example.com
+API_DOMAIN=api.analytics.example.com
+ACME_EMAIL=you@example.com
+```
+
+Everything else is optional; every variable is described in [Configuration reference](#configuration-reference)
+and in comments inside `.env.example`. Keep a copy of `.env` in a password manager: the database passwords
+and `KEY_HASH_PEPPER` are needed to restore a backup.
+
+### 4. Build and start
+
+```bash
+docker compose up -d --build --wait
+docker compose ps
+```
+
+The first build takes 5–15 minutes. `--wait` returns when every service is healthy. On start, `api` applies the
+Postgres and ClickHouse migrations; `ingest`, `worker` and `web` start after it. Caddy requests the certificates
+automatically on the first HTTPS request (check `docker compose logs caddy` if a domain is not ready).
+
+Check that the services answer:
+
+```bash
+curl -fsS https://api.analytics.example.com/health     # {"status":"ok"}
+curl -fsS https://i.analytics.example.com/health       # {"status":"ok"}
+```
+
+### 5. Register the first passkey
+
+There are no passwords. Create a one-time sign-up link (valid for 15 minutes, single use):
+
+```bash
+docker compose exec api /app/appmetrica admin passkey-link
+```
+
+Open the printed `https://APP_DOMAIN/setup/…` link in the browser, name the device and confirm with Touch ID,
+Face ID, Windows Hello or a security key. You are signed in. Add more passkeys (laptop, phone, hardware key) in
+**Settings → Passkeys**. If you ever lose all of them, run the same command again.
+
+### 6. Connect your first app
+
+1. **Portfolio → Add app**: name, platform, time zone. A write key `pk_…` is created automatically.
+2. The **Integration** tab shows the key, ready-to-copy snippets (curl, Swift, Kotlin, JavaScript, Go) and waits for
+   the first event.
+3. Send a test batch (see [Sending your first events](#sending-your-first-events)) — the status turns to
+   "received" and the app appears in the portfolio.
+
+## Configuration reference
+
+All variables live in `deploy/selfhost/.env`. Values are read by `docker-compose.yml`; changing them requires
+`docker compose up -d` (and `--build` for variables marked *build time*).
+
+### Required
+
+| Variable | Example | Description | How to generate |
+|---|---|---|---|
+| `APP_DOMAIN` | `analytics.example.com` | Dashboard, landing and docs domain. Also the passkey (WebAuthn) relying party: passkeys are bound to it, so changing it later requires registering passkeys again | — |
+| `INGEST_DOMAIN` | `i.analytics.example.com` | Event ingestion domain used by your apps. *Build time* for the dashboard snippets | — |
+| `API_DOMAIN` | `api.analytics.example.com` | Read API domain. *Build time* for the dashboard docs | — |
+| `ACME_EMAIL` | `you@example.com` | E-mail for Let's Encrypt (expiry and incident notices) | — |
+| `POSTGRES_PASSWORD` | 48 hex chars | Password of the `appmetrica` Postgres user | `openssl rand -hex 24` |
+| `CLICKHOUSE_ADMIN_PASSWORD` | 48 hex chars | ClickHouse `appmetrica_admin`: migrations and backups | `openssl rand -hex 24` |
+| `CLICKHOUSE_RW_PASSWORD` | 48 hex chars | ClickHouse `appmetrica_rw`: used by ingest and worker | `openssl rand -hex 24` |
+| `CLICKHOUSE_RO_PASSWORD` | 48 hex chars | ClickHouse `appmetrica_ro`: read-only user of api | `openssl rand -hex 24` |
+| `KEY_HASH_PEPPER` | base64, ≥ 32 bytes | HMAC pepper for Read API keys (`sk_…` are stored only as hashes). Changing it invalidates every `sk_` key | `openssl rand -base64 32` |
+| `GEO_MONTH` | `2026-10` | Month of the [DB-IP City Lite](https://db-ip.com/db/download/ip-to-city-lite) database downloaded during the backend build. *Build time*. If the build fails with 404 early in the month, use the previous month | `date +%Y-%m` |
+
+Use hex passwords (`openssl rand -hex`) for Postgres: they go into a connection URL and must not contain `/`, `@`
+or `:`.
+
+### Notifications and monitoring (optional)
+
+| Variable | Default | Description |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | empty | Token from [@BotFather](https://t.me/BotFather). Enables the daily portfolio digest and system alerts (disk space, insert errors, stale backups, services down). The chat ID, digest time and alert switch are set in **Settings → Telegram**. Empty — messages are written to the worker log |
+| `HEALTHCHECKS_PING_URL` | empty | [healthchecks.io](https://healthchecks.io) (or compatible) URL. The worker pings it every 5 minutes; silence means the server or the worker is down |
+| `DISK_FREE_ALERT_PCT` | `20` | Alert when free space on the ClickHouse volume drops below this percentage (1–99) |
+
+### ClickHouse backups to S3 (optional)
+
+Any S3-compatible storage works (AWS S3, Hetzner Object Storage, Cloudflare R2, MinIO, Backblaze B2).
+
+| Variable | Default | Description |
+|---|---|---|
+| `COMPOSE_PROFILES` | empty | Set to `backup` to start the `clickhouse-backup` service |
+| `BACKUP_API_URL` | empty | Set to `http://clickhouse-backup:7171` so the worker checks backup freshness and **Settings → System** shows the last backup |
+| `S3_ENDPOINT` | — | Storage endpoint, e.g. `https://s3.eu-central-1.amazonaws.com` |
+| `S3_BUCKET` | — | Existing bucket for the backups (path `clickhouse/` inside it) |
+| `S3_REGION` | — | Bucket region |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | — | Access key with read/write permissions to the bucket |
+| `BACKUPS_TO_KEEP_REMOTE` | `35` | Number of remote backups to keep (≈ 5 weeks of daily incrementals + weekly full) |
+| `WATCH_INTERVAL` | `24h` | Interval between incremental backups |
+| `FULL_INTERVAL` | `168h` | Interval between full backups |
+
+### Tuning (optional)
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBAUTHN_RP_NAME` | `appmetrica.online` | Name the browser shows when registering a passkey |
+| `HTTP_PORT`, `HTTPS_PORT` | `80`, `443` | Host ports of Caddy. Let's Encrypt needs 80 and 443 reachable from the internet |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` (JSON logs to stdout) |
+| `SESSION_TTL` | `720h` | Absolute lifetime of a dashboard session |
+| `SESSION_IDLE_TTL` | `168h` | Idle timeout of a dashboard session |
+| `API_PUBLIC_BEARER_ENABLED` | `true` | `false` disables the public Read API (`sk_` keys); the dashboard keeps working |
+| `INGEST_MAX_BODY_BYTES` | `1048576` | Maximum decompressed request body, bytes |
+| `INGEST_MAX_EVENTS` | `500` | Maximum events per batch |
+| `INGEST_LATE_WINDOW` | `168h` | Events older than this are rejected (`event_too_old`) |
+| `INGEST_FUTURE_TOLERANCE` | `10m` | Allowed client clock skew into the future after correction |
+| `INGEST_ACCEPT_DEVELOPMENT` | `true` | `false` drops events with `environment=development` |
+| `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST` | `2000`, `4000` | Per-app rate limit; above it the batch gets HTTP 429 with `Retry-After` |
+| `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST` | `100`, `1000` | Per-install limit; extra events are rejected as retryable `install_rate_limited` |
+| `KEY_CACHE_REFRESH` | `15s` | How often ingest reloads write keys (delay before a revoked `pk_` key stops working) |
+| `WORKER_JOBS_ENABLED` | all jobs | Comma-separated list of `system_check`, `digest`, `close_day`, `deletion`, `session_cleanup` |
+
+## Sending your first events
+
+Every app has its own write key `pk_…` (dashboard → app → **Integration**). Write keys are public by design — they
+are embedded into apps and only allow sending events.
+
+```bash
+export AM_PK=pk_your_write_key
+curl -sS -X POST "https://i.analytics.example.com/v1/events" \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  -d "{
+    \"sent_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+    \"context\": { \"platform\": \"ios\", \"app_version\": \"1.0.0\" },
+    \"events\": [{
+      \"insert_id\": \"$(uuidgen | tr A-Z a-z)\",
+      \"name\": \"session_start\",
+      \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+      \"install_id\": \"$(uuidgen | tr A-Z a-z)\",
+      \"session_id\": \"$(uuidgen | tr A-Z a-z)\"
+    }]
+  }"
+# → {"accepted":1,"rejected":[],"server_time":"…","warnings":[]}
+```
+
+The full API reference (ingestion and Read API), session and offline-queue recipes for each platform and the
+error/retry policy are in the dashboard: **Documentation** (`https://APP_DOMAIN/docs`, behind sign-in). The
+OpenAPI contracts are in [`contracts/openapi/`](contracts/openapi/).
+
+## Operations
+
+All commands run from `deploy/selfhost`.
+
+**Logs and status**
+
+```bash
+docker compose ps
+docker compose logs -f --tail=100 api ingest worker
+```
+
+**Update to a new version**
+
+```bash
+git pull
+docker compose up -d --build --wait     # migrations are applied automatically by api
+```
+
+**Refresh the geo database** (monthly): set `GEO_MONTH` to the current month (`date +%Y-%m`) and run
+`docker compose up -d --build --wait`.
+
+**Back up Postgres** (apps, keys, passkeys, settings — small, back it up daily, e.g. from cron):
+
+```bash
+docker compose exec -T postgres pg_dump -U appmetrica -d appmetrica -Fc > appmetrica-$(date +%F).dump
+```
+
+Restore into an empty database:
+
+```bash
+docker compose exec -T postgres pg_restore -U appmetrica -d appmetrica --clean --if-exists < appmetrica-2026-10-14.dump
+```
+
+**Back up ClickHouse**: enable the `backup` profile (see [ClickHouse backups to S3](#clickhouse-backups-to-s3-optional)),
+then manage backups through the `clickhouse-backup` CLI:
+
+```bash
+docker compose exec clickhouse-backup clickhouse-backup list remote
+docker compose exec clickhouse-backup clickhouse-backup restore_remote <backup-name>
+```
+
+**Lost access** (all passkeys gone): `docker compose exec api /app/appmetrica admin passkey-link` prints a new
+one-time sign-up link.
+
+**Health endpoints**: `https://API_DOMAIN/health`, `https://INGEST_DOMAIN/health`, `https://APP_DOMAIN/api/health`.
+
+**Stop / remove**
+
+```bash
+docker compose down        # stop, keep data
+docker compose down -v     # stop and DELETE all data volumes
+```
+
+**Security checklist**: keep `.env` private (`chmod 600`), expose only ports 80/443, keep Docker and the host
+updated, store backups outside the server, and rotate `sk_` Read API keys you no longer use (**Settings → API keys**).
+
+## Development
+
+Requirements: Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker; `golangci-lint` 2.14 for `make check`, `jq` for perf
+and deploy scripts.
+
+```bash
+make env          # .env from .env.example with working dev values
+make install      # Go modules and pnpm dependencies
+make dev-infra    # ClickHouse and Postgres in Docker
+make dev          # migrations + ingest :8081, api :8080, worker :8082, web :3000
+make seed         # demo data: 3 apps, 35 days of events
+make passkey-link # one-time passkey sign-up link for http://localhost:3000
+```
+
+Before committing: `make check` (code generation check, linters, Go/web/script unit tests). Integration tests:
+`make test-integration` (Docker). E2E: `make e2e` (see [AGENTS.md](AGENTS.md)). The project follows TDD and
+Conventional Commits; rules for humans and AI agents are in [AGENTS.md](AGENTS.md).
+
+Repository layout:
+
+- `backend/` — Go module, one binary `appmetrica` (`ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck`).
+- `web/` — Next.js 16 dashboard, landing page, demo mode and API documentation (`web/content/docs/`).
+- `contracts/openapi/` — OpenAPI 3.0 contracts; Go and TypeScript code is generated from them.
+- `deploy/selfhost/` — Docker Compose stack for self-hosting; `deploy/clickhouse/` — ClickHouse configuration.
+- `scripts/` — CI and deploy scripts; `scripts/reconcile` — reconciliation of numbers with AppMetrica exports.
+- `docs/discovery/` — product and technical specification (in Russian).
+
+## Documentation
+
+- Product requirements, architecture, data model, API contracts, UX:
+  [`docs/discovery/2026-10-13-appmetrica-online/`](docs/discovery/2026-10-13-appmetrica-online/) (Russian)
+- Developer runbook: [12-dev-runbook.md](docs/discovery/2026-10-13-appmetrica-online/12-dev-runbook.md)
+- Operations runbooks: [21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md)
+- API documentation for integrations: in the dashboard at `/docs`, sources in [`web/content/docs/`](web/content/docs/)
+
+## License
+
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). You may use, modify and self-host appmetrica.online
+freely; if you run a modified version as a network service for others, you must publish your changes under the
+same license.
+
+Geolocation uses the [IP to City Lite](https://db-ip.com) database by DB-IP, licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the dashboard footer carries the required attribution.

@@ -1,0 +1,22 @@
+# Reverse proxy with automatic HTTPS (Let's Encrypt). Domains come from .env via docker-compose.yml.
+{
+	email {$ACME_EMAIL}
+}
+
+# Dashboard, landing and API docs.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+# Event ingestion: POST /v1/events from your apps. Caddy sets X-Forwarded-For to the client IP;
+# ingest uses it only in memory for country/city lookup and never stores it.
+{$INGEST_DOMAIN} {
+	reverse_proxy ingest:8081
+}
+
+# Read API (Bearer sk_… keys) for scripts and exports.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8080
+}

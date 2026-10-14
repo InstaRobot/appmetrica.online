@@ -29,7 +29,7 @@ appmetrica.online — внутренняя система аналитики п�
 - `contracts/openapi/ingest.yaml`, `contracts/openapi/api.yaml` — OpenAPI 3.0.3, единственный источник HTTP-контрактов.
 - `backend/` — Go-модуль `appmetrica.online/backend`, один бинарник `appmetrica` (подкоманды `ingest`, `api`, `worker`, `migrate`, `admin`, `healthcheck`).
 - `web/` — Next.js 16.4 (App Router), дашборд и документация (Fumadocs).
-- `deploy/` — compose-стек ClickHouse + clickhouse-backup для Dokploy и конфиги ClickHouse.
+- `deploy/` — compose-стек ClickHouse + clickhouse-backup для Dokploy и конфиги ClickHouse; `deploy/selfhost/` — полный стек Docker Compose для установки на любой сервер (Caddy с HTTPS, все сервисы, бэкапы по профилю `backup`), инструкция — в `README.md` / `README.ru.md`. Новая переменная окружения сервисов должна появиться и в `deploy/selfhost/docker-compose.yml`, `.env.example` и в справочнике параметров обоих README.
 - `scripts/` — shell-скрипты CI и деплоя (с тестами `scripts/test-*.sh`) и отдельный Go-модуль `scripts/reconcile` (сверка с AppMetrica, процедура — `docs/reconciliation/README.md`).
 - Сгенерированный код: `backend/internal/gen/**`, `backend/internal/pgstore/sqlc/**`, `web/src/lib/api/gen/**`. Руками не редактируется, перегенерируется `make gen` и коммитится.
 
