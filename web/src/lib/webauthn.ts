@@ -18,6 +18,10 @@ import {
   finishLogin,
   finishSetup,
 } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
+import {
+  beginPasskeyRegistration,
+  finishPasskeyRegistration,
+} from "@/lib/api/gen/endpoints/admin-passkeys/admin-passkeys";
 import type { WebAuthnCeremonyOptionsOptions } from "@/lib/api/gen/model";
 
 export type PasskeyFlow = "login" | "setup";
@@ -90,6 +94,20 @@ export async function registerPasskeyBySetupLink(token: string, name: string): P
     optionsJSON: creationOptionsJSON(begin.data.options),
   });
   await finishSetup(token, {
+    ceremony_id: begin.data.ceremony_id,
+    credential: { ...credential },
+    name,
+  });
+}
+
+// Дополнительный passkey вошедшего владельца (S-12 «Добавить passkey»): ещё одно устройство или ключ.
+export async function registerAdditionalPasskey(name: string): Promise<void> {
+  const begin = await beginPasskeyRegistration();
+  if (begin.status !== 200) throw new Error(`webauthn: beginPasskeyRegistration ${begin.status}`);
+  const credential = await startRegistration({
+    optionsJSON: creationOptionsJSON(begin.data.options),
+  });
+  await finishPasskeyRegistration({
     ceremony_id: begin.data.ceremony_id,
     credential: { ...credential },
     name,

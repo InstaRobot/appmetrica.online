@@ -2,7 +2,6 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
-import type { App } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -95,8 +94,7 @@ describe("AppSettingsForm", () => {
 
   it("sends only changed fields and toasts on success", async () => {
     const bodies = mockUpdate();
-    const onSaved = vi.fn<(app: App) => void>();
-    renderWithClient(<AppSettingsForm app={OLD_APP} onSaved={onSaved} />);
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
 
     const user = userEvent.setup();
     const name = screen.getByRole("textbox", { name: /Название/ });
@@ -106,7 +104,6 @@ describe("AppSettingsForm", () => {
 
     await waitFor(() => expect(bodies).toEqual([{ name: "Notes 2" }]));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Настройки сохранены"));
-    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ name: "Notes 2" }));
   });
 
   it("saves the new timezone", async () => {

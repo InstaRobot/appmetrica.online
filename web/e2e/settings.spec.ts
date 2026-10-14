@@ -65,11 +65,14 @@ test("telegram test shows error from telegram", async ({ page }) => {
   );
   await page.goto("/settings?tab=telegram");
 
+  await expect(page.getByRole("textbox", { name: "Chat ID" })).toBeVisible();
+  await expectNoA11yViolations(page);
+
+  // Новый chat_id при каждом прогоне: иначе форма без изменений и «Сохранить» недоступна.
   const chat = page.getByRole("textbox", { name: "Chat ID" });
-  await chat.fill("123456789");
+  await chat.fill(String(Date.now()));
   await page.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText("Настройки сохранены")).toBeVisible();
-  await expectNoA11yViolations(page);
 
   await page.getByRole("button", { name: "Отправить тестовое сообщение" }).click();
   const alert = page.getByRole("alert").filter({ hasText: "Telegram не принял сообщение" });
@@ -83,11 +86,14 @@ test("settings tabs switch with the keyboard and keep ?tab=", async ({ page }) =
   await expect(passkeys).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("table", { name: "Passkeys" })).toContainText("E2E");
 
+  // Radix переводит фокус на соседнюю вкладку в setTimeout: следующая стрелка — после смены вкладки.
   await passkeys.focus();
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Система" })).toHaveAttribute("aria-selected", "true");
+  for (const name of ["API-ключи", "Telegram", "Система"]) {
+    await page.keyboard.press("ArrowRight");
+    const tab = page.getByRole("tab", { name });
+    await expect(tab).toBeFocused();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+  }
   await expect(page).toHaveURL(/\?tab=system$/);
   await expect(page.getByRole("group", { name: "Postgres" })).toContainText("OK");
   await expectNoA11yViolations(page);

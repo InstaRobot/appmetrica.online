@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import * as zod from "zod";
+import { FieldError, Required } from "@/components/common/form-field";
 import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { isTimezone, TimezoneSelect } from "@/components/common/timezone-select";
 import { Button } from "@/components/ui/button";
@@ -47,24 +47,6 @@ const PLATFORM_OPTIONS = Object.values(Platform).map((value) => ({
   value,
   label: value === Platform.server ? "Сервер" : PLATFORM_LABELS[value],
 }));
-
-function FieldError({ id, message }: { id: string; message: string | undefined }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="flex items-center gap-1 text-caption text-negative">
-      <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-      {message}
-    </p>
-  );
-}
-
-function Required() {
-  return (
-    <span aria-hidden="true" className="text-negative">
-      *
-    </span>
-  );
-}
 
 // S-04: создание приложения (FR-009). После 201 — экран интеграции с write-ключом и сниппетами.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {

@@ -15,6 +15,7 @@ import {
   isSetupLinkExpired,
   loginWithPasskey,
   passkeyErrorMessage,
+  registerAdditionalPasskey,
   registerPasskeyBySetupLink,
   validateDeviceName,
 } from "./webauthn";
@@ -201,6 +202,42 @@ describe("registerPasskeyBySetupLink", () => {
     await expect(promise).rejects.toBeInstanceOf(ApiError);
     await expect(promise).rejects.toMatchObject({ status: 410 });
     expect(startRegistration).not.toHaveBeenCalled();
+  });
+});
+
+describe("registerAdditionalPasskey", () => {
+  it("registers one more passkey for the signed-in owner", async () => {
+    let finishBody: unknown;
+    server.use(
+      http.post("*/api/admin/v1/passkeys/register/begin", () =>
+        HttpResponse.json({ ceremony_id: CEREMONY, options: { publicKey: creationOptions } }),
+      ),
+      http.post("*/api/admin/v1/passkeys/register/finish", async ({ request }) => {
+        finishBody = await request.json();
+        return HttpResponse.json({}, { status: 201 });
+      }),
+    );
+
+    await registerAdditionalPasskey("iPhone");
+
+    expect(startRegistration).toHaveBeenCalledExactlyOnceWith({ optionsJSON: creationOptions });
+    expect(finishBody).toEqual({ ceremony_id: CEREMONY, credential: attestation, name: "iPhone" });
+  });
+
+  it("propagates 422 of finish", async () => {
+    server.use(
+      http.post("*/api/admin/v1/passkeys/register/begin", () =>
+        HttpResponse.json({ ceremony_id: CEREMONY, options: { publicKey: creationOptions } }),
+      ),
+      http.post("*/api/admin/v1/passkeys/register/finish", () =>
+        HttpResponse.json(
+          { error: { code: "webauthn_verification_failed", message: "x", request_id: "01J" } },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(registerAdditionalPasskey("iPhone")).rejects.toMatchObject({ status: 422 });
   });
 });
 
