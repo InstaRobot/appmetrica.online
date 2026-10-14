@@ -2,8 +2,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
+import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { FieldError, Required } from "@/components/common/form-field";
-import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { TimezoneSelect } from "@/components/common/timezone-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { updateApp } from "@/lib/api/gen/endpoints/admin-apps/admin-apps";
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
-import type { App, UpdateAppBody } from "@/lib/api/gen/model";
+import type { App, Platform, UpdateAppBody } from "@/lib/api/gen/model";
+import { isDemoInBrowser } from "@/lib/demo-mode";
 import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
@@ -34,13 +35,37 @@ const messages = {
   timezone: "Выберите часовой пояс",
 };
 
-// Карточка «Основное» S-11 (FR-009): название и часовой пояс; платформа не меняется. Отправляются только
-// изменённые поля; смена пояса предупреждает, что уже закрытые дни остаются в прежнем поясе.
+// Карточки S-11: «Основное» (FR-009) и «Платформы» (04-ux-diff.md §5.2). У каждой своя кнопка
+// «Сохранить» и свой PATCH.
 export function AppSettingsForm({ app }: { app: App }) {
+  return (
+    <>
+      <AppBasicsCard app={app} />
+      <AppPlatformsCard app={app} />
+    </>
+  );
+}
+
+function useSavedApp(app: App) {
   const queryClient = useQueryClient();
   const update = useMutation({
     mutationFn: (body: UpdateAppBody) => updateApp(app.id, body),
   });
+  const save = async (body: UpdateAppBody): Promise<boolean> => {
+    const res = await update.mutateAsync(body);
+    if (res.status !== 200) return false;
+    queryClient.setQueryData(getGetAppQueryKey(app.id), res);
+    void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
+    return true;
+  };
+  return { save, pending: update.isPending };
+}
+
+// «Основное»: название и часовой пояс. Отправляются только изменённые поля; смена пояса предупреждает,
+// что уже закрытые дни остаются в прежнем поясе.
+function AppBasicsCard({ app }: { app: App }) {
+  const { save } = useSavedApp(app);
 
   const form = useZodForm(schema, {
     defaultValues: { name: app.name, timezone: app.timezone },
@@ -52,12 +77,7 @@ export function AppSettingsForm({ app }: { app: App }) {
         ...(timezone !== app.timezone ? { timezone } : {}),
       };
       try {
-        const res = await update.mutateAsync(body);
-        if (res.status !== 200) return;
-        toast.success("Настройки сохранены");
-        queryClient.setQueryData(getGetAppQueryKey(app.id), res);
-        void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-        void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
+        if (await save(body)) toast.success("Настройки сохранены");
       } catch (error) {
         if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
       }
@@ -100,13 +120,6 @@ export function AppSettingsForm({ app }: { app: App }) {
               onBlur={() => form.blur("name")}
             />
             <FieldError id={form.errorId("name")} message={form.errors.name} />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-label-md">Платформа</span>
-            <p className="text-body-md text-fg-muted">
-              {`${PLATFORM_LABELS[app.platform]} (изменить нельзя)`}
-            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -154,5 +167,78 @@ export function AppSettingsForm({ app }: { app: App }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+// Radix ToggleGroup не входит в initial JS страницы настроек (бюджет NFR-006): чипы догружаются, пока
+// на их месте рамка того же вида.
+const PlatformToggleGroup = lazy(() =>
+  import("@/components/common/platform-toggle-group").then((m) => ({
+    default: m.PlatformToggleGroup,
+  })),
+);
+
+const noSubscribe = () => () => {};
+
+// Демо-режим известен только в браузере (cookie am_demo): на сервере рендер без него.
+function useDemo(): boolean {
+  return useSyncExternalStore(noSubscribe, isDemoInBrowser, () => false);
+}
+
+function samePlatforms(a: Platform[], b: Platform[]): boolean {
+  return a.length === b.length && a.every((p) => b.includes(p));
+}
+
+// «Платформы» (#platforms): набор платформ приложения, PATCH { platforms }. Пустой набор не сохраняется;
+// в демо мутации недоступны, поэтому чипы и кнопка выключены.
+function AppPlatformsCard({ app }: { app: App }) {
+  const { save, pending } = useSavedApp(app);
+  const demo = useDemo();
+  const [platforms, setPlatforms] = useState<Platform[]>(app.platforms);
+  const empty = platforms.length === 0;
+  const dirty = !samePlatforms(platforms, app.platforms);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      if (await save({ platforms })) toast.success("Платформы сохранены");
+    } catch (error) {
+      toast.error(toUiError(error).message);
+    }
+  };
+
+  return (
+    <section id="platforms" aria-labelledby="app-platforms-title" className="scroll-mt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle id="app-platforms-title">Платформы</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form noValidate onSubmit={submit} className="flex flex-col gap-3">
+            <Suspense fallback={<div className="h-8 w-full rounded-lg border border-input" />}>
+              <PlatformToggleGroup
+                aria-labelledby="app-platforms-title"
+                aria-describedby={empty ? "platforms-empty platforms-hint" : "platforms-hint"}
+                value={platforms}
+                onValueChange={setPlatforms}
+                disabled={demo}
+              />
+            </Suspense>
+            <FieldError
+              id="platforms-empty"
+              message={empty ? "Оставьте хотя бы одну платформу" : undefined}
+            />
+            <p id="platforms-hint" className="text-caption text-fg-muted">
+              Убрать платформу — не удалить её данные: события и ключи сохраняются.
+            </p>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={demo || empty || !dirty || pending}>
+                {pending ? "Сохраняем…" : "Сохранить"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

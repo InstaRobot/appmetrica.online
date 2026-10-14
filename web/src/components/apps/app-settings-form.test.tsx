@@ -184,7 +184,10 @@ describe("AppSettingsForm platforms", () => {
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 
     const section = platforms();
-    expect(section.getByRole("button", { name: "iOS" })).toHaveAttribute("aria-pressed", "true");
+    expect(await section.findByRole("button", { name: "iOS" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(section.getByRole("button", { name: "Android" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -209,7 +212,7 @@ describe("AppSettingsForm platforms", () => {
 
     const section = platforms();
     const user = userEvent.setup();
-    await user.click(section.getByRole("button", { name: "Android" }));
+    await user.click(await section.findByRole("button", { name: "Android" }));
     await user.click(section.getByRole("button", { name: "Веб" }));
     await user.click(section.getByRole("button", { name: "Сохранить" }));
 
@@ -222,7 +225,7 @@ describe("AppSettingsForm platforms", () => {
     renderWithClient(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />);
 
     const section = platforms();
-    await userEvent.setup().click(section.getByRole("button", { name: "iOS" }));
+    await userEvent.setup().click(await section.findByRole("button", { name: "iOS" }));
 
     const save = section.getByRole("button", { name: "Сохранить" });
     expect(save).toBeDisabled();
@@ -240,7 +243,7 @@ describe("AppSettingsForm platforms", () => {
 
     const section = platforms();
     const user = userEvent.setup();
-    await user.click(section.getByRole("button", { name: "Веб" }));
+    await user.click(await section.findByRole("button", { name: "Веб" }));
     await user.click(section.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() =>
@@ -250,13 +253,13 @@ describe("AppSettingsForm platforms", () => {
     expect(section.getByRole("button", { name: "Сохранить" })).toBeEnabled();
   });
 
-  it("disables the platforms in the demo", () => {
+  it("disables the platforms in the demo", async () => {
     // biome-ignore lint/suspicious/noDocumentCookie: тест демо-режима ставит и снимает cookie am_demo.
     document.cookie = "am_demo=1; path=/";
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 
     const section = platforms();
-    expect(section.getByRole("button", { name: "Веб" })).toBeDisabled();
+    expect(await section.findByRole("button", { name: "Веб" })).toBeDisabled();
     expect(section.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   });
 });
