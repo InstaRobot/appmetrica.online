@@ -17,11 +17,11 @@ export const SNIPPET_LABELS: Record<SnippetLang, string> = {
 
 // Рецепты документации с офлайн-очередью и сессиями (07-project-structure.md, content/docs/recipes).
 export const SNIPPET_RECIPES: Record<SnippetLang, string> = {
-  curl: "/docs/recipes/go-and-curl",
+  curl: "/docs/recipes/curl",
   swift: "/docs/recipes/ios-swift",
   kotlin: "/docs/recipes/android-kotlin",
   javascript: "/docs/recipes/web-js",
-  go: "/docs/recipes/go-and-curl",
+  go: "/docs/recipes/go",
 };
 
 export type SnippetInput = { ingestUrl: string; writeKey: string; platform: Platform };

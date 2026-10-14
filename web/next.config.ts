@@ -31,6 +31,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Старые адреса документации. Redirects применяются до proxy.ts, поэтому работают и без сессии.
+  async redirects() {
+    return [
+      // «Go и curl» разделён на рецепты curl и Go; старые ссылки вели в основном на curl-примеры.
+      { source: "/docs/recipes/go-and-curl", destination: "/docs/recipes/curl", permanent: true },
+    ];
+  },
 };
 
 const withMDX = createMDX();
