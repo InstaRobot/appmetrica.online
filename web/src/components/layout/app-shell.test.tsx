@@ -45,6 +45,26 @@ describe("AppShell", () => {
     expect(screen.queryByText(/Приложение в архиве/)).not.toBeInTheDocument();
   });
 
+  it("names every platform of the app in the header", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () =>
+        HttpResponse.json(
+          makeApp({
+            id: APP_ID,
+            name: "Notes",
+            platform: "ios",
+            platforms: ["ios", "android", "web", "macos"],
+          }),
+        ),
+      ),
+    );
+    renderShell();
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+    const badge = screen.getByText("iOS, Android, Веб, macOS", { selector: "[data-slot=badge]" });
+    expect(badge.querySelectorAll("svg")).toHaveLength(4);
+  });
+
   it("warns about an archived app", async () => {
     server.use(
       http.get(`*/v1/apps/${APP_ID}`, () =>

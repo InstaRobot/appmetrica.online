@@ -181,6 +181,7 @@ describe("PortfolioView", () => {
       .map((h) => h.textContent);
     expect(headers).toEqual([
       "Приложение",
+      "Платформы",
       "Сегодня",
       "DAU 12\u00a0окт",
       "Δ к пн\u00a05\u00a0окт",
@@ -199,10 +200,10 @@ describe("PortfolioView", () => {
 
     const t = await table();
     const cells = within(rowOf(t, "site.ru")).getAllByRole("cell");
-    expect(cells[3]).toHaveTextContent("—");
-    expect(cells[6]).toHaveTextContent("—");
+    expect(cells[4]).toHaveTextContent("—");
     expect(cells[7]).toHaveTextContent("—");
-    expect(within(rowOf(t, "Notes iOS")).getAllByRole("cell")[6]).toHaveTextContent(`38${NBSP}%`);
+    expect(cells[8]).toHaveTextContent("—");
+    expect(within(rowOf(t, "Notes iOS")).getAllByRole("cell")[7]).toHaveTextContent(`38${NBSP}%`);
 
     const d1 = within(t).getByRole("button", { name: /^D1/ });
     await user.click(d1);
@@ -367,6 +368,7 @@ describe("PortfolioView", () => {
       id: "0192aaaa-0000-7000-8000-000000000009",
       name: "Old Bot",
       platform: "bot",
+      platforms: ["bot"],
       status: "archived",
       archived_at: "2026-09-20T10:00:00Z",
     });
@@ -381,12 +383,69 @@ describe("PortfolioView", () => {
 
     const archive = screen.getByRole("table", { name: "Архив" });
     expect(within(archive).getByText("Old Bot")).toBeInTheDocument();
+    expect(within(archive).getByRole("columnheader", { name: "Платформы" })).toBeInTheDocument();
     expect(within(archive).getByText("Бот")).toBeInTheDocument();
     expect(within(archive).getByText("20 сен 2026")).toBeInTheDocument();
     expect(within(archive).getByRole("link", { name: "Открыть" })).toHaveAttribute(
       "href",
       `/apps/${archived.id}`,
     );
+  });
+
+  it("names every platform of an archived app", async () => {
+    const archived = makeApp({
+      id: "0192aaaa-0000-7000-8000-000000000010",
+      name: "Old Game",
+      platform: "ios",
+      platforms: ["ios", "android"],
+      status: "archived",
+      archived_at: "2026-09-20T10:00:00Z",
+    });
+    mockApi([notes], [makeApp({ ...notes.app }), archived]);
+    const user = userEvent.setup();
+    renderView();
+
+    await table();
+    await user.click(await screen.findByRole("switch", { name: "Показать архивные (1)" }));
+
+    const archive = screen.getByRole("table", { name: "Архив" });
+    expect(within(archive).getByText("iOS, Android")).toBeInTheDocument();
+    expect(within(archive).getByTitle("iOS, Android")).toBeInTheDocument();
+  });
+
+  it("shows platform icons by the name and platform shares", async () => {
+    const multi = portfolioRow({
+      app: {
+        id: "0192aaaa-0000-7000-8000-000000000004",
+        name: "Notes",
+        platform: "ios",
+        platforms: ["ios", "android", "web", "macos"],
+        status: "active",
+      },
+      active_date: 100,
+      platforms: [
+        { platform: "ios", active: 60 },
+        { platform: "android", active: 40 },
+      ],
+    });
+    const quiet = portfolioRow({
+      app: { ...site.app, id: "0192aaaa-0000-7000-8000-000000000005", name: "Quiet" },
+      active_date: 0,
+      platforms: [],
+    });
+    mockApi([multi, quiet]);
+    renderView();
+
+    const t = await table();
+    const row = rowOf(t, "Notes");
+    expect(within(row).getByRole("link", { name: "Notes" })).toBeInTheDocument();
+    expect(within(row).getByTitle("iOS, Android, Веб, macOS")).toBeInTheDocument();
+    expect(within(row).getByText("+1")).toBeInTheDocument();
+    expect(
+      within(row).getByRole("img", { name: "iOS 60\u00a0%, Android 40\u00a0%" }),
+    ).toBeInTheDocument();
+    const quietCells = within(rowOf(t, "Quiet")).getAllByRole("cell");
+    expect(quietCells[1]).toHaveTextContent("—");
   });
 
   it("hides the archive switch when nothing is archived", async () => {

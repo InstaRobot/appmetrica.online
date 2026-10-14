@@ -35,6 +35,11 @@ test("creates app from portfolio", async ({ page }) => {
   const link = table.getByRole("link", { name, exact: true });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", `/apps/${appId}`);
+  // Новое приложение без событий: иконка заявленной платформы у названия, в колонке долей прочерк.
+  await expect(table.getByRole("columnheader", { name: "Платформы" })).toBeVisible();
+  const row = table.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+  await expect(row.getByTitle("iOS", { exact: true })).toBeVisible();
+  await expect(row.getByRole("cell").nth(1)).toHaveText("—");
   await expectNoA11yViolations(page);
 });
 
