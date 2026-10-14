@@ -21,6 +21,7 @@ import (
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/pgstore"
 	"appmetrica.online/backend/internal/reports"
+	"appmetrica.online/backend/internal/telegram"
 )
 
 // runAPI — `appmetrica api`: Read API и admin API на API_LISTEN_ADDR, метрики на METRICS_LISTEN_ADDR.
@@ -74,6 +75,13 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	srv := api.NewServer(authSvc, apps.NewService(pg, c, logger), logger, cfg).
 		WithReports(reports.NewService(ch.Conn(), c), pg.Queries()).
 		WithDeletion(deletion.NewService(pg, c, logger)).
+		WithSettings(pg.Queries(), telegramSender(cfg.TelegramBotToken), c).
+		WithSystemStatus(api.SystemSources{
+			ClickHouse: ch,
+			Postgres:   func(ctx context.Context) error { return pg.Pool().Ping(ctx) },
+			Ops:        pg.Queries(),
+			Backup:     backupLister(cfg.BackupAPIURL),
+		}).
 		WithReadyChecks(
 			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return pg.Pool().Ping(ctx) }},
 			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},
@@ -95,4 +103,20 @@ func runAPI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	cancel()
 	wg.Wait()
 	return code
+}
+
+// telegramSender — nil без TELEGRAM_BOT_TOKEN: тестовое сообщение отвечает sent=false с подсказкой.
+func telegramSender(token string) api.TelegramSender {
+	if token == "" {
+		return nil
+	}
+	return telegram.New(token)
+}
+
+// backupLister — nil без BACKUP_API_URL: блок backup статуса системы пустой.
+func backupLister(url string) api.BackupLister {
+	if url == "" {
+		return nil
+	}
+	return chstore.NewBackupClient(url, nil)
 }

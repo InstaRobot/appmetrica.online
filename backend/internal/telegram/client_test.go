@@ -214,8 +214,8 @@ func TestSend_RetryAfterTooLong(t *testing.T) {
 
 func TestSend_InvalidResponses(t *testing.T) {
 	for name, rep := range map[string]reply{
-		"not_json":         {http.StatusOK, "<html>"},
-		"ok_false_200":     {http.StatusOK, `{"ok":false,"error_code":400,"description":"Bad Request: message text is empty"}`},
+		"not_json":          {http.StatusOK, "<html>"},
+		"ok_false_200":      {http.StatusOK, `{"ok":false,"error_code":400,"description":"Bad Request: message text is empty"}`},
 		"ok_without_result": {http.StatusOK, `{"ok":true}`},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -253,7 +253,7 @@ func TestSend_ContextCanceledStopsRetries(t *testing.T) {
 }
 
 func TestSend_HTTPClientTimeout(t *testing.T) {
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 		case <-time.After(2 * time.Second):

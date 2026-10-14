@@ -237,13 +237,18 @@ func validateName(name string) (string, error) {
 	return name, nil
 }
 
-// validateTimezone принимает только имена IANA: пустая строка и "Local" для time.LoadLocation
+// ValidTimezone принимает только имена IANA: пустая строка и "Local" для time.LoadLocation
 // означают UTC и пояс сервера, поэтому отклоняются.
-func validateTimezone(tz string) (string, error) {
+func ValidTimezone(tz string) bool {
 	if tz == "" || tz == "Local" || len(tz) > timezoneMaxLen {
-		return "", &ValidationError{Field: "timezone", Message: "Неизвестный часовой пояс"}
+		return false
 	}
-	if _, err := time.LoadLocation(tz); err != nil {
+	_, err := time.LoadLocation(tz)
+	return err == nil
+}
+
+func validateTimezone(tz string) (string, error) {
+	if !ValidTimezone(tz) {
 		return "", &ValidationError{Field: "timezone", Message: "Неизвестный часовой пояс"}
 	}
 	return tz, nil

@@ -84,7 +84,8 @@ func TestUpdateSettings_Persists(t *testing.T) {
 
 	got := decodeSettings(t, e.settingsCall(t, doc, cookie, http.MethodGet, settingsPath, nil))
 	require.Equal(t, want, normalize(got))
-	require.True(t, got.UpdatedAt.After(initial.UpdatedAt))
+	// Начальный updated_at — now() Postgres, а часы теста стоят: сравнивается только факт изменения.
+	require.False(t, got.UpdatedAt.Equal(initial.UpdatedAt))
 
 	// Частичный PATCH меняет только переданные поля.
 	e.advance(time.Minute)
