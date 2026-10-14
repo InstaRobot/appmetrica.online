@@ -1,0 +1,27 @@
+{
+  "active": {
+    "metric": "active",
+    "granularity": "day",
+    "points": [
+      { "ts": "2026-11-28T00:00:00+03:00", "value": 1049 },
+      { "ts": "2026-11-29T00:00:00+03:00", "value": 949 }
+    ]
+  },
+  "new": {
+    "metric": "new",
+    "granularity": "day",
+    "points": [
+      { "ts": "2026-11-28T00:00:00+03:00", "value": 204 },
+      { "ts": "2026-11-29T00:00:00+03:00", "value": 175 }
+    ]
+  },
+  "retention": {
+    "cohort_granularity": "day",
+    "periods": 1,
+    "cohorts": [
+      { "cohort_start": "2026-11-28", "size": 204, "values": [1, 0.41] },
+      { "cohort_start": "2026-11-29", "size": 175, "values": [1, null] }
+    ],
+    "average": [1, 0.41]
+  }
+}
