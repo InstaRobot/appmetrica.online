@@ -1,131 +1,20 @@
 ---
-title: Go и curl
-description: Проверка ключа из терминала, полная сессия, gzip и клиент на Go с повторами.
+title: Go
+description: Клиент на Go без зависимостей — отправка батча, повторы через Retry-After и экспоненциальная задержка.
 ---
 
-curl удобен, чтобы проверить ключ и посмотреть ответ сервера глазами. Клиент на Go подходит для
-бэкендов, CLI и cron-задач. Боты и серверные сессии разобраны в рецепте
-[Боты и бэкенды](/docs/recipes/bots-and-backends).
+Клиент на Go подходит для бэкендов, CLI и cron-задач. Проверить ключ и посмотреть ответ сервера проще
+из терминала — запросы на чистом curl собраны в рецепте [curl](/docs/recipes/curl). Боты и серверные
+сессии разобраны в рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends).
 
-Во всех примерах write-ключ берётся из переменной окружения `AM_PK`. Ключ показан на вкладке
-«Интеграция» приложения:
+Клиент берёт write-ключ из переменной окружения `AM_PK`. Ключ показан на вкладке «Интеграция»
+приложения:
 
 ```bash
 export AM_PK="pk_…"
 ```
 
-## curl: одно событие [#curl-single]
-
-Минимальный батч — один `session_start`. `environment: "development"` не даёт тестовым событиям
-попасть в production-отчёты. Идентификаторы генерирует `uuidgen`, время — `date` в UTC.
-
-```bash
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-curl -sS https://i.appmetrica.online/v1/events \
-  -H "Content-Type: application/json" \
-  -H "X-App-Key: $AM_PK" \
-  --data-binary @- <<JSON
-{
-  "sent_at": "$NOW",
-  "context": { "platform": "server", "app_version": "1.0.0", "environment": "development" },
-  "events": [
-    {
-      "insert_id": "$(uuidgen | tr A-Z a-z)",
-      "name": "session_start",
-      "timestamp": "$NOW",
-      "install_id": "$(uuidgen | tr A-Z a-z)",
-      "session_id": "$(uuidgen | tr A-Z a-z)"
-    }
-  ]
-}
-JSON
-```
-
-Ответ:
-
-```json
-{ "accepted": 1, "rejected": [], "warnings": [], "server_time": "2026-10-14T09:15:02.318Z" }
-```
-
-## curl: полная сессия [#curl-session]
-
-`session_start` и `session_end` одной сессии делят `session_id` и `install_id`. У `session_end`
-обязательно поле `duration_ms` — время на переднем плане в миллисекундах.
-
-```bash
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-INSTALL_ID=$(uuidgen | tr A-Z a-z)
-SESSION_ID=$(uuidgen | tr A-Z a-z)
-curl -sS https://i.appmetrica.online/v1/events \
-  -H "Content-Type: application/json" \
-  -H "X-App-Key: $AM_PK" \
-  --data-binary @- <<JSON
-{
-  "sent_at": "$NOW",
-  "context": {
-    "platform": "server",
-    "os_name": "Linux",
-    "app_version": "1.0.0",
-    "device_type": "server",
-    "environment": "development",
-    "ip": "none"
-  },
-  "events": [
-    {
-      "insert_id": "$(uuidgen | tr A-Z a-z)",
-      "name": "session_start",
-      "timestamp": "$NOW",
-      "install_id": "$INSTALL_ID",
-      "session_id": "$SESSION_ID",
-      "user_id": "acct_8f14e45f"
-    },
-    {
-      "insert_id": "$(uuidgen | tr A-Z a-z)",
-      "name": "session_end",
-      "timestamp": "$NOW",
-      "install_id": "$INSTALL_ID",
-      "session_id": "$SESSION_ID",
-      "user_id": "acct_8f14e45f",
-      "duration_ms": 60000
-    }
-  ]
-}
-JSON
-```
-
-`"ip": "none"` отключает определение страны и города: без него сервер взял бы адрес машины, с
-которой запущен curl. Подробнее — в разделе [context.ip](/docs/recipes/bots-and-backends#context-ip).
-
-## curl: gzip [#curl-gzip]
-
-Большие батчи (до 500 событий и 1 МиБ после распаковки) выгодно сжимать. Сервер принимает только
-`Content-Encoding: gzip`.
-
-```bash
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-cat > batch.json <<JSON
-{
-  "sent_at": "$NOW",
-  "context": { "platform": "server", "environment": "development", "ip": "none" },
-  "events": [
-    {
-      "insert_id": "$(uuidgen | tr A-Z a-z)",
-      "name": "session_start",
-      "timestamp": "$NOW",
-      "install_id": "$(uuidgen | tr A-Z a-z)",
-      "session_id": "$(uuidgen | tr A-Z a-z)"
-    }
-  ]
-}
-JSON
-gzip -c batch.json | curl -sS https://i.appmetrica.online/v1/events \
-  -H "Content-Type: application/json" \
-  -H "Content-Encoding: gzip" \
-  -H "X-App-Key: $AM_PK" \
-  --data-binary @-
-```
-
-## Go: клиент с повторами [#go-client]
+## Клиент с повторами [#go-client]
 
 Клиент без сторонних зависимостей. Он отправляет батч и повторяет его по правилам из
 [Ошибки и повторы](/docs/errors-and-retries): `429` и `503` — через `Retry-After`, `5xx` и сетевые

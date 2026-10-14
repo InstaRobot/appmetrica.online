@@ -1,4 +1,4 @@
 {
   "title": "Концепции",
-  "pages": ["identity", "sessions", "time-and-offline"]
+  "pages": ["initialization", "identity", "sessions", "time-and-offline"]
 }

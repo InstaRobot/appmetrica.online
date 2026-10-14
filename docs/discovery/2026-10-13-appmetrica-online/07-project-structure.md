@@ -443,9 +443,9 @@ docs/
 web/content/docs/                              # пользовательская документация API (S-13, за логином)
 ├── meta.json                                  # порядок разделов в сайдбаре (+ meta.json в каждом подразделе)
 ├── index.mdx                                  # Быстрый старт
-├── concepts/identity.mdx  concepts/sessions.mdx  concepts/time-and-offline.mdx
-├── recipes/ios-swift.mdx  recipes/android-kotlin.mdx  recipes/web-js.mdx
-├── recipes/bots-and-backends.mdx  recipes/go-and-curl.mdx
+├── concepts/initialization.mdx  concepts/identity.mdx  concepts/sessions.mdx  concepts/time-and-offline.mdx
+├── recipes/curl.mdx  recipes/ios-swift.mdx  recipes/android-kotlin.mdx  recipes/web-js.mdx
+├── recipes/bots-and-backends.mdx  recipes/go.mdx
 ├── errors-and-retries.mdx  privacy-and-gdpr.mdx
 └── read-api/overview.mdx
 ```

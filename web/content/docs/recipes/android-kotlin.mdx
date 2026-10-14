@@ -8,6 +8,9 @@ description: HttpURLConnection, install_id в SharedPreferences, офлайн-о
 `ActivityLifecycleCallbacks` без зависимостей. Код состоит из трёх частей: `install_id`,
 офлайн-очередь с отправкой и трекер сессий.
 
+Почему трекер создаётся в `Application.onCreate`, а не в `Activity.onCreate`, — в разделе
+[Где инициализировать метрику](/docs/concepts/initialization#android).
+
 ## install_id [#install-id]
 
 `install_id` создаётся при первом запуске и хранится в `SharedPreferences`. Auto Backup включён по

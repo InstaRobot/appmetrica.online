@@ -60,15 +60,20 @@ JSON
 
 ## 3. Встройте отправку в приложение [#integrate]
 
-Выберите рецепт для своей платформы. В каждом есть хранение `install_id`, жизненный цикл сессии и
-офлайн-очередь:
+Аналитика создаётся один раз на процесс, а сессия следует за жизненным циклом всего приложения, а не
+отдельного экрана. Точки входа и хуки для каждой платформы собраны в разделе
+[Где инициализировать метрику](/docs/concepts/initialization).
+
+Затем выберите рецепт для своей платформы. В каждом есть хранение `install_id`, жизненный цикл сессии
+и офлайн-очередь:
 
 - [iOS (Swift)](/docs/recipes/ios-swift) — URLSession, Keychain, SwiftUI и UIKit;
 - [Android (Kotlin)](/docs/recipes/android-kotlin) — HttpURLConnection, SharedPreferences,
   ProcessLifecycleOwner;
 - [Веб (JavaScript)](/docs/recipes/web-js) — `navigator.sendBeacon`, `localStorage`;
 - [Боты и бэкенды](/docs/recipes/bots-and-backends) — Telegram-боты, серверные сессии, `context.ip`;
-- [Go и curl](/docs/recipes/go-and-curl) — проверка из терминала и клиент на Go.
+- [curl](/docs/recipes/curl) — все запросы из терминала: батчи, досыл, gzip, повторы, Read API;
+- [Go](/docs/recipes/go) — клиент с повторами для бэкендов, CLI и cron-задач.
 
 ## 4. Проверьте данные [#check]
 
@@ -78,6 +83,7 @@ DAU и новые пользователи за выбранный период.
 
 ## Что почитать дальше [#next]
 
+- [Где инициализировать метрику](/docs/concepts/initialization) — точки входа и хуки жизненного цикла.
 - [Идентичность](/docs/concepts/identity) — `install_id`, `user_id` и как считаются люди.
 - [Сессии](/docs/concepts/sessions) — когда начинать и заканчивать сессию.
 - [Время и офлайн-очередь](/docs/concepts/time-and-offline) — сбитые часы и досыл через 7 дней.

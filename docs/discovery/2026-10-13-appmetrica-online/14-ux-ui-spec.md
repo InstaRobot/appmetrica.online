@@ -1715,8 +1715,8 @@ func main() {
 
 **Дерево навигации** (из `content/docs`):
 1. Быстрый старт (`index`)
-2. Концепции: Идентификация (`concepts/identity`), Сессии (`concepts/sessions`), Время и офлайн-очередь (`concepts/time-and-offline`)
-3. Рецепты: iOS (Swift) (`recipes/ios-swift`), Android (Kotlin) (`recipes/android-kotlin`), Веб (JS) (`recipes/web-js`), Боты и бэкенды (`recipes/bots-and-backends`), Go и curl (`recipes/go-and-curl`)
+2. Концепции: Где инициализировать метрику (`concepts/initialization`), Идентификация (`concepts/identity`), Сессии (`concepts/sessions`), Время и офлайн-очередь (`concepts/time-and-offline`)
+3. Рецепты: curl (`recipes/curl`), iOS (Swift) (`recipes/ios-swift`), Android (Kotlin) (`recipes/android-kotlin`), Веб (JS) (`recipes/web-js`), Боты и бэкенды (`recipes/bots-and-backends`), Go (`recipes/go`); старый адрес `recipes/go-and-curl` — постоянный редирект на `recipes/curl`
 4. Ошибки и ретраи (`errors-and-retries`)
 5. Приватность и GDPR (`privacy-and-gdpr`)
 6. Read API: Обзор (`read-api/overview`)

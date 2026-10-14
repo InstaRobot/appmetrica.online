@@ -1911,8 +1911,8 @@ AC-6.2.5 (invariant — SLA):
 **чтобы** встроить отправку событий в любое приложение без SDK.
 
 **Контекст**: Fumadocs (core/ui 16.17.2, mdx 15.4.7, openapi 12.4.2) в route group `(docs)`, путь `/docs`. Страницы:
-index (Быстрый старт), concepts/identity, concepts/sessions, concepts/time-and-offline, recipes/ios-swift,
-recipes/android-kotlin, recipes/web-js, recipes/bots-and-backends, recipes/go-and-curl, errors-and-retries,
+index (Быстрый старт), concepts/initialization, concepts/identity, concepts/sessions, concepts/time-and-offline,
+recipes/curl, recipes/ios-swift, recipes/android-kotlin, recipes/web-js, recipes/bots-and-backends, recipes/go, errors-and-retries,
 privacy-and-gdpr, read-api/overview, api-reference (ingest), api-reference (read). API reference генерируется из
 `contracts/openapi/ingest.yaml` и `api.yaml` (`/admin/v1` помечен `x-internal: true` и исключается). Playground выключен.
 Доступ: `proxy.ts` + серверная проверка `GET /admin/v1/auth/state` в `app/(docs)/layout.tsx`.
@@ -1945,7 +1945,7 @@ AC-7.1.3 (invariant — admin-эндпоинты не публикуются):
 
 ```
 AC-7.1.4 (invariant — сниппеты компилируются):
-  Given: go-сниппет recipes/go-and-curl
+  Given: go-сниппет recipes/go
   When:  CI извлекает блоки ```go из MDX и запускает go vet
   Then:  0 ошибок
   Test:  backend/internal/docscheck/snippets_test.go::TestDocsGoSnippets_Vet

@@ -7,6 +7,9 @@ description: Сессии сайта через visibilitychange, navigator.send
 вкладка видна пользователю. `session_end` отправляется через `navigator.sendBeacon`: браузер доставит
 его, даже если вкладку закрывают.
 
+Куда подключить модуль в SPA и на многостраничном сайте — в разделе
+[Где инициализировать метрику](/docs/concepts/initialization#web).
+
 ## Почему text/plain и app_key в теле [#beacon]
 
 `sendBeacon` не умеет задавать заголовки, поэтому ключ передаётся в поле тела `app_key`, а не в
