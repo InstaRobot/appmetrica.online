@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import { createParser, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { useId, useState } from "react";
 import { LazyCalendar } from "@/components/common/lazy-calendar";
-import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon";
+import { platformLabel } from "@/components/common/platform-icon";
+import { PlatformIcons } from "@/components/common/platform-icons";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { PageHeader } from "@/components/layout/page-header";
@@ -144,7 +145,7 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
                 Название
               </TableHead>
               <TableHead scope="col" className="px-3">
-                Платформа
+                Платформы
               </TableHead>
               <TableHead scope="col" className="px-3">
                 Дата архивации
@@ -159,11 +160,13 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
               <TableRow key={app.id}>
                 <TableCell className="px-3">
                   <span className="inline-flex items-center gap-2">
-                    <PlatformIcon platform={app.platform} className="size-4 text-fg-muted" />
+                    <PlatformIcons platforms={app.platforms} className="text-fg-muted" />
                     {app.name}
                   </span>
                 </TableCell>
-                <TableCell className="px-3">{PLATFORM_LABELS[app.platform]}</TableCell>
+                <TableCell className="px-3">
+                  {app.platforms.map(platformLabel).join(", ")}
+                </TableCell>
                 <TableCell className="px-3">
                   {app.archived_at ? formatDate(app.archived_at, timeZone) : "—"}
                 </TableCell>

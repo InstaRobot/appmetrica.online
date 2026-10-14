@@ -3,7 +3,8 @@
 import { SearchX } from "lucide-react";
 import { useParams } from "next/navigation";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
-import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon";
+import { platformLabel } from "@/components/common/platform-icon";
+import { PlatformIcons } from "@/components/common/platform-icons";
 import { ArchivedBanner } from "@/components/feedback/archived-banner";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -29,7 +30,7 @@ export function AppShellSkeleton() {
   );
 }
 
-// AppShell (14-ux-ui-spec.md S-05…S-11): вкладки приложения, название с платформой, баннер архива.
+// AppShell (14-ux-ui-spec.md S-05…S-11): вкладки приложения, название с платформами, баннер архива.
 // Приложение загружается на клиенте (useGetApp); отчёты вкладок берут его из того же кэша запросов.
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { appId } = useParams<{ appId: string }>();
@@ -66,8 +67,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         adornment={
           <>
             <Badge variant="outline" className="gap-1">
-              <PlatformIcon platform={app.platform} className="size-3.5" />
-              {PLATFORM_LABELS[app.platform]}
+              <PlatformIcons
+                platforms={app.platforms}
+                max={app.platforms.length}
+                className="[&_svg]:size-3.5"
+              />
+              {app.platforms.map(platformLabel).join(", ")}
             </Badge>
             <UnitBadge unit={unit} />
           </>

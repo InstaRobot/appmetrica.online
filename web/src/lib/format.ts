@@ -24,6 +24,16 @@ export function formatPercent(value: number | null | undefined): string {
   return isNumber(value) ? normalizeSpaces(percentFormat.format(value)) : DASH;
 }
 
+const shareFormat = new Intl.NumberFormat("ru-RU", {
+  style: "percent",
+  maximumFractionDigits: 0,
+});
+
+// Доля 0..1 целыми процентами → «51 %» (доли платформ в портфеле).
+export function formatShare(value: number | null | undefined): string {
+  return isNumber(value) ? normalizeSpaces(shareFormat.format(value)) : DASH;
+}
+
 const rateFormat = new Intl.NumberFormat("ru-RU", {
   style: "percent",
   maximumSignificantDigits: 2,

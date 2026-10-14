@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { PlatformIcon } from "@/components/common/platform-icon";
+import { PlatformIcons } from "@/components/common/platform-icons";
 import {
   Table,
   TableBody,
@@ -25,6 +25,7 @@ import {
 import { addDays } from "@/lib/period";
 import { cn } from "@/lib/utils";
 import { Delta } from "./delta";
+import { PlatformShareBar } from "./platform-share-bar";
 import { Sparkline } from "./sparkline";
 
 export type PortfolioSortKey =
@@ -93,10 +94,13 @@ export function trendLabel(values: number[]): string {
 }
 
 type Column = {
-  key: PortfolioSortKey | "sparkline";
+  key: PortfolioSortKey | "platforms" | "sparkline";
   label: string;
   hint?: string;
 };
+
+const isSortable = (column: Column): column is Column & { key: PortfolioSortKey } =>
+  column.key !== "platforms" && column.key !== "sparkline";
 
 function SortButton({
   column,
@@ -141,6 +145,7 @@ function SortButton({
 export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: PortfolioTableProps) {
   const columns: Column[] = [
     { key: "name", label: "Приложение" },
+    { key: "platforms", label: "Платформы" },
     {
       key: "active_today",
       label: "Сегодня",
@@ -167,7 +172,7 @@ export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: Po
                 key={column.key}
                 scope="col"
                 aria-sort={
-                  column.key === "sparkline"
+                  !isSortable(column)
                     ? undefined
                     : sort.key === column.key
                       ? sort.desc
@@ -177,16 +182,12 @@ export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: Po
                 }
                 className={cn("px-3", column.key !== "name" && "text-right")}
               >
-                {column.key === "sparkline" ? (
+                {!isSortable(column) ? (
                   <span className="text-label-sm uppercase tracking-wide text-fg-muted">
                     {column.label}
                   </span>
                 ) : (
-                  <SortButton
-                    column={{ ...column, key: column.key }}
-                    sort={sort}
-                    onSortChange={onSortChange}
-                  />
+                  <SortButton column={column} sort={sort} onSortChange={onSortChange} />
                 )}
               </TableHead>
             ))}
@@ -207,12 +208,12 @@ export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: Po
                   href={`/apps/${row.app.id}` as Route}
                   className="inline-flex items-center gap-2 rounded-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <PlatformIcon
-                    platform={row.app.platform}
-                    className="size-4 shrink-0 text-fg-muted"
-                  />
+                  <PlatformIcons platforms={row.app.platforms} className="text-fg-muted" />
                   {row.app.name}
                 </Link>
+              </TableCell>
+              <TableCell className="px-3 text-right">
+                <PlatformShareBar items={row.platforms} total={row.active_date} />
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums text-fg-muted">
                 {formatInt(row.active_today)}

@@ -14,7 +14,7 @@ import {
   CommandSeparator,
   CommandSkeleton,
 } from "@/components/common/lazy-command";
-import { PlatformIcon } from "@/components/common/platform-icon";
+import { PlatformIcons } from "@/components/common/platform-icons";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { App } from "@/lib/api/gen/model";
@@ -58,7 +58,7 @@ export function AppSwitcher({ apps, currentAppId, currentTab = "" }: AppSwitcher
           aria-expanded={open}
           className="h-9 max-w-64 gap-2 px-2 text-body-md font-medium"
         >
-          {current ? <PlatformIcon platform={current.platform} /> : null}
+          {current ? <PlatformIcons platforms={current.platforms} /> : null}
           <span className="truncate">{current ? current.name : "Все приложения"}</span>
           <ChevronsUpDown aria-hidden="true" className="text-fg-subtle" />
         </Button>
@@ -81,7 +81,7 @@ export function AppSwitcher({ apps, currentAppId, currentTab = "" }: AppSwitcher
                       value={app.id}
                       onSelect={() => go(appTabHref(app.id, currentTab, query))}
                     >
-                      <PlatformIcon platform={app.platform} />
+                      <PlatformIcons platforms={app.platforms} />
                       <span className="truncate">{app.name}</span>
                       <Check
                         aria-hidden="true"
