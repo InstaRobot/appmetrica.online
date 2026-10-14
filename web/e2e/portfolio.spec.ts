@@ -16,8 +16,12 @@ test("creates app from portfolio", async ({ page }) => {
   await expectNoA11yViolations(page);
 
   await page.getByRole("textbox", { name: "Название" }).fill(name);
-  await page.getByRole("combobox", { name: "Платформа" }).click();
-  await page.getByRole("option", { name: "iOS" }).click();
+  const ios = page
+    .getByRole("group", { name: "Платформы" })
+    .getByRole("button", { name: "iOS", exact: true });
+  await ios.click();
+  await expect(ios).toHaveAttribute("aria-pressed", "true");
+  await expectNoA11yViolations(page);
   await expect(page.getByRole("combobox", { name: "Часовой пояс" })).not.toHaveText(
     "Выберите часовой пояс",
   );

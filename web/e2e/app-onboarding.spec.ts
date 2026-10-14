@@ -11,8 +11,11 @@ const INGEST_URL = process.env.E2E_INGEST_URL ?? "http://localhost:8081";
 async function createApp(page: Page, name: string): Promise<void> {
   await page.goto("/apps/new");
   await page.getByRole("textbox", { name: "Название" }).fill(name);
-  await page.getByRole("combobox", { name: "Платформа" }).click();
-  await page.getByRole("option", { name: "iOS" }).click();
+  const ios = page
+    .getByRole("group", { name: "Платформы" })
+    .getByRole("button", { name: "iOS", exact: true });
+  await ios.click();
+  await expect(ios).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Создать" }).click();
   await expect(page).toHaveURL(/\/apps\/[0-9a-f-]{36}\/integration$/);
 }
