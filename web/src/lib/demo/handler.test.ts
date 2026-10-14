@@ -8,7 +8,8 @@ import { DEMO_PROFILES } from "./profiles";
 
 // «Сейчас» демо-тестов: 12:30 по Москве, среда.
 const NOW = new Date("2026-10-14T09:30:00Z");
-const IOS = DEMO_APP_IDS.notesIos;
+const NOTES = DEMO_APP_IDS.notes;
+const SITE = DEMO_APP_IDS.site;
 const BOT = DEMO_APP_IDS.bot;
 const UNKNOWN_APP = "0199d5f0-0000-7000-8000-000000000000";
 const MONTH = { from: "2026-09-15", to: "2026-10-14" };
@@ -24,8 +25,8 @@ const DIMENSIONS = [
   "locale",
 ] as const;
 
-const iosProfile = DEMO_PROFILES.find((p) => p.appId === IOS && p.userId !== null);
-if (!iosProfile) throw new Error("demo profile for Notes iOS is missing");
+const notesProfile = DEMO_PROFILES.find((p) => p.appId === NOTES && p.userId !== null);
+if (!notesProfile) throw new Error("demo profile for Notes is missing");
 
 type Case = { url: string; schema: ZodType };
 
@@ -40,7 +41,7 @@ async function firstDeletionRequestUrl(): Promise<string> {
 // Ответы демо на каждую GET-операцию orval-клиента: URL строит сгенерированный клиент, форму проверяет
 // сгенерированная zod-схема ответа (контракт api.yaml).
 async function contractCases(): Promise<Record<string, Case[]>> {
-  const p = iosProfile;
+  const p = notesProfile;
   if (!p) throw new Error("unreachable");
   return {
     apiHealth: [{ url: endpoints.getApiHealthUrl(), schema: schemas.ApiHealthResponse }],
@@ -74,7 +75,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     ],
     getAudienceSummary: [
       {
-        url: endpoints.getGetAudienceSummaryUrl(IOS, MONTH),
+        url: endpoints.getGetAudienceSummaryUrl(NOTES, MONTH),
         schema: schemas.GetAudienceSummaryResponse,
       },
       {
@@ -89,7 +90,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     ],
     getAudienceTimeseries: [
       {
-        url: endpoints.getGetAudienceTimeseriesUrl(IOS, {
+        url: endpoints.getGetAudienceTimeseriesUrl(NOTES, {
           ...MONTH,
           granularity: "day",
           metric: "active",
@@ -97,7 +98,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.GetAudienceTimeseriesResponse,
       },
       {
-        url: endpoints.getGetAudienceTimeseriesUrl(IOS, {
+        url: endpoints.getGetAudienceTimeseriesUrl(NOTES, {
           from: "2026-10-13",
           to: "2026-10-14",
           granularity: "hour",
@@ -108,7 +109,28 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.GetAudienceTimeseriesResponse,
       },
       {
-        url: endpoints.getGetAudienceTimeseriesUrl(DEMO_APP_IDS.site, {
+        url: endpoints.getGetAudienceTimeseriesUrl(NOTES, {
+          from: "2026-07-01",
+          to: "2026-10-14",
+          granularity: "day",
+          metric: "avg_duration_ms",
+          split: "platform",
+        }),
+        schema: schemas.GetAudienceTimeseriesResponse,
+      },
+      {
+        url: endpoints.getGetAudienceTimeseriesUrl(NOTES, {
+          from: "2026-10-12",
+          to: "2026-10-14",
+          granularity: "hour",
+          metric: "new",
+          split: "platform",
+          country: ["KZ"],
+        }),
+        schema: schemas.GetAudienceTimeseriesResponse,
+      },
+      {
+        url: endpoints.getGetAudienceTimeseriesUrl(SITE, {
           from: "2026-07-01",
           to: "2026-10-14",
           granularity: "week",
@@ -118,7 +140,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.GetAudienceTimeseriesResponse,
       },
       {
-        url: endpoints.getGetAudienceTimeseriesUrl(DEMO_APP_IDS.notesAndroid, {
+        url: endpoints.getGetAudienceTimeseriesUrl(NOTES, {
           from: "2026-04-01",
           to: "2026-10-14",
           granularity: "month",
@@ -131,16 +153,16 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     ],
     getRollingActive: [
       {
-        url: endpoints.getGetRollingActiveUrl(IOS, MONTH),
+        url: endpoints.getGetRollingActiveUrl(NOTES, MONTH),
         schema: schemas.GetRollingActiveResponse,
       },
     ],
     getAudienceBreakdown: DIMENSIONS.map((dimension) => ({
-      url: endpoints.getGetAudienceBreakdownUrl(IOS, { ...MONTH, dimension }),
+      url: endpoints.getGetAudienceBreakdownUrl(NOTES, { ...MONTH, dimension }),
       schema: schemas.GetAudienceBreakdownResponse,
     })).concat(
       DIMENSIONS.map((dimension) => ({
-        url: endpoints.getGetAudienceBreakdownUrl(DEMO_APP_IDS.site, {
+        url: endpoints.getGetAudienceBreakdownUrl(SITE, {
           ...MONTH,
           dimension,
           metric: "sessions",
@@ -151,11 +173,11 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     ),
     getRetention: [
       {
-        url: endpoints.getGetRetentionUrl(IOS, { ...MONTH, cohort_granularity: "day" }),
+        url: endpoints.getGetRetentionUrl(NOTES, { ...MONTH, cohort_granularity: "day" }),
         schema: schemas.GetRetentionResponse,
       },
       {
-        url: endpoints.getGetRetentionUrl(IOS, {
+        url: endpoints.getGetRetentionUrl(NOTES, {
           from: "2026-07-06",
           to: "2026-10-14",
           cohort_granularity: "week",
@@ -165,7 +187,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
       },
     ],
     getRealtime: [
-      { url: endpoints.getGetRealtimeUrl(IOS), schema: schemas.GetRealtimeResponse },
+      { url: endpoints.getGetRealtimeUrl(NOTES), schema: schemas.GetRealtimeResponse },
       {
         url: endpoints.getGetRealtimeUrl(BOT, { environment: "development" }),
         schema: schemas.GetRealtimeResponse,
@@ -177,17 +199,17 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     ],
     searchProfiles: [
       {
-        url: endpoints.getSearchProfilesUrl(IOS, { q: p.installId }),
+        url: endpoints.getSearchProfilesUrl(NOTES, { q: p.installId }),
         schema: schemas.SearchProfilesResponse,
       },
       {
-        url: endpoints.getSearchProfilesUrl(IOS, { q: "nobody" }),
+        url: endpoints.getSearchProfilesUrl(NOTES, { q: "nobody" }),
         schema: schemas.SearchProfilesResponse,
       },
     ],
     getProfile: [
       {
-        url: endpoints.getGetProfileUrl(IOS, encodeURIComponent(p.personKey)),
+        url: endpoints.getGetProfileUrl(NOTES, encodeURIComponent(p.personKey)),
         schema: schemas.GetProfileResponse,
       },
       ...DEMO_PROFILES.map((profile) => ({
@@ -211,11 +233,15 @@ async function contractCases(): Promise<Record<string, Case[]>> {
     })),
     getMergePreview: [
       {
-        url: endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.notesAndroid }),
+        url: endpoints.getGetMergePreviewUrl(NOTES, { source_app_id: SITE }),
         schema: schemas.GetMergePreviewResponse,
       },
       {
-        url: endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.site }),
+        url: endpoints.getGetMergePreviewUrl(NOTES, { source_app_id: DEMO_APP_IDS.oldGame }),
+        schema: schemas.GetMergePreviewResponse,
+      },
+      {
+        url: endpoints.getGetMergePreviewUrl(SITE, { source_app_id: NOTES }),
         schema: schemas.GetMergePreviewResponse,
       },
     ],
@@ -234,7 +260,7 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.ListDeletionRequestsResponse,
       },
       {
-        url: endpoints.getListDeletionRequestsUrl({ app_id: IOS }),
+        url: endpoints.getListDeletionRequestsUrl({ app_id: NOTES }),
         schema: schemas.ListDeletionRequestsResponse,
       },
     ],
@@ -318,16 +344,16 @@ describe("demoFetch contract", () => {
 describe("demoFetch read-only and errors", () => {
   it.each([
     ["POST", "/admin/v1/apps"],
-    ["PATCH", `/admin/v1/apps/${IOS}`],
-    ["DELETE", `/admin/v1/apps/${IOS}`],
-    ["POST", `/admin/v1/apps/${IOS}/archive`],
-    ["POST", `/admin/v1/apps/${IOS}/write-keys`],
+    ["PATCH", `/admin/v1/apps/${NOTES}`],
+    ["DELETE", `/admin/v1/apps/${NOTES}`],
+    ["POST", `/admin/v1/apps/${NOTES}/archive`],
+    ["POST", `/admin/v1/apps/${NOTES}/write-keys`],
     ["POST", "/admin/v1/api-keys"],
     ["PATCH", "/admin/v1/settings"],
     ["POST", "/admin/v1/settings/telegram/test"],
     ["DELETE", "/admin/v1/passkeys/0199d6e0-4444-7ddd-8eee-0f1011121314"],
     ["POST", "/admin/v1/auth/login/begin"],
-    ["POST", `/v1/apps/${IOS}/deletion-requests`],
+    ["POST", `/v1/apps/${NOTES}/deletion-requests`],
     ["PUT", "/v1/apps"],
     ["post", "/v1/unknown"],
   ])("rejects %s %s as read-only demo", async (method, url) => {
@@ -353,8 +379,8 @@ describe("demoFetch read-only and errors", () => {
     "/v1/unknown",
     "/v2/apps",
     "/admin/v1/nothing",
-    `/v1/apps/${IOS}/unknown`,
-    `/v1/apps/${IOS}/audience/summary/extra`,
+    `/v1/apps/${NOTES}/unknown`,
+    `/v1/apps/${NOTES}/audience/summary/extra`,
   ])("answers 404 not_found for unknown path %s", async (url) => {
     const res = await demoFetch(url, undefined, NOW);
     expect(res.status).toBe(404);
@@ -373,8 +399,8 @@ describe("demoFetch read-only and errors", () => {
     `/v1/apps/${UNKNOWN_APP}/integration/health`,
     `/admin/v1/apps/${UNKNOWN_APP}/write-keys`,
     `/admin/v1/apps/${UNKNOWN_APP}/merges`,
-    `/admin/v1/apps/${UNKNOWN_APP}/merge-preview?source_app_id=${IOS}`,
-    `/admin/v1/apps/${IOS}/merge-preview?source_app_id=${UNKNOWN_APP}`,
+    `/admin/v1/apps/${UNKNOWN_APP}/merge-preview?source_app_id=${NOTES}`,
+    `/admin/v1/apps/${NOTES}/merge-preview?source_app_id=${UNKNOWN_APP}`,
   ])("answers 404 app_not_found for unknown app %s", async (url) => {
     const res = await demoFetch(url, undefined, NOW);
     expect(res.status).toBe(404);
@@ -384,8 +410,8 @@ describe("demoFetch read-only and errors", () => {
   });
 
   it("narrows realtime to a platform", async () => {
-    const get = async (query: string) =>
-      (await (await demoFetch(`/v1/apps/${IOS}/realtime${query}`, undefined, NOW)).json()) as {
+    const get = async (query: string, app = SITE) =>
+      (await (await demoFetch(`/v1/apps/${app}/realtime${query}`, undefined, NOW)).json()) as {
         active_now: number;
         per_minute: { sessions_started: number }[];
         recent_events: { platform: string }[];
@@ -394,16 +420,25 @@ describe("demoFetch read-only and errors", () => {
     expect(all.active_now).toBeGreaterThan(0);
     expect(all.recent_events.length).toBeGreaterThan(0);
 
-    expect(await get("?platform=ios")).toEqual(all);
+    expect(await get("?platform=web")).toEqual(all);
     const android = await get("?platform=android");
     expect(android.active_now).toBe(0);
     expect(android.per_minute.every((m) => m.sessions_started === 0)).toBe(true);
     expect(android.recent_events).toEqual([]);
+
+    // У «Notes» платформа — сегмент: каждый срез меньше общего и состоит из своих событий.
+    const notes = await get("", NOTES);
+    for (const platform of ["ios", "android", "web"]) {
+      const one = await get(`?platform=${platform}`, NOTES);
+      expect(one.active_now, platform).toBeGreaterThan(0);
+      expect(one.active_now, platform).toBeLessThan(notes.active_now);
+      expect(one.recent_events.every((e) => e.platform === platform)).toBe(true);
+    }
   });
 
   it("previews a merge of another demo app and rejects the app itself", async () => {
     const res = await demoFetch(
-      endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.notesAndroid }),
+      endpoints.getGetMergePreviewUrl(NOTES, { source_app_id: SITE }),
       undefined,
       NOW,
     );
@@ -414,15 +449,23 @@ describe("demoFetch read-only and errors", () => {
       last_day: string | null;
       write_keys: number;
     };
-    expect(preview.source.id).toBe(DEMO_APP_IDS.notesAndroid);
+    expect(preview.source.id).toBe(SITE);
     expect(preview.events).toBeGreaterThan(0);
     expect(preview.first_day).not.toBeNull();
     expect(preview.last_day).toBe("2026-10-14");
     expect(preview.write_keys).toBe(1);
+    const reverse = await demoFetch(
+      endpoints.getGetMergePreviewUrl(SITE, { source_app_id: NOTES }),
+      undefined,
+      NOW,
+    );
+    const notes = (await reverse.json()) as { write_keys: number; source: { platforms: string[] } };
+    expect(notes.write_keys).toBe(3);
+    expect(notes.source.platforms).toEqual(["ios", "android", "web"]);
 
     for (const url of [
-      endpoints.getGetMergePreviewUrl(IOS, { source_app_id: IOS }),
-      `/admin/v1/apps/${IOS}/merge-preview`,
+      endpoints.getGetMergePreviewUrl(NOTES, { source_app_id: NOTES }),
+      `/admin/v1/apps/${NOTES}/merge-preview`,
     ]) {
       const bad = await demoFetch(url, undefined, NOW);
       expect(bad.status, url).toBe(400);
@@ -432,7 +475,7 @@ describe("demoFetch read-only and errors", () => {
 
   it("answers 404 profile_not_found for an unknown person", async () => {
     const res = await demoFetch(
-      `/v1/apps/${IOS}/profiles/${encodeURIComponent("u:nobody-at-all")}`,
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent("u:nobody-at-all")}`,
       undefined,
       NOW,
     );
@@ -442,7 +485,7 @@ describe("demoFetch read-only and errors", () => {
 
   it("answers 404 not_found for an unknown deletion request", async () => {
     const res = await demoFetch(
-      `/v1/apps/${IOS}/deletion-requests/0199d6d0-0000-7000-8000-000000000000`,
+      `/v1/apps/${NOTES}/deletion-requests/0199d6d0-0000-7000-8000-000000000000`,
       undefined,
       NOW,
     );
@@ -453,87 +496,93 @@ describe("demoFetch read-only and errors", () => {
   it.each([
     [
       "hour range over 7 days",
-      `/v1/apps/${IOS}/audience/timeseries?from=2026-10-01&to=2026-10-08&granularity=hour`,
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-10-01&to=2026-10-08&granularity=hour`,
       "range_too_large",
       { field: "to", max_days: 7 },
     ],
     [
       "range over 366 days",
-      `/v1/apps/${IOS}/audience/summary?from=2025-10-12&to=2026-10-14`,
+      `/v1/apps/${NOTES}/audience/summary?from=2025-10-12&to=2026-10-14`,
       "range_too_large",
       { field: "to", max_days: 366 },
     ],
     [
       "from after to",
-      `/v1/apps/${IOS}/audience/summary?from=2026-10-12&to=2026-10-06`,
+      `/v1/apps/${NOTES}/audience/summary?from=2026-10-12&to=2026-10-06`,
       "invalid_request",
       { field: "from" },
     ],
     [
       "missing from",
-      `/v1/apps/${IOS}/audience/rolling-active?to=2026-10-06`,
+      `/v1/apps/${NOTES}/audience/rolling-active?to=2026-10-06`,
       "invalid_request",
       { field: "from" },
     ],
     [
       "bad date",
-      `/v1/apps/${IOS}/audience/summary?from=2026-02-30&to=2026-03-06`,
+      `/v1/apps/${NOTES}/audience/summary?from=2026-02-30&to=2026-03-06`,
       "invalid_request",
       { field: "from" },
     ],
     ["bad portfolio date", "/v1/portfolio?date=2026-13-01", "invalid_request", { field: "date" }],
     [
+      "bad split",
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-10-01&to=2026-10-14&split=os`,
+      "invalid_request",
+      { field: "split" },
+    ],
+    [
       "bad dimension",
-      `/v1/apps/${IOS}/audience/breakdown?from=2026-10-01&to=2026-10-14&dimension=ip`,
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-01&to=2026-10-14&dimension=ip`,
       "invalid_request",
       { field: "dimension" },
     ],
     [
       "bad environment",
-      `/v1/apps/${IOS}/realtime?environment=staging`,
+      `/v1/apps/${NOTES}/realtime?environment=staging`,
       "invalid_request",
       { field: "environment" },
     ],
     [
       "bad realtime platform",
-      `/v1/apps/${IOS}/realtime?platform=symbian`,
+      `/v1/apps/${NOTES}/realtime?platform=symbian`,
       "invalid_request",
       { field: "platform" },
     ],
     [
       "bad country filter",
-      `/v1/apps/${IOS}/audience/summary?from=2026-10-01&to=2026-10-14&country=ru`,
+      `/v1/apps/${NOTES}/audience/summary?from=2026-10-01&to=2026-10-14&country=ru`,
       "invalid_request",
       { field: "country" },
     ],
     [
       "too many retention periods",
-      `/v1/apps/${IOS}/retention?from=2026-10-01&to=2026-10-14&periods=91`,
+      `/v1/apps/${NOTES}/retention?from=2026-10-01&to=2026-10-14&periods=91`,
       "invalid_request",
       { field: "periods" },
     ],
     [
       "too many weekly periods",
-      `/v1/apps/${IOS}/retention?from=2026-10-01&to=2026-10-14&cohort_granularity=week&periods=53`,
+      `/v1/apps/${NOTES}/retention?from=2026-10-01&to=2026-10-14&cohort_granularity=week&periods=53`,
       "invalid_request",
       { field: "periods" },
     ],
     [
       "hours over 168",
-      `/v1/apps/${IOS}/integration/health?hours=169`,
+      `/v1/apps/${NOTES}/integration/health?hours=169`,
       "invalid_request",
       { field: "hours" },
     ],
-    ["empty search", `/v1/apps/${IOS}/profiles?q=`, "invalid_request", { field: "q" }],
+    ["empty search", `/v1/apps/${NOTES}/profiles?q=`, "invalid_request", { field: "q" }],
     [
       "bad person key",
-      `/v1/apps/${IOS}/profiles/${encodeURIComponent("x:123")}`,
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent("x:123")}`,
       "invalid_request",
       { field: "person_key" },
     ],
     [
       "bad sessions limit",
-      `/v1/apps/${IOS}/profiles/${encodeURIComponent(iosProfile.personKey)}?sessions_limit=501`,
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent(notesProfile.personKey)}?sessions_limit=501`,
       "invalid_request",
       { field: "sessions_limit" },
     ],

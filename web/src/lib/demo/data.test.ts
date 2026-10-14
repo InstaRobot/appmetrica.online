@@ -22,8 +22,7 @@ import { DEMO_PROFILES, demoProfileExamples } from "./profiles";
 
 const NOW = new Date("2026-10-14T09:30:00Z"); // 12:30 MSK, среда
 const TODAY = "2026-10-14";
-const IOS = DEMO_APP_IDS.notesIos;
-const ANDROID = DEMO_APP_IDS.notesAndroid;
+const NOTES = DEMO_APP_IDS.notes;
 const SITE = DEMO_APP_IDS.site;
 const BOT = DEMO_APP_IDS.bot;
 const OLD = DEMO_APP_IDS.oldGame;
@@ -57,31 +56,46 @@ function summary(appId: string, params: Record<string, string | string[]> = {}) 
   );
 }
 
+// pearson — коэффициент корреляции Пирсона двух рядов одной длины.
+function pearson(a: readonly number[], b: readonly number[]): number {
+  const mean = (x: readonly number[]) => x.reduce((s, v) => s + v, 0) / x.length;
+  const ma = mean(a);
+  const mb = mean(b);
+  let cov = 0;
+  let va = 0;
+  let vb = 0;
+  a.forEach((x, i) => {
+    const y = b[i] ?? 0;
+    cov += (x - ma) * (y - mb);
+    va += (x - ma) ** 2;
+    vb += (y - mb) ** 2;
+  });
+  return cov / Math.sqrt(va * vb);
+}
+
+function values(points: readonly { value: number | null }[]): number[] {
+  return points.map((p) => p.value ?? 0);
+}
+
 describe("demo apps", () => {
-  it("exports five fixed apps in a fixed order", () => {
-    expect(DEMO_APPS.map((a) => [a.name, a.platform, a.status])).toEqual([
-      ["Notes iOS", "ios", "active"],
-      ["Notes Android", "android", "active"],
-      ["site.ru", "web", "active"],
-      ["Помощник TG", "bot", "active"],
-      ["Old Game", "ios", "archived"],
+  it("exports four fixed apps in a fixed order", () => {
+    expect(DEMO_APPS.map((a) => [a.name, a.platforms, a.status])).toEqual([
+      ["Notes", ["ios", "android", "web"], "active"],
+      ["site.ru", ["web"], "active"],
+      ["Помощник TG", ["bot"], "active"],
+      ["Old Game", ["ios"], "archived"],
     ]);
-    expect(DEMO_APPS.map((a) => a.id)).toEqual([IOS, ANDROID, SITE, BOT, OLD]);
-    for (const app of DEMO_APPS) expect(app.platforms).toEqual([app.platform]);
+    expect(DEMO_APPS.map((a) => a.id)).toEqual([NOTES, SITE, BOT, OLD]);
+    for (const app of DEMO_APPS) expect(app.platform).toBe(app.platforms[0]);
     expect(DEMO_APPS[0]?.timezone).toBe("Europe/Moscow");
     expect(DEMO_APPS.find((a) => a.id === OLD)?.archived_at).not.toBeNull();
   });
 
   it("lists active apps sorted by name and archived ones on request", async () => {
     const active = await get<AppList>("/v1/apps");
-    expect(active.items.map((a) => a.name)).toEqual([
-      "Notes Android",
-      "Notes iOS",
-      "site.ru",
-      "Помощник TG",
-    ]);
+    expect(active.items.map((a) => a.name)).toEqual(["Notes", "site.ru", "Помощник TG"]);
     const all = await get<AppList>("/v1/apps?include_archived=true");
-    expect(all.items).toHaveLength(5);
+    expect(all.items).toHaveLength(4);
   });
 });
 
@@ -91,13 +105,12 @@ describe("demo portfolio", () => {
     expect(p.date).toBe("2026-10-13"); // вчера в Europe/Moscow
     expect(p.environment).toBe("production");
     expect(p.unit).toBe("persons");
-    expect(p.rows.map((r) => r.app.id).sort()).toEqual([IOS, ANDROID, SITE, BOT].sort());
+    expect(p.rows.map((r) => r.app.id).sort()).toEqual([NOTES, SITE, BOT].sort());
     for (const row of p.rows) {
       expect(row.sparkline).toHaveLength(30);
       expect(row.sparkline[0]?.day).toBe(addDays(p.date, -29));
       expect(row.sparkline[29]?.day).toBe(p.date);
       expect(row.sparkline[29]?.active).toBe(row.active_date);
-      expect(row.platforms).toEqual([{ platform: row.app.platform, active: row.active_date }]);
       expect(row.retention_d1).not.toBeNull();
       expect(row.retention_d7).not.toBeNull();
     }
@@ -105,12 +118,29 @@ describe("demo portfolio", () => {
     expect(actives).toEqual([...actives].sort((a, b) => b - a));
   });
 
+  it("splits active people of the date by platform", async () => {
+    const p = await get<Portfolio>("/v1/portfolio");
+    for (const row of p.rows.filter((r) => r.app.id !== NOTES)) {
+      expect(row.platforms).toEqual([{ platform: row.app.platform, active: row.active_date }]);
+    }
+    const notes = p.rows.find((r) => r.app.id === NOTES);
+    expect(notes?.platforms.map((x) => x.platform)).toEqual(["ios", "android", "web"]);
+    const sum = notes?.platforms.reduce((s, x) => s + x.active, 0) ?? 0;
+    // Люди сразу на нескольких платформах: сумма долей больше итога.
+    expect(sum).toBeGreaterThan(notes?.active_date ?? 0);
+    for (const x of notes?.platforms ?? []) expect(x.active).toBeLessThan(notes?.active_date ?? 0);
+
+    // До запуска веб-версии у «Notes» только мобильные платформы.
+    const july = await get<Portfolio>("/v1/portfolio?date=2026-07-15");
+    const before = july.rows.find((r) => r.app.id === NOTES);
+    expect(before?.platforms.map((x) => x.platform)).toEqual(["ios", "android"]);
+  });
+
   it("uses realistic scales for every app", async () => {
     const p = await get<Portfolio>("/v1/portfolio");
     const byId = new Map(p.rows.map((r) => [r.app.id, r]));
     const ranges: [string, number, number][] = [
-      [IOS, 9_000, 15_000],
-      [ANDROID, 6_500, 11_500],
+      [NOTES, 17_000, 25_000],
       [SITE, 2_000, 4_200],
       [BOT, 650, 1_400],
     ];
@@ -141,9 +171,11 @@ describe("demo portfolio", () => {
 
 describe("demo audience", () => {
   it("counts installs 3–8 % above persons and development in tens", async () => {
-    for (const id of [IOS, ANDROID, SITE, BOT]) {
-      const persons = await summary(id);
-      const installs = await summary(id, { unit: "installs" });
+    const platformOf: Record<string, string[]> = { [NOTES]: ["ios"], [SITE]: [], [BOT]: [] };
+    for (const id of [NOTES, SITE, BOT]) {
+      const platform = platformOf[id] ?? [];
+      const persons = await summary(id, { platform });
+      const installs = await summary(id, { unit: "installs", platform });
       const ratio = installs.active / persons.active;
       expect(ratio).toBeGreaterThanOrEqual(1.03);
       expect(ratio).toBeLessThanOrEqual(1.08);
@@ -157,10 +189,15 @@ describe("demo audience", () => {
       expect(dev.active).toBeLessThan(100);
       expect(dev.active).toBeLessThan(day.active / 10);
     }
+    // У «Notes» установки на разных платформах — разные устройства одних людей.
+    const persons = await summary(NOTES);
+    const installs = await summary(NOTES, { unit: "installs" });
+    expect(installs.active / persons.active).toBeGreaterThan(1.1);
+    expect(installs.active / persons.active).toBeLessThan(1.2);
   });
 
   it("keeps sessions ≈ 2.3×, new ≈ 10 % and durations in 3–6 minutes", async () => {
-    const s = await summary(IOS, { from: "2026-10-13", to: "2026-10-13" });
+    const s = await summary(NOTES, { from: "2026-10-13", to: "2026-10-13" });
     expect(s.sessions / s.active).toBeGreaterThan(1.9);
     expect(s.sessions / s.active).toBeLessThan(2.8);
     expect(s.new / s.active).toBeGreaterThan(0.07);
@@ -171,29 +208,55 @@ describe("demo audience", () => {
   });
 
   it("compares with the previous period of the same length", async () => {
-    const s = await summary(IOS);
+    const s = await summary(NOTES);
     expect(s.compare?.from).toBe("2026-09-30");
     expect(s.compare?.to).toBe("2026-10-06");
     const base = s.compare?.active ?? 0;
     expect(s.compare?.delta_pct.active).toBe(Math.round(((s.active - base) / base) * 10000) / 100);
-    const none = await summary(IOS, { compare: "none" });
+    const none = await summary(NOTES, { compare: "none" });
     expect(none.compare).toBeUndefined();
   });
 
   it("shrinks numbers by filters in proportion to the breakdown share", async () => {
-    const all = await summary(IOS);
-    const android = await summary(IOS, { platform: ["android"] });
-    expect(android.active).toBe(0);
-    const ru = await summary(IOS, { country: ["RU"] });
+    const all = await summary(NOTES);
+    const ru = await summary(NOTES, { country: ["RU"] });
     const breakdown = await get<Breakdown>(
-      `/v1/apps/${IOS}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=country`,
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=country`,
     );
     const ruRow = breakdown.rows.find((r) => r.value === "RU");
     expect(ruRow).toBeDefined();
     expect(ru.active).toBeLessThan(all.active);
     expect(Math.abs(ru.active - (ruRow?.count ?? 0)) / ru.active).toBeLessThan(0.02);
-    const ruKz = await summary(IOS, { country: ["RU", "KZ"] });
+    const ruKz = await summary(NOTES, { country: ["RU", "KZ"] });
     expect(ruKz.active).toBeGreaterThan(ru.active);
+    const iosRu = await summary(NOTES, { platform: ["ios"], country: ["RU"] });
+    expect(iosRu.active).toBeGreaterThan(0);
+    expect(iosRu.active).toBeLessThan(ru.active);
+  });
+
+  it("platform filter returns the segment", async () => {
+    const june = { from: "2026-06-01", to: "2026-06-30" };
+    const october = { from: "2026-10-01", to: "2026-10-13" };
+    const share = async (period: Record<string, string>) => {
+      const all = await summary(NOTES, period);
+      const android = await summary(NOTES, { ...period, platform: ["android"] });
+      expect(android.active).toBeGreaterThan(0);
+      expect(android.active).toBeLessThan(all.active);
+      return android.active / all.active;
+    };
+    // Множитель дал бы одну и ту же долю: Android ровный, iOS растёт, веб запущен в августе.
+    expect(Math.abs((await share(june)) - (await share(october)))).toBeGreaterThan(0.05);
+
+    const web = await summary(NOTES, { ...june, platform: ["web"] });
+    expect(web.active).toBe(0);
+    expect(web.sessions).toBe(0);
+    const mobile = await summary(NOTES, { ...october, platform: ["ios", "android"] });
+    const ios = await summary(NOTES, { ...october, platform: ["ios"] });
+    const android = await summary(NOTES, { ...october, platform: ["android"] });
+    expect(mobile.active).toBeLessThan(ios.active + android.active);
+    expect(mobile.sessions).toBe(ios.sessions + android.sessions);
+    const site = await summary(SITE, { platform: ["android"] });
+    expect(site.active).toBe(0);
   });
 
   it("returns breakdown rows with shares summing to about one", async () => {
@@ -208,7 +271,7 @@ describe("demo audience", () => {
       "city",
       "locale",
     ]) {
-      for (const id of [IOS, SITE, BOT]) {
+      for (const id of [NOTES, SITE, BOT]) {
         const b = await get<Breakdown>(
           `/v1/apps/${id}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=${dimension}&limit=200`,
         );
@@ -216,22 +279,52 @@ describe("demo audience", () => {
         expect(b.metric).toBe("active");
         expect(b.rows.length).toBeGreaterThan(0);
         const share = b.rows.reduce((sum, r) => sum + r.share, 0);
+        // По платформам люди «Notes» с двух платформ попадают в обе строки.
+        const max = id === NOTES && dimension === "platform" ? 1.12 : 1.03;
         expect(share, `${id} ${dimension}`).toBeGreaterThan(0.97);
-        expect(share, `${id} ${dimension}`).toBeLessThan(1.03);
+        expect(share, `${id} ${dimension}`).toBeLessThan(max);
         const counts = b.rows.map((r) => r.count);
         expect(counts).toEqual([...counts].sort((x, y) => y - x));
         expect(new Set(b.rows.map((r) => r.value)).size).toBe(b.rows.length);
       }
     }
     const limited = await get<Breakdown>(
-      `/v1/apps/${IOS}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=device_model&limit=3`,
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=device_model&limit=3`,
     );
     expect(limited.rows).toHaveLength(3);
   });
 
+  it("breaks Notes down by platform as the platform filter does", async () => {
+    const b = await get<Breakdown>(
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=platform`,
+    );
+    expect(b.rows.map((r) => r.value)).toEqual(["ios", "android", "web"]);
+    for (const row of b.rows) {
+      const one = await summary(NOTES, { platform: [row.value] });
+      expect(row.count, row.value).toBe(one.active);
+    }
+    const filtered = await get<Breakdown>(
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=platform&platform=web`,
+    );
+    expect(filtered.rows.map((r) => r.value)).toEqual(["web"]);
+    const june = await get<Breakdown>(
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-06-01&to=2026-06-30&dimension=platform`,
+    );
+    expect(june.rows.map((r) => r.value)).toEqual(["ios", "android"]);
+    // Распределения измерений у каждого сегмента свои: Windows только в вебе.
+    const webOs = await get<Breakdown>(
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=os_name&platform=web`,
+    );
+    expect(webOs.rows.map((r) => r.value)).toContain("Windows");
+    const iosOs = await get<Breakdown>(
+      `/v1/apps/${NOTES}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=os_name&platform=ios`,
+    );
+    expect(iosOs.rows.map((r) => r.value).sort()).toEqual(["iOS", "iPadOS"]);
+  });
+
   it("fills a daily series from from to to with zeros in the future", async () => {
     const ts = await get<TimeSeries>(
-      `/v1/apps/${IOS}/audience/timeseries?from=2026-10-01&to=2026-10-20&granularity=day`,
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-10-01&to=2026-10-20&granularity=day`,
     );
     expect(ts.metric).toBe("active");
     expect(ts.granularity).toBe("day");
@@ -242,7 +335,7 @@ describe("demo audience", () => {
     const future = ts.points.slice(14);
     expect(future.every((p) => p.value === 0)).toBe(true);
     const past = ts.points.slice(0, 13);
-    expect(past.every((p) => (p.value ?? 0) > 8_000)).toBe(true);
+    expect(past.every((p) => (p.value ?? 0) > 15_000)).toBe(true);
     // Выходные ниже будней: 2026-10-03/04 — суббота и воскресенье.
     const value = (i: number) => ts.points[i]?.value ?? 0;
     expect(Math.max(value(2), value(3))).toBeLessThan(Math.min(value(0), value(1), value(5)));
@@ -250,7 +343,7 @@ describe("demo audience", () => {
 
   it("builds hourly, weekly and monthly buckets in the app time zone", async () => {
     const hours = await get<TimeSeries>(
-      `/v1/apps/${IOS}/audience/timeseries?from=2026-10-13&to=2026-10-14&granularity=hour&metric=sessions`,
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-10-13&to=2026-10-14&granularity=hour&metric=sessions`,
     );
     expect(hours.points).toHaveLength(48);
     expect(hours.points[0]?.ts).toBe("2026-10-13T00:00:00+03:00");
@@ -260,7 +353,7 @@ describe("demo audience", () => {
     expect(hours.points[24 + 11]?.value).toBeGreaterThan(0);
 
     const weeks = await get<TimeSeries>(
-      `/v1/apps/${IOS}/audience/timeseries?from=2026-09-10&to=2026-10-14&granularity=week&compare=none`,
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-09-10&to=2026-10-14&granularity=week&compare=none`,
     );
     expect(weeks.points[0]?.ts).toBe("2026-09-07T00:00:00+03:00"); // понедельник недели from
     expect(weeks.points).toHaveLength(6);
@@ -277,15 +370,75 @@ describe("demo audience", () => {
   });
 
   it("keeps past values independent of now", async () => {
-    const url = `/v1/apps/${ANDROID}/audience/timeseries?from=2026-09-01&to=2026-09-30&compare=none`;
+    const url = `/v1/apps/${NOTES}/audience/timeseries?from=2026-09-01&to=2026-09-30&split=platform`;
     const a = await get<TimeSeries>(url, NOW);
     const b = await get<TimeSeries>(url, new Date("2026-10-20T18:00:00Z"));
     expect(b).toEqual(a);
   });
 
+  it("segments of Notes have their own shape", async () => {
+    const ts = await get<TimeSeries>(
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-07-01&to=2026-10-13&metric=active&split=platform`,
+    );
+    expect(ts.compare_points).toBeUndefined();
+    expect(ts.splits?.map((s) => s.platform)).toEqual(["android", "ios", "web"]);
+    const split = (p: string) => ts.splits?.find((s) => s.platform === p)?.points ?? [];
+    for (const p of ["android", "ios", "web"]) {
+      expect(split(p).map((x) => x.ts)).toEqual(ts.points.map((x) => x.ts));
+    }
+    const ios = values(split("ios"));
+    const android = values(split("android"));
+    const web = values(split("web"));
+    expect(pearson(ios, web)).toBeLessThan(0.9);
+    ts.points.forEach((point, i) => {
+      const day = point.ts.slice(0, 10);
+      if (day < "2026-08-14") {
+        expect(web[i], day).toBe(0);
+        return;
+      }
+      expect(web[i], day).toBeGreaterThan(0);
+      const sum = (ios[i] ?? 0) + (android[i] ?? 0) + (web[i] ?? 0);
+      const total = point.value ?? 0;
+      // Пересечение людей на нескольких платформах — 5–10 % суммы.
+      expect(total, day).toBeLessThan(sum * 0.95);
+      expect(total, day).toBeGreaterThan(sum * 0.9);
+    });
+
+    // Ряд платформы совпадает с рядом при фильтре platform=[p].
+    const filtered = await get<TimeSeries>(
+      `/v1/apps/${NOTES}/audience/timeseries?from=2026-07-01&to=2026-10-13&metric=active&platform=web`,
+    );
+    expect(filtered.points).toEqual(split("web"));
+  });
+
+  it("splits only the platforms seen in the period and under the filters", async () => {
+    const base = `/v1/apps/${NOTES}/audience/timeseries`;
+    const june = await get<TimeSeries>(`${base}?from=2026-06-01&to=2026-06-30&split=platform`);
+    expect(june.splits?.map((s) => s.platform)).toEqual(["android", "ios"]);
+    const ios = await get<TimeSeries>(
+      `${base}?from=2026-10-01&to=2026-10-13&split=platform&platform=ios&metric=sessions`,
+    );
+    expect(ios.splits?.map((s) => s.platform)).toEqual(["ios"]);
+    expect(ios.splits?.[0]?.points).toEqual(ios.points);
+    const hours = await get<TimeSeries>(
+      `${base}?from=2026-10-14&to=2026-10-14&granularity=hour&split=platform`,
+    );
+    expect(hours.splits?.map((s) => s.platform)).toEqual(["android", "ios", "web"]);
+    expect(hours.splits?.every((s) => s.points.length === 24)).toBe(true);
+    const site = await get<TimeSeries>(
+      `/v1/apps/${SITE}/audience/timeseries?from=2026-10-01&to=2026-10-13&split=platform`,
+    );
+    expect(site.splits).toEqual([{ platform: "web", points: site.points }]);
+    const future = await get<TimeSeries>(`${base}?from=2026-10-20&to=2026-10-25&split=platform`);
+    expect(future.splits).toEqual([]);
+    const none = await get<TimeSeries>(`${base}?from=2026-10-01&to=2026-10-13&split=none`);
+    expect(none.splits).toBeUndefined();
+    expect(none.compare_points).toHaveLength(13);
+  });
+
   it("returns rolling active with dau ≤ wau ≤ mau", async () => {
     const r = await get<RollingActive>(
-      `/v1/apps/${IOS}/audience/rolling-active?from=2026-09-14&to=2026-10-13`,
+      `/v1/apps/${NOTES}/audience/rolling-active?from=2026-09-14&to=2026-10-13`,
     );
     expect(r.points).toHaveLength(30);
     for (const p of r.points) {
@@ -326,7 +479,9 @@ describe("demo retention", () => {
   }
 
   it("builds daily cohorts with nulls only for periods not yet complete", async () => {
-    const m = await get<RetentionMatrix>(`/v1/apps/${IOS}/retention?from=2026-08-01&to=2026-10-20`);
+    const m = await get<RetentionMatrix>(
+      `/v1/apps/${NOTES}/retention?from=2026-08-01&to=2026-10-20`,
+    );
     expect(m.cohort_granularity).toBe("day");
     expect(m.periods).toBe(30);
     expect(m.cohorts).toHaveLength(81);
@@ -344,7 +499,7 @@ describe("demo retention", () => {
 
   it("builds weekly cohorts from Mondays", async () => {
     const m = await get<RetentionMatrix>(
-      `/v1/apps/${ANDROID}/retention?from=2026-07-08&to=2026-10-14&cohort_granularity=week`,
+      `/v1/apps/${NOTES}/retention?from=2026-07-08&to=2026-10-14&cohort_granularity=week`,
     );
     expect(m.cohort_granularity).toBe("week");
     expect(m.periods).toBe(12);
@@ -355,19 +510,24 @@ describe("demo retention", () => {
 
   it("keeps web retention present but lower than mobile", async () => {
     const url = (id: string) => `/v1/apps/${id}/retention?from=2026-08-01&to=2026-09-30&periods=7`;
-    const ios = await get<RetentionMatrix>(url(IOS));
+    const notes = await get<RetentionMatrix>(url(NOTES));
     const site = await get<RetentionMatrix>(url(SITE));
     expectNullsOnlyInFuture(site, 1);
     expect(site.average[1]).not.toBeNull();
-    expect(site.average[1] ?? 1).toBeLessThan(ios.average[1] ?? 0);
-    expect(site.average[7] ?? 1).toBeLessThan(ios.average[7] ?? 0);
+    expect(site.average[1] ?? 1).toBeLessThan(notes.average[1] ?? 0);
+    expect(site.average[7] ?? 1).toBeLessThan(notes.average[7] ?? 0);
+    // Веб-сегмент «Notes» удерживает хуже мобильных.
+    const segment = (p: string) => get<RetentionMatrix>(`${url(NOTES)}&platform=${p}`);
+    const ios = await segment("ios");
+    const web = await segment("web");
+    expect(web.average[7] ?? 1).toBeLessThan(ios.average[7] ?? 0);
   });
 
   it("matches portfolio retention with the retention matrix", async () => {
     const p = await get<Portfolio>("/v1/portfolio?date=2026-10-12");
-    const row = p.rows.find((r) => r.app.id === IOS);
+    const row = p.rows.find((r) => r.app.id === NOTES);
     const m = await get<RetentionMatrix>(
-      `/v1/apps/${IOS}/retention?from=2026-10-05&to=2026-10-11&periods=7`,
+      `/v1/apps/${NOTES}/retention?from=2026-10-05&to=2026-10-11&periods=7`,
     );
     const d1 = m.cohorts.find((c) => c.cohort_start === "2026-10-11")?.values[1];
     const d7 = m.cohorts.find((c) => c.cohort_start === "2026-10-05")?.values[7];
@@ -378,7 +538,7 @@ describe("demo retention", () => {
 
 describe("demo realtime", () => {
   it("returns 30 full minutes and 50 recent events from the last minutes", async () => {
-    const r = await get<Realtime>(`/v1/apps/${IOS}/realtime`);
+    const r = await get<Realtime>(`/v1/apps/${NOTES}/realtime`);
     expect(r.generated_at).toBe(NOW.toISOString());
     expect(r.active_now).toBeGreaterThan(0);
     expect(r.per_minute).toHaveLength(30);
@@ -395,13 +555,14 @@ describe("demo realtime", () => {
       expect(Date.parse(e.event_time)).toBeLessThanOrEqual(t);
       expect(e.person_key).toMatch(/^(u:.+|i:[0-9a-f-]{36})$/);
       expect(e.environment).toBe("production");
-      expect(e.platform).toBe("ios");
+      expect(["ios", "android", "web"]).toContain(e.platform);
     }
+    expect(new Set(r.recent_events.map((e) => e.platform)).size).toBeGreaterThanOrEqual(2);
     expect(new Set(r.recent_events.map((e) => e.insert_id)).size).toBe(50);
   });
 
   it("is quiet for development and empty for the archived app", async () => {
-    const dev = await get<Realtime>(`/v1/apps/${IOS}/realtime?environment=development`);
+    const dev = await get<Realtime>(`/v1/apps/${NOTES}/realtime?environment=development`);
     expect(dev.active_now).toBeLessThan(10);
     expect(dev.recent_events.every((e) => e.environment === "development")).toBe(true);
     const old = await get<Realtime>(`/v1/apps/${OLD}/realtime`);
@@ -425,7 +586,7 @@ describe("demo realtime", () => {
 
 describe("demo integration health", () => {
   it("returns hourly totals, reasons and versions", async () => {
-    for (const id of [IOS, ANDROID, SITE, BOT]) {
+    for (const id of [NOTES, SITE, BOT]) {
       const h = await get<IntegrationHealth>(`/v1/apps/${id}/integration/health`);
       expect(h.hours).toBe(24);
       expect(h.hourly).toHaveLength(24);
@@ -453,7 +614,7 @@ describe("demo integration health", () => {
   });
 
   it("honours the hours parameter and the time zone of the app", async () => {
-    const ios = await get<IntegrationHealth>(`/v1/apps/${IOS}/integration/health?hours=48`);
+    const ios = await get<IntegrationHealth>(`/v1/apps/${NOTES}/integration/health?hours=48`);
     expect(ios.hourly).toHaveLength(48);
     expect(ios.hourly[47]?.hour).toBe("2026-10-14T12:00:00+03:00");
     const bot = await get<IntegrationHealth>(`/v1/apps/${BOT}/integration/health`);
@@ -463,7 +624,7 @@ describe("demo integration health", () => {
 
 describe("demo profiles", () => {
   it("exports a few searchable examples per active app", async () => {
-    for (const id of [IOS, ANDROID, SITE, BOT]) {
+    for (const id of [NOTES, SITE, BOT]) {
       const examples = demoProfileExamples(id);
       expect(examples.length).toBeGreaterThanOrEqual(3);
       expect(examples.length).toBeLessThanOrEqual(5);
@@ -489,14 +650,14 @@ describe("demo profiles", () => {
   });
 
   it("finds nothing for an unknown query", async () => {
-    const r = await get<ProfileSearchResult>(`/v1/apps/${IOS}/profiles?q=nobody`);
+    const r = await get<ProfileSearchResult>(`/v1/apps/${NOTES}/profiles?q=nobody`);
     expect(r.items).toEqual([]);
   });
 
   it("pages sessions with before and next_before", async () => {
-    const power = demoProfileExamples(IOS)[0];
+    const power = demoProfileExamples(NOTES)[0];
     if (!power) throw new Error("no profile");
-    const url = `/v1/apps/${IOS}/profiles/${encodeURIComponent(power.personKey)}`;
+    const url = `/v1/apps/${NOTES}/profiles/${encodeURIComponent(power.personKey)}`;
     const first = await get<Profile>(url);
     expect(first.person_key).toBe(power.personKey);
     expect(first.sessions).toHaveLength(100);
@@ -521,32 +682,53 @@ describe("demo profiles", () => {
   });
 
   it("shows development sessions of the tester and 404 for linked installs", async () => {
-    const examples = demoProfileExamples(IOS);
+    const examples = demoProfileExamples(NOTES);
     const withDev = await Promise.all(
       examples.map((ex) =>
-        get<Profile>(`/v1/apps/${IOS}/profiles/${encodeURIComponent(ex.personKey)}`),
+        get<Profile>(`/v1/apps/${NOTES}/profiles/${encodeURIComponent(ex.personKey)}`),
       ),
     );
     expect(withDev.some((p) => p.sessions.some((s) => s.environment === "development"))).toBe(true);
     const linked = examples.find((ex) => ex.userId !== null);
     if (!linked) throw new Error("no linked profile");
     const res = await demoFetch(
-      `/v1/apps/${IOS}/profiles/${encodeURIComponent(`i:${linked.installId}`)}`,
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent(`i:${linked.installId}`)}`,
       undefined,
       NOW,
     );
     expect(res.status).toBe(404);
   });
+
+  it("has people of Notes on several platforms whose sessions respect the web launch", async () => {
+    const power = demoProfileExamples(NOTES)[0];
+    if (!power) throw new Error("no profile");
+    const profile = await get<Profile>(
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent(power.personKey)}?sessions_limit=500`,
+    );
+    expect(new Set(profile.installs.map((i) => i.platform))).toEqual(new Set(["ios", "web"]));
+    const web = profile.sessions.filter((s) => s.platform === "web");
+    expect(web.length).toBeGreaterThan(0);
+    expect(web.every((s) => s.started_at >= "2026-08-13T21:00:00.000Z")).toBe(true);
+  });
 });
 
 describe("demo admin data", () => {
   it("uses obvious demo write keys and api key prefixes", async () => {
-    const write = await get<WriteKeyList>(`/admin/v1/apps/${IOS}/write-keys`);
+    const write = await get<WriteKeyList>(`/admin/v1/apps/${NOTES}/write-keys`);
     expect(write.items.length).toBeGreaterThan(0);
     for (const k of write.items) {
       expect(k.key.startsWith("pk_demo")).toBe(true);
-      expect(k.app_id).toBe(IOS);
+      expect(k.app_id).toBe(NOTES);
     }
+    // Ключ на каждую платформу приложения с меткой, как при создании.
+    const active = write.items.filter((k) => k.revoked_at === null);
+    expect(active.map((k) => [k.platform, k.label])).toEqual([
+      ["ios", "iOS"],
+      ["android", "Android"],
+      ["web", "Веб"],
+    ]);
+    const site = await get<WriteKeyList>(`/admin/v1/apps/${SITE}/write-keys`);
+    expect(site.items.map((k) => [k.platform, k.label])).toEqual([["web", "Веб"]]);
     const api = await get<ApiKeyList>("/admin/v1/api-keys");
     expect(api.items.length).toBeGreaterThan(0);
     for (const k of api.items) expect(k.key_prefix).toMatch(/^sk_[A-Za-z0-9]{8}$/);
@@ -558,9 +740,9 @@ describe("demo admin data", () => {
     expect(all.items.length).toBeGreaterThanOrEqual(3);
     const requested = all.items.map((r) => Date.parse(r.requested_at));
     expect(requested).toEqual([...requested].sort((a, b) => b - a));
-    const ios = await get<DeletionRequestList>(`/admin/v1/deletion-requests?app_id=${IOS}`);
-    expect(ios.items.length).toBeGreaterThan(0);
-    expect(ios.items.every((r) => r.app_id === IOS)).toBe(true);
+    const notes = await get<DeletionRequestList>(`/admin/v1/deletion-requests?app_id=${NOTES}`);
+    expect(notes.items.length).toBeGreaterThan(0);
+    expect(notes.items.every((r) => r.app_id === NOTES)).toBe(true);
     for (const r of all.items) {
       const one = await get<{ id: string }>(`/v1/apps/${r.app_id}/deletion-requests/${r.id}`);
       expect(one.id).toBe(r.id);

@@ -11,15 +11,16 @@ test("visitor explores the demo without signing in and leaves it", async ({ page
   await expect(page).toHaveURL("/portfolio");
   const banner = page.getByRole("region", { name: "Демо-режим" });
   await expect(banner).toBeVisible();
-  await expect(page.getByRole("link", { name: "Notes iOS" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Notes", exact: true })).toBeVisible();
+  // Документация открыта гостям, поэтому ссылка есть и в демо.
   await expect(
     page
       .getByRole("navigation", { name: "Основная навигация" })
       .getByRole("link", { name: "Документация" }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expectNoA11yViolations(page);
 
-  await page.getByRole("link", { name: "Notes iOS" }).click();
+  await page.getByRole("link", { name: "Notes", exact: true }).click();
   await expect(page).toHaveURL(/\/apps\/[0-9a-f-]+/);
   await expect(page.getByRole("navigation", { name: "Разделы приложения" })).toBeVisible();
 
@@ -38,7 +39,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/demo");
     await expect(page).toHaveURL("/portfolio");
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-    await expect(page.getByRole("link", { name: "Notes iOS" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Notes", exact: true })).toBeVisible();
     await expectNoA11yViolations(page);
 
     const appId = "0199d5f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f";
