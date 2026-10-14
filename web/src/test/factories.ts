@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import type { Error as ApiErrorBody, AppSummary, PortfolioRow } from "@/lib/api/gen/model";
+import type { Error as ApiErrorBody, App, AppSummary, PortfolioRow } from "@/lib/api/gen/model";
 
 // Детерминированные фабрики для тестов компонентов: seed фиксирован, чтобы снапшоты и тексты не плавали.
 faker.seed(20261013);
@@ -10,6 +10,20 @@ export function appSummary(overrides: Partial<AppSummary> = {}): AppSummary {
     name: "Notes iOS",
     platform: "ios",
     status: "active",
+    ...overrides,
+  };
+}
+
+export function app(overrides: Partial<App> = {}): App {
+  return {
+    id: faker.string.uuid(),
+    name: "Notes iOS",
+    platform: "ios",
+    timezone: "Europe/Moscow",
+    status: "active",
+    created_at: "2026-09-01T10:00:00Z",
+    updated_at: "2026-09-01T10:00:00Z",
+    archived_at: null,
     ...overrides,
   };
 }
