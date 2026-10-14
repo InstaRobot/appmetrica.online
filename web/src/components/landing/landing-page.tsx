@@ -59,7 +59,11 @@ const STEPS = [
   "Статус «Ждём первое событие» сменится на «Получено», и приложение появится в портфеле.",
 ] as const;
 
-const SNIPPET = `curl -X POST https://i.appmetrica.online/v1/events \\
+// Адрес ingest — из сборки (NEXT_PUBLIC_INGEST_URL, у self-hosted установки свой домен); читается
+// внутри функции, а не на уровне модуля (AGENTS.md §8).
+const DEFAULT_INGEST_URL = "https://i.appmetrica.online";
+
+const snippet = (ingestUrl: string) => `curl -X POST ${ingestUrl}/v1/events \\
   -H "Content-Type: application/json" \\
   -H "X-App-Key: $AM_PK" \\
   -d '{
@@ -215,7 +219,7 @@ export function LandingPage() {
           </div>
           <figure aria-label="Пример запроса на приём событий" className="min-w-0">
             <pre className="overflow-x-auto rounded-2xl bg-code-bg p-6 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card)">
-              {SNIPPET}
+              {snippet(process.env.NEXT_PUBLIC_INGEST_URL || DEFAULT_INGEST_URL)}
             </pre>
           </figure>
         </section>
