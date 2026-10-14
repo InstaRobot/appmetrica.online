@@ -100,7 +100,14 @@ test("app settings create a write key for a platform and revoke it", async ({ pa
   const appId = await seedAppId(page);
   await page.goto(`/apps/${appId}/settings`);
   await expect(page.getByRole("textbox", { name: /Название/ })).toHaveValue("Seed iOS");
-  await expect(page.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+  const basics = page.getByRole("form", { name: "Основное" });
+  await expect(basics.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+  const platforms = page.getByRole("region", { name: "Платформы" });
+  await expect(platforms.getByRole("button", { name: "iOS" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(platforms.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   await expectNoA11yViolations(page);
 
   const label = `e2e-${randomUUID().slice(0, 8)}`;

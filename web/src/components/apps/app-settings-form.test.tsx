@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -18,6 +18,8 @@ const OLD_APP = makeApp({
   name: "Notes iOS",
   timezone: "Europe/Moscow",
   created_at: "2026-09-01T10:00:00Z",
+  platforms: ["ios", "android"],
+  platform: "ios",
 });
 
 function mockUpdate(respond?: (body: Record<string, unknown>) => Response) {
@@ -31,6 +33,14 @@ function mockUpdate(respond?: (body: Record<string, unknown>) => Response) {
     }),
   );
   return bodies;
+}
+
+function basics() {
+  return within(screen.getByRole("form", { name: "Основное" }));
+}
+
+function platforms() {
+  return within(screen.getByRole("region", { name: "Платформы" }));
 }
 
 async function pickTimezone(name: RegExp) {
@@ -76,12 +86,12 @@ describe("AppSettingsForm", () => {
     expect(screen.queryByText(/Закрытые дни не пересчитываются/)).not.toBeInTheDocument();
   });
 
-  it("shows the platform as read-only and keeps save disabled until something changes", async () => {
+  it("keeps save disabled until something changes", async () => {
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 
     expect(screen.getByRole("textbox", { name: /Название/ })).toHaveValue("Notes iOS");
-    expect(screen.getByText("iOS (изменить нельзя)")).toBeInTheDocument();
-    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(screen.queryByText(/изменить нельзя/)).not.toBeInTheDocument();
+    const save = basics().getByRole("button", { name: "Сохранить" });
     expect(save).toBeDisabled();
 
     const user = userEvent.setup();
@@ -100,7 +110,7 @@ describe("AppSettingsForm", () => {
     const name = screen.getByRole("textbox", { name: /Название/ });
     await user.clear(name);
     await user.type(name, "  Notes 2  ");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(basics().getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(bodies).toEqual([{ name: "Notes 2" }]));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Настройки сохранены"));
@@ -111,7 +121,7 @@ describe("AppSettingsForm", () => {
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 
     await pickTimezone(/Asia\/Tokyo/);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Сохранить" }));
+    await userEvent.setup().click(basics().getByRole("button", { name: "Сохранить" }));
     await waitFor(() => expect(bodies).toEqual([{ timezone: "Asia/Tokyo" }]));
   });
 
@@ -123,7 +133,7 @@ describe("AppSettingsForm", () => {
     const name = screen.getByRole("textbox", { name: /Название/ });
     await user.clear(name);
     await user.type(name, "   ");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(basics().getByRole("button", { name: "Сохранить" }));
 
     expect(await screen.findByText("Введите название")).toBeInTheDocument();
     expect(name).toHaveAttribute("aria-invalid", "true");
@@ -139,7 +149,7 @@ describe("AppSettingsForm", () => {
     const name = screen.getByRole("textbox", { name: /Название/ });
     await user.clear(name);
     await user.type(name, "Weather Android");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(basics().getByRole("button", { name: "Сохранить" }));
 
     const card = screen.getByRole("form", { name: "Основное" });
     expect(
@@ -154,12 +164,100 @@ describe("AppSettingsForm", () => {
 
     const user = userEvent.setup();
     await user.type(screen.getByRole("textbox", { name: /Название/ }), "!");
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(basics().getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() =>
       expect(toasts.error).toHaveBeenCalledWith("Ошибка сервера. Повторите через минуту."),
     );
-    expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+    expect(basics().getByRole("button", { name: "Сохранить" })).toBeEnabled();
+  });
+});
+
+describe("AppSettingsForm platforms", () => {
+  afterEach(() => {
+    // biome-ignore lint/suspicious/noDocumentCookie: тест демо-режима ставит и снимает cookie am_demo.
+    document.cookie = "am_demo=; max-age=0; path=/";
+    vi.clearAllMocks();
+  });
+
+  it("shows the current platforms and keeps save disabled until the set changes", async () => {
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
+
+    const section = platforms();
+    expect(section.getByRole("button", { name: "iOS" })).toHaveAttribute("aria-pressed", "true");
+    expect(section.getByRole("button", { name: "Android" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(section.getByRole("button", { name: "Веб" })).toHaveAttribute("aria-pressed", "false");
+    expect(
+      section.getByText("Убрать платформу — не удалить её данные: события и ключи сохраняются."),
+    ).toBeInTheDocument();
+    const save = section.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.click(section.getByRole("button", { name: "Веб" }));
+    expect(save).toBeEnabled();
+    await user.click(section.getByRole("button", { name: "Веб" }));
+    expect(save).toBeDisabled();
+  });
+
+  it("saves the platforms", async () => {
+    const bodies = mockUpdate();
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
+
+    const section = platforms();
+    const user = userEvent.setup();
+    await user.click(section.getByRole("button", { name: "Android" }));
+    await user.click(section.getByRole("button", { name: "Веб" }));
+    await user.click(section.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(bodies).toEqual([{ platforms: ["ios", "web"] }]));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Платформы сохранены"));
+  });
+
+  it("keeps at least one platform", async () => {
+    const bodies = mockUpdate();
+    renderWithClient(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />);
+
+    const section = platforms();
+    await userEvent.setup().click(section.getByRole("button", { name: "iOS" }));
+
+    const save = section.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    expect(section.getByText("Оставьте хотя бы одну платформу")).toBeInTheDocument();
+    expect(section.getByRole("group", { name: "Платформы" })).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining("platforms-empty"),
+    );
+    expect(bodies).toEqual([]);
+  });
+
+  it("toasts a failed save and lets the user retry", async () => {
+    mockUpdate(() => HttpResponse.json(errorBody("internal_error"), { status: 500 }));
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
+
+    const section = platforms();
+    const user = userEvent.setup();
+    await user.click(section.getByRole("button", { name: "Веб" }));
+    await user.click(section.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("Ошибка сервера. Повторите через минуту."),
+    );
+    expect(toasts.success).not.toHaveBeenCalledWith("Платформы сохранены");
+    expect(section.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+  });
+
+  it("disables the platforms in the demo", () => {
+    // biome-ignore lint/suspicious/noDocumentCookie: тест демо-режима ставит и снимает cookie am_demo.
+    document.cookie = "am_demo=1; path=/";
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
+
+    const section = platforms();
+    expect(section.getByRole("button", { name: "Веб" })).toBeDisabled();
+    expect(section.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   });
 });
 
