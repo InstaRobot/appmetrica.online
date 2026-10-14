@@ -29,7 +29,7 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 	t.Setenv("CLICKHOUSE_PASSWORD", env.ClickHouse.Password)
 
 	const key = "pk_devseedkey0000000000000000000000"
-	args := []string{"--apps", "3", "--days", "3", "--daily-installs", "10", "--write-key", key}
+	args := []string{"--apps", "4", "--days", "3", "--daily-installs", "40", "--write-key", key}
 	clk := clock.NewFixed(testToday.Add(9 * time.Hour))
 
 	countEvents := func() (rows, sessions uint64) {
@@ -48,9 +48,30 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 
 	apps, err := env.PG.Queries().ListApps(ctx, true)
 	require.NoError(t, err)
-	require.Len(t, apps, 3)
-	names := []string{apps[0].Name, apps[1].Name, apps[2].Name}
-	require.ElementsMatch(t, []string{"Seed iOS", "Seed Android", "Seed Site"}, names)
+	require.Len(t, apps, 4)
+	names := make([]string, 0, len(apps))
+	var notes sqlc.App
+	for _, a := range apps {
+		names = append(names, a.Name)
+		if a.Name == "Seed Notes" {
+			notes = a
+		}
+	}
+	require.ElementsMatch(t, []string{"Seed iOS", "Seed Android", "Seed Site", "Seed Notes"}, names)
+	require.Equal(t, []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid, sqlc.AppPlatformWeb}, notes.Platforms)
+
+	// События Seed Notes — с трёх платформ, часть людей с одним user_id на iOS и Web.
+	var platforms []string
+	require.NoError(t, env.CH.Conn().QueryRow(ctx,
+		"SELECT arraySort(groupUniqArray(platform)) FROM events WHERE app_id = ?", notes.ID).Scan(&platforms))
+	require.Equal(t, []string{"android", "ios", "web"}, platforms)
+	var cross uint64
+	require.NoError(t, env.CH.Conn().QueryRow(ctx, `
+		SELECT count() FROM (
+			SELECT user_id FROM events WHERE app_id = ? AND user_id != ''
+			GROUP BY user_id HAVING uniqExact(platform) > 1
+		)`, notes.ID).Scan(&cross))
+	require.Positive(t, cross, "есть люди на iOS и Web")
 
 	keys, err := env.PG.Queries().LoadWriteKeyCache(ctx)
 	require.NoError(t, err)
@@ -70,7 +91,7 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 	require.Equal(t, sessions, againSessions)
 	apps, err = env.PG.Queries().ListApps(ctx, true)
 	require.NoError(t, err)
-	require.Len(t, apps, 3, "приложения не дублируются")
+	require.Len(t, apps, 4, "приложения не дублируются")
 	keys, err = env.PG.Queries().LoadWriteKeyCache(ctx)
 	require.NoError(t, err)
 	require.Len(t, keys, 1, "ключ не дублируется")

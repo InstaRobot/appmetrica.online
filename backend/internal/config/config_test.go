@@ -27,6 +27,7 @@ var knownVars = []string{
 	"SESSION_TTL", "SESSION_IDLE_TTL", "KEY_HASH_PEPPER", "MIGRATE_ON_START", "API_PUBLIC_BEARER_ENABLED",
 	"WORKER_LISTEN_ADDR", "WORKER_JOBS_ENABLED", "TELEGRAM_BOT_TOKEN", "HEALTHCHECKS_PING_URL",
 	"BACKUP_API_URL", "DISK_FREE_ALERT_PCT", "INGEST_HEALTH_URL", "API_HEALTH_URL", "INGEST_METRICS_URL",
+	"MERGE_KEYS_WAIT",
 }
 
 const devPepper = "ZGV2LXBlcHBlci1kby1ub3QtdXNlLWluLXByb2R1Y3Rpb24="
@@ -204,6 +205,39 @@ func TestJobsIncludeAppMerge(t *testing.T) {
 
 	setEnv(t, map[string]string{"WORKER_JOBS_ENABLED": "app_merge,app_merges"})
 	require.ErrorContains(t, loadWorker(), `WORKER_JOBS_ENABLED: unknown job "app_merges"`)
+}
+
+// MERGE_KEYS_WAIT заменяет ожидание шага wait_keys слияния (deletion.AppPurgeDelay) только на e2e-стенде:
+// в production короткое ожидание потеряло бы события, принятые ingest по старому снимку ключей.
+func TestLoad_WorkerMergeKeysWait(t *testing.T) {
+	base := map[string]string{"POSTGRES_URL": "postgres://u:p@localhost:5432/db"}
+
+	clearEnv(t)
+	setEnv(t, base)
+	w, err := config.LoadWorker()
+	require.NoError(t, err)
+	require.Nil(t, w.MergeKeysWait, "по умолчанию — ожидание executor-а")
+
+	setEnv(t, map[string]string{"APP_ENV": "e2e", "MERGE_KEYS_WAIT": "0"})
+	w, err = config.LoadWorker()
+	require.NoError(t, err)
+	require.NotNil(t, w.MergeKeysWait)
+	require.Equal(t, time.Duration(0), *w.MergeKeysWait)
+
+	setEnv(t, map[string]string{"MERGE_KEYS_WAIT": "30s"})
+	w, err = config.LoadWorker()
+	require.NoError(t, err)
+	require.Equal(t, 30*time.Second, *w.MergeKeysWait)
+
+	for _, env := range []config.Env{config.EnvProduction, config.EnvDevelopment} {
+		setEnv(t, map[string]string{"APP_ENV": string(env), "MERGE_KEYS_WAIT": "0"})
+		require.ErrorContains(t, loadWorker(), "MERGE_KEYS_WAIT: allowed only with APP_ENV=e2e", env)
+	}
+
+	setEnv(t, map[string]string{"APP_ENV": "e2e", "MERGE_KEYS_WAIT": "soon"})
+	require.ErrorContains(t, loadWorker(), "MERGE_KEYS_WAIT: invalid duration")
+	setEnv(t, map[string]string{"MERGE_KEYS_WAIT": "-1s"})
+	require.ErrorContains(t, loadWorker(), "MERGE_KEYS_WAIT: must not be negative")
 }
 
 // api читает те же TELEGRAM_BOT_TOKEN и BACKUP_API_URL, что и worker: тестовое сообщение и статус бэкапа.

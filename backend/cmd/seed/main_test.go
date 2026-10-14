@@ -29,7 +29,7 @@ func testConfig(t *testing.T) genConfig {
 
 var testApp = seedApp{
 	ID:         uuid.MustParse("0199e0a0-0000-7000-8000-000000000001"),
-	Platform:   "ios",
+	Platforms:  []string{"ios"},
 	WriteKeyID: uuid.MustParse("0199e0a0-0000-7000-8000-0000000000aa"),
 }
 
@@ -141,6 +141,63 @@ func TestGenerateApp_Shape(t *testing.T) {
 	})
 }
 
+// «Seed Notes» — одно приложение на iOS, Android и Web: у каждой установки своя платформа, около 5 % людей
+// с одним user_id на iOS и Web (пересечение для долей портфеля и итога «люди сквозь платформы»).
+func TestGenerateApp_MultiPlatform(t *testing.T) {
+	cfg := testConfig(t)
+	notes := seedApp{
+		ID:        uuid.MustParse("0199e0a0-0000-7000-8000-000000000004"),
+		Platforms: []string{"ios", "android", "web"},
+	}
+	rows := generateApp(cfg, 3, notes)
+	require.Equal(t, rows, generateApp(cfg, 3, notes), "генератор детерминирован")
+
+	osByPlatform := map[string]map[string]bool{}
+	for p, models := range devices {
+		osByPlatform[p] = map[string]bool{}
+		for _, d := range models {
+			osByPlatform[p][d.osName] = true
+		}
+	}
+	installPlatform := map[uuid.UUID]string{}
+	userPlatforms := map[string]map[string]bool{}
+	installsPerPlatform := map[string]int{}
+	anonymous := 0
+	for _, r := range rows {
+		require.Equal(t, notes.ID, r.AppID)
+		require.Equal(t, uuid.Nil, r.WriteKeyID, "у Seed Notes нет ключа")
+		require.Contains(t, notes.Platforms, r.Platform)
+		require.True(t, osByPlatform[r.Platform][r.OSName], "ОС %q у платформы %q", r.OSName, r.Platform)
+		if p, ok := installPlatform[r.InstallID]; ok {
+			require.Equal(t, p, r.Platform, "платформа установки постоянна")
+			continue
+		}
+		installPlatform[r.InstallID] = r.Platform
+		installsPerPlatform[r.Platform]++
+		if r.UserID == "" {
+			anonymous++
+			continue
+		}
+		if userPlatforms[r.UserID] == nil {
+			userPlatforms[r.UserID] = map[string]bool{}
+		}
+		userPlatforms[r.UserID][r.Platform] = true
+	}
+
+	for _, p := range notes.Platforms {
+		require.Greater(t, installsPerPlatform[p], len(installPlatform)/10, "платформа %s заметна", p)
+	}
+	cross := 0
+	for user, ps := range userPlatforms {
+		if len(ps) > 1 {
+			require.Equal(t, map[string]bool{"ios": true, "web": true}, ps, "сквозной человек %s — iOS и Web", user)
+			cross++
+		}
+	}
+	persons := anonymous + len(userPlatforms)
+	require.InDelta(t, 0.05, float64(cross)/float64(persons), 0.012, "около 5 %% людей на iOS и Web")
+}
+
 func localDay(t time.Time, loc *time.Location) time.Time {
 	y, m, d := t.In(loc).Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
@@ -171,7 +228,7 @@ func TestParseOptions(t *testing.T) {
 		ok   bool
 		want options
 	}{
-		{"defaults", []string{"--write-key", key}, true, options{Apps: 3, Days: 35, DailyInstalls: 400, WriteKey: key, Seed: 1}},
+		{"defaults", []string{"--write-key", key}, true, options{Apps: 4, Days: 35, DailyInstalls: 400, WriteKey: key, Seed: 1}},
 		{
 			"all flags",
 			[]string{"--apps", "1", "--days", "3", "--daily-installs", "10", "--seed", "7", "--write-key", key},
@@ -181,7 +238,7 @@ func TestParseOptions(t *testing.T) {
 		{"missing key", nil, false, options{}},
 		{"bad key format", []string{"--write-key", "pk_short"}, false, options{}},
 		{"secret key instead of write key", []string{"--write-key", "sk_devseedkey0000000000000000000000"}, false, options{}},
-		{"too many apps", []string{"--apps", "4", "--write-key", key}, false, options{}},
+		{"too many apps", []string{"--apps", "5", "--write-key", key}, false, options{}},
 		{"zero apps", []string{"--apps", "0", "--write-key", key}, false, options{}},
 		{"zero days", []string{"--days", "0", "--write-key", key}, false, options{}},
 		{"zero installs", []string{"--daily-installs", "0", "--write-key", key}, false, options{}},
