@@ -13,6 +13,7 @@ import (
 	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
 	"appmetrica.online/backend/internal/config"
+	"appmetrica.online/backend/internal/deletion"
 	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/reports"
@@ -25,7 +26,8 @@ type Server struct {
 
 	auth          *auth.Service
 	apps          *apps.Service
-	reports       *reports.Service // nil — отчёты не подключены (WithReports)
+	reports       *reports.Service  // nil — отчёты не подключены (WithReports)
+	deletion      *deletion.Service // nil — запросы на удаление не подключены (WithDeletion)
 	settings      SettingsReader
 	ready         []httpx.ReadyCheck
 	metrics       *metrics // nil — метрики не подключены (RegisterMetrics)
@@ -46,6 +48,13 @@ func NewServer(authSvc *auth.Service, appsSvc *apps.Service, logger *slog.Logger
 		secureCookies: strings.HasPrefix(cfg.PublicBaseURL, "https://"),
 		sessionTTL:    cfg.SessionTTL,
 	}
+}
+
+// WithDeletion подключает запросы на удаление данных: createDeletionRequest, getDeletionRequest,
+// listDeletionRequests.
+func (s *Server) WithDeletion(svc *deletion.Service) *Server {
+	s.deletion = svc
+	return s
 }
 
 // WithReadyChecks задаёт проверки хранилищ для GET /ready.

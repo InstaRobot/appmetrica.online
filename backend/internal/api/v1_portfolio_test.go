@@ -22,6 +22,7 @@ import (
 	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
+	"appmetrica.online/backend/internal/deletion"
 	gen "appmetrica.online/backend/internal/gen/api"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/identity"
@@ -95,6 +96,7 @@ func (e *portfolioEnv) newHandler(t *testing.T, rep *reports.Service, ch *chstor
 	logger := slog.New(slog.DiscardHandler)
 	srv := api.NewServer(e.auth, apps.NewService(e.env.PG, e.clock, logger), logger, e.cfg).
 		WithReports(rep, e.env.PG.Queries()).
+		WithDeletion(deletion.NewService(e.env.PG, e.clock, logger)).
 		WithReadyChecks(
 			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return e.env.PG.Pool().Ping(ctx) }},
 			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},

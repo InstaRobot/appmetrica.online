@@ -24,9 +24,6 @@ import (
 	"appmetrica.online/backend/internal/testutil"
 )
 
-// pendingOperations — операции /v1 из api.yaml, которые ещё не реализованы: удаление данных (T-045).
-var pendingOperations = []string{"createDeletionRequest", "getDeletionRequest"}
-
 func loadAPIDoc(t *testing.T) *openapi3.T {
 	t.Helper()
 	doc, err := openapi3.NewLoader().LoadFromFile(filepath.Join("..", "..", "..", "contracts", "openapi", "api.yaml"))
@@ -62,7 +59,7 @@ func validateResponse(t *testing.T, doc *openapi3.T, req *http.Request, rec *htt
 	return route.Operation.OperationID
 }
 
-// readOperations — GET-операции Read API (/v1) и health из api.yaml.
+// readOperations — операции Read API (/v1) и health из api.yaml.
 func readOperations(doc *openapi3.T) []string {
 	var ids []string
 	for path, item := range doc.Paths.Map() {
@@ -70,9 +67,7 @@ func readOperations(doc *openapi3.T) []string {
 			continue
 		}
 		for _, op := range item.Operations() {
-			if !slices.Contains(pendingOperations, op.OperationID) {
-				ids = append(ids, op.OperationID)
-			}
+			ids = append(ids, op.OperationID)
 		}
 	}
 	slices.Sort(ids)
@@ -102,6 +97,20 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 	require.NotEmpty(t, found.Items)
 	profile := app + "/profiles/" + url.PathEscape(found.Items[0].PersonKey)
 
+	// createDeletionRequest — единственная не-GET операция /v1; её запрос читают GET-кейсы ниже.
+	called := map[string]bool{}
+	_, del := e.deletionKey(t, nil, auth.ScopeDelete)
+	createReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, app+"/deletion-requests",
+		strings.NewReader(`{"subject_type":"user","subject_value":"contract"}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+del)
+	rec = serveRequest(t, e.handler, createReq)
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	called[validateResponse(t, doc, createReq, rec)] = true
+	var created gen.DeletionRequest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+	deletionRequest := app + "/deletion-requests/" + created.Id.String()
+
 	cases := []struct {
 		path   string
 		status int
@@ -130,6 +139,7 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 		{profile + "?sessions_limit=1", http.StatusOK},
 		{app + "/integration/health", http.StatusOK},
 		{app + "/integration/health?hours=168", http.StatusOK},
+		{deletionRequest, http.StatusOK},
 
 		// Ошибки — тот же конверт Error, статусы из операций api.yaml.
 		{"/v1/apps/" + uuid.NewString(), http.StatusNotFound},
@@ -143,9 +153,9 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 		{app + "/profiles/" + url.PathEscape("u:nobody"), http.StatusNotFound},
 		{app + "/integration/health?hours=169", http.StatusBadRequest},
 		{"/v1/apps/" + uuid.NewString() + "/realtime", http.StatusNotFound},
+		{app + "/deletion-requests/" + uuid.NewString(), http.StatusNotFound},
 	}
 
-	called := map[string]bool{}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tc.path, nil)
