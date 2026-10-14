@@ -4,7 +4,6 @@ import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { Copy, PlugZap } from "lucide-react";
 import type { Route } from "next";
 import { useParams } from "next/navigation";
-import { useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -21,10 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useFilterOptions } from "@/hooks/use-filter-options";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import {
-  getGetAudienceBreakdownQueryOptions,
   getGetAudienceTimeseriesQueryOptions,
   useGetAudienceBreakdown,
   useGetAudienceSummary,
@@ -83,7 +82,6 @@ function AudienceReport({ app }: { app: App }) {
   const today = todayIn(app.timezone);
   const { state, update } = useAudienceState(app.timezone, today);
   const params = reportParams(state);
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Каждая карточка грузится своим запросом и не ждёт остальные.
   const summary = useGetAudienceSummary(app.id, { ...params, compare: "previous_period" }, keep);
@@ -115,18 +113,7 @@ function AudienceReport({ app }: { app: App }) {
     { ...params, dimension: state.dim, metric: state.bmetric, limit: 50 },
     keep,
   );
-  // Значения фильтров — только когда открыт список «+ Фильтр».
-  const optionQueries = useQueries({
-    queries: FILTER_DIMENSIONS.map((dim) => ({
-      ...getGetAudienceBreakdownQueryOptions(app.id, {
-        ...params,
-        dimension: dim,
-        metric: "active",
-        limit: 50,
-      }),
-      enabled: filtersOpen,
-    })),
-  });
+  const filterOptions = useFilterOptions(app.id, params);
 
   const summaryData = summary.data?.status === 200 ? summary.data.data : undefined;
   // Пустое приложение отличается от пустого периода только наличием первого события.
@@ -142,13 +129,6 @@ function AudienceReport({ app }: { app: App }) {
   METRICS.forEach((metric, i) => {
     const q = sparklineQueries[i];
     if (q?.data?.status === 200) sparklines[metric] = q.data.data.points;
-  });
-  const options: Partial<
-    Record<(typeof FILTER_DIMENSIONS)[number], { value: string; count: number }[]>
-  > = {};
-  FILTER_DIMENSIONS.forEach((dim, i) => {
-    const q = optionQueries[i];
-    if (q?.data?.status === 200) options[dim] = q.data.data.rows;
   });
 
   const rangeError = [summary, chart, rolling, breakdown].some(isRangeError)
@@ -213,11 +193,9 @@ function AudienceReport({ app }: { app: App }) {
           <FilterBar
             value={state.filters}
             onChange={changeFilters}
-            options={options}
-            onOpenChange={(open) => {
-              if (open) setFiltersOpen(true);
-            }}
-            loading={filtersOpen && optionQueries.some((q) => q.isPending)}
+            options={filterOptions.options}
+            onOpenChange={filterOptions.onOpenChange}
+            loading={filterOptions.loading}
           />
           <div className="ml-auto">
             <EnvironmentSwitch value={state.env} onChange={(env) => void update({ env })} />

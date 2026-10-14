@@ -253,7 +253,7 @@ describe("retention url-state", () => {
     });
 
     await act(() => result.current.update({ cohort: "week" }));
-    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?cohort=week&platform=ios");
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios&cohort=week");
     expect(onUrlUpdate.mock.lastCall?.[0].options.history).toBe("push");
     expect(result.current.state.periods).toBe(12);
 

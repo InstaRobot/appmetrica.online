@@ -26,7 +26,8 @@ type PeriodPickerProps = {
   maxRangeDays?: number;
   /** Текст range_too_large — inline под выбором периода. */
   error?: string | undefined;
-  presets?: Exclude<PeriodPreset, "custom">[];
+  /** Доступные пресеты; по умолчанию — все. */
+  presets?: readonly Preset[];
 };
 
 type Preset = Exclude<PeriodPreset, "custom">;
@@ -59,6 +60,7 @@ export function PeriodPicker({
   timezone,
   maxRangeDays = MAX_RANGE_DAYS,
   error,
+  presets,
 }: PeriodPickerProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>();
@@ -88,7 +90,7 @@ export function PeriodPicker({
             if (isPreset(next) && next !== value.preset) onChange(presetPeriod(next, today));
           }}
         >
-          {PRESETS.map((p) => (
+          {PRESETS.filter((p) => !presets || presets.includes(p.value)).map((p) => (
             <ToggleGroupItem key={p.value} value={p.value} className="px-3">
               {p.label}
             </ToggleGroupItem>

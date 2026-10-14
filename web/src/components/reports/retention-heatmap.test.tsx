@@ -19,7 +19,7 @@ const dayMatrix: RetentionMatrix = {
 const weekMatrix: RetentionMatrix = {
   cohort_granularity: "week",
   periods: 2,
-  average: [1, 0.62, 0.142],
+  average: [1, 0.611, 0.13],
   cohorts: [
     { cohort_start: "2026-09-28", size: 2400, values: [1, 0.62, 0.142] },
     { cohort_start: "2026-10-05", size: 2000, values: [1, 0.6, null] },

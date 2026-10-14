@@ -132,6 +132,17 @@ export function formatDateRange(from: string, to: string): string {
   return `${a.day}–${end}`;
 }
 
+// Когорта ISO-недели по её понедельнику: «8–14 сен», «28 сен – 4 окт», «29 дек – 4 янв» (S-06).
+export function formatWeekRange(start: string): string {
+  const a = dateParts(start);
+  if (!a || !ISO_DATE.test(start)) return DASH;
+  const end = new Date(Date.UTC(a.year, a.month - 1, a.day + 6));
+  const b = { day: end.getUTCDate(), month: end.getUTCMonth() + 1 };
+  const last = `${b.day}${NBSP}${MONTHS[b.month - 1]}`;
+  if (a.month !== b.month) return `${a.day}${NBSP}${MONTHS[a.month - 1]} – ${last}`;
+  return `${a.day}–${last}`;
+}
+
 const timeFormats = new Map<string, Intl.DateTimeFormat>();
 
 function timeFormat(timeZone: string): Intl.DateTimeFormat {
@@ -166,8 +177,4 @@ export function formatBucket(
   const day = `${p.day}${NBSP}${MONTHS[p.month - 1]}`;
   if (granularity !== "hour") return day;
   return `${day}, ${timeFormat(timeZone).format(new Date(ts))}`;
-}
-
-export function formatWeekRange(_start: string): string {
-  return DASH;
 }

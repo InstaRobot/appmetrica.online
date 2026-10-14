@@ -301,7 +301,7 @@ cd web && pnpm test:coverage   # пороги web: lines/statements/functions 70
 ```bash
 cd web && pnpm exec playwright install chromium   # один раз
 make dev-infra migrate-up geo-db                  # инфраструктура
-make seed                                         # «Seed iOS» и др.: данные для audience.spec.ts
+make seed                                         # «Seed iOS» и др.: данные для audience.spec.ts и retention.spec.ts
 make run-ingest & make run-api-e2e &              # backend в фоне (или в отдельных терминалах); api с APP_ENV=e2e
 make e2e                                          # pnpm build && pnpm e2e (webServer поднимает next start)
 cd web && pnpm e2e:ui                             # интерактивный режим

@@ -20,6 +20,7 @@ import {
   Unit,
 } from "@/lib/api/gen/model";
 import {
+  addDays,
   allowedGranularities,
   coerceGranularity,
   GRANULARITIES,
@@ -61,6 +62,18 @@ const countryCode = createParser({
   serialize: (value: string) => value,
 });
 
+// Фильтры, окружение и unit — общие для всех отчётов приложения (переживают смену вкладки).
+const filterParams = {
+  platform: parseAsNativeArrayOf(parseAsStringLiteral(Object.values(Platform))),
+  app_version: parseAsNativeArrayOf(parseAsString),
+  os_name: parseAsNativeArrayOf(parseAsString),
+  country: parseAsNativeArrayOf(countryCode),
+};
+const scopeParams = {
+  env: parseAsStringLiteral(Object.values(Environment)).withDefault(Environment.production),
+  unit: parseAsStringLiteral(Object.values(Unit)).withDefault(Unit.persons),
+};
+
 // Порядок ключей — порядок параметров в сериализованном URL.
 export const audienceSearchParams = {
   period: parseAsStringLiteral(PERIOD_PRESETS),
@@ -71,12 +84,8 @@ export const audienceSearchParams = {
   metric: parseAsStringLiteral(Object.values(TimeSeriesMetric)).withDefault("active"),
   dim: parseAsStringLiteral(Object.values(BreakdownDimension)).withDefault("app_version"),
   bmetric: parseAsStringLiteral(Object.values(BreakdownMetric)).withDefault("active"),
-  platform: parseAsNativeArrayOf(parseAsStringLiteral(Object.values(Platform))),
-  app_version: parseAsNativeArrayOf(parseAsString),
-  os_name: parseAsNativeArrayOf(parseAsString),
-  country: parseAsNativeArrayOf(countryCode),
-  env: parseAsStringLiteral(Object.values(Environment)).withDefault(Environment.production),
-  unit: parseAsStringLiteral(Object.values(Unit)).withDefault(Unit.persons),
+  ...filterParams,
+  ...scopeParams,
 };
 
 export type AudienceSearch = inferParserType<typeof audienceSearchParams>;
@@ -114,14 +123,22 @@ function resolvePeriod(search: AudienceSearch, today: string): PeriodValue {
   return presetPeriod("7d", today);
 }
 
-export function resolveAudienceState(search: AudienceSearch, today: string): AudienceState {
-  const period = resolvePeriod(search, today);
-  const granularity = coerceGranularity(search.g, allowedGranularities(period));
+type FilterSearch = inferParserType<typeof filterParams>;
+
+// Пустые фильтры в состояние не попадают.
+function resolveFilters(search: FilterSearch): Filters {
   const filters: Filters = {};
   if (search.platform.length > 0) filters.platform = search.platform;
   if (search.app_version.length > 0) filters.app_version = search.app_version;
   if (search.os_name.length > 0) filters.os_name = search.os_name;
   if (search.country.length > 0) filters.country = search.country;
+  return filters;
+}
+
+export function resolveAudienceState(search: AudienceSearch, today: string): AudienceState {
+  const period = resolvePeriod(search, today);
+  const granularity = coerceGranularity(search.g, allowedGranularities(period));
+  const filters = resolveFilters(search);
 
   return {
     period,
@@ -138,14 +155,18 @@ export function resolveAudienceState(search: AudienceSearch, today: string): Aud
 }
 
 // periodSearch — параметры URL для выбранного периода: пресет без дат, custom — с датами.
-export function periodSearch(period: PeriodValue): AudienceSearchPatch {
+export function periodSearch(
+  period: PeriodValue,
+): Pick<AudienceSearchPatch, "period" | "from" | "to"> {
   return period.preset === "custom"
     ? { period: "custom", from: period.from, to: period.to }
     : { period: period.preset, from: null, to: null };
 }
 
 // filtersSearch — все четыре фильтра: снятый фильтр удаляется из URL.
-export function filtersSearch(filters: Filters): AudienceSearchPatch {
+export function filtersSearch(
+  filters: Filters,
+): Pick<AudienceSearchPatch, "platform" | "app_version" | "os_name" | "country"> {
   return {
     platform: filters.platform ?? null,
     app_version: filters.app_version ?? null,
@@ -154,8 +175,10 @@ export function filtersSearch(filters: Filters): AudienceSearchPatch {
   };
 }
 
-// Общие параметры отчётов аудитории для orval-клиента.
-export function reportParams(state: AudienceState): ReportParams {
+// Общие параметры отчётов (период, окружение, unit, фильтры) для orval-клиента.
+export function reportParams(
+  state: Pick<AudienceState, "period" | "env" | "unit" | "filters">,
+): ReportParams {
   return {
     from: state.period.from,
     to: state.period.to,
@@ -175,8 +198,24 @@ export function useAudienceState(timezone: string, today: string = todayIn(timez
   };
 }
 
+// URL-состояние экрана S-06 (14-ux-ui-spec.md S-06): когорты по дням или ISO-неделям, период, фильтры,
+// окружение и unit. Без периода в URL — последние 30 дневных когорт по вчера или 12 завершённых недель.
+export const COHORT_GRANULARITIES = ["day", "week"] as const;
+export type CohortGranularity = (typeof COHORT_GRANULARITIES)[number];
+
+// Число периодов матрицы: D0…D30 и W0…W12 (умолчания getRetention).
+export const RETENTION_PERIODS: Record<CohortGranularity, number> = { day: 30, week: 12 };
+
+// Однодневные пресеты для когорт бессмысленны: вместо них — период по умолчанию.
+export const RETENTION_PRESETS = ["7d", "30d", "90d"] as const;
+
 export const retentionSearchParams = {
-  cohort: parseAsStringLiteral(["day", "week"] as const).withDefault("day"),
+  cohort: parseAsStringLiteral(COHORT_GRANULARITIES).withDefault("day"),
+  period: parseAsStringLiteral(PERIOD_PRESETS),
+  from: isoDate,
+  to: isoDate,
+  ...filterParams,
+  ...scopeParams,
 };
 
 export type RetentionSearch = inferParserType<typeof retentionSearchParams>;
@@ -186,7 +225,7 @@ export const loadRetentionSearch = createLoader(retentionSearchParams);
 export const serializeRetentionSearch = createSerializer(retentionSearchParams);
 
 export type RetentionState = {
-  cohort: "day" | "week";
+  cohort: CohortGranularity;
   period: PeriodValue;
   periods: number;
   filters: Filters;
@@ -194,19 +233,60 @@ export type RetentionState = {
   unit: Unit;
 };
 
-export function resolveRetentionState(_search: RetentionSearch, _today: string): RetentionState {
-  throw new Error("not implemented");
-}
+export type RetentionParams = ReportParams & {
+  cohort_granularity: CohortGranularity;
+  periods: number;
+};
 
-export function retentionParams(_state: RetentionState): Record<string, unknown> {
-  throw new Error("not implemented");
-}
-
-export function useRetentionState(_timezone: string, _today?: string) {
-  throw new Error("not implemented");
-  // biome-ignore lint/correctness/noUnreachable: заглушка до реализации
+// Период когорт по умолчанию: дни — вчера и 29 дней до него, недели — 12 ISO-недель до текущей.
+export function retentionDefaultPeriod(cohort: CohortGranularity, today: string): PeriodValue {
+  if (cohort === "day") {
+    return { preset: "custom", from: addDays(today, -30), to: addDays(today, -1) };
+  }
+  const monday = addDays(today, -isoWeekday(today));
   return {
-    state: {} as RetentionState,
-    update: (_patch: RetentionSearchPatch) => Promise.resolve(),
+    preset: "custom",
+    from: addDays(monday, -7 * RETENTION_PERIODS.week),
+    to: addDays(monday, -1),
+  };
+}
+
+// Номер дня ISO-недели от 0 (понедельник) до 6 (воскресенье).
+function isoWeekday(date: string): number {
+  return (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
+}
+
+export function resolveRetentionState(search: RetentionSearch, today: string): RetentionState {
+  const { cohort, period, from, to } = search;
+  let value: PeriodValue;
+  if (period && (RETENTION_PRESETS as readonly string[]).includes(period)) {
+    value = presetPeriod(period as (typeof RETENTION_PRESETS)[number], today);
+  } else if ((!period || period === "custom") && from && to && from <= to) {
+    value = { preset: "custom", from, to };
+  } else {
+    value = retentionDefaultPeriod(cohort, today);
+  }
+  return {
+    cohort,
+    period: value,
+    periods: RETENTION_PERIODS[cohort],
+    filters: resolveFilters(search),
+    env: search.env,
+    unit: search.unit,
+  };
+}
+
+// Параметры getRetention для orval-клиента.
+export function retentionParams(state: RetentionState): RetentionParams {
+  const { from, to, ...rest } = reportParams(state);
+  return { from, to, cohort_granularity: state.cohort, periods: state.periods, ...rest };
+}
+
+// useRetentionState читает состояние S-06 из URL; каждое изменение — новая запись истории.
+export function useRetentionState(timezone: string, today: string = todayIn(timezone)) {
+  const [search, setSearch] = useQueryStates(retentionSearchParams, { history: "push" });
+  return {
+    state: resolveRetentionState(search, today),
+    update: (patch: RetentionSearchPatch) => setSearch(patch),
   };
 }
