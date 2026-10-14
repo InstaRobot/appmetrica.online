@@ -27,8 +27,9 @@ import (
 	"appmetrica.online/backend/internal/worker"
 )
 
-// digestNow — 2026-10-13 09:00:30 по Москве: дайджест за 2026-10-12.
-var digestNow = time.Date(2026, 10, 13, 6, 0, 30, 0, time.UTC)
+// digestNow — 2026-10-16 09:00:30 по Москве: дайджест за четверг 2026-10-15 — в сценарии у приложений есть
+// D1 (когорты 2026-10-14) и Δ к 2026-10-08 в обе стороны.
+var digestNow = time.Date(2026, 10, 16, 6, 0, 30, 0, time.UTC)
 
 const (
 	digestToken   = "123456:TEST-TOKEN"
@@ -216,7 +217,7 @@ func TestDigest_SendsOncePerDay(t *testing.T) {
 	run := h.lastRun(t)
 	require.Equal(t, "ok", run.Status)
 	require.Equal(t, map[string]any{
-		"sent_on": "2026-10-13", "date": "2026-10-12", "apps": float64(3), "telegram_message_id": float64(101),
+		"sent_on": "2026-10-16", "date": "2026-10-15", "apps": float64(3), "telegram_message_id": float64(101),
 	}, run.Details)
 
 	require.NoError(t, h.runAt(t, digestNow.Add(4*time.Minute+30*time.Second)))
@@ -230,8 +231,8 @@ func TestDigest_SendsOncePerDay(t *testing.T) {
 	require.NoError(t, h.runAt(t, digestNow.Add(24*time.Hour)))
 	got = bot.requests()
 	require.Len(t, got, 2)
-	require.Contains(t, got[1].Text, "<b>Портфель за 13.10.2026</b>")
-	require.Equal(t, "2026-10-14", h.lastRun(t).Details["sent_on"])
+	require.Contains(t, got[1].Text, "<b>Портфель за 16.10.2026</b>")
+	require.Equal(t, "2026-10-17", h.lastRun(t).Details["sent_on"])
 
 	for _, r := range h.runs(t) {
 		require.Equal(t, "ok", r.Status)
@@ -250,7 +251,7 @@ func TestDigest_TelegramErrors(t *testing.T) {
 		require.Equal(t, []time.Duration{time.Second}, h.sleeps)
 		run := h.lastRun(t)
 		require.Equal(t, "ok", run.Status)
-		require.Equal(t, "2026-10-13", run.Details["sent_on"])
+		require.Equal(t, "2026-10-16", run.Details["sent_on"])
 		require.InDelta(t, 0, h.tgErrors(t), 0)
 	})
 
@@ -263,7 +264,7 @@ func TestDigest_TelegramErrors(t *testing.T) {
 		run := h.lastRun(t)
 		require.Equal(t, "failed", run.Status)
 		require.Contains(t, run.Details["error"], "chat not found")
-		require.Equal(t, "2026-10-12", run.Details["date"])
+		require.Equal(t, "2026-10-15", run.Details["date"])
 		require.NotContains(t, run.Details, "sent_on")
 		require.InDelta(t, 1, h.tgErrors(t), 0)
 		require.NotContains(t, h.logs.String(), digestToken, "токен бота не попадает в лог")
@@ -308,7 +309,7 @@ func TestDigest_RetriesThreeTimesTenMinutesApart(t *testing.T) {
 	require.Len(t, bot.requests(), 4)
 	require.NoError(t, h.runAt(t, digestNow.Add(24*time.Hour+10*time.Minute)))
 	require.Len(t, bot.requests(), 5)
-	require.Equal(t, "2026-10-14", h.lastRun(t).Details["sent_on"])
+	require.Equal(t, "2026-10-17", h.lastRun(t).Details["sent_on"])
 }
 
 // FR-020: без digest_enabled или chat_id и без активных приложений сообщение не отправляется.
@@ -342,7 +343,7 @@ func TestDigest_SkipsWhenNothingToSend(t *testing.T) {
 		require.Empty(t, bot.requests())
 		run := h.lastRun(t)
 		require.Equal(t, "ok", run.Status)
-		require.Equal(t, map[string]any{"skipped": "no_apps", "sent_on": "2026-10-13"}, run.Details)
+		require.Equal(t, map[string]any{"skipped": "no_apps", "sent_on": "2026-10-16"}, run.Details)
 
 		require.NoError(t, h.runAt(t, digestNow.Add(5*time.Minute)))
 		require.Equal(t, map[string]any{"skipped": "already_sent"}, h.lastRun(t).Details)
@@ -358,15 +359,32 @@ func TestDigest_OwnerTimezone(t *testing.T) {
 	require.NoError(t, h.runAt(t, digestNow), "02:00 в Нью-Йорке")
 	require.Empty(t, bot.requests())
 
-	require.NoError(t, h.runAt(t, time.Date(2026, 10, 13, 13, 0, 0, 0, time.UTC)))
+	require.NoError(t, h.runAt(t, time.Date(2026, 10, 16, 13, 0, 0, 0, time.UTC)))
 	got := bot.requests()
 	require.Len(t, got, 1)
-	require.Contains(t, got[0].Text, "<b>Портфель за 12.10.2026</b>")
-	require.Equal(t, "2026-10-13", h.lastRun(t).Details["sent_on"])
+	require.Contains(t, got[0].Text, "<b>Портфель за 15.10.2026</b>")
+	require.Equal(t, "2026-10-16", h.lastRun(t).Details["sent_on"])
 
-	// 23:30 по Нью-Йорку — те же сутки владельца, хотя в UTC уже 14-е.
-	require.NoError(t, h.runAt(t, time.Date(2026, 10, 14, 3, 30, 0, 0, time.UTC)))
+	// 23:30 по Нью-Йорку — те же сутки владельца, хотя в UTC уже 17-е.
+	require.NoError(t, h.runAt(t, time.Date(2026, 10, 17, 3, 30, 0, 0, time.UTC)))
 	require.Len(t, bot.requests(), 1)
+}
+
+// В день перевода часов digest_time сравнивается с часами владельца: 25.10.2026 в Берлине с полуночи до 08:30
+// проходит 9 ч 30 мин, но дайджест уходит в 09:00 по местным часам.
+func TestDigest_DSTUsesWallClock(t *testing.T) {
+	bot := newFakeBotAPI(t)
+	h := newDigestHarness(t, bot)
+	h.setSettings(t, "UPDATE settings SET owner_timezone = 'Europe/Berlin'")
+
+	require.NoError(t, h.runAt(t, time.Date(2026, 10, 25, 7, 30, 0, 0, time.UTC)), "08:30 CET")
+	require.Empty(t, bot.requests())
+	require.Equal(t, map[string]any{"skipped": "not_yet"}, h.lastRun(t).Details)
+
+	require.NoError(t, h.runAt(t, time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC)), "09:00 CET")
+	got := bot.requests()
+	require.Len(t, got, 1)
+	require.Contains(t, got[0].Text, "<b>Портфель за 24.10.2026</b>")
 }
 
 // Без TELEGRAM_BOT_TOKEN дайджест пишется в лог раз в сутки (12-dev-runbook.md §3.2).
@@ -376,11 +394,11 @@ func TestDigest_WithoutTokenLogsMessage(t *testing.T) {
 
 	require.NoError(t, h.runAt(t, digestNow))
 	require.Empty(t, bot.requests())
-	require.Contains(t, h.logs.String(), "Портфель за 12.10.2026")
+	require.Contains(t, h.logs.String(), "Портфель за 15.10.2026")
 	run := h.lastRun(t)
 	require.Equal(t, "ok", run.Status)
 	require.Equal(t, map[string]any{
-		"sent_on": "2026-10-13", "date": "2026-10-12", "apps": float64(3), "delivery": "log",
+		"sent_on": "2026-10-16", "date": "2026-10-15", "apps": float64(3), "delivery": "log",
 	}, run.Details)
 
 	h.logs.Reset()

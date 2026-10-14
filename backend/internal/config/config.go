@@ -150,6 +150,7 @@ func LoadWorker() (Worker, error) {
 		ListenAddr:          r.str("WORKER_LISTEN_ADDR", ":8082"),
 		JobsEnabled:         r.list("WORKER_JOBS_ENABLED", strings.Join(Jobs, ",")),
 		TelegramBotToken:    r.str("TELEGRAM_BOT_TOKEN", ""),
+		PublicBaseURL:       r.origin("PUBLIC_BASE_URL", "http://localhost:3000"),
 		HealthchecksPingURL: r.str("HEALTHCHECKS_PING_URL", ""),
 		BackupAPIURL:        r.str("BACKUP_API_URL", ""),
 		DiskFreeAlertPct:    r.positiveInt("DISK_FREE_ALERT_PCT", 20),

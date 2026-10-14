@@ -1978,11 +1978,13 @@ AC-7.1.4 (invariant — сниппеты компилируются):
 `sendMessage` с `parse_mode=HTML`:
 
 ```
-<b>Портфель за 12.10.2026</b>
-Notes iOS — DAU 12 480 (+4,1 %), новые 1 204, сессии 31 022, D1 38 %
-Notes Android — DAU 8 902 (−1,2 %), новые 861, сессии 20 114, D1 31 %
-<a href="https://appmetrica.online/">Открыть дашборд</a>
+<b>Портфель за 12.10.2026</b> · DAU 21 382
+<b>Notes iOS</b> · DAU 12 480 (▲4,1 % к пн) · новые 1 204 · сессии 31 022 · D1 38 %
+<b>Notes Android</b> · DAU 8 902 (▼1,2 % к пн) · новые 861 · сессии 20 114 · D1 31 %
+<a href="https://appmetrica.online/">Открыть портфель</a>
 ```
+
+Формат — OQ-012 (решён в Task 48): строки по убыванию DAU, не больше 30, остальные — «и ещё N приложений».
 
 Ответ Telegram 429 → ждать `parameters.retry_after` и повторить, всего 3 попытки; иначе `job_runs.status = failed`.
 

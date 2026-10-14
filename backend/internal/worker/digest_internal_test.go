@@ -2,9 +2,12 @@ package worker
 
 import (
 	"fmt"
+	"html"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -120,6 +123,29 @@ func TestFormatDigest_TruncatesAfter30Apps(t *testing.T) {
 		require.Len(t, lines, appLines+3)
 		require.Equal(t, tt.tail, lines[appLines+1])
 	}
+}
+
+// Строки приложений не выводят сообщение за лимит sendMessage (4096 символов без разметки): длинные имена и
+// большие числа уходят в «и ещё N приложений».
+func TestFormatDigest_FitsTelegramLimit(t *testing.T) {
+	rows := make([]digestRow, 40)
+	for i := range rows {
+		rows[i] = digestRow{
+			Name: fmt.Sprintf("%02d %s", i, strings.Repeat("&", 61)),
+			Row: reports.PortfolioRow{
+				ActiveDate: 9_000_000 - uint64(i), ActiveDeltaPct: ptr(-100.0), NewDate: 9_000_000,
+				SessionsDate: 99_000_000, RetentionD1: ptr(1.0),
+			},
+		}
+	}
+	text := formatDigest(digestDate, rows, "https://appmetrica.online")
+	visible := html.UnescapeString(regexp.MustCompile(`<[^>]+>`).ReplaceAllString(text, ""))
+	require.LessOrEqual(t, utf8.RuneCountInString(visible), 4096)
+	lines := strings.Split(text, "\n")
+	shown := len(lines) - 3
+	require.Less(t, shown, 30)
+	require.Positive(t, shown)
+	require.Equal(t, fmt.Sprintf("и ещё %d %s", 40-shown, pluralApps(40-shown)), lines[len(lines)-2])
 }
 
 // Равный DAU — по имени, как в таблице портфеля.

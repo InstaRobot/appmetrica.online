@@ -126,7 +126,7 @@ make env        # копирует .env.example → .env, если .env ещё �
 - **Общие Go**: `APP_ENV`, `LOG_LEVEL`, `METRICS_LISTEN_ADDR`, `POSTGRES_URL`, `CLICKHOUSE_ADDR`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_MIGRATE_USER`, `CLICKHOUSE_MIGRATE_PASSWORD`.
 - **ingest**: `INGEST_LISTEN_ADDR`, `GEOIP_DB_PATH`, `INGEST_MAX_BODY_BYTES`, `INGEST_MAX_EVENTS`, `INGEST_LATE_WINDOW`, `INGEST_FUTURE_TOLERANCE`, `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST`, `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST`, `KEY_CACHE_REFRESH`.
 - **api**: `API_LISTEN_ADDR`, `PUBLIC_BASE_URL`, `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_ORIGINS`, `WEBAUTHN_RP_NAME`, `SESSION_TTL`, `SESSION_IDLE_TTL`, `KEY_HASH_PEPPER`, `MIGRATE_ON_START`.
-- **worker**: `WORKER_LISTEN_ADDR`, `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`.
+- **worker**: `WORKER_LISTEN_ADDR`, `PUBLIC_BASE_URL` (ссылка в дайджесте), `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_PING_URL`, `BACKUP_API_URL`, `DISK_FREE_ALERT_PCT`, `INGEST_HEALTH_URL`, `API_HEALTH_URL`, `INGEST_METRICS_URL`.
 - **web**: `API_INTERNAL_URL`, `NEXT_PUBLIC_INGEST_URL`, `NEXT_PUBLIC_API_URL`.
 - **Инфраструктура**: `CLICKHOUSE_ADMIN_PASSWORD`, `CLICKHOUSE_RW_PASSWORD`, `CLICKHOUSE_RO_PASSWORD`, `POSTGRES_PASSWORD`; clickhouse-backup: `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `CLICKHOUSE_USERNAME`, `BACKUPS_TO_KEEP_REMOTE`, `WATCH_INTERVAL`, `FULL_INTERVAL`.
 - **Только локально**: `DEV_WRITE_KEY` (write-ключ, который создаёт `make seed`).
@@ -143,7 +143,7 @@ make env        # копирует .env.example → .env, если .env ещё �
 | `CLICKHOUSE_MIGRATE_USER`/`CLICKHOUSE_MIGRATE_PASSWORD`, `MIGRATE_ON_START=true` | ✓ | — | — | — | — |
 | Группа ingest | — | ✓ | — | — | — |
 | Группа api (`PUBLIC_BASE_URL=https://appmetrica.online`, `WEBAUTHN_RP_ID=appmetrica.online`, `WEBAUTHN_RP_ORIGINS=https://appmetrica.online`) | ✓ | — | — | — | — |
-| Группа worker (`INGEST_HEALTH_URL=http://appmetrica-ingest:8081/health`, `API_HEALTH_URL=http://appmetrica-api:8080/health`, `INGEST_METRICS_URL=http://appmetrica-ingest:9090/metrics`, `BACKUP_API_URL=http://clickhouse-backup:7171`) | — | — | ✓ | — | — |
+| Группа worker (`PUBLIC_BASE_URL=https://appmetrica.online`, `INGEST_HEALTH_URL=http://appmetrica-ingest:8081/health`, `API_HEALTH_URL=http://appmetrica-api:8080/health`, `INGEST_METRICS_URL=http://appmetrica-ingest:9090/metrics`, `BACKUP_API_URL=http://clickhouse-backup:7171`) | — | — | ✓ | — | — |
 | `API_INTERNAL_URL` (build-arg, уже зашит в образ) | — | — | — | ✓ | — |
 | Пароли ClickHouse, S3, `CLICKHOUSE_USERNAME`, `BACKUPS_TO_KEEP_REMOTE`, `WATCH_INTERVAL`, `FULL_INTERVAL` | — | — | — | — | ✓ |
 

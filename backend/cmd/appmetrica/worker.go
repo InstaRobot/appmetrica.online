@@ -60,11 +60,13 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		tg = client
 	}
 
+	stats := reports.NewService(ch.Conn(), c)
 	executor := deletion.NewExecutor(pg, deletion.NewClickHousePurger(ch.Conn()), c, logger,
 		deletion.WithOnFailed(worker.DeletionFailedNotifier(pg.Queries(), tg, logger)))
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
 		worker.DeletionJob(executor),
-		worker.CloseDayJob(pg.Queries(), reports.NewService(ch.Conn(), c), pg, c),
+		worker.CloseDayJob(pg.Queries(), stats, pg, c),
+		worker.DigestJob(pg.Queries(), stats, tg, c, logger, cfg.PublicBaseURL),
 	)
 	if err := sched.RegisterMetrics(reg); err != nil {
 		logger.Error("metrics init failed", slog.Any("error", err))
