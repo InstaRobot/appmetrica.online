@@ -150,7 +150,7 @@ services:
       HEALTHCHECKS_PING_URL: ${HEALTHCHECKS_PING_URL:-}
       BACKUP_API_URL: ${BACKUP_API_URL:-}
       DISK_FREE_ALERT_PCT: ${DISK_FREE_ALERT_PCT:-20}
-      WORKER_JOBS_ENABLED: ${WORKER_JOBS_ENABLED:-system_check,digest,close_day,deletion,session_cleanup}
+      WORKER_JOBS_ENABLED: ${WORKER_JOBS_ENABLED:-system_check,digest,close_day,deletion,session_cleanup,app_merge}
       INGEST_HEALTH_URL: http://appmetrica-ingest:8081/health
       API_HEALTH_URL: http://appmetrica-api:8080/health
       INGEST_METRICS_URL: http://appmetrica-ingest:9090/metrics

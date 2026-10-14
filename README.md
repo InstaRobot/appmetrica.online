@@ -13,6 +13,8 @@ user profiles and a Read API. Users are counted as people, not devices (`install
 - **No SDK.** One documented endpoint: `POST https://<ingest-domain>/v1/events`, batches of up to 500 events,
   idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, Go, curl and bots
   are in the public [documentation](https://appmetrica.online/docs).
+- **One app, many platforms.** An app can ship on iOS, Android, the web and more: each platform gets its own write
+  key, reports count people across platforms with a platform switcher on top, and duplicate apps can be merged.
 - **Privacy by design.** The client IP is used only in memory for a country/city lookup and is never stored —
   not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
   GDPR deletion by API or from the dashboard.
@@ -31,6 +33,7 @@ user profiles and a Read API. Users are counted as people, not devices (`install
 - [Deploying with Dokploy](#deploying-with-dokploy)
 - [Configuration reference](#configuration-reference)
 - [Sending your first events](#sending-your-first-events)
+- [Platforms and merging apps](#platforms-and-merging-apps)
 - [Operations](#operations)
 - [Development](#development)
 - [Documentation](#documentation)
@@ -166,7 +169,8 @@ Face ID, Windows Hello or a security key. You are signed in. Add more passkeys (
 
 ### 6. Connect your first app
 
-1. **Portfolio → Add app**: name, platform, time zone. A write key `pk_…` is created automatically.
+1. **Portfolio → Add app**: name, one or more platforms, time zone. A write key `pk_…` is created for each
+   platform.
 2. The **Integration** tab shows the key, ready-to-copy snippets (curl, Swift, Kotlin, JavaScript, Go) and waits for
    the first event.
 3. Send a test batch (see [Sending your first events](#sending-your-first-events)) — the status turns to
@@ -344,7 +348,7 @@ Any S3-compatible storage works (AWS S3, Hetzner Object Storage, Cloudflare R2, 
 | `RATE_APP_EVENTS_PER_SEC`, `RATE_APP_BURST` | `2000`, `4000` | Per-app rate limit; above it the batch gets HTTP 429 with `Retry-After` |
 | `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST` | `100`, `1000` | Per-install limit; extra events are rejected as retryable `install_rate_limited` |
 | `KEY_CACHE_REFRESH` | `15s` | How often ingest reloads write keys (delay before a revoked `pk_` key stops working) |
-| `WORKER_JOBS_ENABLED` | all jobs | Comma-separated list of `system_check`, `digest`, `close_day`, `deletion`, `session_cleanup` |
+| `WORKER_JOBS_ENABLED` | all jobs | Comma-separated list of `system_check`, `digest`, `close_day`, `deletion`, `session_cleanup`, `app_merge`. A list without `app_merge` leaves [app merges](#platforms-and-merging-apps) waiting in `pending` |
 
 ## Sending your first events
 
@@ -374,6 +378,34 @@ The full API reference (ingestion and Read API), session and offline-queue recip
 error/retry policy are in the public documentation at `https://APP_DOMAIN/docs`, no sign-in needed; the live copy
 is at [appmetrica.online/docs](https://appmetrica.online/docs). The OpenAPI contracts are in
 [`contracts/openapi/`](contracts/openapi/).
+
+## Platforms and merging apps
+
+An app is one product on one or more platforms: `ios`, `android`, `web`, `macos`, `windows`, `linux`, `bot`,
+`server`, `other`. Choose them when you create the app and change them in **Settings → Platforms**; removing a
+platform keeps its events and keys.
+
+Each event gets its platform in this order:
+
+1. `context.platform` of the event or of the batch;
+2. the platform of the write key. Keys created with the app are bound to their platform; in **Settings → Write keys**
+   a new key gets one platform or "Any platform";
+3. the only platform of the app, if it has exactly one;
+4. otherwise `other`, and the response carries a `platform_missing` warning for the event.
+
+Reports count people across platforms: the same `user_id` on iOS and on the web is one person. The platform switcher
+above the reports narrows them to one platform, and the audience chart can draw a line per platform.
+
+**Merging apps.** If iOS and Android were connected as two separate apps, merge them: open the app that stays,
+**Settings → Danger zone → Merge…**, pick the other app and type its name. The worker job `app_merge` moves the write
+keys (released app versions keep sending with them), waits 17 minutes until every ingest instance reloads the keys,
+copies the events, deletes the source app and recalculates the merged days. A banner above the app shows the
+progress; if a step fails, the banner shows the error and **Retry** continues from that step. While a merge is
+running, neither app can be archived or deleted.
+
+A merge cannot be undone. Before merging, back up Postgres and ClickHouse (see [Operations](#operations)) and make
+sure the ClickHouse disk has free space for a copy of the source app's events. The job must be listed in
+`WORKER_JOBS_ENABLED` (it is by default); otherwise the merge waits in `pending`.
 
 ## Operations
 

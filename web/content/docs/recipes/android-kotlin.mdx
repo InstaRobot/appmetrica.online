@@ -11,6 +11,10 @@ description: HttpURLConnection, install_id в SharedPreferences, офлайн-о
 Почему трекер создаётся в `Application.onCreate`, а не в `Activity.onCreate`, — в разделе
 [Где инициализировать метрику](/docs/concepts/initialization#android).
 
+Вшейте ключ платформы Android из вкладки «Интеграция». Если приложение выходит и на iOS, добавьте
+платформу Android к существующему приложению, а не создавайте второе: у каждой платформы свой ключ, а
+человек с одним `user_id` на обеих считается один раз — см. [Платформа события](/docs#platform).
+
 ## install_id [#install-id]
 
 `install_id` создаётся при первом запуске и хранится в `SharedPreferences`. Auto Backup включён по
@@ -165,7 +169,7 @@ class EventQueue(context: Context) {
 
     companion object {
         private const val ENDPOINT = "https://i.appmetrica.online/v1/events"
-        private const val WRITE_KEY = "pk_…" // вкладка «Интеграция» приложения
+        private const val WRITE_KEY = "pk_…" // ключ платформы Android на вкладке «Интеграция»
         private const val MAX_BATCH = 500
         private const val MAX_AGE_SECONDS = 7L * 24 * 3600
     }

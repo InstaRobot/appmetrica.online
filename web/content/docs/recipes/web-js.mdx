@@ -10,6 +10,10 @@ description: Сессии сайта через visibilitychange, navigator.send
 Куда подключить модуль в SPA и на многостраничном сайте — в разделе
 [Где инициализировать метрику](/docs/concepts/initialization#web).
 
+Если у продукта есть и мобильные приложения, добавьте платформу «Веб» к существующему приложению, а не
+создавайте отдельное: тогда человек с одним `user_id` на сайте и в приложении считается один раз.
+В модуль вшейте ключ платформы «Веб» — см. [Платформа события](/docs#platform).
+
 ## Почему text/plain и app_key в теле [#beacon]
 
 `sendBeacon` не умеет задавать заголовки, поэтому ключ передаётся в поле тела `app_key`, а не в
@@ -24,7 +28,7 @@ description: Сессии сайта через visibilitychange, navigator.send
 
 ```js title="analytics.js"
 const ENDPOINT = "https://i.appmetrica.online/v1/events";
-const WRITE_KEY = "pk_…"; // вкладка «Интеграция» приложения
+const WRITE_KEY = "pk_…"; // ключ платформы «Веб» на вкладке «Интеграция»
 const QUEUE_KEY = "am_queue";
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 const MAX_BATCH = 500;

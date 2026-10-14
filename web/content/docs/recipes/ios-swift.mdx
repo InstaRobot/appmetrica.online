@@ -5,8 +5,12 @@ description: URLSession, install_id в Keychain, офлайн-очередь и 
 
 Рецепт для iOS 17+ и Swift 6 без сторонних зависимостей. Он состоит из четырёх файлов: модель
 событий, `install_id` в Keychain, офлайн-очередь с отправкой через `URLSession` и трекер сессий,
-который подключается к жизненному циклу приложения. Для macOS код тот же, кроме `platform: "macos"`
-и уведомлений `NSApplication`.
+который подключается к жизненному циклу приложения. Для macOS код тот же, кроме `platform: "macos"`,
+ключа платформы macOS и уведомлений `NSApplication`.
+
+Вшейте ключ платформы iOS из вкладки «Интеграция». Если приложение выходит и на других платформах, это
+одно приложение с несколькими платформами: у каждой свой ключ, а человек с одним `user_id` на iOS и
+Android считается один раз — см. [Платформа события](/docs#platform).
 
 Где создать трекер, почему сессию ведёт приложение, а не экран, и почему расширения и виджеты сессий
 не отправляют, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#ios).
@@ -56,7 +60,7 @@ struct IngestResult: Decodable, Sendable {
 
 enum Analytics {
     static let endpoint = URL(string: "https://i.appmetrica.online/v1/events")!
-    static let writeKey = "pk_…" // вкладка «Интеграция» приложения
+    static let writeKey = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
 
     struct Response: Sendable {
         let status: Int

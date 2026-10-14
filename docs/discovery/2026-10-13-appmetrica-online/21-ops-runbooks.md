@@ -515,6 +515,53 @@ docker rm -f ch-drill && docker volume rm ch-drill-data && docker network rm ch-
 3. Если SSH не отвечает — Robot → Reset или KVM-консоль (заказ в Robot), либо Rescue System для починки.
 4. **Удалить временное правило firewall сразу после восстановления Tailscale.**
 
+### 7.8. Слияние приложений
+Слияние запускает владелец в дашборде («Настройки → Опасная зона → Объединить…»), выполняет job worker `app_merge`
+(каждую минуту, до 30 минут за запуск). Шаги: `move_keys` → `wait_keys` (17 минут) → `copy` → `purge_source` → `reclose`
+→ `done`; прогресс — в `app_merges.step` и `app_merges.copied_partitions`. Слияние необратимо: после `purge_source`
+источника нет. До `purge_source` события источника целы, повтор продолжает с сохранённого шага.
+
+**Перед слиянием в production**:
+1. Бэкап Postgres: Dokploy → Backups → ручной запуск бэкапа `appmetrica-postgres`, или
+   `docker exec $(docker ps -qf name=appmetrica-postgres) pg_dump -U appmetrica -d appmetrica -Fc > pre-merge-$(date +%Y%m%d).dump`.
+2. Бэкап ClickHouse: `docker exec $(docker ps -qf name=clickhouse-backup) clickhouse-backup create_remote --diff-from-remote=<последний> pre-merge-$(date +%Y%m%d)`.
+3. Место на диске: копия событий источника временно занимает столько же, сколько оригинал, плюс слияния партов. Оценка
+   объёма источника (запрос из 6.1 «Свободное место» — `free` должен быть больше `need` хотя бы вдвое):
+   ```sql
+   SELECT (SELECT count() FROM appmetrica.events WHERE app_id = '<source_app_id>') AS source_rows,
+          (SELECT sum(bytes_on_disk) / sum(rows) FROM system.parts
+           WHERE database = 'appmetrica' AND table = 'events' AND active) AS bytes_per_row,
+          formatReadableSize(source_rows * bytes_per_row) AS need;
+   ```
+4. `WORKER_JOBS_ENABLED` сервиса worker содержит `app_merge` (значение по умолчанию). Без него слияние висит в `pending`.
+
+**Диагностика**:
+```sql
+-- Postgres: незавершённые слияния и последние запуски job
+SELECT id, status, step, attempts, copied_events, total_events, keys_moved_at, started_at, left(error, 200) AS error
+FROM app_merges WHERE status <> 'done' ORDER BY created_at;
+SELECT started_at, finished_at, status, details FROM job_runs WHERE job = 'app_merge' ORDER BY started_at DESC LIMIT 5;
+```
+Логи `appmetrica-worker`: `event=merge.step` (шаг и `outcome`), `event=merge.slow` (копирование дольше 30 минут). Метрики:
+`merge_step_duration_seconds{step}`, `merge_copied_events_total`. Падение шага ставит `failed` и шлёт алерт в Telegram
+«Слияние приложений не выполнено» с текстом ошибки.
+
+**Mitigation**:
+- `failed`: устранить причину по тексту ошибки (ClickHouse недоступен — 7.2, нет места — 7.3), затем в дашборде цели
+  нажать «Повторить» в баннере слияния. Шаг `copy` продолжает с первой нескопированной партиции; дубли строк уже
+  скопированных партиций схлопывает `ReplacingMergeTree` (`insert_id`), метрики от дублей не зависят.
+- Зависло в `running` (нет новых `merge.step` дольше часа, worker перезапускался): остановить слияние вручную, чтобы
+  worker перестал его брать, и после разбора повторить из дашборда:
+  ```sql
+  UPDATE app_merges SET status = 'failed', error = 'остановлено вручную'
+  WHERE id = '<merge_id>' AND status IN ('pending', 'running');
+  ```
+- Слияния нужно остановить совсем (упали дважды подряд на `copy`): убрать `app_merge` из `WORKER_JOBS_ENABLED` worker и
+  задеплоить. Незавершённые слияния ждут в своём статусе; приложения-участники нельзя архивировать, удалять, выпускать
+  им ключи и начинать с ними новое слияние, пока слияние в `pending`, `running` или `failed`.
+- После шага `reclose` переоткрытые дни цели `close_day` закрывает постепенно (до 400 дней за запуск раз в 15 минут);
+  портфель в это время медленнее — это ожидаемо.
+
 ## 8. Disaster recovery (DR)
 
 ### 8.1. Scenarios
