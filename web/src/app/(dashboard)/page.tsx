@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/layout/page-header";
+import { Suspense } from "react";
+import DashboardLoading from "./loading";
+import { PortfolioView } from "./portfolio-view";
 
 export const metadata: Metadata = { title: "Портфель" };
 
-// S-03: каркас страницы портфеля. Таблица PortfolioTable, дата и EnvironmentSwitch — T-037.
+// S-03 `/`: состояние экрана в URL (nuqs читает useSearchParams), поэтому вид — под Suspense.
 export default function PortfolioPage() {
-  return <PageHeader title="Портфель" />;
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <PortfolioView />
+    </Suspense>
+  );
 }

@@ -43,7 +43,7 @@ test("creates app from portfolio", async ({ page }) => {
 
 test("portfolio keeps environment in the URL", async ({ page }) => {
   await page.goto("/");
-  const env = page.getByRole("group", { name: "Окружение" });
+  const env = page.getByRole("radiogroup", { name: "Окружение" });
   await env.getByRole("radio", { name: "development" }).click();
 
   await expect(page).toHaveURL(/[?&]env=development/);
@@ -53,6 +53,6 @@ test("portfolio keeps environment in the URL", async ({ page }) => {
   );
   await page.reload();
   await expect(
-    page.getByRole("group", { name: "Окружение" }).getByRole("radio", { name: "development" }),
+    page.getByRole("radiogroup", { name: "Окружение" }).getByRole("radio", { name: "development" }),
   ).toHaveAttribute("aria-checked", "true");
 });

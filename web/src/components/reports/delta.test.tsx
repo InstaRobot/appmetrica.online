@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Delta } from "./delta";
 import { Sparkline } from "./sparkline";
 
+// Testing Library сводит пробельные символы текста узла (и U+00A0) к обычному пробелу.
 const NBSP = " ";
 
 describe("Delta", () => {

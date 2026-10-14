@@ -12,6 +12,7 @@ import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
 import { type PortfolioSort, PortfolioTable } from "./portfolio-table";
 
+// Testing Library сводит пробельные символы текста узла (и U+00A0) к обычному пробелу.
 const NBSP = " ";
 const MINUS = "−";
 
@@ -97,14 +98,16 @@ function mockApi(rows: PortfolioRow[], apps = rows.map((r) => makeApp({ ...r.app
 
 function renderView(searchParams = "", onUrlUpdate?: OnUrlUpdateFunction) {
   return renderWithClient(<PortfolioView />, {
+    // hasMemory: адаптер хранит обновления URL, как браузер, — иначе состояние откатывается к searchParams.
     wrapper: withNuqsTestingAdapter({
       searchParams,
+      hasMemory: true,
       ...(onUrlUpdate ? { onUrlUpdate } : {}),
     }),
   });
 }
 
-const table = () => screen.findByRole("table", { name: /Портфель приложений за/ });
+const table = () => screen.findByRole("table", { name: /^Портфель приложений за/ });
 const bodyRows = (t: HTMLElement) => within(t).getAllByRole("row").slice(1);
 const names = (t: HTMLElement) =>
   bodyRows(t).map((r) => within(r).getAllByRole("cell")[0]?.textContent);
@@ -131,10 +134,10 @@ describe("PortfolioView", () => {
     const t = await table();
     expect(names(t)).toEqual(["Maps Android", "Notes iOS", "site.ru"]);
 
-    await user.click(within(t).getByRole("button", { name: /^DAU 12 окт/ }));
+    await user.click(within(t).getByRole("button", { name: /^DAU 12\sокт/ }));
 
     expect(names(t)).toEqual(["Notes iOS", "Maps Android", "site.ru"]);
-    const dau = within(t).getByRole("columnheader", { name: /^DAU 12 окт/ });
+    const dau = within(t).getByRole("columnheader", { name: /^DAU 12\sокт/ });
     expect(dau).toHaveAttribute("aria-sort", "descending");
     expect(within(t).getByRole("columnheader", { name: /^Приложение/ })).toHaveAttribute(
       "aria-sort",
@@ -169,15 +172,15 @@ describe("PortfolioView", () => {
     renderView();
 
     const t = await table();
-    expect(t).toHaveAccessibleName("Портфель приложений за 12 окт 2026");
+    expect(t).toHaveAccessibleName(/^Портфель приложений за 12\sокт\s2026$/);
     const headers = within(t)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
     expect(headers).toEqual([
       "Приложение",
       "Сегодня",
-      "DAU 12 окт",
-      "Δ к пн 5 окт",
+      "DAU 12\u00a0окт",
+      "Δ к пн\u00a05\u00a0окт",
       "Новые",
       "Сессии",
       "D1",
@@ -310,7 +313,7 @@ describe("PortfolioView", () => {
 
     await table();
     expect(captured.portfolio.at(-1)?.get("environment")).toBe("production");
-    const env = screen.getByRole("group", { name: "Окружение" });
+    const env = screen.getByRole("radiogroup", { name: "Окружение" });
     expect(within(env).getByRole("radio", { name: "production" })).toBeChecked();
 
     await user.click(within(env).getByRole("radio", { name: "development" }));
@@ -320,7 +323,7 @@ describe("PortfolioView", () => {
   });
 
   it("steps the date but not past yesterday in the owner timezone", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-10-13T09:00:00Z"));
     const captured = mockApi([notes]);
     const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
@@ -329,7 +332,9 @@ describe("PortfolioView", () => {
 
     await table();
     expect(captured.portfolio[0]?.has("date")).toBe(false);
-    expect(screen.getByRole("button", { name: "Выбрать дату: 12 окт 2026" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Выбрать дату: 12\sокт\s2026$/ }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Следующий день" })).toBeDisabled(),
     );
@@ -339,7 +344,9 @@ describe("PortfolioView", () => {
     expect(onUrlUpdate.mock.lastCall?.[0].searchParams.get("date")).toBe("2026-10-11");
     await waitFor(() => expect(captured.portfolio.at(-1)?.get("date")).toBe("2026-10-11"));
     expect(
-      await screen.findByRole("table", { name: "Портфель приложений за 11 окт 2026" }),
+      await screen.findByRole("table", {
+        name: /^Портфель приложений за 11\sокт\s2026$/,
+      }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Следующий день" })).toBeEnabled();
   });

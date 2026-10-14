@@ -1,37 +1,176 @@
-import type { FormEvent } from "react";
+import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 import type * as zod from "zod";
+import { ApiError } from "@/lib/api/fetcher";
+import { messageFor } from "@/lib/errors";
+
+// Хук форм дашборда (14-ux-ui-spec.md §7.1) вместо react-hook-form: правила — Zod-схемы orval из
+// contracts/openapi/api.yaml, тексты ошибок — по полю и коду issue Zod. Ошибка поля показывается на blur,
+// при отправке — у всех полей; после первой неудачной отправки поле проверяется на каждый ввод.
 
 type Field<S extends zod.ZodObject> = keyof zod.input<S> & string;
 
+// Строковые поля (включая enum) принимают любую строку: незаполненный select — "".
 export type FormValues<S extends zod.ZodObject> = {
   [K in Field<S>]: zod.input<S>[K] extends string ? string : zod.input<S>[K];
 };
 export type FormErrors<S extends zod.ZodObject> = Partial<Record<Field<S>, string>>;
+/** Один текст на любое нарушение или тексты по коду issue Zod (too_small, too_big, invalid_value, custom…). */
 export type FieldMessages = string | Partial<Record<string, string>>;
 
 type UseZodFormOptions<S extends zod.ZodObject> = {
   defaultValues: FormValues<S>;
   messages?: Partial<Record<Field<S>, FieldMessages>>;
+  /** Код ошибки API → поле, к которому относится текст из lib/errors.ts (409 app_name_taken → name). */
   serverErrors?: Partial<Record<string, Field<S>>>;
   onSubmit: (data: zod.output<S>) => void | Promise<void>;
 };
 
-// TODO(T-037)
-export function useZodForm<S extends zod.ZodObject>(_schema: S, options: UseZodFormOptions<S>) {
+function issueText(issue: zod.core.$ZodIssue, messages: FieldMessages | undefined): string {
+  if (typeof messages === "string") return messages;
+  return messages?.[issue.code] ?? issue.message;
+}
+
+export function useZodForm<S extends zod.ZodObject>(schema: S, options: UseZodFormOptions<S>) {
+  const [values, setValues] = useState(options.defaultValues);
+  const [errors, setErrors] = useState<FormErrors<S>>({});
+  const [submitting, setSubmitting] = useState(false);
+  // Актуальные значения и опции для обработчиков, вызванных до перерисовки (select: onValueChange → blur).
+  const valuesRef = useRef(values);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const submittedRef = useRef(false);
+  const elements = useRef(new Map<Field<S>, HTMLElement>());
+
+  const fields = useMemo(() => Object.keys(schema.shape) as Field<S>[], [schema]);
+
+  const validate = useCallback(
+    (current: FormValues<S>) => {
+      const result = schema.safeParse(current);
+      const next: FormErrors<S> = {};
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          const name = issue.path[0] as Field<S>;
+          if (next[name] === undefined) {
+            next[name] = issueText(issue, optionsRef.current.messages?.[name]);
+          }
+        }
+      }
+      return { result, errors: next };
+    },
+    [schema],
+  );
+
+  const showFieldError = useCallback(
+    (name: Field<S>) => {
+      const message = validate(valuesRef.current).errors[name];
+      setErrors((prev) => {
+        const next = { ...prev };
+        if (message === undefined) delete next[name];
+        else next[name] = message;
+        return next;
+      });
+    },
+    [validate],
+  );
+
+  const setValue = useCallback(
+    <K extends Field<S>>(name: K, value: FormValues<S>[K]) => {
+      valuesRef.current = { ...valuesRef.current, [name]: value };
+      setValues(valuesRef.current);
+      if (submittedRef.current) {
+        showFieldError(name);
+      } else {
+        // Серверная ошибка поля снимается при его изменении.
+        setErrors((prev) => {
+          if (prev[name] === undefined) return prev;
+          const next = { ...prev };
+          delete next[name];
+          return next;
+        });
+      }
+    },
+    [showFieldError],
+  );
+
+  const blur = useCallback((name: Field<S>) => showFieldError(name), [showFieldError]);
+
+  const focusFirst = useCallback(
+    (failed: FormErrors<S>) => {
+      const first = fields.find((name) => failed[name] !== undefined);
+      if (first) elements.current.get(first)?.focus();
+    },
+    [fields],
+  );
+
+  const handleSubmit = useCallback(
+    async (event?: FormEvent) => {
+      event?.preventDefault();
+      submittedRef.current = true;
+      const { result, errors: failed } = validate(valuesRef.current);
+      setErrors(failed);
+      if (!result.success) {
+        focusFirst(failed);
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await optionsRef.current.onSubmit(result.data);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [validate, focusFirst],
+  );
+
+  // applyServerErrors раскладывает ошибку API по полям: код из serverErrors или 400 invalid_request с
+  // details.fields. Возвращает false, если ошибка не относится к полям (её показывает вызывающий код).
+  const applyServerErrors = useCallback(
+    (error: unknown): boolean => {
+      if (!(error instanceof ApiError)) return false;
+      const next: FormErrors<S> = {};
+      const field = optionsRef.current.serverErrors?.[error.code];
+      if (field) {
+        next[field] = messageFor(error.code);
+      } else if (error.code === "invalid_request") {
+        const reported = error.details?.fields;
+        if (reported && typeof reported === "object") {
+          for (const [name, text] of Object.entries(reported)) {
+            if (fields.includes(name as Field<S>) && typeof text === "string") {
+              next[name as Field<S>] = text;
+            }
+          }
+        }
+      }
+      if (Object.keys(next).length === 0) return false;
+      setErrors(next);
+      focusFirst(next);
+      return true;
+    },
+    [fields, focusFirst],
+  );
+
+  const errorId = (name: Field<S>) => `${name}-error`;
+
+  // Атрибуты связи поля с ошибкой и ref для фокуса на первой ошибке после отправки.
+  const field = (name: Field<S>) => ({
+    id: name as string,
+    "aria-invalid": errors[name] !== undefined ? (true as const) : undefined,
+    "aria-describedby": errors[name] !== undefined ? errorId(name) : undefined,
+    ref: (el: HTMLElement | null) => {
+      if (el) elements.current.set(name, el);
+      else elements.current.delete(name);
+    },
+  });
+
   return {
-    values: options.defaultValues,
-    errors: {} as FormErrors<S>,
-    submitting: false,
-    setValue: <K extends Field<S>>(_name: K, _value: FormValues<S>[K]) => {},
-    blur: (_name: Field<S>) => {},
-    handleSubmit: async (_event?: FormEvent) => {},
-    applyServerErrors: (_error: unknown): boolean => false,
-    field: (name: Field<S>) => ({
-      id: name as string,
-      "aria-invalid": undefined as true | undefined,
-      "aria-describedby": undefined as string | undefined,
-      ref: (_el: HTMLElement | null) => {},
-    }),
-    errorId: (name: Field<S>) => `${name}-error`,
+    values,
+    errors,
+    submitting,
+    setValue,
+    blur,
+    handleSubmit,
+    applyServerErrors,
+    field,
+    errorId,
   };
 }
