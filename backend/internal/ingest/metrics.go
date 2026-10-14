@@ -26,6 +26,9 @@ type Metrics struct {
 	EventsRejected *prometheus.CounterVec
 	// Warnings — ingest_warnings_total{code}: предупреждения по WarningCode.
 	Warnings *prometheus.CounterVec
+	// PlatformMissing — ingest_platform_missing_total: принятые события, записанные как other, потому что
+	// платформу не дали ни context, ни ключ, а у приложения несколько платформ.
+	PlatformMissing prometheus.Counter
 	// BatchDuration — ingest_batch_duration_seconds: время обработки запроса POST /v1/events.
 	BatchDuration prometheus.Histogram
 	// BatchEvents — ingest_batch_events: число событий в разобранном батче.
@@ -73,6 +76,10 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 			Name: "ingest_warnings_total",
 			Help: "Предупреждения о принятых событиях по коду.",
 		}, []string{"code"}),
+		PlatformMissing: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "ingest_platform_missing_total",
+			Help: "События без платформы в context и ключе у приложения с несколькими платформами (записаны как other).",
+		}),
 		BatchDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "ingest_batch_duration_seconds",
 			Help:    "Время обработки запроса POST /v1/events, включая ожидание ack ClickHouse.",
@@ -99,7 +106,7 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 	}
 	for _, c := range []prometheus.Collector{
 		m.Requests, m.KeyCacheSize, m.KeyCacheRefreshErrors, m.KeyCacheLastRefresh, m.RateLimited,
-		m.EventsAccepted, m.EventsRejected, m.Warnings, m.BatchDuration, m.BatchEvents,
+		m.EventsAccepted, m.EventsRejected, m.Warnings, m.PlatformMissing, m.BatchDuration, m.BatchEvents,
 		m.InsertDuration, m.InsertErrors, m.RejectedLogDropped,
 	} {
 		if err := reg.Register(c); err != nil {

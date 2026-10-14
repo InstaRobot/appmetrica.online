@@ -36,10 +36,13 @@ const (
 
 // KeyInfo — запись кэша по write-ключу pk_.
 type KeyInfo struct {
-	WriteKeyID  uuid.UUID
-	AppID       uuid.UUID
-	AppStatus   sqlc.AppStatus
-	AppPlatform sqlc.AppPlatform
+	WriteKeyID uuid.UUID
+	AppID      uuid.UUID
+	AppStatus  sqlc.AppStatus
+	// KeyPlatform — write_keys.platform; "" — ключ для любой платформы.
+	KeyPlatform string
+	// AppPlatforms — apps.platforms в порядке enum; общий срез для всех ключей приложения, не изменяется.
+	AppPlatforms []string
 }
 
 // KeyStore — запросы Postgres, нужные кэшу (реализует *sqlc.Queries).
@@ -99,11 +102,19 @@ func (c *KeyCache) Refresh(ctx context.Context) error {
 		return fmt.Errorf("ingest: load write keys: %w", err)
 	}
 	keys := make(map[string]KeyInfo, len(rows))
+	appPlatforms := map[uuid.UUID][]string{}
 	for _, r := range rows {
-		info := KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus}
-		// Пока платформа события берётся из основной платформы приложения (platforms[1], CHECK в схеме).
-		if len(r.AppPlatforms) > 0 {
-			info.AppPlatform = r.AppPlatforms[0]
+		platforms, ok := appPlatforms[r.AppID]
+		if !ok {
+			platforms = make([]string, len(r.AppPlatforms))
+			for i, p := range r.AppPlatforms {
+				platforms[i] = string(p)
+			}
+			appPlatforms[r.AppID] = platforms
+		}
+		info := KeyInfo{WriteKeyID: r.WriteKeyID, AppID: r.AppID, AppStatus: r.AppStatus, AppPlatforms: platforms}
+		if r.KeyPlatform != nil {
+			info.KeyPlatform = string(*r.KeyPlatform)
 		}
 		keys[r.Key] = info
 	}

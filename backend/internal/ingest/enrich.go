@@ -29,22 +29,33 @@ type Enricher struct {
 	AcceptDevelopment bool
 }
 
-// Enrich сливает context батча (batchCtx из ValidateBatchContext) и события, подставляет apps.platform
-// и environment=production по умолчанию и определяет гео: context.ip, если задан ("none" — без гео),
-// иначе b.ClientIP. Заполняет ev.Resolved. Возвращает warning geo_ip_invalid для невалидного context.ip
-// и write=false, если событие development нужно молча отбросить.
-func (e Enricher) Enrich(b *Batch, batchCtx ContextFields, ev *Event) (warning *ingestapi.IngestWarning, write bool) {
+// Enrich сливает context батча (batchCtx из ValidateBatchContext) и события, определяет платформу (context →
+// ключ → единственная платформа приложения → other), environment=production по умолчанию и гео: context.ip,
+// если задан ("none" — без гео), иначе b.ClientIP. Заполняет ev.Resolved. Возвращает предупреждения
+// platform_missing и geo_ip_invalid (в этом порядке) и write=false, если событие development нужно молча
+// отбросить — тогда без предупреждений.
+func (e Enricher) Enrich(b *Batch, batchCtx ContextFields, ev *Event) (warnings []ingestapi.IngestWarning, write bool) {
 	merged := MergeContext(batchCtx, ev.Context)
-	ev.Resolved = resolveContext(merged, string(b.Key.AppPlatform))
+	var platformMissing bool
+	ev.Resolved, platformMissing = resolveContext(merged, b.Key.KeyPlatform, b.Key.AppPlatforms)
 	if !e.AcceptDevelopment && ev.Resolved.Environment == string(ingestapi.EnvironmentDevelopment) {
 		return nil, false
 	}
-	addr, warning := geoAddr(ev.Index, merged, b.ClientIP)
+	if platformMissing {
+		warnings = append(warnings, ingestapi.IngestWarning{
+			Index: ev.Index, Code: ingestapi.WarningCodePlatformMissing,
+			Message: "Платформа не определена: нет context.platform и платформы ключа; событие записано как other",
+		})
+	}
+	addr, geoWarning := geoAddr(ev.Index, merged, b.ClientIP)
+	if geoWarning != nil {
+		warnings = append(warnings, *geoWarning)
+	}
 	if addr.IsValid() {
 		loc := e.Geo.Lookup(addr)
 		ev.Resolved.Country, ev.Resolved.Region, ev.Resolved.City = loc.Country, loc.Region, loc.City
 	}
-	return warning, true
+	return warnings, true
 }
 
 // geoAddr выбирает адрес для гео; нулевой адрес — гео не определяется.

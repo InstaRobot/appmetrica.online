@@ -140,9 +140,11 @@ func MergeContext(batch, event ContextFields) ContextFields {
 	return merged
 }
 
-// resolveContext — итоговые колонки без гео: нет platform → apps.platform, нет environment → production.
-func resolveContext(merged ContextFields, appPlatform string) ResolvedContext {
-	rc := ResolvedContext{
+// resolveContext — итоговые колонки без гео; нет environment → production. Платформа (FR-3): context.platform →
+// платформа ключа → единственная платформа приложения → other, и тогда missing=true (предупреждение
+// platform_missing). context.platform с набором приложения не сверяется.
+func resolveContext(merged ContextFields, keyPlatform string, appPlatforms []string) (rc ResolvedContext, missing bool) {
+	rc = ResolvedContext{
 		Platform:    merged["platform"],
 		OSName:      merged["os_name"],
 		OSVersion:   merged["os_version"],
@@ -153,11 +155,17 @@ func resolveContext(merged ContextFields, appPlatform string) ResolvedContext {
 		Locale:      merged["locale"],
 		Environment: merged["environment"],
 	}
-	if rc.Platform == "" {
-		rc.Platform = appPlatform
+	switch {
+	case rc.Platform != "":
+	case keyPlatform != "":
+		rc.Platform = keyPlatform
+	case len(appPlatforms) == 1:
+		rc.Platform = appPlatforms[0]
+	default:
+		rc.Platform, missing = string(ingestapi.PlatformOther), true
 	}
 	if rc.Environment == "" {
 		rc.Environment = string(ingestapi.EnvironmentProduction)
 	}
-	return rc
+	return rc, missing
 }

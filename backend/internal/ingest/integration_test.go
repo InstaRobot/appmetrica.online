@@ -144,9 +144,9 @@ func TestIngest_HappyPath_InsertsTwoEvents(t *testing.T) {
 // пишет события без context.platform как other с platform_missing на каждое, ключ android — как android.
 func TestIngestUsesKeyPlatform(t *testing.T) {
 	l := newLiveIngestApp(t, []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid}, nil)
-	android := sqlc.AppPlatformAndroid
+	keyPlatform := sqlc.AppPlatformAndroid
 	androidKey, err := l.env.PG.Queries().CreateWriteKey(t.Context(), sqlc.CreateWriteKeyParams{
-		AppID: l.appID, Key: otherKey, Label: "Android", Platform: &android,
+		AppID: l.appID, Key: otherKey, Label: "Android", Platform: &keyPlatform,
 	})
 	require.NoError(t, err)
 	require.NoError(t, l.cache.Refresh(t.Context()))
@@ -168,10 +168,12 @@ func TestIngestUsesKeyPlatform(t *testing.T) {
 	res = decodeResult(t, l.postKey(t, otherKey, []byte(other), ""))
 	require.Equal(t, 2, res.Accepted)
 	require.Empty(t, res.Warnings)
-	var platforms []string
-	require.NoError(t, l.env.CH.Conn().Select(t.Context(), &platforms,
-		"SELECT platform FROM events WHERE app_id = ? AND write_key_id = ?", l.appID, androidKey.ID))
-	require.Equal(t, []string{"android", "android"}, platforms)
+	var android, total uint64
+	require.NoError(t, l.env.CH.Conn().QueryRow(t.Context(),
+		"SELECT countIf(platform = 'android'), count() FROM events WHERE app_id = ? AND write_key_id = ?",
+		l.appID, androidKey.ID).Scan(&android, &total))
+	require.Equal(t, uint64(2), total)
+	require.Equal(t, uint64(2), android, "события ключа android записаны как android")
 	require.InDelta(t, 2.0, metricValue(t, l.reg, "ingest_platform_missing_total"), 0)
 }
 

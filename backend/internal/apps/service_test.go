@@ -284,7 +284,8 @@ func TestCreateApp_CreatesAppAndFirstKey(t *testing.T) {
 	require.Equal(t, app.ID, info.AppID.String())
 	require.Equal(t, key.ID, info.WriteKeyID.String())
 	require.Equal(t, sqlc.AppStatusActive, info.AppStatus)
-	require.Equal(t, sqlc.AppPlatformIos, info.AppPlatform)
+	require.Equal(t, "ios", info.KeyPlatform)
+	require.Equal(t, []string{"ios"}, info.AppPlatforms)
 
 	// Приложение сразу видно в Read API.
 	require.Equal(t, app, e.get(t, app.ID))

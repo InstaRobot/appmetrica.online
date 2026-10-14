@@ -102,7 +102,7 @@ func TestPipeline_RejectedRows(t *testing.T) {
 		require.Contains(t, logged[0].PayloadSample, `"name":"purchase"`)
 
 		require.Empty(t, logged[1].EventName)
-		require.Equal(t, "ios", logged[1].Platform, "platform по умолчанию — apps.platform")
+		require.Equal(t, "ios", logged[1].Platform, "платформа по умолчанию — единственная платформа приложения")
 		require.Equal(t, "3.4.0", logged[1].AppVersion)
 		require.Equal(t, `"not an object"`, logged[1].PayloadSample)
 

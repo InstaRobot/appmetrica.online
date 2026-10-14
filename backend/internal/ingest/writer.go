@@ -115,10 +115,8 @@ func (p *pipeline) events(b *Batch, batchCtx ContextFields, res *ingestapi.Inges
 		if clamped != nil {
 			res.Warnings = append(res.Warnings, *clamped)
 		}
-		geoWarning, write := p.cfg.Enricher.Enrich(b, batchCtx, ev)
-		if geoWarning != nil {
-			res.Warnings = append(res.Warnings, *geoWarning)
-		}
+		warnings, write := p.cfg.Enricher.Enrich(b, batchCtx, ev)
+		res.Warnings = append(res.Warnings, warnings...)
 		res.Accepted++
 		if write {
 			rows = append(rows, NewEventRow(b, ev))
@@ -162,6 +160,9 @@ func (p *pipeline) record(b *Batch, batchCtx ContextFields, res ingestapi.Ingest
 	}
 	for _, w := range res.Warnings {
 		m.Warnings.WithLabelValues(string(w.Code)).Inc()
+		if w.Code == ingestapi.WarningCodePlatformMissing {
+			m.PlatformMissing.Inc()
+		}
 	}
 	p.cfg.Rejected.logEvents(b, batchCtx, res.Rejected)
 }
@@ -204,7 +205,7 @@ func (l RejectedLogger) LogBatchError(appKey string, receivedAt time.Time, body 
 	if json.Unmarshal(body, &raw) == nil {
 		batchCtx, _ = parseContext(raw.Context)
 	}
-	rc := resolveContext(batchCtx, string(info.AppPlatform))
+	rc, _ := resolveContext(batchCtx, info.KeyPlatform, info.AppPlatforms)
 	field, _ := e.Details["field"].(string)
 	l.add(chstore.RejectedRow{
 		ReceivedAt:    receivedAt,
@@ -229,7 +230,7 @@ func (l RejectedLogger) logEvents(b *Batch, batchCtx ContextFields, rejected []i
 	for i, rej := range rejected {
 		raw := b.Events[rej.Index]
 		name, evCtx := peekEvent(raw)
-		rc := resolveContext(MergeContext(batchCtx, evCtx), string(b.Key.AppPlatform))
+		rc, _ := resolveContext(MergeContext(batchCtx, evCtx), b.Key.KeyPlatform, b.Key.AppPlatforms)
 		if rej.Code == ingestapi.RejectionCodeUserIdLooksLikePii {
 			raw = redactUserID(raw)
 		}
