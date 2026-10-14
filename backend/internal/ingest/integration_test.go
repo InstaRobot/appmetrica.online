@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
+	"appmetrica.online/backend/internal/gen/ingestapi"
 	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/ingest"
 	"appmetrica.online/backend/internal/pgstore/sqlc"
@@ -29,6 +31,8 @@ type liveIngest struct {
 	handler  http.Handler
 	env      *testutil.Env
 	rejected *chstore.RejectedLog
+	cache    *ingest.KeyCache
+	reg      *prometheus.Registry
 	appID    uuid.UUID
 	keyID    uuid.UUID
 }
@@ -37,10 +41,16 @@ type liveIngest struct {
 // (nil — env.CH).
 func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWriter) *liveIngest {
 	t.Helper()
+	return newLiveIngestApp(t, []sqlc.AppPlatform{sqlc.AppPlatformIos}, writer)
+}
+
+// newLiveIngestApp — как newLiveIngest, но с заданным набором платформ приложения; ключ testKey без платформы.
+func newLiveIngestApp(t *testing.T, platforms []sqlc.AppPlatform, writer func(env *testutil.Env) ingest.EventWriter) *liveIngest {
+	t.Helper()
 	ctx := t.Context()
 	env := testutil.Start(t)
 	q := env.PG.Queries()
-	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes iOS", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos}, Timezone: "Europe/Moscow"})
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{Name: "Notes", Platforms: platforms, Timezone: "Europe/Moscow"})
 	require.NoError(t, err)
 	key, err := q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: testKey, Label: "Основной"})
 	require.NoError(t, err)
@@ -49,7 +59,8 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 		w = writer(env)
 	}
 
-	metrics, err := ingest.NewMetrics(prometheus.NewRegistry())
+	reg := prometheus.NewRegistry()
+	metrics, err := ingest.NewMetrics(reg)
 	require.NoError(t, err)
 	clk := clock.NewFixed(receivedAt)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -74,15 +85,20 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 	h := httpx.Chain(ingest.NewHandler(ingest.HandlerConfig{
 		Processor: p, Keys: cache, Clock: clk, Logger: logger, Metrics: metrics, BatchErrors: rl,
 	}), httpx.CORS(), httpx.RequestID(clk))
-	return &liveIngest{handler: h, env: env, rejected: rejected, appID: app.ID, keyID: key.ID}
+	return &liveIngest{handler: h, env: env, rejected: rejected, cache: cache, reg: reg, appID: app.ID, keyID: key.ID}
 }
 
 // post отправляет батч с ключом testKey; адрес клиента — X-Forwarded-For от Traefik.
 func (l *liveIngest) post(t *testing.T, body []byte, forwardedFor string) *httptest.ResponseRecorder {
 	t.Helper()
+	return l.postKey(t, testKey, body, forwardedFor)
+}
+
+func (l *liveIngest) postKey(t *testing.T, key string, body []byte, forwardedFor string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/events", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-App-Key", testKey)
+	req.Header.Set("X-App-Key", key)
 	if forwardedFor != "" {
 		req.Header.Set("X-Forwarded-For", forwardedFor)
 	}
@@ -122,6 +138,41 @@ func TestIngest_HappyPath_InsertsTwoEvents(t *testing.T) {
 	}
 	require.Equal(t, "session_start", rows[0].Name)
 	require.Equal(t, uint32(183986), rows[1].DurationMs)
+}
+
+// TestIngestUsesKeyPlatform — AC-004.2 (FR-3, AC-3.1, AC-3.4): у приложения ios+android ключ без платформы
+// пишет события без context.platform как other с platform_missing на каждое, ключ android — как android.
+func TestIngestUsesKeyPlatform(t *testing.T) {
+	l := newLiveIngestApp(t, []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid}, nil)
+	android := sqlc.AppPlatformAndroid
+	androidKey, err := l.env.PG.Queries().CreateWriteKey(t.Context(), sqlc.CreateWriteKeyParams{
+		AppID: l.appID, Key: otherKey, Label: "Android", Platform: &android,
+	})
+	require.NoError(t, err)
+	require.NoError(t, l.cache.Refresh(t.Context()))
+	noPlatform := strings.Replace(batchI01, `"platform": "ios", `, "", 1)
+	require.NotContains(t, noPlatform, `"platform"`)
+
+	res := decodeResult(t, l.post(t, []byte(noPlatform), ""))
+	require.Equal(t, 2, res.Accepted)
+	require.Empty(t, res.Rejected)
+	require.Len(t, res.Warnings, 2)
+	for i, w := range res.Warnings {
+		require.Equal(t, i, w.Index)
+		require.Equal(t, ingestapi.WarningCodePlatformMissing, w.Code)
+	}
+	require.Equal(t, uint64(2), l.count(t, "SELECT count() FROM events WHERE app_id = ? AND platform = 'other'"))
+	require.InDelta(t, 2.0, metricValue(t, l.reg, "ingest_platform_missing_total"), 0)
+
+	other := strings.ReplaceAll(noPlatform, "0199d6a", "0299d6a") // новые insert_id
+	res = decodeResult(t, l.postKey(t, otherKey, []byte(other), ""))
+	require.Equal(t, 2, res.Accepted)
+	require.Empty(t, res.Warnings)
+	var platforms []string
+	require.NoError(t, l.env.CH.Conn().Select(t.Context(), &platforms,
+		"SELECT platform FROM events WHERE app_id = ? AND write_key_id = ?", l.appID, androidKey.ID))
+	require.Equal(t, []string{"android", "android"}, platforms)
+	require.InDelta(t, 2.0, metricValue(t, l.reg, "ingest_platform_missing_total"), 0)
 }
 
 // TestIngest_RetryIsIdempotent — AC-014.5 (I-36): повтор того же батча не завышает число сессий.

@@ -9,7 +9,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
+	"appmetrica.online/backend/internal/gen/ingestapi"
 	"appmetrica.online/backend/internal/ingest"
+	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
 // histogramCount — число наблюдений гистограммы name без меток.
@@ -360,4 +362,70 @@ func TestRejectedLogger_BatchSampleRedactsPII(t *testing.T) {
 		require.NotContains(t, sample, "anna@exam")
 		require.Contains(t, sample, `"user_id":"user_42"`)
 	})
+}
+
+// TestPipeline_PlatformMissing — AC-004.2 на фейковом хранилище: ключ без платформы у приложения с двумя
+// платформами пишет события как other с предупреждением на каждое и ingest_platform_missing_total; журнал
+// отказов берёт платформу по той же цепочке.
+func TestPipeline_PlatformMissing(t *testing.T) {
+	h := newPlatformHarness(t)
+
+	body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"app_version": "3.4.0"},
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": "purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2)}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(3), "context": map[string]any{"platform": "web"}}),
+	)
+	res := decodeResult(t, h.postBody(t, body))
+	require.Equal(t, 3, res.Accepted)
+	message := "Платформа не определена: нет context.platform и платформы ключа; событие записано как other"
+	require.Equal(t, []ingestapi.IngestWarning{
+		{Index: 0, Code: ingestapi.WarningCodePlatformMissing, Message: message},
+		{Index: 2, Code: ingestapi.WarningCodePlatformMissing, Message: message},
+	}, res.Warnings)
+	rows := h.writer.written()
+	require.Len(t, rows, 3)
+	require.Equal(t, []string{"other", "other", "web"}, []string{rows[0].Platform, rows[1].Platform, rows[2].Platform})
+	require.InDelta(t, 2.0, metricValue(t, h.reg, "ingest_platform_missing_total"), 0)
+	require.Equal(t, map[string]float64{"platform_missing": 2}, labelCounts(t, h.reg, "ingest_warnings_total", "code"))
+	logged := h.sink.logged()
+	require.Len(t, logged, 1)
+	require.Equal(t, "other", logged[0].Platform, "отказ без платформы журналируется как other")
+
+	res = decodeResult(t, h.do(t, request{contentType: "application/json", header: otherKey, body: oneEvent(t, nil)}))
+	require.Equal(t, 1, res.Accepted)
+	require.Empty(t, res.Warnings, "платформа ключа — не fallback")
+	require.Equal(t, "android", h.writer.written()[3].Platform)
+	require.InDelta(t, 2.0, metricValue(t, h.reg, "ingest_platform_missing_total"), 0)
+}
+
+func TestRejectedLogger_BatchErrorPlatform(t *testing.T) {
+	h := newPlatformHarness(t)
+	ok, _ := h.limits.Apps.Allow(appA, 4000)
+	require.True(t, ok)
+	requireError(t, h.do(t, request{contentType: "application/json", header: otherKey, body: oneEvent(t, nil)}),
+		http.StatusTooManyRequests, "app_rate_limited")
+	requireError(t, h.postBody(t, oneEvent(t, nil)), http.StatusTooManyRequests, "app_rate_limited")
+	logged := h.sink.logged()
+	require.Len(t, logged, 2)
+	require.Equal(t, "android", logged[0].Platform, "batch-ошибка берёт платформу ключа")
+	require.Equal(t, "other", logged[1].Platform, "ключ без платформы у приложения с двумя платформами")
+	require.Zero(t, metricValue(t, h.reg, "ingest_platform_missing_total"), "журнал отказов не считает предупреждения")
+}
+
+// newPlatformHarness — конвейер с приложением appA (ios+android): testKey без платформы, otherKey — android.
+func newPlatformHarness(t *testing.T) *pipelineHarness {
+	t.Helper()
+	h := newPipelineHarness(t)
+	android := sqlc.AppPlatformAndroid
+	both := []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid}
+	h.store.set(
+		sqlc.LoadWriteKeyCacheRow{WriteKeyID: wk1, Key: testKey, AppID: appA, AppStatus: sqlc.AppStatusActive, AppPlatforms: both},
+		sqlc.LoadWriteKeyCacheRow{
+			WriteKeyID: wk2, Key: otherKey, AppID: appA, AppStatus: sqlc.AppStatusActive,
+			KeyPlatform: &android, AppPlatforms: both,
+		},
+	)
+	require.NoError(t, h.cache.Refresh(t.Context()))
+	return h
 }

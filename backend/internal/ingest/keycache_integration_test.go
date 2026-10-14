@@ -59,13 +59,13 @@ func TestKeyCache_PostgresRevokeArchiveAndLastUsed(t *testing.T) {
 
 	info, err := cache.Lookup(testKey)
 	require.NoError(t, err)
-	require.Equal(t, ingest.KeyInfo{WriteKeyID: k1.ID, AppID: notes.ID, AppStatus: sqlc.AppStatusActive, AppPlatform: sqlc.AppPlatformIos}, info)
+	require.Equal(t, ingest.KeyInfo{WriteKeyID: k1.ID, AppID: notes.ID, AppStatus: sqlc.AppStatusActive, AppPlatforms: []string{"ios"}}, info)
 	info, err = cache.Lookup(otherKey)
 	require.NoError(t, err)
 	require.Equal(t, k2.ID, info.WriteKeyID)
 	info, err = cache.Lookup(k3.Key)
 	require.NoError(t, err)
-	require.Equal(t, sqlc.AppPlatformWeb, info.AppPlatform)
+	require.Equal(t, []string{"web"}, info.AppPlatforms)
 
 	// last_used_at уходит в Postgres одним сбросом.
 	require.NoError(t, cache.FlushLastUsed(ctx))
@@ -98,4 +98,40 @@ func TestKeyCache_PostgresRevokeArchiveAndLastUsed(t *testing.T) {
 	require.Error(t, cache.Refresh(ctx))
 	_, err = cache.Lookup(otherKey)
 	require.NoError(t, err)
+}
+
+// TestKeyCacheLoadsPlatforms — AC-004.3: снимок несёт платформу ключа и набор платформ приложения
+// в порядке enum; ключ без платформы даёт пустую KeyPlatform.
+func TestKeyCacheLoadsPlatforms(t *testing.T) {
+	ctx := t.Context()
+	store, err := pgstore.Open(ctx, testutil.NewPostgresDB(t, true))
+	require.NoError(t, err)
+	t.Cleanup(store.Close)
+	q := store.Queries()
+
+	app, err := q.CreateApp(ctx, sqlc.CreateAppParams{
+		Name: "Notes", Platforms: []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid}, Timezone: "UTC",
+	})
+	require.NoError(t, err)
+	android := sqlc.AppPlatformAndroid
+	_, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: testKey, Label: "Android", Platform: &android})
+	require.NoError(t, err)
+	_, err = q.CreateWriteKey(ctx, sqlc.CreateWriteKeyParams{AppID: app.ID, Key: otherKey, Label: "Любая"})
+	require.NoError(t, err)
+
+	metrics, err := ingest.NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	cache := ingest.NewKeyCache(ingest.KeyCacheConfig{
+		Store: q, Clock: clock.NewFixed(receivedAt), Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Metrics: metrics,
+	})
+	require.NoError(t, cache.Refresh(ctx))
+
+	info, err := cache.Lookup(testKey)
+	require.NoError(t, err)
+	require.Equal(t, "android", info.KeyPlatform)
+	require.Equal(t, []string{"ios", "android"}, info.AppPlatforms)
+	info, err = cache.Lookup(otherKey)
+	require.NoError(t, err)
+	require.Empty(t, info.KeyPlatform)
+	require.Equal(t, []string{"ios", "android"}, info.AppPlatforms)
 }

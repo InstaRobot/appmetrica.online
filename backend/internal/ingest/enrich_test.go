@@ -64,7 +64,7 @@ func (p *enrichPipeline) Process(_ context.Context, b *ingest.Batch) (ingestapi.
 	if p.fail != nil {
 		return ingestapi.IngestResult{}, fmt.Errorf("pipeline: %w", p.fail)
 	}
-	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppStatus: sqlc.AppStatusActive, AppPlatform: sqlc.AppPlatformIos}
+	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppStatus: sqlc.AppStatusActive, AppPlatforms: []string{"ios"}}
 	res := ingestapi.IngestResult{ServerTime: b.ReceivedAt}
 	batchCtx, rejected := ingest.ValidateBatchContext(b)
 	if len(rejected) > 0 {
@@ -81,10 +81,8 @@ func (p *enrichPipeline) Process(_ context.Context, b *ingest.Batch) (ingestapi.
 			p.samples = append(p.samples, ingest.PayloadSample(raw))
 			continue
 		}
-		warning, write := p.enricher.Enrich(b, batchCtx, ev)
-		if warning != nil {
-			res.Warnings = append(res.Warnings, *warning)
-		}
+		warnings, write := p.enricher.Enrich(b, batchCtx, ev)
+		res.Warnings = append(res.Warnings, warnings...)
 		res.Accepted++
 		if write {
 			p.rows = append(p.rows, ingest.NewEventRow(b, ev))
@@ -182,7 +180,7 @@ func TestEnrich_ClientIPFromRemoteAddr(t *testing.T) {
 
 // enrichEvent валидирует batchCtx и событие с evCtx (nil — без context) и обогащает его.
 func enrichEvent(t *testing.T, e ingest.Enricher, clientIP string, batchCtx, evCtx map[string]any) (
-	*ingest.Event, *ingestapi.IngestWarning, bool,
+	*ingest.Event, []ingestapi.IngestWarning, bool,
 ) {
 	t.Helper()
 	overrides := map[string]any{}
@@ -191,7 +189,7 @@ func enrichEvent(t *testing.T, e ingest.Enricher, clientIP string, batchCtx, evC
 	}
 	raw := eventJSON(t, overrides)
 	b := batchWithContext(t, batchCtx, raw)
-	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppPlatform: sqlc.AppPlatformIos}
+	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppPlatforms: []string{"ios"}}
 	if clientIP != "" {
 		b.ClientIP = netip.MustParseAddr(clientIP)
 	}
@@ -199,8 +197,8 @@ func enrichEvent(t *testing.T, e ingest.Enricher, clientIP string, batchCtx, evC
 	require.Empty(t, rejected)
 	ev, rej := ingest.ValidateEvent(0, raw)
 	require.Nil(t, rej)
-	warning, write := e.Enrich(b, fields, ev)
-	return ev, warning, write
+	warnings, write := e.Enrich(b, fields, ev)
+	return ev, warnings, write
 }
 
 func location(ev *ingest.Event) geo.Location {
@@ -211,40 +209,39 @@ func TestEnrich_ContextIPOverride(t *testing.T) {
 	e := ingest.Enricher{Geo: openGeo(t), AcceptDevelopment: true}
 
 	t.Run("context_ip_wins_over_client", func(t *testing.T) {
-		ev, warning, write := enrichEvent(t, e, "2a02:6b8::1", nil, map[string]any{"ip": londonIP})
-		require.Nil(t, warning)
+		ev, warnings, write := enrichEvent(t, e, "2a02:6b8::1", nil, map[string]any{"ip": londonIP})
+		require.Empty(t, warnings)
 		require.True(t, write)
 		require.Equal(t, london, location(ev))
 	})
 
 	t.Run("none_disables_geo", func(t *testing.T) {
-		ev, warning, _ := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": "none"})
-		require.Nil(t, warning)
+		ev, warnings, _ := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": "none"})
+		require.Empty(t, warnings)
 		require.Equal(t, geo.Location{}, location(ev))
 	})
 
 	t.Run("invalid_ip_warns", func(t *testing.T) {
 		for _, ip := range []string{"999.1.1.1", "", "localhost", " 81.2.69.142"} {
-			ev, warning, write := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": ip})
+			ev, warnings, write := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": ip})
 			require.True(t, write, "событие принято: %q", ip)
 			require.Equal(t, geo.Location{}, location(ev), ip)
-			require.NotNil(t, warning, ip)
-			require.Equal(t, ingestapi.IngestWarning{
+			require.Equal(t, []ingestapi.IngestWarning{{
 				Index: 0, Code: ingestapi.WarningCodeGeoIpInvalid,
 				Message: "context.ip не является IP-адресом; гео не определено.",
-			}, *warning)
+			}}, warnings, ip)
 		}
 	})
 
 	t.Run("ipv6_context_ip", func(t *testing.T) {
-		ev, warning, _ := enrichEvent(t, e, "", nil, map[string]any{"ip": "2a02:6b8::1"})
-		require.Nil(t, warning)
+		ev, warnings, _ := enrichEvent(t, e, "", nil, map[string]any{"ip": "2a02:6b8::1"})
+		require.Empty(t, warnings)
 		require.Equal(t, "RU", ev.Resolved.Country)
 	})
 
 	t.Run("private_context_ip_empty_without_warning", func(t *testing.T) {
-		ev, warning, _ := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": "10.0.0.1"})
-		require.Nil(t, warning)
+		ev, warnings, _ := enrichEvent(t, e, londonIP, nil, map[string]any{"ip": "10.0.0.1"})
+		require.Empty(t, warnings)
 		require.Equal(t, geo.Location{}, location(ev))
 	})
 
@@ -259,8 +256,8 @@ func TestEnrich_ContextIPOverride(t *testing.T) {
 	})
 
 	t.Run("no_ip_anywhere", func(t *testing.T) {
-		ev, warning, _ := enrichEvent(t, e, "", nil, nil)
-		require.Nil(t, warning)
+		ev, warnings, _ := enrichEvent(t, e, "", nil, nil)
+		require.Empty(t, warnings)
 		require.Equal(t, geo.Location{}, location(ev))
 	})
 
@@ -303,7 +300,7 @@ func TestEnrich_ContextMerge(t *testing.T) {
 
 	t.Run("platform_precedence", func(t *testing.T) {
 		ev, _, _ := enrichEvent(t, e, "", map[string]any{"platform": "web"}, nil)
-		require.Equal(t, "web", ev.Resolved.Platform, "батч перекрывает apps.platform")
+		require.Equal(t, "web", ev.Resolved.Platform, "батч перекрывает платформу приложения")
 		ev, _, _ = enrichEvent(t, e, "", map[string]any{"platform": "web"}, map[string]any{"platform": "android"})
 		require.Equal(t, "android", ev.Resolved.Platform, "событие перекрывает батч")
 	})
@@ -331,12 +328,108 @@ func TestMergeContext(t *testing.T) {
 	require.Equal(t, event, ingest.MergeContext(nil, event))
 }
 
+// TestResolvePlatformOrder — AC-004.1 (FR-3): context.platform → платформа ключа → единственная платформа
+// приложения → other с флагом platform_missing. Сверки context.platform с набором приложения нет.
+func TestResolvePlatformOrder(t *testing.T) {
+	cases := []struct {
+		name    string
+		context string
+		key     string
+		app     []string
+		want    string
+		missing bool
+	}{
+		{"context_wins_over_key", "web", "android", []string{"ios", "android"}, "web", false},
+		{"context_outside_app_platforms", "web", "", []string{"ios"}, "web", false},
+		{"key_platform", "", "android", []string{"ios", "android"}, "android", false},
+		{"single_app_platform", "", "", []string{"ios"}, "ios", false},
+		{"several_app_platforms", "", "", []string{"ios", "android"}, "other", true},
+		{"explicit_other_is_not_missing", "other", "", []string{"ios", "android"}, "other", false},
+		{"no_app_platforms", "", "", nil, "other", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := ingest.ContextFields{"app_version": "3.4.0"}
+			if tc.context != "" {
+				merged["platform"] = tc.context
+			}
+			rc, missing := ingest.ResolveContext(merged, tc.key, tc.app)
+			require.Equal(t, tc.want, rc.Platform)
+			require.Equal(t, tc.missing, missing)
+			require.Equal(t, "3.4.0", rc.AppVersion)
+			require.Equal(t, "production", rc.Environment)
+		})
+	}
+}
+
+// enrichWithKey обогащает событие с индексом index (evCtx nil — без context) под ключом с заданными платформами.
+func enrichWithKey(t *testing.T, e ingest.Enricher, key ingest.KeyInfo, index int, evCtx map[string]any) (
+	*ingest.Event, []ingestapi.IngestWarning, bool,
+) {
+	t.Helper()
+	overrides := map[string]any{}
+	if evCtx != nil {
+		overrides["context"] = evCtx
+	}
+	raw := eventJSON(t, overrides)
+	b := batchWithContext(t, nil, raw)
+	b.Key = key
+	ev, rej := ingest.ValidateEvent(index, raw)
+	require.Nil(t, rej)
+	warnings, write := e.Enrich(b, nil, ev)
+	return ev, warnings, write
+}
+
+func TestEnrich_PlatformMissing(t *testing.T) {
+	e := ingest.Enricher{Geo: openGeo(t), AcceptDevelopment: false}
+	anyKey := ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppPlatforms: []string{"ios", "android"}}
+	missing := ingestapi.IngestWarning{
+		Index: 3, Code: ingestapi.WarningCodePlatformMissing,
+		Message: "Платформа не определена: нет context.platform и платформы ключа; событие записано как other",
+	}
+
+	t.Run("warns_with_event_index", func(t *testing.T) {
+		ev, warnings, write := enrichWithKey(t, e, anyKey, 3, nil)
+		require.True(t, write)
+		require.Equal(t, "other", ev.Resolved.Platform)
+		require.Equal(t, []ingestapi.IngestWarning{missing}, warnings)
+	})
+
+	t.Run("key_platform_without_warning", func(t *testing.T) {
+		key := anyKey
+		key.KeyPlatform = "android"
+		ev, warnings, _ := enrichWithKey(t, e, key, 0, nil)
+		require.Equal(t, "android", ev.Resolved.Platform)
+		require.Empty(t, warnings)
+	})
+
+	t.Run("context_platform_without_warning", func(t *testing.T) {
+		ev, warnings, _ := enrichWithKey(t, e, anyKey, 0, map[string]any{"platform": "web"})
+		require.Equal(t, "web", ev.Resolved.Platform)
+		require.Empty(t, warnings)
+	})
+
+	t.Run("together_with_geo_warning", func(t *testing.T) {
+		_, warnings, _ := enrichWithKey(t, e, anyKey, 3, map[string]any{"ip": "localhost"})
+		require.Equal(t, []ingestapi.IngestWarning{missing, {
+			Index: 3, Code: ingestapi.WarningCodeGeoIpInvalid,
+			Message: "context.ip не является IP-адресом; гео не определено.",
+		}}, warnings)
+	})
+
+	t.Run("dropped_development_event_without_warning", func(t *testing.T) {
+		_, warnings, write := enrichWithKey(t, e, anyKey, 0, map[string]any{"environment": "development"})
+		require.False(t, write)
+		require.Empty(t, warnings)
+	})
+}
+
 func TestEnrich_DevelopmentKillSwitch(t *testing.T) {
 	g := openGeo(t)
 	dev := map[string]any{"environment": "development"}
 
-	_, warning, write := enrichEvent(t, ingest.Enricher{Geo: g, AcceptDevelopment: false}, "", nil, dev)
-	require.Nil(t, warning)
+	_, warnings, write := enrichEvent(t, ingest.Enricher{Geo: g, AcceptDevelopment: false}, "", nil, dev)
+	require.Empty(t, warnings)
 	require.False(t, write, "development при INGEST_ACCEPT_DEVELOPMENT=false не пишется")
 
 	_, _, write = enrichEvent(t, ingest.Enricher{Geo: g, AcceptDevelopment: false}, "", nil, nil)
@@ -353,7 +446,7 @@ func TestNewEventRow(t *testing.T) {
 		"context": map[string]any{"app_version": "3.5.0"},
 	})
 	b := batchWithContext(t, map[string]any{"os_name": "iOS"}, raw)
-	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppPlatform: sqlc.AppPlatformIos}
+	b.Key = ingest.KeyInfo{WriteKeyID: enrichKeyID, AppID: enrichAppID, AppPlatforms: []string{"ios"}}
 	b.ClientIP = netip.MustParseAddr(londonIP)
 	b.SentAt = time.Date(2026, 10, 12, 23, 30, 1, 0, time.UTC)
 	b.ReceivedAt = time.Date(2026, 10, 12, 23, 30, 0, 0, time.UTC)

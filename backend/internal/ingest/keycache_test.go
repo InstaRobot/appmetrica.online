@@ -163,7 +163,7 @@ func TestKeyCache_MultipleActiveKeys(t *testing.T) {
 
 	calls := h.proc.calls()
 	require.Len(t, calls, 2)
-	require.Equal(t, ingest.KeyInfo{WriteKeyID: wk1, AppID: appA, AppStatus: sqlc.AppStatusActive, AppPlatform: sqlc.AppPlatformIos}, calls[0].Key)
+	require.Equal(t, ingest.KeyInfo{WriteKeyID: wk1, AppID: appA, AppStatus: sqlc.AppStatusActive, AppPlatforms: []string{"ios"}}, calls[0].Key)
 	require.Equal(t, wk2, calls[1].Key.WriteKeyID, "каждый ключ пишет свой write_key_id")
 	require.Equal(t, appA, calls[1].Key.AppID)
 
