@@ -381,6 +381,46 @@ for s in "deploy.yml -f ref=" "deploy.yml -f tag=" "geo-refresh.yml"; do
   if grep -qF -- "$s" "$readme" 2>/dev/null; then pass "README: команда «${s}»"; else fail "README: команда «${s}»"; fi
 done
 
+# ---------------------------------------------------------------------------
+echo "compose"
+
+# compose_jobs <file> <service> [env...] — WORKER_JOBS_ENABLED сервиса после интерполяции `docker compose config`.
+# Обязательные переменные получают заглушки; .env рядом с файлом не читается (пустой --env-file).
+: >"$TMP/empty.env"
+compose_jobs() {
+  local file=$1 svc=$2
+  shift 2
+  run env -u WORKER_JOBS_ENABLED POSTGRES_PASSWORD=x CLICKHOUSE_ADMIN_PASSWORD=x CLICKHOUSE_RW_PASSWORD=x \
+    CLICKHOUSE_RO_PASSWORD=x GEO_MONTH=2026-10 APP_DOMAIN=a.test INGEST_DOMAIN=i.test API_DOMAIN=api.test \
+    KEY_HASH_PEPPER=x ACME_EMAIL=ops@a.test "$@" \
+    docker compose --env-file "$TMP/empty.env" -f "$ROOT/$file" config --format json
+  [ "$code" -eq 0 ] && out=$(jq -r --arg s "$svc" '.services[$s].environment.WORKER_JOBS_ENABLED' <<<"$out")
+}
+
+if docker compose version >/dev/null 2>&1; then
+  for spec in deploy/selfhost/docker-compose.yml:worker deploy/dokploy/docker-compose.yml:appmetrica-worker; do
+    file=${spec%%:*} svc=${spec##*:}
+    compose_jobs "$file" "$svc" WORKER_JOBS_ENABLED=
+    expect_code "$file: docker compose config → exit 0" 0
+    if grep -qE '(^|,)app_merge(,|$)' <<<"$out"; then
+      pass "AC-010.2: $file: compose defaults include app_merge"
+    else
+      fail "AC-010.2: $file: compose defaults include app_merge" "$out"
+    fi
+    compose_jobs "$file" "$svc" WORKER_JOBS_ENABLED=deletion
+    expect_eq "$file: явный WORKER_JOBS_ENABLED не дополняется" "$out" "deletion"
+  done
+else
+  fail "AC-010.2: compose defaults include app_merge (нужен docker compose)"
+fi
+
+for f in deploy/selfhost/.env.example .env.example; do
+  if grep -qE '^WORKER_JOBS_ENABLED=(.*,)?app_merge(,|$)' "$ROOT/$f"; then pass "$f: WORKER_JOBS_ENABLED с app_merge"; else fail "$f: WORKER_JOBS_ENABLED с app_merge"; fi
+done
+for f in README.md README.ru.md; do
+  if grep -E '^\| `WORKER_JOBS_ENABLED`' "$ROOT/$f" | grep -qF 'app_merge'; then pass "$f: app_merge в справочнике параметров"; else fail "$f: app_merge в справочнике параметров"; fi
+done
+
 echo
 if [ "$failures" -gt 0 ]; then
   echo "test-deploy: $failures из $total проверок упали"
