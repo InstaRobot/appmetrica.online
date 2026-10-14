@@ -1,0 +1,73 @@
+import { screen, waitFor, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { describe, expect, it } from "vitest";
+import type { DeletionRequest } from "@/lib/api/gen/model";
+import { appSummary, deletionRequest, errorBody } from "@/test/factories";
+import { server } from "@/test/msw";
+import { renderWithClient } from "@/test/render";
+import { DeletionsTab } from "./deletions-tab";
+
+const NOTES = appSummary({ id: "0192aaaa-0000-7000-8000-000000000047", name: "Notes iOS" });
+const INSTALL = "5d8e2c1a-0b3f-4e5f-9a7b-0c1d2e3f4e5f";
+
+function mockRequests(items: DeletionRequest[]) {
+  server.use(
+    http.get("*/v1/apps", () => HttpResponse.json({ items: [NOTES] })),
+    http.get("*/admin/v1/deletion-requests", () => HttpResponse.json({ items })),
+  );
+}
+
+describe("DeletionsTab", () => {
+  it("lists requests with readable types, sources and statuses", async () => {
+    mockRequests([
+      deletionRequest({
+        app_id: NOTES.id,
+        subject_type: "install",
+        subject_value: INSTALL,
+        source: "api",
+        status: "done",
+        completed_at: "2026-10-12T13:00:00Z",
+      }),
+      deletionRequest({
+        app_id: "0192aaaa-0000-7000-8000-0000000000ff",
+        subject_type: "user",
+        subject_value: "42",
+        source: "dashboard",
+        status: "failed",
+        error: "clickhouse: timeout",
+      }),
+    ]);
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);
+
+    const table = await screen.findByRole("table", { name: "Запросы на удаление" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    await waitFor(() => expect(rows[0]).toHaveTextContent("Notes iOS"));
+    expect(rows[0]).toHaveTextContent("Устройство");
+    expect(rows[0]).toHaveTextContent("5d8e…4e5f");
+    expect(rows[0]).toHaveTextContent("API");
+    expect(rows[0]).toHaveTextContent("Удалено");
+    expect(rows[1]).toHaveTextContent("Пользователь");
+    expect(rows[1]).toHaveTextContent("Дашборд");
+    expect(rows[1]).toHaveTextContent("Ошибка");
+    expect(rows[1]).toHaveTextContent("clickhouse: timeout");
+    // Приложение уже удалено — показываем сокращённый id.
+    expect(rows[1]).toHaveTextContent("0192…00ff");
+  });
+
+  it("says when there were no requests", async () => {
+    mockRequests([]);
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);
+    expect(await screen.findByText("Запросов на удаление не было")).toBeInTheDocument();
+  });
+
+  it("shows an error state", async () => {
+    server.use(
+      http.get("*/v1/apps", () => HttpResponse.json({ items: [] })),
+      http.get("*/admin/v1/deletion-requests", () =>
+        HttpResponse.json(errorBody("internal_error"), { status: 500 }),
+      ),
+    );
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);
+    expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
+  });
+});

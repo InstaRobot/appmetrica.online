@@ -1,14 +1,19 @@
 import { faker } from "@faker-js/faker";
 import type {
   Error as ApiErrorBody,
+  ApiKey,
   App,
   AppSummary,
   DeletionRequest,
+  Passkey,
   PortfolioRow,
   Profile,
   ProfileInstall,
   ProfileSession,
   ProfileSummary,
+  Settings,
+  SystemStatus,
+  WriteKey,
 } from "@/lib/api/gen/model";
 
 // Детерминированные фабрики для тестов компонентов: seed фиксирован, чтобы снапшоты и тексты не плавали.
@@ -139,4 +144,84 @@ export function errorBody(
   requestId = "01JTESTREQUESTID0000000000",
 ): ApiErrorBody {
   return { error: { code, message, request_id: requestId } };
+}
+
+export function writeKey(overrides: Partial<WriteKey> = {}): WriteKey {
+  return {
+    id: faker.string.uuid(),
+    app_id: faker.string.uuid(),
+    key: "pk_7Hq2xxxxxxxxxxxxxxxxxxxxxxxxxAb0",
+    label: "iOS 2.x",
+    created_at: "2026-10-01T09:00:00Z",
+    revoked_at: null,
+    last_used_at: "2026-10-12T11:30:00Z",
+    ...overrides,
+  };
+}
+
+export function apiKey(overrides: Partial<ApiKey> = {}): ApiKey {
+  return {
+    id: faker.string.uuid(),
+    key_prefix: "sk_a8Kd2xQ1",
+    label: "Telegram-отчёт",
+    scopes: ["read"],
+    app_id: null,
+    created_at: "2026-10-01T09:00:00Z",
+    revoked_at: null,
+    last_used_at: null,
+    ...overrides,
+  };
+}
+
+export function passkey(overrides: Partial<Passkey> = {}): Passkey {
+  return {
+    id: faker.string.uuid(),
+    name: "MacBook Pro",
+    created_at: "2026-10-13T06:00:00Z",
+    last_used_at: "2026-10-13T06:01:00Z",
+    backup_eligible: true,
+    backup_state: true,
+    transports: ["internal", "hybrid"],
+    ...overrides,
+  };
+}
+
+export function settings(overrides: Partial<Settings> = {}): Settings {
+  return {
+    owner_timezone: "Europe/Moscow",
+    telegram_chat_id: "123456789",
+    digest_enabled: true,
+    digest_time: "09:00",
+    alerts_enabled: true,
+    updated_at: "2026-10-13T06:00:00Z",
+    ...overrides,
+  };
+}
+
+export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatus {
+  return {
+    clickhouse: { ok: true, disk_free_pct: 71.4, events_rows: 1204551902 },
+    postgres: { ok: true },
+    backup: { last_backup_at: "2026-10-13T00:12:00Z", last_backup_name: "increment-2026-10-13" },
+    alerts: [
+      {
+        key: "disk_free",
+        firing: false,
+        first_fired_at: null,
+        last_notified_at: null,
+        last_value: "71.4",
+      },
+    ],
+    jobs: [
+      {
+        id: faker.string.uuid(),
+        job: "system_check",
+        started_at: "2026-10-13T11:30:00Z",
+        finished_at: "2026-10-13T11:30:01Z",
+        status: "ok",
+        details: {},
+      },
+    ],
+    ...overrides,
+  };
 }
