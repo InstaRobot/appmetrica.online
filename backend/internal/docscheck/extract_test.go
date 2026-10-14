@@ -18,7 +18,7 @@ func TestExtract(t *testing.T) {
 	}{
 		{
 			name: "language, meta and line of the opening fence",
-			src: "---\ntitle: T\n---\n\nText.\n\n```go title=\"main.go\" tab=\"Go\"\npackage main\n\nfunc main() {}\n```\n",
+			src:  "---\ntitle: T\n---\n\nText.\n\n```go title=\"main.go\" tab=\"Go\"\npackage main\n\nfunc main() {}\n```\n",
 			want: []docscheck.Snippet{{
 				File: "page.mdx", Line: 7, Lang: "go", Meta: `title="main.go" tab="Go"`,
 				Code: "package main\n\nfunc main() {}\n",

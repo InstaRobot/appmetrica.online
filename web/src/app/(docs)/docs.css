@@ -41,3 +41,9 @@
   --color-yellow-600: var(--color-warning-700);
   --color-amber-600: var(--color-warning-700);
 }
+
+/* Код во вкладках (tab="…" в MDX) Fumadocs кладёт на серый bg-fd-secondary, одиночный блок — на
+   bg-fd-card. Контраст подсветки (WCAG 1.4.3) проверен на bg-fd-card: фон вкладок — тот же. */
+#nd-docs-layout .shiki.bg-fd-secondary {
+  background-color: var(--color-fd-card);
+}

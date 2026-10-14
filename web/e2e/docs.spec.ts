@@ -38,8 +38,8 @@ test("docs render for owner without caching", async ({ page }) => {
   await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "Быстрый старт" })).toBeVisible();
   const sidebar = page.locator("#nd-sidebar");
-  await expect(sidebar.getByText("Ingestion API")).toBeVisible();
-  await expect(sidebar.getByText("Read API")).toBeVisible();
+  await expect(sidebar.getByText("Ingestion API", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("Read API", { exact: true })).toBeVisible();
   await expectNoA11yViolations(page);
 });
 
@@ -67,8 +67,8 @@ test("docs recipe page renders for owner", async ({ page }) => {
 
   const sidebar = page.locator("#nd-sidebar");
   await expect(sidebar.getByRole("link", { name: "iOS (Swift)" })).toHaveAttribute(
-    "aria-current",
-    "page",
+    "data-active",
+    "true",
   );
   await expect(sidebar.getByRole("link", { name: "Android (Kotlin)" })).toBeVisible();
   await page.waitForFunction(() =>
@@ -77,7 +77,7 @@ test("docs recipe page renders for owner", async ({ page }) => {
   await expectNoA11yViolations(page);
 });
 
-// Гайды связаны между собой: ссылки быстрого старта ведут на существующие страницы.
+// Гайды связаны между собой: ссылки быстрого старта ведут на существующие страницы, и каждая проходит axe.
 test("docs guides link to recipes and concepts", async ({ page }) => {
   await page.goto("/docs");
 
@@ -100,6 +100,7 @@ test("docs guides link to recipes and concepts", async ({ page }) => {
   ]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Страница не найдена");
+    await expectNoA11yViolations(page);
   }
 });
 
@@ -112,7 +113,7 @@ test("api reference lists public operations without playground", async ({ page }
   await expect(main.getByRole("button", { name: /^(Send|Отправить)$/ })).toHaveCount(0);
 
   const sidebar = page.locator("#nd-sidebar");
-  await sidebar.getByText("Read API").click();
+  await sidebar.getByText("Read API", { exact: true }).click();
   await expect(sidebar.getByRole("link", { name: /portfolio/i })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /auth|passkey|settings/i })).toHaveCount(0);
   // Папка раскрывается с анимацией прозрачности: axe проверяет контраст после неё.

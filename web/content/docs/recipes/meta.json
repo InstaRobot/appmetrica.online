@@ -1,0 +1,5 @@
+{
+  "title": "Рецепты",
+  "pages": ["ios-swift", "android-kotlin", "web-js", "bots-and-backends", "go-and-curl"],
+  "defaultOpen": true
+}

@@ -1,4 +1,12 @@
 {
   "title": "Документация",
-  "pages": ["index", "..."]
+  "pages": [
+    "index",
+    "concepts",
+    "recipes",
+    "errors-and-retries",
+    "privacy-and-gdpr",
+    "read-api",
+    "..."
+  ]
 }

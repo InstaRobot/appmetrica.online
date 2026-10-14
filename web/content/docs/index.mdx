@@ -3,32 +3,85 @@ title: Быстрый старт
 description: Как начать отправлять события session_start и session_end без SDK.
 ---
 
-appmetrica.online принимает системные события приложений по HTTP. SDK не нужен: клиент сам отправляет
-`session_start` при запуске и `session_end` при уходе в фон.
+appmetrica.online принимает системные события приложений по HTTP. SDK не нужен: приложение само
+отправляет `session_start`, когда выходит на передний план, и `session_end`, когда уходит в фон. Из
+этих двух событий строятся все отчёты: активные и новые пользователи, сессии и их длительность,
+retention, realtime и профили.
 
-## 1. Создайте приложение
+## 1. Создайте приложение [#create-app]
 
-В портфеле нажмите «Создать приложение», выберите платформу и часовой пояс. На экране «Интеграция»
-появится write-ключ `pk_…` и готовые сниппеты.
+В портфеле нажмите «Добавить приложение», выберите платформу и часовой пояс. Часовой пояс задаёт
+границы суток в отчётах. На вкладке «Интеграция» появятся write-ключ `pk_…` и готовые сниппеты.
 
-## 2. Отправьте первый батч
+Write-ключ не секретный: он вшивается в приложение и виден любому, кто его разберёт. От
+злоупотреблений защищают лимиты частоты, а скомпрометированный ключ можно отозвать и выпустить новый.
+
+## 2. Отправьте первое событие [#first-event]
+
+Проверьте ключ из терминала. Подставьте его в переменную `AM_PK`:
 
 ```bash
-curl -X POST https://i.appmetrica.online/v1/events \
-  -H "Content-Type: application/json" \
-  -H "X-App-Key: pk_…" \
-  -d '{"sent_at":"2026-10-14T09:00:00Z","context":{"platform":"ios"},"events":[…]}'
+export AM_PK="pk_…"
 ```
 
-Ответ `200` приходит только после записи в хранилище. Поле `accepted` — число принятых событий,
-`rejected` — отклонённые с кодом причины.
+и отправьте одно событие:
 
-## 3. Проверьте данные
+```bash
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+curl -sS https://i.appmetrica.online/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  --data-binary @- <<JSON
+{
+  "sent_at": "$NOW",
+  "context": { "platform": "ios", "app_version": "1.0.0", "environment": "development" },
+  "events": [
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$(uuidgen | tr A-Z a-z)",
+      "session_id": "$(uuidgen | tr A-Z a-z)"
+    }
+  ]
+}
+JSON
+```
 
-На вкладке «Интеграция» видны последние события и ошибки, на вкладке «Аудитория» — DAU и новые
-пользователи.
+Ответ `200` приходит только после записи в хранилище. `accepted` — число принятых событий,
+`rejected` — отклонённые события с кодом причины, `warnings` — события, принятые с поправкой:
 
-## Дальше
+```json
+{ "accepted": 1, "rejected": [], "warnings": [], "server_time": "2026-10-14T09:15:02.318Z" }
+```
 
-- [Ingestion API](/docs/api-reference/ingest/ingest-events) — формат батча и коды ошибок.
-- [Read API](/docs/api-reference/read/get-portfolio) — те же отчёты для скриптов по ключу `sk_…`.
+`environment: "development"` отделяет тестовые события от боевых: отчёты по умолчанию показывают
+только production.
+
+## 3. Встройте отправку в приложение [#integrate]
+
+Выберите рецепт для своей платформы. В каждом есть хранение `install_id`, жизненный цикл сессии и
+офлайн-очередь:
+
+- [iOS (Swift)](/docs/recipes/ios-swift) — URLSession, Keychain, SwiftUI и UIKit;
+- [Android (Kotlin)](/docs/recipes/android-kotlin) — HttpURLConnection, SharedPreferences,
+  ProcessLifecycleOwner;
+- [Веб (JavaScript)](/docs/recipes/web-js) — `navigator.sendBeacon`, `localStorage`;
+- [Боты и бэкенды](/docs/recipes/bots-and-backends) — Telegram-боты, серверные сессии, `context.ip`;
+- [Go и curl](/docs/recipes/go-and-curl) — проверка из терминала и клиент на Go.
+
+## 4. Проверьте данные [#check]
+
+На вкладке «Интеграция» видны последние события и ошибки отклонённых событий по версиям
+приложения. На вкладке «Realtime» событие появится в течение 10 секунд, на вкладке «Аудитория» —
+DAU и новые пользователи за выбранный период.
+
+## Что почитать дальше [#next]
+
+- [Идентичность](/docs/concepts/identity) — `install_id`, `user_id` и как считаются люди.
+- [Сессии](/docs/concepts/sessions) — когда начинать и заканчивать сессию.
+- [Время и офлайн-очередь](/docs/concepts/time-and-offline) — сбитые часы и досыл через 7 дней.
+- [Ошибки и повторы](/docs/errors-and-retries) — коды ответа и что делать с каждым.
+- [Приватность и GDPR](/docs/privacy-and-gdpr) — что хранится и как удалить данные.
+- [Ingestion API](/docs/api-reference/ingest/ingest-events) — полный формат батча.
+- [Read API](/docs/read-api/overview) — те же отчёты для скриптов по ключу `sk_…`.
