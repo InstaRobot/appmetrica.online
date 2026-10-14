@@ -123,9 +123,9 @@ jobs:
         working-directory: scripts/reconcile
         run: go test -race -count=1 ./...
 
-      # internal/docscheck выполняет curl-сниппеты документации в bash: нужны curl, gzip и uuidgen.
-      - name: Tools for docs snippet checks (uuidgen)
-        run: command -v uuidgen || (sudo apt-get update && sudo apt-get install -y uuid-runtime)
+      # internal/docscheck выполняет curl-сниппеты документации в bash: нужны curl, gzip, uuidgen и jq.
+      - name: Tools for docs snippet checks (uuidgen, jq)
+        run: (command -v uuidgen && command -v jq) || (sudo apt-get update && sudo apt-get install -y uuid-runtime jq)
 
       # -tags=integration включает и unit-тесты: один прогон с -race даёт и результат, и профиль покрытия.
       - name: Unit + integration tests (race, testcontainers) and coverage gate (≥80% ingest/reports/auth/identity/deletion)

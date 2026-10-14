@@ -6,6 +6,7 @@ import {
   defaultSnippetLang,
   ingestEndpoint,
   SNIPPET_LANGS,
+  SNIPPET_RECIPES,
   type SnippetLang,
 } from "./snippets";
 
@@ -134,5 +135,10 @@ describe("snippets", () => {
     expect(ingestEndpoint()).toBe("http://localhost:8081/v1/events");
     vi.stubEnv("NEXT_PUBLIC_INGEST_URL", "");
     expect(ingestEndpoint()).toBe("https://i.appmetrica.online/v1/events");
+  });
+
+  it("links curl and Go snippets to their own recipes", () => {
+    expect(SNIPPET_RECIPES.curl).toBe("/docs/recipes/curl");
+    expect(SNIPPET_RECIPES.go).toBe("/docs/recipes/go");
   });
 });

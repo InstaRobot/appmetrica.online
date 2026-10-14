@@ -42,6 +42,10 @@ describe("SnippetTabs", () => {
       <SnippetTabs ingestUrl={URL} writeKey={KEY} platform="ios" defaultLang="go" />,
     );
     expect(screen.getByRole("tab", { name: "Go" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
+      "href",
+      "/docs/recipes/go",
+    );
     unmount();
 
     render(<SnippetTabs ingestUrl={URL} writeKey={KEY} platform="windows" />);
@@ -51,7 +55,7 @@ describe("SnippetTabs", () => {
     );
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
       "href",
-      "/docs/recipes/go-and-curl",
+      "/docs/recipes/curl",
     );
   });
 });

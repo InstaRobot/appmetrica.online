@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,7 +61,7 @@ func filesOf(snips []docscheck.Snippet) []string {
 // и проходит go vet.
 func TestDocsGoSnippets_Vet(t *testing.T) {
 	snips := docscheck.ByLang(docSnippets(t), "go")
-	require.Subset(t, filesOf(snips), []string{"recipes/bots-and-backends.mdx", "recipes/go-and-curl.mdx"})
+	require.Subset(t, filesOf(snips), []string{"recipes/bots-and-backends.mdx", "recipes/go.mdx"})
 	for _, s := range snips {
 		require.Contains(t, s.Code, "package ", "%s: Go-сниппет должен быть полным файлом", s.Pos())
 	}
@@ -71,8 +72,8 @@ func TestDocsGoSnippets_Vet(t *testing.T) {
 // и accepted > 0.
 func TestDocsCurlSnippets_Accepted(t *testing.T) {
 	snips := ingestCurlSnippets(docSnippets(t))
-	require.Subset(t, filesOf(snips), []string{"index.mdx", "recipes/go-and-curl.mdx"})
-	requireTools(t, "bash", "curl", "uuidgen", "gzip", "date")
+	require.Subset(t, filesOf(snips), []string{"index.mdx", "recipes/curl.mdx"})
+	requireTools(t, "bash", "curl", "uuidgen", "gzip", "date", "jq")
 
 	target := startIngest(t)
 	total := 0
@@ -85,6 +86,44 @@ func TestDocsCurlSnippets_Accepted(t *testing.T) {
 		total += accepted
 	}
 	target.verify(t, total)
+}
+
+// Скрипт повторов из recipes/curl.mdx: 429 и 503 — пауза из Retry-After, 5xx — экспоненциальная задержка,
+// повтор несёт те же insert_id и новый sent_at; 4xx, кроме 429, не повторяется и завершает скрипт ошибкой.
+func TestDocsCurlRetrySnippet(t *testing.T) {
+	requireTools(t, "bash", "curl", "uuidgen", "date")
+	s := curlSnippetWith(t, "recipes/curl.mdx", "Retry-After")
+
+	tests := []struct {
+		name     string
+		statuses []int
+		wantErr  bool
+	}{
+		{name: "503 waits for Retry-After", statuses: []int{http.StatusServiceUnavailable, http.StatusOK}},
+		{name: "429 waits for Retry-After", statuses: []int{http.StatusTooManyRequests, http.StatusOK}},
+		{name: "500 backs off", statuses: []int{http.StatusInternalServerError, http.StatusOK}},
+		{name: "400 is not retried", statuses: []int{http.StatusBadRequest}, wantErr: true},
+		{name: "401 is not retried", statuses: []int{http.StatusUnauthorized}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := newScriptedIngest(t, tt.statuses)
+			out, err := runShellSnippet(t, s, srv.url, devWriteKey)
+			reqs := srv.requests()
+			if tt.wantErr {
+				require.Error(t, err, out)
+				require.Len(t, reqs, 1, "батч с ответом %d не повторяется\n%s", tt.statuses[0], out)
+				return
+			}
+			require.NoError(t, err, out)
+			require.Len(t, reqs, len(tt.statuses), out)
+			first, retry := reqs[0], reqs[1]
+			require.NotEmpty(t, first.InsertIDs())
+			require.Equal(t, first.InsertIDs(), retry.InsertIDs(), "повтор с теми же insert_id")
+			require.True(t, retry.SentAt.After(first.SentAt), "sent_at выставляется при каждой попытке: %s → %s",
+				first.SentAt, retry.SentAt)
+		})
+	}
 }
 
 func TestVetGo_ReportsMDXPosition(t *testing.T) {
@@ -178,6 +217,81 @@ func ingestCurlSnippets(snips []docscheck.Snippet) []docscheck.Snippet {
 		}
 	}
 	return out
+}
+
+// curlSnippetWith — единственный ingest-сниппет файла, в коде которого есть marker.
+func curlSnippetWith(t *testing.T, file, marker string) docscheck.Snippet {
+	t.Helper()
+	var found []docscheck.Snippet
+	for _, s := range ingestCurlSnippets(docSnippets(t)) {
+		if s.File == file && strings.Contains(s.Code, marker) {
+			found = append(found, s)
+		}
+	}
+	require.Len(t, found, 1, "%s: ровно один сниппет с %q", file, marker)
+	return found[0]
+}
+
+// sentBatch — батч, который получил scriptedIngest.
+type sentBatch struct {
+	SentAt time.Time `json:"sent_at"`
+	Events []struct {
+		InsertID string `json:"insert_id"`
+	} `json:"events"`
+}
+
+func (b sentBatch) InsertIDs() []string {
+	ids := make([]string, 0, len(b.Events))
+	for _, e := range b.Events {
+		ids = append(ids, e.InsertID)
+	}
+	return ids
+}
+
+// scriptedIngest отвечает на POST статусами по порядку (последний — на все следующие запросы): 429 и 503 —
+// с Retry-After: 1, 200 — с IngestResult, остальные — с конвертом error.
+type scriptedIngest struct {
+	url string
+
+	mu      sync.Mutex
+	batches []sentBatch
+}
+
+func newScriptedIngest(t *testing.T, statuses []int) *scriptedIngest {
+	t.Helper()
+	si := &scriptedIngest{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b sentBatch
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			http.Error(w, err.Error(), http.StatusTeapot)
+			return
+		}
+		si.mu.Lock()
+		si.batches = append(si.batches, b)
+		status := statuses[min(len(si.batches), len(statuses))-1]
+		si.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "1")
+		}
+		w.WriteHeader(status)
+		if status == http.StatusOK {
+			_, _ = fmt.Fprintf(w, `{"accepted":%d,"rejected":[],"warnings":[],"server_time":%q}`,
+				len(b.Events), time.Now().UTC().Format(time.RFC3339Nano))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"error":{"code":"http_%d","message":"scripted","request_id":"test"}}`, status)
+	}))
+	t.Cleanup(srv.Close)
+	si.url = srv.URL
+	return si
+}
+
+func (si *scriptedIngest) requests() []sentBatch {
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	return slices.Clone(si.batches)
 }
 
 func requireTools(t *testing.T, tools ...string) {

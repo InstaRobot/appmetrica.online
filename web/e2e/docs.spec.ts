@@ -98,13 +98,26 @@ test("docs guides link to recipes and concepts", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Веб (JavaScript)" })).toBeVisible();
   await expect(page.locator("#nd-page").getByText("navigator.sendBeacon").first()).toBeVisible();
 
+  await page.goto("/docs");
+  await page
+    .locator("#nd-page")
+    .getByRole("link", { name: "Где инициализировать метрику" })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/docs\/concepts\/initialization$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Где инициализировать метрику" }),
+  ).toBeVisible();
+
   for (const path of [
+    "/docs/concepts/initialization",
     "/docs/concepts/identity",
     "/docs/concepts/sessions",
     "/docs/concepts/time-and-offline",
+    "/docs/recipes/curl",
     "/docs/recipes/android-kotlin",
     "/docs/recipes/bots-and-backends",
-    "/docs/recipes/go-and-curl",
+    "/docs/recipes/go",
     "/docs/errors-and-retries",
     "/docs/privacy-and-gdpr",
     "/docs/read-api/overview",
@@ -113,6 +126,21 @@ test("docs guides link to recipes and concepts", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Страница не найдена");
     await expectNoA11yViolations(page);
   }
+});
+
+// Рецепт «Go и curl» разделён на «curl» и «Go»: старый адрес навсегда ведёт на рецепты curl.
+test("old go-and-curl recipe redirects to curl", async ({ page }) => {
+  const res = await page.goto("/docs/recipes/go-and-curl");
+
+  const redirect = await res?.request().redirectedFrom()?.response();
+  expect(redirect?.status()).toBe(308);
+  await expect(page).toHaveURL(/\/docs\/recipes\/curl$/);
+  await expect(page.getByRole("heading", { level: 1, name: "curl", exact: true })).toBeVisible();
+  // Клиент на Go переехал на свою страницу: рецепт curl ссылается на неё.
+  await expect(
+    page.locator("#nd-page").getByRole("link", { name: "Go", exact: true }).first(),
+  ).toHaveAttribute("href", "/docs/recipes/go");
+  await expectNoA11yViolations(page);
 });
 
 test("api reference lists public operations without playground", async ({ page }) => {
