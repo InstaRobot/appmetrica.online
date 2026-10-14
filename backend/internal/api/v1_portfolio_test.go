@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -17,9 +18,11 @@ import (
 	"appmetrica.online/backend/internal/api"
 	"appmetrica.online/backend/internal/apps"
 	"appmetrica.online/backend/internal/auth"
+	"appmetrica.online/backend/internal/chstore"
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/config"
 	gen "appmetrica.online/backend/internal/gen/api"
+	"appmetrica.online/backend/internal/httpx"
 	"appmetrica.online/backend/internal/identity"
 	"appmetrica.online/backend/internal/reports"
 	"appmetrica.online/backend/internal/testutil"
@@ -27,8 +30,11 @@ import (
 
 type portfolioEnv struct {
 	env        *testutil.Env
-	mux        *http.ServeMux
+	handler    http.Handler
 	reports    *reports.Service
+	auth       *auth.Service
+	clock      clock.Clock
+	cfg        config.API
 	all        string // sk_ read на все приложения
 	restricted string // sk_ read только на nyc
 }
@@ -71,12 +77,26 @@ func newPortfolioEnv(t *testing.T) *portfolioEnv {
 	})
 	require.NoError(t, err)
 
-	rep := reports.NewService(env.CH.Conn(), clk)
+	e := &portfolioEnv{
+		env: env, reports: reports.NewService(env.CH.Conn(), clk), auth: authSvc, clock: clk, cfg: cfg,
+		all: all, restricted: restricted,
+	}
+	e.handler = e.newHandler(e.reports, env.CH)
+	return e
+}
+
+// newHandler — маршруты API с отчётами rep и проверкой /ready по ch, за RequestID, как в `appmetrica api`.
+func (e *portfolioEnv) newHandler(rep *reports.Service, ch *chstore.Store) http.Handler {
+	logger := slog.New(slog.DiscardHandler)
 	mux := http.NewServeMux()
-	api.NewServer(authSvc, apps.NewService(env.PG, clk, logger), logger, cfg).
-		WithReports(rep, env.PG.Queries()).
+	api.NewServer(e.auth, apps.NewService(e.env.PG, e.clock, logger), logger, e.cfg).
+		WithReports(rep, e.env.PG.Queries()).
+		WithReadyChecks(
+			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return e.env.PG.Pool().Ping(ctx) }},
+			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},
+		).
 		Register(mux)
-	return &portfolioEnv{env: env, mux: mux, reports: rep, all: all, restricted: restricted}
+	return httpx.Chain(mux, httpx.RequestID(e.clock))
 }
 
 func (e *portfolioEnv) get(t *testing.T, path, secret string) *httptest.ResponseRecorder {
@@ -84,7 +104,7 @@ func (e *portfolioEnv) get(t *testing.T, path, secret string) *httptest.Response
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
-	e.mux.ServeHTTP(rec, req)
+	e.handler.ServeHTTP(rec, req)
 	return rec
 }
 

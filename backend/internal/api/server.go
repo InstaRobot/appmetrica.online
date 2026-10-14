@@ -46,6 +46,9 @@ func NewServer(authSvc *auth.Service, appsSvc *apps.Service, logger *slog.Logger
 	}
 }
 
+// WithReadyChecks — заглушка до реализации (T-034).
+func (s *Server) WithReadyChecks(_ ...httpx.ReadyCheck) *Server { return s }
+
 // Register подключает реализованные операции к mux. Пути и методы — как в api.yaml.
 // CSRF стоит перед разбором параметров: запрос без X-Requested-With получает 403 csrf_check_failed, а не 400.
 func (s *Server) Register(mux *http.ServeMux) {

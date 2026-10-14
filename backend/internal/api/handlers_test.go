@@ -1,68 +1,162 @@
+//go:build integration
+
 package api_test
 
 import (
-	"log/slog"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"appmetrica.online/backend/internal/api"
 	"appmetrica.online/backend/internal/auth"
-	"appmetrica.online/backend/internal/clock"
-	"appmetrica.online/backend/internal/config"
+	"appmetrica.online/backend/internal/chstore"
+	"appmetrica.online/backend/internal/httpx"
+	"appmetrica.online/backend/internal/reports"
+	"appmetrica.online/backend/internal/testutil"
 )
 
-// newMux собирает маршруты API без Postgres: запросы в этом файле не доходят до хранилища.
-func newMux(t *testing.T, env config.Env) *http.ServeMux {
+// ownerCookie — сессия владельца, записанная прямо в Postgres: тестам Read API не нужна WebAuthn-церемония.
+func ownerCookie(t *testing.T, e *portfolioEnv) *http.Cookie {
 	t.Helper()
-	cfg := config.API{
-		Common:            config.Common{AppEnv: env},
-		PublicBaseURL:     "http://localhost:3000",
-		WebAuthnRPID:      "localhost",
-		WebAuthnRPName:    "appmetrica.online",
-		WebAuthnRPOrigins: []string{"http://localhost:3000"},
-		SessionTTL:        720 * time.Hour,
-		SessionIdleTTL:    168 * time.Hour,
-	}
-	logger := slog.New(slog.DiscardHandler)
-	svc, err := auth.NewService(nil, clock.NewFixed(time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)), logger, cfg)
+	handle := make([]byte, 64)
+	raw := make([]byte, 32)
+	_, _ = rand.Read(handle)
+	_, _ = rand.Read(raw)
+	var ownerID uuid.UUID
+	require.NoError(t, e.env.PG.Pool().QueryRow(t.Context(),
+		`INSERT INTO owner (webauthn_user_handle) VALUES ($1) RETURNING id`, handle).Scan(&ownerID))
+	hash := sha256.Sum256(raw)
+	now := e.clock.Now()
+	_, err := e.env.PG.Pool().Exec(t.Context(),
+		`INSERT INTO auth_sessions (token_hash, owner_id, created_at, last_seen_at, expires_at) VALUES ($1, $2, $3, $3, $4)`,
+		hash[:], ownerID, now, now.Add(e.cfg.SessionTTL))
 	require.NoError(t, err)
-	mux := http.NewServeMux()
-	api.NewServer(svc, nil, logger, cfg).Register(mux)
-	return mux
+	return &http.Cookie{Name: auth.SessionCookie, Value: base64.RawURLEncoding.EncodeToString(raw)}
 }
 
-func serve(t *testing.T, mux http.Handler, method, path string) *httptest.ResponseRecorder {
+func serveRequest(t *testing.T, h http.Handler, req *http.Request) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
+	h.ServeHTTP(rec, req)
 	return rec
 }
 
-var e2eRoutes = []string{"/internal/e2e/passkey-link", "/internal/e2e/reset-auth"}
+// requireEnvelope — конверт Error с кодом code и request_id, совпадающим с X-Request-Id.
+func requireEnvelope(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) {
+	t.Helper()
+	body := errorBody(t, rec, status)
+	require.Equal(t, code, body.Code)
+	require.NotEmpty(t, body.Message)
+	require.True(t, httpx.ValidULID(body.RequestID), body.RequestID)
+	require.Equal(t, rec.Header().Get(httpx.HeaderRequestID), body.RequestID)
+}
 
-func TestE2ERoutes_DisabledOutsideE2E(t *testing.T) {
-	for _, env := range []config.Env{config.EnvProduction, config.EnvDevelopment} {
-		t.Run(string(env), func(t *testing.T) {
-			mux := newMux(t, env)
-			for _, path := range e2eRoutes {
-				for _, method := range []string{http.MethodPost, http.MethodGet} {
-					require.Equal(t, http.StatusNotFound, serve(t, mux, method, path).Code, "%s %s", method, path)
-				}
+func TestReadAPI_Unauthenticated(t *testing.T) {
+	e := newPortfolioEnv(t)
+	doc := loadAPIDoc(t)
+	msk := testutil.ScenarioApps[0]
+
+	cases := []struct {
+		name   string
+		path   string
+		header map[string]string
+		cookie *http.Cookie
+	}{
+		{name: "no_credentials", path: "/v1/apps"},
+		{name: "unknown_bearer", path: "/v1/apps", header: map[string]string{"Authorization": "Bearer sk_" + "0123456789abcdefghij0123456789abcdefghij"}},
+		{name: "not_bearer_scheme", path: "/v1/apps", header: map[string]string{"Authorization": "Basic dXNlcjpwYXNz"}},
+		{name: "empty_authorization", path: "/v1/apps", header: map[string]string{"Authorization": ""}},
+		{name: "unknown_cookie", path: "/v1/apps", cookie: &http.Cookie{Name: auth.SessionCookie, Value: base64.RawURLEncoding.EncodeToString(make([]byte, 32))}},
+		{name: "malformed_cookie", path: "/v1/apps", cookie: &http.Cookie{Name: auth.SessionCookie, Value: "not-a-token"}},
+		{name: "report_without_credentials", path: audiencePath(msk, "summary", "from=2026-10-01&to=2026-10-12")},
+		{name: "portfolio_without_credentials", path: "/v1/portfolio"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tc.path, nil)
+			for k, v := range tc.header {
+				req.Header.Set(k, v)
 			}
+			if tc.cookie != nil {
+				req.AddCookie(tc.cookie)
+			}
+			rec := serveRequest(t, e.handler, req)
+			requireEnvelope(t, rec, http.StatusUnauthorized, "unauthenticated")
+			validateResponse(t, doc, req, rec)
+		})
+	}
+}
+
+func TestReadAPI_SameResultForCookieAndBearer(t *testing.T) {
+	e := newPortfolioEnv(t)
+	cookie := ownerCookie(t, e)
+	msk := testutil.ScenarioApps[0]
+
+	for _, path := range []string{
+		"/v1/portfolio?date=2026-10-12",
+		"/v1/portfolio?date=2026-10-12&unit=installs&include_archived=true",
+		"/v1/apps",
+		audiencePath(msk, "summary", "from=2026-10-01&to=2026-10-12&compare=previous_period"),
+	} {
+		t.Run(path, func(t *testing.T) {
+			byBearer := e.get(t, path, e.all)
+			require.Equal(t, http.StatusOK, byBearer.Code, byBearer.Body.String())
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+			req.AddCookie(cookie)
+			byCookie := serveRequest(t, e.handler, req)
+			require.Equal(t, http.StatusOK, byCookie.Code, byCookie.Body.String())
+
+			require.Equal(t, byBearer.Body.String(), byCookie.Body.String())
+			require.Equal(t, byBearer.Header().Get("Content-Type"), byCookie.Header().Get("Content-Type"))
+		})
+	}
+}
+
+func TestReadAPI_StorageUnavailable(t *testing.T) {
+	e := newPortfolioEnv(t)
+	doc := loadAPIDoc(t)
+	down, err := chstore.Open(t.Context(), e.env.ClickHouse)
+	require.NoError(t, err)
+	require.NoError(t, down.Close())
+	h := e.newHandler(reports.NewService(down.Conn(), e.clock), down)
+	msk := testutil.ScenarioApps[0]
+
+	for _, path := range []string{
+		"/v1/portfolio",
+		"/v1/portfolio?date=2026-10-12",
+		audiencePath(msk, "summary", "from=2026-10-01&to=2026-10-12"),
+		retentionPath(msk, "from=2026-09-14&to=2026-10-12"),
+		realtimePath(msk, ""),
+		integrationPath(msk.ID, ""),
+	} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+			req.Header.Set("Authorization", "Bearer "+e.all)
+			rec := serveRequest(t, h, req)
+			requireEnvelope(t, rec, http.StatusServiceUnavailable, "storage_unavailable")
+			require.Equal(t, "5", rec.Header().Get("Retry-After"))
+			validateResponse(t, doc, req, rec)
 		})
 	}
 
-	// В e2e маршруты зарегистрированы только на POST: GET получает 405 от mux, не доходя до Postgres.
-	t.Run("e2e", func(t *testing.T) {
-		mux := newMux(t, config.Env("e2e"))
-		for _, path := range e2eRoutes {
-			rec := serve(t, mux, http.MethodGet, path)
-			require.Equal(t, http.StatusMethodNotAllowed, rec.Code, path)
-			require.Equal(t, http.MethodPost, rec.Header().Get("Allow"), path)
-		}
+	// Postgres жив: список приложений ClickHouse не читает.
+	t.Run("apps_without_clickhouse", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/apps", nil)
+		req.Header.Set("Authorization", "Bearer "+e.all)
+		require.Equal(t, http.StatusOK, serveRequest(t, h, req).Code)
+	})
+
+	t.Run("ready", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
+		rec := serveRequest(t, h, req)
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		require.JSONEq(t, `{"status":"not_ready","checks":{"postgres":"ok","clickhouse":"fail"}}`, rec.Body.String())
+		validateResponse(t, doc, req, rec)
 	})
 }

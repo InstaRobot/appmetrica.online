@@ -47,9 +47,10 @@ func requireJSON(t *testing.T, want any, rec *httptest.ResponseRecorder) {
 }
 
 type apiErrorBody struct {
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
-	Details map[string]any `json:"details"`
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	RequestID string         `json:"request_id"`
+	Details   map[string]any `json:"details"`
 }
 
 func errorBody(t *testing.T, rec *httptest.ResponseRecorder, status int) apiErrorBody {
