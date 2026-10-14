@@ -44,3 +44,29 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
 export function yesterdayIn(timeZone: string, now: Date = new Date()): string {
   return addDays(todayIn(timeZone, now), -1);
 }
+
+// TODO(T-038): заглушки периодов отчётов.
+export const PERIOD_PRESETS = ["today", "yesterday", "7d", "30d", "90d", "custom"] as const;
+export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
+export type PeriodValue = { preset: PeriodPreset; from: string; to: string };
+export const GRANULARITIES = ["hour", "day", "week", "month"] as const;
+export type Granularity = (typeof GRANULARITIES)[number];
+
+export function presetPeriod(
+  _preset: Exclude<PeriodPreset, "custom">,
+  _today: string,
+): PeriodValue {
+  throw new Error("not implemented");
+}
+
+export function rangeDays(_from: string, _to: string): number {
+  throw new Error("not implemented");
+}
+
+export function allowedGranularities(_period: PeriodValue): Granularity[] {
+  throw new Error("not implemented");
+}
+
+export function coerceGranularity(_value: Granularity, _allowed: Granularity[]): Granularity {
+  throw new Error("not implemented");
+}

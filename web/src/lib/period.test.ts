@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isIsoDate, todayIn, yesterdayIn } from "./period";
+import {
+  addDays,
+  allowedGranularities,
+  coerceGranularity,
+  isIsoDate,
+  presetPeriod,
+  rangeDays,
+  todayIn,
+  yesterdayIn,
+} from "./period";
 
 describe("period", () => {
   it("adds days across month and year boundaries", () => {
@@ -26,5 +35,56 @@ describe("period", () => {
     expect(isIsoDate("2026-02-30")).toBe(false);
     expect(isIsoDate("2026-13-01")).toBe(false);
     expect(isIsoDate("12.10.2026")).toBe(false);
+  });
+});
+
+describe("report periods", () => {
+  const today = "2026-10-13";
+
+  it("resolves presets in the app time zone, ending today inclusive", () => {
+    expect(presetPeriod("today", today)).toEqual({ preset: "today", from: today, to: today });
+    expect(presetPeriod("yesterday", today)).toEqual({
+      preset: "yesterday",
+      from: "2026-10-12",
+      to: "2026-10-12",
+    });
+    expect(presetPeriod("7d", today)).toEqual({ preset: "7d", from: "2026-10-07", to: today });
+    expect(presetPeriod("30d", today)).toEqual({ preset: "30d", from: "2026-09-14", to: today });
+    expect(presetPeriod("90d", today)).toEqual({ preset: "90d", from: "2026-07-16", to: today });
+  });
+
+  it("counts range length in days inclusive", () => {
+    expect(rangeDays("2026-10-13", "2026-10-13")).toBe(1);
+    expect(rangeDays("2026-10-07", "2026-10-13")).toBe(7);
+    expect(rangeDays("2025-10-13", "2026-10-13")).toBe(366);
+    expect(rangeDays("2026-10-13", "2026-10-12")).toBe(0);
+  });
+
+  it("allows granularities per period", () => {
+    const custom = (from: string, to: string) => ({ preset: "custom" as const, from, to });
+    expect(allowedGranularities(presetPeriod("today", today))).toEqual(["hour"]);
+    expect(allowedGranularities(presetPeriod("yesterday", today))).toEqual(["hour"]);
+    expect(allowedGranularities(presetPeriod("7d", today))).toEqual(["hour", "day"]);
+    expect(allowedGranularities(presetPeriod("30d", today))).toEqual(["day", "week"]);
+    expect(allowedGranularities(presetPeriod("90d", today))).toEqual(["day", "week", "month"]);
+    expect(allowedGranularities(custom("2026-10-07", "2026-10-13"))).toEqual([
+      "hour",
+      "day",
+      "week",
+    ]);
+    expect(allowedGranularities(custom("2026-10-06", "2026-10-13"))).toEqual(["day", "week"]);
+    expect(allowedGranularities(custom("2026-08-15", "2026-10-13"))).toEqual([
+      "day",
+      "week",
+      "month",
+    ]);
+  });
+
+  it("replaces a granularity with the nearest allowed one", () => {
+    expect(coerceGranularity("day", ["hour"])).toBe("hour");
+    expect(coerceGranularity("hour", ["day", "week"])).toBe("day");
+    expect(coerceGranularity("month", ["day", "week"])).toBe("week");
+    expect(coerceGranularity("week", ["hour", "day"])).toBe("day");
+    expect(coerceGranularity("week", ["day", "week", "month"])).toBe("week");
   });
 });
