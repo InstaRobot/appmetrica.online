@@ -62,12 +62,17 @@ oapi-codegen (Go), orval (TS-клиент, Zod, MSW-моки) и Fumadocs (ст�
 
 ```
 web/src/app/
-├── layout.tsx                    # <html lang="ru">, шрифт Inter (next/font, subsets latin+cyrillic), globals.css
-├── globals.css                   # Tailwind 4 (@import "tailwindcss"; @theme — токены из 14-ux-ui-spec)
+├── layout.tsx                    # <html lang="ru" data-theme>, inline-скрипт темы (lib/theme.ts), Manrope + JetBrains Mono, globals.css
+├── globals.css                   # Tailwind 4; токены светлой (:root) и тёмной (:root[data-theme="dark"]) тем, 14-ux-ui-spec «Обновление 1.2»
 ├── shadcn.css                    # варианты и утилиты стиля radix-nova из shadcn@4.21.4 (CLI в зависимостях не держим)
 ├── not-found.tsx                 # S-14: 404
 ├── error.tsx                     # S-14: граница ошибок сегмента (500)
 ├── global-error.tsx              # фатальная ошибка корневого layout
+├── (public)/
+│   └── page.tsx                  # S-00: лендинг на «/» (components/landing), без сессии
+├── demo/
+│   ├── route.ts                  # GET /demo: cookie am_demo=1 → /portfolio (S-15 демо-режим)
+│   └── exit/route.ts             # GET /demo/exit: снять am_demo → /
 ├── api/
 │   └── health/route.ts           # GET /api/health → {"status":"ok"} (healthcheck контейнера web; приоритет над rewrite)
 ├── (auth)/                       # публичные страницы без шапки дашборда
@@ -75,9 +80,9 @@ web/src/app/
 │   ├── login/page.tsx            # S-01: вход по passkey (кнопка + conditional UI)
 │   └── setup/[token]/page.tsx    # S-02: регистрация passkey по одноразовой ссылке
 ├── (dashboard)/                  # всё, что требует сессии владельца
-│   ├── layout.tsx                # SkipLink → AppHeader (под Suspense) → <main id="main"> → AppFooter
+│   ├── layout.tsx                # SkipLink → [DemoBanner] + AppHeader(demo) (под Suspense, cookie am_demo) → <main id="main"> → AppFooter
 │   ├── providers.tsx             # 'use client': QueryClientProvider + NuqsAdapter
-│   ├── page.tsx                  # S-03: портфель (оболочка под Suspense)
+│   ├── portfolio/page.tsx        # S-03: портфель на /portfolio (оболочка под Suspense)
 │   ├── portfolio-view.tsx        # S-03: клиентский вид, URL-состояние ?date ?env ?unit ?sort
 │   ├── loading.tsx               # skeleton портфеля
 │   ├── settings/
@@ -110,7 +115,7 @@ web/src/app/
 ```
 
 **Правила**:
-- Route groups `(auth)`, `(dashboard)`, `(docs)` дают разные layouts без влияния на URL. Пути экранов — строго из таблицы S-01…S-14 якоря.
+- Route groups `(public)`, `(auth)`, `(dashboard)`, `(docs)` дают разные layouts без влияния на URL. «/» — публичный лендинг S-00, портфель — `/portfolio`; в демо-режиме (cookie `am_demo=1`, S-15) proxy пускает в `(dashboard)` без сессии, а `apiFetch` берёт ответы из `src/lib/demo` вместо API; `(docs)` остаётся только для владельца. Пути экранов — строго из таблицы S-01…S-14 якоря.
 - `src/proxy.ts` (Next.js 16, бывший middleware) только проверяет **наличие** cookie `am_session` и редиректит на `/login?next=<path>`; валидность сессии проверяет Go (`401 unauthenticated` → клиентский редирект на `/login`).
 - `page.tsx` — Server Component: читает `searchParams` (период, фильтры), отдаёт данные в клиентские компоненты отчётов. Запросы к API из серверных компонентов идут на `API_INTERNAL_URL` с пробросом cookie (через `src/lib/api/fetcher.ts`).
 - `'use cache'` в `(dashboard)` и `(auth)` запрещён: данные персональные и зависят от cookie. Cache Components включены (`cacheComponents: true`), поэтому все динамические чтения (`cookies()`, `searchParams`) находятся под `Suspense` (`loading.tsx`).
@@ -583,3 +588,4 @@ web/content/docs/                              # пользовательска�
 | 2026-10-13 | 1.0 | Initial project structure (monorepo backend + web + contracts + deploy) |
 | 2026-10-14 | 1.1 | Сверка с кодом после MVP (Task 52): каталоги `scripts/`, `docs/reconciliation/`, `contracts/http/`, `.ralphex/`; вместо `docs/adr/` — ADR в 03-architecture §5; страницы с `*-view.tsx`; компоненты по 14-ux-ui-spec §4 плюс оболочки (`app-shell`, `user-menu`, `audience-kpis`, `realtime-panel`, `app-settings-panel`, `app-danger-zone`, `tab-header`) и ленивые обёртки `lazy-*`; `lib/` (`url-state` вместо `search-params`, `forms/`, `docs/`, `errors`, `rejection-codes` и др.), хуки — только два; backend: `keycache.go` в `internal/ingest` (снимок в atomic.Pointer, last_used_at раз в 5 мин), три миграции ClickHouse 00001–00003, пакет `docscheck`, `perf/`, `testdata/{geo,gen}`; правила archtest для тестовых пакетов; фикстуры `smoke`/`scenario` + golden; E2E-спеки и a11y в каждой спеке; таблица `scripts/`; «куда положить» — имена хендлеров `v1_<report>.go` / `<area>_handlers.go` и задач worker |
 | 2026-10-14 | 1.2 | Ревью MVP: `internal/worker` может импортировать `identity` (лист без зависимостей; алиас `reports.UnitPersons` убран); экранирование параметров ClickHouse — общее в `chstore/params.go`; флаг `--seed` у `cmd/seed` |
+| 2026-10-14 | 1.x | Макет «Dashboard v2»: `(public)/page.tsx` (S-00 лендинг), `(dashboard)/portfolio/page.tsx` (портфель на /portfolio), `app/demo/**` и `lib/demo/**` + `lib/demo-mode.ts` (S-15 демо-режим), `components/landing/**`, `lib/theme.ts`, `hooks/use-theme.ts`, `components/layout/{theme-toggle,demo-banner}.tsx` |
