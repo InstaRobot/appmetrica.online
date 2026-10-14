@@ -60,6 +60,7 @@ export function portfolioRow(overrides: Partial<PortfolioRow> = {}): PortfolioRo
       day: `2026-09-${String(i + 1).padStart(2, "0")}`,
       active: 12000 + i * 10,
     })),
+    platforms: [{ platform: "ios", active: 12480 }],
     ...overrides,
   };
 }

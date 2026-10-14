@@ -300,3 +300,47 @@ func TestPortfolio_UsesDailyStatsForClosedDays(t *testing.T) {
 	got.Sparkline, live.Sparkline = nil, nil
 	require.Equal(t, live, got)
 }
+
+// AC-005.1, AC-005.2 (FR-4): активные за дату по events.platform — человек на двух платформах в обеих строках,
+// равные active идут в порядке enum, неизвестная платформа — последней; у приложения без событий за дату — [].
+func TestPortfolioPlatformSplit(t *testing.T) {
+	on := func(platform string, r chstore.EventRow) chstore.EventRow {
+		r.Platform = platform
+		return r
+	}
+	env := startWith(t, []chstore.EventRow{
+		on("ios", session(t, 1, "u1", "2026-10-12T09:00:00+03:00")),
+		on("web", session(t, 2, "u1", "2026-10-12T10:00:00+03:00")),
+		on("ios", session(t, 3, "", "2026-10-12T11:00:00+03:00")),
+		on("macos", session(t, 4, "", "2026-10-12T12:00:00+03:00")),
+		on("android", session(t, 5, "", "2026-10-12T13:00:00+03:00")),
+		on("tvos", session(t, 6, "", "2026-10-12T14:00:00+03:00")),
+		// Вне даты в TZ приложения и другой environment — не считаются.
+		on("windows", session(t, 7, "", "2026-10-11T23:59:00+03:00")),
+		on("windows", session(t, 7, "", "2026-10-13T00:00:00+03:00")),
+		dev(on("linux", session(t, 8, "", "2026-10-12T12:00:00+03:00"))),
+	})
+	svc := NewService(env.CH.Conn(), clock.NewFixed(portfolioNow))
+	empty := uuid.MustParse("1de0a000-0000-4000-8000-0000000000ff")
+
+	got := portfolio(t, svc, PortfolioQuery{
+		Date: date(t, "2026-10-12"), Env: EnvProduction, Unit: identity.Persons,
+		Apps: []PortfolioApp{
+			{ID: identityApp, Location: location(t, "Europe/Moscow")},
+			{ID: empty, Location: location(t, "UTC")},
+		},
+	})
+
+	row := got.Rows[0]
+	require.Equal(t, uint64(5), row.ActiveDate)
+	require.Equal(t, []PlatformActive{
+		{Platform: "ios", Active: 2},
+		{Platform: "android", Active: 1},
+		{Platform: "web", Active: 1},
+		{Platform: "macos", Active: 1},
+		{Platform: "tvos", Active: 1},
+	}, row.Platforms)
+
+	require.NotNil(t, got.Rows[1].Platforms)
+	require.Empty(t, got.Rows[1].Platforms)
+}

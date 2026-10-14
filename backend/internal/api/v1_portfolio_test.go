@@ -284,3 +284,60 @@ func mustDetails(t *testing.T, rec *httptest.ResponseRecorder) json.RawMessage {
 	require.Equal(t, "invalid_request", body.Error.Code)
 	return body.Error.Details
 }
+
+// AC-005.1, AC-005.2 (FR-4): строка портфеля несёт активных за date по платформам событий — U1 на ios и web
+// учитывается в обеих строках, — и набор платформ приложения; без событий за date — platforms: [].
+func TestPortfolioRowPlatforms(t *testing.T) {
+	e := newPortfolioEnv(t)
+	app := testutil.ScenarioApp{ID: uuid.New(), Name: "Notes", Timezone: "UTC"}
+	_, err := e.env.PG.Pool().Exec(t.Context(),
+		`INSERT INTO apps (id, name, platform, platforms, timezone) VALUES ($1, $2, 'ios', '{ios,android,web}', $3)`,
+		app.ID, app.Name, app.Timezone)
+	require.NoError(t, err)
+
+	day := time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC)
+	session := func(platform, user string, at time.Time) chstore.EventRow {
+		r := liveSession(app, uuid.New(), reports.EnvProduction, at)
+		r.Platform, r.UserID = platform, user
+		return r
+	}
+	require.NoError(t, e.env.CH.InsertEvents(t.Context(), []chstore.EventRow{
+		session("ios", "u1", day),
+		session("web", "u1", day.Add(time.Hour)),
+		session("ios", "u2", day.Add(2*time.Hour)),
+		session("android", "u3", day.Add(3*time.Hour)),
+	}))
+
+	row := func(t *testing.T, date string) map[string]json.RawMessage {
+		t.Helper()
+		rec := e.get(t, "/v1/portfolio?date="+date, e.all)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var body struct {
+			Rows []map[string]json.RawMessage `json:"rows"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		for _, r := range body.Rows {
+			var summary gen.AppSummary
+			require.NoError(t, json.Unmarshal(r["app"], &summary))
+			if summary.Id == app.ID {
+				require.Equal(t, gen.PlatformList{gen.PlatformIos, gen.PlatformAndroid, gen.PlatformWeb}, summary.Platforms)
+				require.Equal(t, gen.PlatformIos, summary.Platform)
+				return r
+			}
+		}
+		require.FailNow(t, "нет строки приложения", date)
+		return nil
+	}
+
+	t.Run("overlapping_people", func(t *testing.T) {
+		r := row(t, "2026-10-12")
+		require.JSONEq(t, `3`, string(r["active_date"]))
+		require.JSONEq(t, `[{"platform":"ios","active":2},{"platform":"android","active":1},{"platform":"web","active":1}]`,
+			string(r["platforms"]))
+	})
+
+	t.Run("no_events", func(t *testing.T) {
+		r := row(t, "2026-10-05")
+		require.JSONEq(t, `[]`, string(r["platforms"]))
+	})
+}

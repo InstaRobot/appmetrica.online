@@ -8,6 +8,7 @@ import (
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/identity"
+	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
 func f64(v float64) *float64 { return &v }
@@ -101,4 +102,38 @@ func TestPortfolio_DefaultDate(t *testing.T) {
 	got, err := svc.Portfolio(t.Context(), PortfolioQuery{Date: explicit, OwnerLocation: msk, Env: EnvDevelopment, Unit: identity.Installs})
 	require.NoError(t, err)
 	require.Equal(t, Portfolio{Date: "2026-10-01", Environment: EnvDevelopment, Unit: identity.Installs, Rows: []PortfolioRow{}}, got)
+}
+
+// Равные active — в порядке enum Platform, неизвестные платформы — после известных по алфавиту.
+func TestSortPlatformActive(t *testing.T) {
+	got := []PlatformActive{
+		{Platform: "web", Active: 1},
+		{Platform: "zz", Active: 1},
+		{Platform: "android", Active: 1},
+		{Platform: "other", Active: 1},
+		{Platform: "aa", Active: 1},
+		{Platform: "macos", Active: 3},
+		{Platform: "ios", Active: 2},
+	}
+	sortPlatformActive(got)
+	require.Equal(t, []PlatformActive{
+		{Platform: "macos", Active: 3},
+		{Platform: "ios", Active: 2},
+		{Platform: "android", Active: 1},
+		{Platform: "web", Active: 1},
+		{Platform: "other", Active: 1},
+		{Platform: "aa", Active: 1},
+		{Platform: "zz", Active: 1},
+	}, got)
+
+	sortPlatformActive(nil)
+}
+
+// platformOrder повторяет enum app_platform (и Platform в api.yaml): порядок долей портфеля — порядок enum.
+func TestPlatformOrderMatchesEnum(t *testing.T) {
+	want := make([]string, 0, len(platformOrder))
+	for _, p := range sqlc.AllAppPlatformValues() {
+		want = append(want, string(p))
+	}
+	require.Equal(t, want, platformOrder)
 }

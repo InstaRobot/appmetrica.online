@@ -97,6 +97,7 @@ describe("demo portfolio", () => {
       expect(row.sparkline[0]?.day).toBe(addDays(p.date, -29));
       expect(row.sparkline[29]?.day).toBe(p.date);
       expect(row.sparkline[29]?.active).toBe(row.active_date);
+      expect(row.platforms).toEqual([{ platform: row.app.platform, active: row.active_date }]);
       expect(row.retention_d1).not.toBeNull();
       expect(row.retention_d7).not.toBeNull();
     }
@@ -133,6 +134,7 @@ describe("demo portfolio", () => {
     const old = p.rows.find((r) => r.app.id === OLD);
     expect(old?.app.status).toBe("archived");
     expect(old?.active_date).toBe(0);
+    expect(old?.platforms).toEqual([]);
     expect(old?.active_delta_pct).toBeNull();
   });
 });
