@@ -3,13 +3,10 @@ import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { APIPage } from "@/components/docs/api-page";
-import { requireOwner } from "@/lib/docs/session";
 import { source } from "@/lib/docs/source";
 
-// S-13 `/docs/[[...slug]]`: MDX-гайд или страница операции API reference. Страница проверяет
-// сессию сама: при клиентской навигации layout повторно не рендерится.
+// S-13 `/docs/[[...slug]]`: MDX-гайд или страница операции API reference, доступна без входа.
 export default async function DocsRoute({ params }: PageProps<"/docs/[[...slug]]">) {
-  await requireOwner();
   const { slug } = await params;
   const page = source.getPage(slug);
   if (!page) notFound();

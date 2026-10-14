@@ -2,16 +2,16 @@ import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import { Suspense } from "react";
 import { Providers } from "@/app/(dashboard)/providers";
-import { AppHeader } from "@/components/layout/app-header";
-import { requireOwner } from "@/lib/docs/session";
+import { DocsHeader } from "@/components/docs/docs-header";
 import { source } from "@/lib/docs/source";
 import { DOCS_TRANSLATIONS } from "@/lib/docs/translations";
 import "../docs.css";
 
-// DocsShell (S-13): шапка дашборда сверху, под ней layout Fumadocs (сайдбар, контент, оглавление).
-// Документация только для владельца: сессия проверяется на сервере при каждом запросе,
-// 'use cache' в этой route group запрещён (CONTRIBUTING.md §5).
-// Провайдер Fumadocs читает usePathname, а сессия — cookie запроса, поэтому вся оболочка под
+// DocsShell (S-13): шапка сверху, под ней layout Fumadocs (сайдбар, контент, оглавление).
+// Документация публичная (решение владельца от 2026-10-14); шапка зависит от сессии: владельцу —
+// шапка дашборда, гостю — публичная. Сессию читаем из cookie запроса, поэтому 'use cache' в этой
+// route group запрещён (CONTRIBUTING.md §5).
+// Провайдер Fumadocs читает usePathname, а шапка — cookie запроса, поэтому вся оболочка под
 // Suspense: статическая часть ответа — только полоса шапки.
 export default function DocsShell({ children }: LayoutProps<"/docs">) {
   return (
@@ -22,24 +22,17 @@ export default function DocsShell({ children }: LayoutProps<"/docs">) {
           search={{ options: { api: "/docs/search" } }}
           i18n={{ locale: "ru", translations: DOCS_TRANSLATIONS }}
         >
-          <AppHeader />
-          <OwnerOnly>
-            <DocsLayout
-              tree={source.getPageTree()}
-              nav={{ title: "Документация", url: "/docs" }}
-              themeSwitch={{ enabled: false }}
-              tabs={false}
-            >
-              {children}
-            </DocsLayout>
-          </OwnerOnly>
+          <DocsHeader />
+          <DocsLayout
+            tree={source.getPageTree()}
+            nav={{ title: "Документация", url: "/docs" }}
+            themeSwitch={{ enabled: false }}
+            tabs={false}
+          >
+            {children}
+          </DocsLayout>
         </RootProvider>
       </Suspense>
     </Providers>
   );
-}
-
-async function OwnerOnly({ children }: { children: React.ReactNode }) {
-  await requireOwner();
-  return children;
 }

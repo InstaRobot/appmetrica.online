@@ -1,8 +1,7 @@
 import { ArrowRight, ChartColumn } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { Logo } from "@/components/layout/logo";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { PublicHeader } from "@/components/layout/public-header";
 import { cn } from "@/lib/utils";
 import { HeroPreview } from "./hero-preview";
 
@@ -89,23 +88,7 @@ const OUTLINE = "border border-(--border-strong) bg-card text-foreground hover:b
 export function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="mx-auto flex h-16 w-full max-w-[1200px] items-center gap-4 px-8">
-        <Link href="/" aria-label="appmetrica.online — на главную" className="rounded-md">
-          <Logo />
-        </Link>
-        <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle className="border border-(--border-strong) bg-card" />
-          <Link
-            href="/login"
-            className={cn(
-              "inline-flex h-9 items-center rounded-lg px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              PRIMARY,
-            )}
-          >
-            Войти
-          </Link>
-        </div>
-      </header>
+      <PublicHeader className="mx-auto max-w-[1200px]" />
 
       <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-18 px-8 pt-12 pb-20">
         <section className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-center gap-12">

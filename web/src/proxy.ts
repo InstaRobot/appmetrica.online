@@ -7,12 +7,8 @@ const SESSION_COOKIE = "am_session";
 
 // /api/* — rewrite на Go API и собственный /api/health: API отвечает 401 сам, HTML-редирект ему не нужен.
 // «/» — публичный лендинг S-00 (только сам корень, без вложенных путей); /demo и /demo/exit —
-// вход в демо-режим и выход из него.
-const PUBLIC_PREFIXES = ["/login", "/setup/", "/api/", "/demo"];
-
-// В демо-режиме (cookie am_demo=1) дашборд открыт без сессии: данные идут из статичного датасета,
-// а не из API. Документация остаётся только для владельца.
-const isDocs = (pathname: string) => pathname === "/docs" || pathname.startsWith("/docs/");
+// вход в демо-режим и выход из него; /docs — публичная документация (решение владельца от 2026-10-14).
+const PUBLIC_PREFIXES = ["/login", "/setup/", "/api/", "/demo", "/docs"];
 
 function isPublic(pathname: string): boolean {
   if (pathname === "/") return true;
@@ -25,7 +21,8 @@ function isPublic(pathname: string): boolean {
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
-  const demo = request.cookies.get(DEMO_COOKIE)?.value === "1" && !isDocs(pathname);
+  // В демо-режиме (cookie am_demo=1) дашборд открыт без сессии: данные идут из статичного датасета.
+  const demo = request.cookies.get(DEMO_COOKIE)?.value === "1";
   if (isPublic(pathname) || request.cookies.get(SESSION_COOKIE)?.value || demo) {
     return NextResponse.next();
   }
