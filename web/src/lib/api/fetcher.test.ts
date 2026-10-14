@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/msw";
 import { ApiError, apiFetch } from "./fetcher";
 
+const demoFetch = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>());
+vi.mock("@/lib/demo/handler", () => ({ demoFetch }));
+
 type Envelope<T> = { data: T; status: number; headers: Headers };
 
 const originalLocation = Object.getOwnPropertyDescriptor(window, "location");
@@ -179,5 +182,69 @@ describe("apiFetch errors", () => {
     await expect(apiFetch("/v1/portfolio", { signal: controller.signal })).rejects.toMatchObject({
       name: "AbortError",
     });
+  });
+});
+
+describe("apiFetch in demo mode", () => {
+  beforeEach(() => {
+    // biome-ignore lint/suspicious/noDocumentCookie: тест эмулирует cookie демо-режима
+    document.cookie = "am_demo=1; path=/";
+    demoFetch.mockReset();
+  });
+
+  afterEach(() => {
+    // biome-ignore lint/suspicious/noDocumentCookie: тест эмулирует cookie демо-режима
+    document.cookie = "am_demo=; max-age=0; path=/";
+    if (originalLocation) Object.defineProperty(window, "location", originalLocation);
+  });
+
+  it("answers from the static demo dataset without touching the network", async () => {
+    let hit = false;
+    server.use(
+      http.get("*/api/v1/portfolio", () => {
+        hit = true;
+        return HttpResponse.json({});
+      }),
+    );
+    demoFetch.mockResolvedValue(Response.json({ date: "2026-10-13", rows: [] }));
+
+    const res = await apiFetch<Envelope<unknown>>("/v1/portfolio?date=2026-10-13");
+
+    expect(res).toMatchObject({ status: 200, data: { date: "2026-10-13", rows: [] } });
+    expect(demoFetch).toHaveBeenCalledWith(
+      "/v1/portfolio?date=2026-10-13",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(hit).toBe(false);
+  });
+
+  it("rejects changes with demo_read_only and never sends the visitor to login", async () => {
+    const assign = stubLocation("/apps/1/settings");
+    demoFetch.mockResolvedValueOnce(
+      Response.json(
+        {
+          error: {
+            code: "demo_read_only",
+            message: "Демо-режим: изменения недоступны",
+            request_id: "demo",
+          },
+        },
+        { status: 403 },
+      ),
+    );
+
+    await expect(apiFetch("/admin/v1/apps", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 403,
+      code: "demo_read_only",
+    });
+
+    demoFetch.mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "unauthenticated", message: "x", request_id: "demo" } },
+        { status: 401 },
+      ),
+    );
+    await expect(apiFetch("/v1/apps")).rejects.toMatchObject({ status: 401 });
+    expect(assign).not.toHaveBeenCalled();
   });
 });

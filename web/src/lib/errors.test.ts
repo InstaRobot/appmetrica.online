@@ -17,6 +17,12 @@ function contractErrorCodes(): string[] {
 }
 
 describe("errors", () => {
+  it("explains that the demo is read-only", () => {
+    expect(toUiError(new ApiError(403, "demo_read_only", "x", "demo")).message).toBe(
+      "Демо-режим: изменения недоступны",
+    );
+  });
+
   it("maps API error codes to russian messages", () => {
     expect(messageFor("app_not_found")).toBe("Приложение не найдено или удалено");
     expect(messageFor("range_too_large")).toBe(

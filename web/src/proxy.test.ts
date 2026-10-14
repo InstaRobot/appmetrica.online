@@ -47,6 +47,21 @@ describe("proxy", () => {
     },
   );
 
+  it.each(["/demo", "/demo/exit"])("lets anonymous visitors open %s", (path) => {
+    expect(passesThrough(proxy(request(path)))).toBe(true);
+  });
+
+  it.each(["/portfolio", "/apps/x/retention", "/apps/new", "/settings"])(
+    "lets demo visitors open %s without a session",
+    (path) => {
+      expect(passesThrough(proxy(request(path, "am_demo=1")))).toBe(true);
+    },
+  );
+
+  it("keeps the docs behind the login in demo mode", () => {
+    expect(proxy(request("/docs", "am_demo=1")).status).toBe(307);
+  });
+
   it("lets requests with am_session through without validating it", () => {
     expect(passesThrough(proxy(request("/apps/x", "am_session=anything")))).toBe(true);
   });

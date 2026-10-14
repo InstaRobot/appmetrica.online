@@ -232,3 +232,20 @@ describe("AppHeader theme switch", () => {
     expect(await screen.findByRole("button", { name: "Включить тёмную тему" })).toBeInTheDocument();
   });
 });
+
+describe("AppHeader in demo mode", () => {
+  it("hides the owner-only docs and offers to leave the demo", async () => {
+    const user = userEvent.setup();
+    renderWithClient(<AppHeader demo />);
+
+    expect(within(mainNav()).queryByRole("link", { name: "Документация" })).not.toBeInTheDocument();
+    expect(within(mainNav()).getByRole("link", { name: "Портфель" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Меню пользователя" }));
+    expect(await screen.findByRole("menuitem", { name: "Выйти из демо" })).toHaveAttribute(
+      "href",
+      "/demo/exit",
+    );
+    expect(screen.queryByRole("menuitem", { name: "Выйти" })).not.toBeInTheDocument();
+  });
+});

@@ -10,8 +10,20 @@ const redirect = vi.hoisted(() =>
   }),
 );
 
+const demoFetch = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>());
+vi.mock("@/lib/demo/handler", () => ({ demoFetch }));
+
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ toString: () => cookieHeader.value }),
+  cookies: async () => ({
+    toString: () => cookieHeader.value,
+    get: (name: string) => {
+      const pair = cookieHeader.value
+        .split("; ")
+        .map((c) => c.split("="))
+        .find(([key]) => key === name);
+      return pair ? { name, value: pair[1] ?? "" } : undefined;
+    },
+  }),
 }));
 vi.mock("next/navigation", () => ({ redirect }));
 
@@ -21,6 +33,16 @@ describe("apiFetch on the server", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     cookieHeader.value = "am_session=s3cr3t";
+  });
+
+  it("renders demo pages from the static dataset on the server", async () => {
+    cookieHeader.value = "am_demo=1";
+    demoFetch.mockResolvedValue(Response.json({ items: [] }));
+
+    const res = await apiFetch<{ data: unknown; status: number }>("/v1/apps");
+
+    expect(res).toMatchObject({ status: 200, data: { items: [] } });
+    expect(demoFetch).toHaveBeenCalledWith("/v1/apps", expect.objectContaining({ method: "GET" }));
   });
 
   it("calls API_INTERNAL_URL directly and forwards the session cookie", async () => {
