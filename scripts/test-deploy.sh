@@ -366,6 +366,10 @@ jqt "geo-refresh: вызов deploy.yml получает права на GHCR" "
 
 jqt "ci: образы собирает deploy.yml, не ci.yml" "$ci_wf" '.jobs | has("images") | not'
 jqt "ci: тесты деплоя в CI" "$ci_wf" '[.jobs[].steps[]? | .run? // "" | test("scripts/test-deploy.sh")] | any'
+jqt "ci: перф отчётов еженедельно по cron (понедельник 03:00 UTC) и вручную" "$ci_wf" '.on.schedule == [{"cron": "0 3 * * 1"}] and (.on | has("workflow_dispatch"))'
+jqt "ci: perf-reports — только cron, ручной запуск и метка perf на PR" "$ci_wf" '.jobs["perf-reports"].if | test("schedule") and test("workflow_dispatch") and test("labels.*perf")'
+jqt "ci: perf-reports запускает make perf-reports и сохраняет reports-latest.json" "$ci_wf" '([.jobs["perf-reports"].steps[] | .run? // ""] | join("\n") | test("make perf-reports")) and ([.jobs["perf-reports"].steps[] | .with.path? // ""] | join("\n") | test("reports-latest.json"))'
+jqt "ci: cron не отменяется push в main (event в группе concurrency)" "$ci_wf" '.concurrency.group | test("github.event_name")'
 
 readme="$ROOT/deploy/dokploy/README.md"
 if [ -f "$readme" ]; then pass "deploy/dokploy/README.md есть"; else fail "deploy/dokploy/README.md есть"; fi

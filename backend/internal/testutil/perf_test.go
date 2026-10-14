@@ -190,8 +190,8 @@ func TestPerf_Invariants(t *testing.T) {
 			}
 			installUser[r.InstallID] = r.UserID
 		}
-		if r.UserID == testutil.PerfPowerUser && r.Name == "session_start" {
-			require.Equal(t, testutil.PerfPowerInstall, r.InstallID)
+		if r.InstallID == testutil.PerfPowerInstall && r.Name == "session_start" {
+			require.Equal(t, testutil.PerfPowerUser, r.UserID)
 			powerDays[localDay.Format(time.DateOnly)]++
 		}
 	}
@@ -215,6 +215,14 @@ func TestPerf_Invariants(t *testing.T) {
 		require.GreaterOrEqual(t, n, 3, "power user: ≥ 3 сессии в день %s", d)
 	}
 	require.Equal(t, testutil.PerfApps[0].ID, installApp[testutil.PerfPowerInstall])
+	powerInstalls := 0
+	for id, u := range installUser {
+		if u == testutil.PerfPowerUser {
+			powerInstalls++
+			require.Equal(t, testutil.PerfApps[0].ID, installApp[id])
+		}
+	}
+	require.Equal(t, 2, powerInstalls, "power user на двух установках основного приложения")
 }
 
 func TestPerf_EmitErrorStops(t *testing.T) {

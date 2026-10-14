@@ -45,3 +45,5 @@ web/.pnpm-store/
 
 # Рабочий отчёт `make perf-ingest`; эталон baseline.json коммитится
 backend/perf/reports/latest.json
+# Рабочий отчёт `make perf-reports` (в CI — артефакт job perf-reports)
+backend/perf/reports/reports-latest.json

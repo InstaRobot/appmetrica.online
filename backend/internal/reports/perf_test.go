@@ -136,6 +136,23 @@ func perfCases(t *testing.T, svc *Service, cfg testutil.PerfConfig) []perfCase {
 	}
 }
 
+// perfServerMemory — config.d перф-теста: контейнер ClickHouse выделенный, поэтому сервер может занять 90 %
+// RAM вместо 50 % боевого deploy/clickhouse/config.d (в production ClickHouse делит 128 ГБ с Postgres и
+// сервисами — 64 ГБ). Настройка перечитывается без рестарта (SYSTEM RELOAD CONFIG).
+const perfServerMemory = `<clickhouse><max_server_memory_usage_to_ram_ratio>0.9</max_server_memory_usage_to_ram_ratio></clickhouse>`
+
+func raiseServerMemory(t *testing.T, env *testutil.Env) {
+	t.Helper()
+	ctx := t.Context()
+	require.NoError(t, env.ClickHouseContainer().CopyToContainer(ctx, []byte(perfServerMemory),
+		"/etc/clickhouse-server/config.d/zz-perf.xml", 0o644))
+	require.NoError(t, env.CH.Conn().Exec(ctx, "SYSTEM RELOAD CONFIG"))
+	var ratio string
+	require.NoError(t, env.CH.Conn().QueryRow(ctx,
+		"SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage_to_ram_ratio'").Scan(&ratio))
+	require.Equal(t, "0.9", ratio)
+}
+
 // optimizePerf сливает части таблиц после загрузки: замеры не конкурируют с фоновыми слияниями, а данные
 // выглядят как в production, где части давно слиты.
 func optimizePerf(t *testing.T, conn driver.Conn) {
@@ -150,6 +167,7 @@ func TestReportsPerf_90Days100kDAU(t *testing.T) {
 	ctx := t.Context()
 	env := testutil.Start(t)
 	cfg := testutil.DefaultPerfConfig()
+	raiseServerMemory(t, env)
 
 	started := time.Now()
 	stats := env.LoadPerf(t, cfg)
@@ -161,7 +179,7 @@ func TestReportsPerf_90Days100kDAU(t *testing.T) {
 	var version string
 	require.NoError(t, env.CH.Conn().QueryRow(ctx, "SELECT version()").Scan(&version))
 
-	svc := NewService(env.CH.Conn(), clock.NewFixed(cfg.Now()))
+	svc := NewService(roProfileConn(t, env), clock.NewFixed(cfg.Now()))
 	report := perfReport{
 		GeneratedAt:       time.Now().UTC().Truncate(time.Second),
 		ClickHouseVersion: version,
@@ -173,15 +191,12 @@ func TestReportsPerf_90Days100kDAU(t *testing.T) {
 		LoadSeconds: load.Seconds(),
 	}
 	for _, c := range perfCases(t, svc, cfg) {
-		require.NoError(t, c.run(ctx), "%s: прогрев", c.name)
-		runs := make([]time.Duration, 0, perfRuns)
-		for range perfRuns {
-			start := time.Now()
-			require.NoError(t, c.run(ctx), c.name)
-			runs = append(runs, time.Since(start))
+		res := measure(ctx, c)
+		if res.Error != "" {
+			t.Logf("%-34s ошибка: %s", res.Name, res.Error)
+		} else {
+			t.Logf("%-34s P50 %7.1f мс  P95 %7.1f мс  max %7.1f мс  порог %5.0f мс", res.Name, res.P50Ms, res.P95Ms, res.MaxMs, res.ThresholdMs)
 		}
-		res := testutil.SummarizeRuns(c.name, c.threshold, runs)
-		t.Logf("%-34s P50 %7.1f мс  P95 %7.1f мс  max %7.1f мс  порог %5.0f мс", res.Name, res.P50Ms, res.P95Ms, res.MaxMs, res.ThresholdMs)
 		report.Results = append(report.Results, res)
 	}
 
@@ -192,12 +207,51 @@ func TestReportsPerf_90Days100kDAU(t *testing.T) {
 	t.Logf("результаты: %s", perfReportPath())
 
 	for _, res := range report.Results {
+		assert.Empty(t, res.Error, res.Name)
 		assert.True(t, res.Pass, "%s: P95 %.1f мс > порога %.0f мс", res.Name, res.P95Ms, res.ThresholdMs)
 	}
 }
 
+// measure — прогрев и perfRuns замеров отчёта. Ошибка (например, превышение памяти) записывается в результат,
+// а не прерывает тест: отчёт reports-latest.json остаётся полным.
+func measure(ctx context.Context, c perfCase) testutil.PerfResult {
+	runs := make([]time.Duration, 0, perfRuns)
+	for i := range perfRuns + 1 {
+		start := time.Now()
+		if err := c.run(ctx); err != nil {
+			res := testutil.SummarizeRuns(c.name, c.threshold, nil)
+			res.Error = err.Error()
+			return res
+		}
+		if i > 0 { // первый прогон — прогрев
+			runs = append(runs, time.Since(start))
+		}
+	}
+	return testutil.SummarizeRuns(c.name, c.threshold, runs)
+}
+
+// roProfileConn — соединение с базой теста с настройками боевого профиля appmetrica_ro
+// (deploy/clickhouse/users.d): отчёты меряются с теми же лимитами потоков, памяти и времени, что у api.
+func roProfileConn(t *testing.T, env *testutil.Env) driver.Conn {
+	t.Helper()
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Addr: []string{env.ClickHouse.Addr},
+		Auth: clickhouse.Auth{Database: env.ClickHouse.Database, Username: env.ClickHouse.User, Password: env.ClickHouse.Password},
+		Settings: clickhouse.Settings{
+			"max_threads":        8,
+			"max_memory_usage":   8589934592,
+			"max_execution_time": 30,
+			"join_use_nulls":     0,
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	require.NoError(t, conn.Ping(t.Context()))
+	return conn
+}
+
 // explainEventsParts — части events до и после отсечения партиций по EXPLAIN indexes = 1 (json = 1):
-// по каждому чтению events — Initial Parts индекса MinMax и Selected Parts индекса Partition.
+// по каждому чтению events — Initial Parts индекса Min-Max и Selected Parts индекса Partition.
 func explainEventsParts(ctx context.Context, t *testing.T, conn driver.Conn, query string) (reads []partsRead) {
 	t.Helper()
 	var plan string
@@ -214,13 +268,13 @@ func explainEventsParts(ctx context.Context, t *testing.T, conn driver.Conn, que
 			r := partsRead{initial: -1, selected: -1}
 			for _, idx := range n.Indexes {
 				switch idx.Type {
-				case "MinMax":
+				case "Min-Max", "MinMax": // 26.8 — "Min-Max"
 					r.initial = idx.InitialParts
 				case "Partition":
 					r.selected = idx.SelectedParts
 				}
 			}
-			require.NotEqual(t, -1, r.initial, "нет индекса MinMax: %s", plan)
+			require.NotEqual(t, -1, r.initial, "нет индекса Min-Max: %s", plan)
 			require.NotEqual(t, -1, r.selected, "нет индекса Partition: %s", plan)
 			reads = append(reads, r)
 		}

@@ -3,6 +3,8 @@ name: CI
 # Гейты 22-test-strategy.md §5 (T-008). Все jobs обязательны в branch protection для main.
 # Образы собирает и выкатывает deploy.yml после зелёного CI на main (T-024).
 # Jobs backend, web, gen-check, tdd-order и e2e идут параллельно, чтобы весь прогон укладывался в ~10 минут.
+# Перф-тест отчётов (job perf-reports, NFR-003, T-035) — еженедельно по cron, вручную и по метке perf на PR;
+# cron и ручной запуск прогоняют и остальные jobs на main (деплой запускает только push, см. deploy.yml).
 
 on:
   push:
@@ -10,12 +12,16 @@ on:
   pull_request:
     # labeled/unlabeled — чтобы метка tdd-exception сразу пересчитывала job tdd-order.
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # event_name в группе: push в main не отменяет еженедельный перф-прогон.
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -223,3 +229,44 @@ jobs:
             ingest.log
             api.log
           retention-days: 7
+
+  perf-reports:
+    name: perf-reports (NFR-003, 100k DAU × 90 days)
+    # 22-test-strategy.md §11.2: еженедельно, по метке perf на PR и вручную — обязательно перед снятием AppMetrica SDK.
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'perf'))
+    # ubuntu-24.04: 4 vCPU и 16 ГБ RAM — окружение AC-035.1.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Reports P95 on synthetic data (testcontainers ClickHouse) and EXPLAIN partition pruning
+        run: make perf-reports
+
+      - name: Results to job summary
+        if: always()
+        run: |
+          f=backend/perf/reports/reports-latest.json
+          [ -f "$f" ] || exit 0
+          {
+            echo '### Reports perf (P95 of 20 runs)'
+            echo '| report | P50, ms | P95, ms | threshold, ms | pass |'
+            echo '|---|---:|---:|---:|:-:|'
+            jq -r '.results[] | "| \(.name) | \(.p50_ms | floor) | \(.p95_ms | floor) | \(.threshold_ms | floor) | \(if .pass then "✅" else "❌" end) |"' "$f"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports-latest.json
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: reports-perf
+          path: backend/perf/reports/reports-latest.json
+          if-no-files-found: ignore
+          retention-days: 90

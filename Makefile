@@ -193,6 +193,10 @@ perf-ingest: ## k6 2.3.0 в Docker: 500 rps × 10 мин на локальный
 	@if [ -f $(PERF_REPORTS)/baseline.json ]; then bash $(ROOT)/scripts/perf-compare.sh $(PERF_REPORTS)/baseline.json $(PERF_REPORTS)/latest.json; \
 	else echo "perf-ingest: baseline.json нет — сохраните отчёт: cp $(PERF_REPORTS)/latest.json $(PERF_REPORTS)/baseline.json"; fi
 
+.PHONY: perf-reports
+perf-reports: ## Перф-тест отчётов NFR-003 (нужен Docker, ~16 ГБ RAM): 100k DAU × 90 дней, P95 из 20 прогонов → backend/perf/reports/reports-latest.json
+	cd $(BACKEND) && go test -count=1 -tags=perf -timeout 60m -v -run 'TestReportsPerf|TestPortfolio_ExplainPrunesPartitions' ./internal/reports/
+
 .PHONY: test-web
 test-web: ## Unit-тесты web (Vitest)
 	cd $(WEB) && pnpm test
