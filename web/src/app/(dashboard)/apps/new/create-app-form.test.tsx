@@ -47,8 +47,7 @@ function mockCreate(respond?: () => Response) {
 }
 
 async function choosePlatform(user: ReturnType<typeof userEvent.setup>, label: string) {
-  await user.click(screen.getByRole("combobox", { name: /Платформа/ }));
-  await user.click(await screen.findByRole("option", { name: label }));
+  await user.click(screen.getByRole("button", { name: label }));
 }
 
 beforeEach(() => {
@@ -75,22 +74,59 @@ describe("CreateAppForm", () => {
     expect(toasts.success).toHaveBeenCalledWith("Приложение создано");
   });
 
-  it("marks required fields and offers every platform", async () => {
+  it("creates an app with several platforms", async () => {
+    const bodies = mockCreate();
     const user = userEvent.setup();
+    renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+
+    await choosePlatform(user, "iOS");
+    await choosePlatform(user, "Android");
+    await choosePlatform(user, "Веб");
+    await user.type(screen.getByRole("textbox", { name: /Название/ }), "Notes");
+    await user.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${created.id}/integration`));
+    expect(bodies).toEqual([
+      { name: "Notes", platforms: ["ios", "android", "web"], timezone: "Europe/Moscow" },
+    ]);
+  });
+
+  it("requires a platform", async () => {
+    const bodies = mockCreate();
+    const user = userEvent.setup();
+    renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+
+    await user.type(screen.getByRole("textbox", { name: /Название/ }), "Notes");
+    await choosePlatform(user, "Android");
+    await choosePlatform(user, "Android");
+    await user.click(screen.getByRole("button", { name: "Создать" }));
+
+    const group = screen.getByRole("group", { name: /Платформы/ });
+    await waitFor(() =>
+      expect(group).toHaveAccessibleDescription("Выберите хотя бы одну платформу"),
+    );
+    expect(screen.getByRole("button", { name: "iOS" })).toHaveFocus();
+    expect(bodies).toEqual([]);
+
+    await choosePlatform(user, "Linux");
+    expect(group).toHaveAccessibleDescription(
+      "На каждую платформу создадим ключ записи. Платформы можно добавить позже в настройках.",
+    );
+  });
+
+  it("marks required fields and offers every platform", () => {
     renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />);
 
     expect(screen.getByRole("textbox", { name: /Название/ })).toHaveAttribute(
       "aria-required",
       "true",
     );
-    const platform = screen.getByRole("combobox", { name: /Платформа/ });
-    expect(platform).toHaveAttribute("aria-required", "true");
-    expect(platform).toHaveTextContent("Выберите платформу");
-    expect(screen.getByRole("link", { name: "Отмена" })).toHaveAttribute("href", "/portfolio");
-
-    await user.click(platform);
-    const options = await screen.findAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual([
+    const group = screen.getByRole("group", { name: /Платформы/ });
+    expect(group).toHaveAccessibleDescription(
+      "На каждую платформу создадим ключ записи. Платформы можно добавить позже в настройках.",
+    );
+    const chips = within(group).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
       "iOS",
       "Android",
       "Веб",
@@ -98,9 +134,11 @@ describe("CreateAppForm", () => {
       "Windows",
       "Linux",
       "Бот",
-      "Сервер",
+      "Бэкенд",
       "Другое",
     ]);
+    for (const chip of chips) expect(chip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("link", { name: "Отмена" })).toHaveAttribute("href", "/portfolio");
   });
 
   it("shows field errors on submit and focuses the first invalid field", async () => {
@@ -114,8 +152,8 @@ describe("CreateAppForm", () => {
     expect(name).toHaveAttribute("aria-invalid", "true");
     expect(name).toHaveAccessibleDescription("Введите название");
     expect(name).toHaveFocus();
-    expect(screen.getByRole("combobox", { name: /Платформа/ })).toHaveAccessibleDescription(
-      "Выберите платформу",
+    expect(screen.getByRole("group", { name: /Платформы/ })).toHaveAccessibleDescription(
+      "Выберите хотя бы одну платформу",
     );
     expect(screen.getByRole("combobox", { name: /Часовой пояс/ })).toHaveAccessibleDescription(
       "Выберите часовой пояс",
@@ -192,6 +230,7 @@ describe("CreateAppForm", () => {
 
     const busy = await screen.findByRole("button", { name: "Создаём…" });
     expect(busy).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Бот" })).toBeDisabled();
     release();
     await waitFor(() => expect(screen.getByRole("button", { name: "Создать" })).toBeEnabled());
   });
