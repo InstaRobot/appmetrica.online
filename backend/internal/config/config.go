@@ -93,6 +93,9 @@ type Worker struct {
 	IngestHealthURL     string
 	APIHealthURL        string
 	IngestMetricsURL    string
+	// MergeKeysWait — ожидание шага wait_keys слияния вместо deletion.AppPurgeDelay; nil — ожидание executor-а.
+	// MERGE_KEYS_WAIT допустим только при APP_ENV=e2e: стенду Playwright не ждать 17 минут.
+	MergeKeysWait *time.Duration
 }
 
 // Migrate — конфигурация `appmetrica migrate`: ClickHouse подключается пользователем для DDL.
@@ -165,6 +168,19 @@ func LoadWorker() (Worker, error) {
 	}
 	if c.DiskFreeAlertPct >= 100 {
 		r.fail(errors.New("DISK_FREE_ALERT_PCT: must be between 1 and 99"))
+	}
+	if v, ok := r.value("MERGE_KEYS_WAIT"); ok {
+		d, err := time.ParseDuration(v)
+		switch {
+		case c.AppEnv != EnvE2E:
+			r.fail(errors.New("MERGE_KEYS_WAIT: allowed only with APP_ENV=e2e"))
+		case err != nil:
+			r.fail(errors.New("MERGE_KEYS_WAIT: invalid duration"))
+		case d < 0:
+			r.fail(errors.New("MERGE_KEYS_WAIT: must not be negative"))
+		default:
+			c.MergeKeysWait = &d
+		}
 	}
 	return c, r.err()
 }

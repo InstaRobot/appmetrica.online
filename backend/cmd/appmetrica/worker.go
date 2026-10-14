@@ -76,7 +76,11 @@ func runWorker(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		checkCfg.Backups = chstore.NewBackupClient(cfg.BackupAPIURL, nil)
 	}
 	check := worker.NewSystemCheck(checkCfg)
-	merges := merge.NewExecutor(pg, ch.Conn(), c, logger, worker.MergeFailedNotifier(pg.Queries(), tg, logger))
+	var mergeOpts []merge.Option
+	if cfg.MergeKeysWait != nil {
+		mergeOpts = append(mergeOpts, merge.WithKeysWait(*cfg.MergeKeysWait))
+	}
+	merges := merge.NewExecutor(pg, ch.Conn(), c, logger, worker.MergeFailedNotifier(pg.Queries(), tg, logger), mergeOpts...)
 	sched := worker.NewScheduler(pg.Queries(), c, logger, cfg.JobsEnabled,
 		check.Job(),
 		worker.DeletionJob(executor),
