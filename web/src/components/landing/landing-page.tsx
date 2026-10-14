@@ -214,7 +214,7 @@ export function LandingPage() {
             </ol>
           </div>
           <figure aria-label="Пример запроса на приём событий" className="min-w-0">
-            <pre className="overflow-x-auto rounded-2xl bg-code p-6 font-mono text-[13px] leading-5 text-code-foreground shadow-(--shadow-card)">
+            <pre className="overflow-x-auto rounded-2xl bg-code-bg p-6 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card)">
               {SNIPPET}
             </pre>
           </figure>

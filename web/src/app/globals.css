@@ -259,8 +259,9 @@
 
   --color-page: var(--bg-page);
   --color-header: var(--bg-header);
-  --color-code: var(--code-bg);
-  --color-code-foreground: var(--code-fg);
+  /* Цвета блока кода — code-bg/code-fg: имя text-code занято типографской утилитой (моноширинный шрифт). */
+  --color-code-bg: var(--code-bg);
+  --color-code-fg: var(--code-fg);
   --color-subtle: var(--bg-subtle);
   --color-selected: var(--bg-selected);
   --color-fg-muted: var(--fg-muted);
