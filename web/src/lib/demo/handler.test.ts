@@ -209,6 +209,20 @@ async function contractCases(): Promise<Record<string, Case[]>> {
       url: endpoints.getListWriteKeysUrl(app.id),
       schema: schemas.ListWriteKeysResponse,
     })),
+    getMergePreview: [
+      {
+        url: endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.notesAndroid }),
+        schema: schemas.GetMergePreviewResponse,
+      },
+      {
+        url: endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.site }),
+        schema: schemas.GetMergePreviewResponse,
+      },
+    ],
+    listAppMerges: DEMO_APPS.map((app) => ({
+      url: endpoints.getListAppMergesUrl(app.id),
+      schema: schemas.ListAppMergesResponse,
+    })),
     listApiKeys: [{ url: endpoints.getListApiKeysUrl(), schema: schemas.ListApiKeysResponse }],
     getSettings: [{ url: endpoints.getGetSettingsUrl(), schema: schemas.GetSettingsResponse }],
     getSystemStatus: [
@@ -358,12 +372,44 @@ describe("demoFetch read-only and errors", () => {
     `/v1/apps/${UNKNOWN_APP}/profiles?q=abc`,
     `/v1/apps/${UNKNOWN_APP}/integration/health`,
     `/admin/v1/apps/${UNKNOWN_APP}/write-keys`,
+    `/admin/v1/apps/${UNKNOWN_APP}/merges`,
+    `/admin/v1/apps/${UNKNOWN_APP}/merge-preview?source_app_id=${IOS}`,
+    `/admin/v1/apps/${IOS}/merge-preview?source_app_id=${UNKNOWN_APP}`,
   ])("answers 404 app_not_found for unknown app %s", async (url) => {
     const res = await demoFetch(url, undefined, NOW);
     expect(res.status).toBe(404);
     const error = await errorOf(res);
     expect(error.code).toBe("app_not_found");
     expect(error.request_id).toBe("demo");
+  });
+
+  it("previews a merge of another demo app and rejects the app itself", async () => {
+    const res = await demoFetch(
+      endpoints.getGetMergePreviewUrl(IOS, { source_app_id: DEMO_APP_IDS.notesAndroid }),
+      undefined,
+      NOW,
+    );
+    const preview = (await res.json()) as {
+      source: { id: string };
+      events: number;
+      first_day: string | null;
+      last_day: string | null;
+      write_keys: number;
+    };
+    expect(preview.source.id).toBe(DEMO_APP_IDS.notesAndroid);
+    expect(preview.events).toBeGreaterThan(0);
+    expect(preview.first_day).not.toBeNull();
+    expect(preview.last_day).toBe("2026-10-14");
+    expect(preview.write_keys).toBe(1);
+
+    for (const url of [
+      endpoints.getGetMergePreviewUrl(IOS, { source_app_id: IOS }),
+      `/admin/v1/apps/${IOS}/merge-preview`,
+    ]) {
+      const bad = await demoFetch(url, undefined, NOW);
+      expect(bad.status, url).toBe(400);
+      expect((await errorOf(bad)).details).toEqual({ field: "source_app_id" });
+    }
   });
 
   it("answers 404 profile_not_found for an unknown person", async () => {

@@ -705,3 +705,63 @@ WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&n)
 	require.True(t, t0.Add(2*time.Minute).Equal(res.dr.RequestedAt), res.dr.RequestedAt)
 	require.Equal(t, "archived", e.get(t, app.ID).Status)
 }
+
+// insertRunningMerge — слияние target←source на шаге copy, как его оставляет worker.
+func (e *env) insertRunningMerge(t *testing.T, target, source appJSON) string {
+	t.Helper()
+	var id string
+	require.NoError(t, e.pg.Pool().QueryRow(t.Context(),
+		`INSERT INTO app_merges (target_app_id, source_app_id, source_name, source_platforms, source_timezone, status, step)
+		 VALUES ($1, $2, $3, $4::app_platform[], $5, 'running', 'copy') RETURNING id`,
+		target.ID, source.ID, source.Name, source.Platforms, source.Timezone).Scan(&id))
+	return id
+}
+
+func TestAppOperationsBlockedDuringMerge(t *testing.T) {
+	e := newEnv(t)
+	target, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
+	source, _ := e.create(t, "Notes Android", "android", "UTC")
+	targetPath, sourcePath := "/admin/v1/apps/"+target.ID, "/admin/v1/apps/"+source.ID
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, sourcePath+"/archive", nil).Code)
+	mergeID := e.insertRunningMerge(t, target, source)
+	keysBefore := e.count(t, "write_keys")
+
+	for _, tc := range []struct {
+		name, method, path string
+		body               any
+	}{
+		{"delete_target", http.MethodDelete, targetPath, map[string]any{"confirm_name": "Notes iOS"}},
+		{"delete_source", http.MethodDelete, sourcePath, map[string]any{"confirm_name": "Notes Android"}},
+		{"unarchive_source", http.MethodPost, sourcePath + "/unarchive", nil},
+		{"archive_target", http.MethodPost, targetPath + "/archive", nil},
+		{"write_key_target", http.MethodPost, targetPath + "/write-keys", map[string]any{"label": "late"}},
+		{"write_key_source", http.MethodPost, sourcePath + "/write-keys", map[string]any{"label": "late"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requireAPIError(t, e.call(t, tc.method, tc.path, tc.body), http.StatusConflict, "merge_in_progress")
+		})
+	}
+
+	// Состояние не изменилось: цель активна, источник в архиве, заявок на удаление и новых ключей нет.
+	require.Equal(t, "active", e.get(t, target.ID).Status)
+	require.Equal(t, "archived", e.get(t, source.ID).Status)
+	require.Zero(t, e.count(t, "deletion_requests"))
+	require.Equal(t, keysBefore, e.count(t, "write_keys"))
+	for _, wk := range e.listWriteKeys(t, target.ID) {
+		require.Nil(t, wk.RevokedAt)
+	}
+
+	// Упавшее слияние тоже держит блокировку: его повторяют, а не обходят.
+	_, err := e.pg.Pool().Exec(t.Context(), `UPDATE app_merges SET status = 'failed', error = 'boom' WHERE id = $1`, mergeID)
+	require.NoError(t, err)
+	requireAPIError(t, e.call(t, http.MethodPost, targetPath+"/archive", nil), http.StatusConflict, "merge_in_progress")
+
+	// Завершённое слияние операции не блокирует; другие приложения не затронуты.
+	_, err = e.pg.Pool().Exec(t.Context(), `UPDATE app_merges SET status = 'done', step = 'done', finished_at = now() WHERE id = $1`, mergeID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, targetPath+"/archive", nil).Code)
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, targetPath+"/unarchive", nil).Code)
+	e.createWriteKey(t, target.ID, map[string]any{"label": "after"})
+	other, _ := e.create(t, "Site", "web", "UTC")
+	require.Equal(t, http.StatusNoContent, e.call(t, http.MethodPost, "/admin/v1/apps/"+other.ID+"/archive", nil).Code)
+}

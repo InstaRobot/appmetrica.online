@@ -37,6 +37,7 @@ var wantAPIOperationIDs = []string{
 	"listPasskeys", "beginPasskeyRegistration", "finishPasskeyRegistration", "renamePasskey", "deletePasskey",
 	"createApp", "updateApp", "deleteApp", "archiveApp", "unarchiveApp",
 	"listWriteKeys", "createWriteKey", "revokeWriteKey",
+	"getMergePreview", "listAppMerges", "createAppMerge", "retryAppMerge",
 	"listApiKeys", "createApiKey", "revokeApiKey",
 	"getSettings", "updateSettings", "sendTelegramTest", "getSystemStatus", "listDeletionRequests",
 }
@@ -141,7 +142,7 @@ func TestSpecs_LoadAndValidate(t *testing.T) {
 func TestSpecs_OperationIDs(t *testing.T) {
 	ops := operations(loadSpec(t, apiSpecPath))
 
-	require.Len(t, ops, 43)
+	require.Len(t, ops, 47)
 	require.Empty(t, duplicateIDs(ops), "operationId должны быть непустыми и уникальными")
 	require.ElementsMatch(t, wantAPIOperationIDs, operationIDs(ops))
 	require.Empty(t, internalViolations(ops), "x-internal: true ровно у путей %s", adminPrefix)
