@@ -38,7 +38,9 @@ const NAV: NavItem[] = [
 
 // Шапка дашборда (14-ux-ui-spec.md §6.1, макет «Dashboard v2»): 64 px, sticky, полупрозрачная с размытием. Список приложений для AppSwitcher
 // загружается на клиенте, чтобы после создания или архивации приложения обновляться без перезагрузки.
-export function AppHeader() {
+// demo — режим статичного датасета (lib/demo-mode.ts): документация только для владельца, поэтому
+// пункт скрыт, а меню предлагает выйти из демо вместо выхода из аккаунта.
+export function AppHeader({ demo = false }: { demo?: boolean }) {
   const pathname = usePathname();
   const current = parseAppPath(pathname);
   const { data } = useListApps();
@@ -64,24 +66,26 @@ export function AppHeader() {
         </Suspense>
         <nav aria-label="Основная навигация" className="ml-auto">
           <ul className="flex items-center gap-1">
-            {NAV.map(({ href, label, icon: Icon, active }) => {
-              const isActive = active(pathname);
-              return (
-                <li key={href}>
-                  <Link
-                    href={href as Route}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex h-9 items-center gap-2 rounded-md px-3 text-label-md text-fg-muted transition-colors hover:bg-subtle hover:text-foreground",
-                      isActive && "bg-selected text-fg-link hover:bg-selected hover:text-fg-link",
-                    )}
-                  >
-                    <Icon aria-hidden="true" className="size-5" />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
+            {NAV.filter((item) => !(demo && item.href === "/docs")).map(
+              ({ href, label, icon: Icon, active }) => {
+                const isActive = active(pathname);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href as Route}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-md px-3 text-label-md text-fg-muted transition-colors hover:bg-subtle hover:text-foreground",
+                        isActive && "bg-selected text-fg-link hover:bg-selected hover:text-fg-link",
+                      )}
+                    >
+                      <Icon aria-hidden="true" className="size-5" />
+                      {label}
+                    </Link>
+                  </li>
+                );
+              },
+            )}
           </ul>
         </nav>
         <ThemeToggle />
@@ -95,7 +99,7 @@ export function AppHeader() {
             </span>
           }
         >
-          <UserMenu />
+          <UserMenu demo={demo} />
         </Suspense>
       </div>
     </header>

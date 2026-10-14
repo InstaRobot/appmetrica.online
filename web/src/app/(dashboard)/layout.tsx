@@ -1,7 +1,10 @@
+import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { AppFooter } from "@/components/layout/app-footer";
 import { AppHeader } from "@/components/layout/app-header";
+import { DemoBanner } from "@/components/layout/demo-banner";
 import { SkipLink } from "@/components/layout/skip-link";
+import { DEMO_COOKIE } from "@/lib/demo-mode";
 import { Providers } from "./providers";
 
 // DashboardShell (14-ux-ui-spec.md §5): SkipLink → AppHeader → <main id="main"> → AppFooter.
@@ -12,12 +15,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <Providers>
       <SkipLink />
       <Suspense fallback={<div className="h-16 border-b border-border bg-header" />}>
-        <AppHeader />
+        <DashboardHeader />
       </Suspense>
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1600px] px-8 pt-6 pb-12 outline-none">
         {children}
       </main>
       <AppFooter />
     </Providers>
+  );
+}
+
+// Демо-режим определяется на сервере по cookie, чтобы шапка и плашка совпали с гидратацией.
+async function DashboardHeader() {
+  const demo = (await cookies()).get(DEMO_COOKIE)?.value === "1";
+  return (
+    <>
+      {demo && <DemoBanner />}
+      <AppHeader demo={demo} />
+    </>
   );
 }

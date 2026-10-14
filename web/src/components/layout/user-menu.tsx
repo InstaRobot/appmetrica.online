@@ -14,8 +14,9 @@ import { logout } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
 import { toUiError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 
-// Меню «⋯» шапки (14-ux-ui-spec.md §6.1): выход из дашборда.
-export function UserMenu() {
+// Меню «⋯» шапки (14-ux-ui-spec.md §6.1): выход из дашборда; в демо-режиме — выход из демо
+// (полная навигация на /demo/exit: route handler снимает cookie и уводит на лендинг).
+export function UserMenu({ demo = false }: { demo?: boolean }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const signOut = useMutation({
@@ -35,10 +36,19 @@ export function UserMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={signOut.isPending} onSelect={() => signOut.mutate()}>
-          <LogOut aria-hidden="true" />
-          Выйти
-        </DropdownMenuItem>
+        {demo ? (
+          <DropdownMenuItem asChild>
+            <a href="/demo/exit">
+              <LogOut aria-hidden="true" />
+              Выйти из демо
+            </a>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem disabled={signOut.isPending} onSelect={() => signOut.mutate()}>
+            <LogOut aria-hidden="true" />
+            Выйти
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

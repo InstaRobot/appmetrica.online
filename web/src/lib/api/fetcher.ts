@@ -6,6 +6,7 @@
 // - Успех возвращается в форме, которую ждут сгенерированные функции: `{ data, status, headers }`.
 // - Ошибка — исключение ApiError с полями конверта Error; 401 отправляет на `/login`.
 import type { ErrorErrorDetails } from "@/lib/api/gen/model";
+import { DEMO_COOKIE, hasDemoCookie } from "@/lib/demo-mode";
 
 export class ApiError extends Error {
   override readonly name = "ApiError";
@@ -29,6 +30,13 @@ const MUTATING = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const DEFAULT_API_INTERNAL_URL = "http://localhost:8080";
 
 const isBrowser = () => typeof window !== "undefined";
+
+// Демо-режим: ответы даёт статичный датасет lib/demo (отдельный чанк, грузится только в демо).
+async function inDemo(): Promise<boolean> {
+  if (isBrowser()) return hasDemoCookie(document.cookie);
+  const { cookies } = await import("next/headers");
+  return (await cookies()).get(DEMO_COOKIE)?.value === "1";
+}
 
 async function serverRequest(url: string, headers: Headers): Promise<string> {
   const { cookies } = await import("next/headers");
@@ -69,11 +77,17 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
   const headers = new Headers(init.headers);
   if (MUTATING.has(method)) headers.set("X-Requested-With", "appmetrica-web");
 
-  const target = isBrowser() ? `/api${url}` : await serverRequest(url, headers);
+  const demo = await inDemo();
 
   let res: Response;
   try {
-    res = await fetch(target, { ...init, method, headers, credentials: "include" });
+    if (demo) {
+      const { demoFetch } = await import("@/lib/demo/handler");
+      res = await demoFetch(url, { ...init, method, headers });
+    } else {
+      const target = isBrowser() ? `/api${url}` : await serverRequest(url, headers);
+      res = await fetch(target, { ...init, method, headers, credentials: "include" });
+    }
   } catch (err) {
     // Отмена запроса (смена фильтров, размонтирование) — не сетевая ошибка; TanStack Query её ожидает как есть.
     if (init.signal?.aborted) throw err;
@@ -82,7 +96,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 
   if (!res.ok) {
     const error = await toApiError(res);
-    if (res.status === 401) await redirectToLogin();
+    if (res.status === 401 && !demo) await redirectToLogin();
     throw error;
   }
 
