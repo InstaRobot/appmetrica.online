@@ -140,7 +140,11 @@ func (s *Service) Retention(ctx context.Context, p Params, q RetentionQuery) (Re
 	if q.Periods > maxPeriods {
 		return Retention{}, fmt.Errorf("%w: periods", ErrUnsupported)
 	}
+	return s.retention(ctx, p, q, query, step)
+}
 
+// retention — матрица по запросу query (qRetentionDay | qRetentionWeek) с длиной периода step дней.
+func (s *Service) retention(ctx context.Context, p Params, q RetentionQuery, query string, step int) (Retention, error) {
 	loc := p.location()
 	starts := cohortStarts(p.Period, q.Granularity)
 	if len(starts) == 0 {

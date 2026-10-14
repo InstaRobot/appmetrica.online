@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -163,27 +164,45 @@ func TestReadAPI_StorageUnavailable(t *testing.T) {
 }
 
 // api_request_duration_seconds считает операции по operationId и статусу; отказ аутентификации до операции
-// в метрику не попадает.
+// в метрику не попадает. api_clickhouse_query_duration_seconds считает отчёты, дошедшие до ClickHouse:
+// запрос с ошибкой параметров отклоняется раньше.
 func TestReadAPI_RequestMetrics(t *testing.T) {
 	e := newPortfolioEnv(t)
 	msk := testutil.ScenarioApps[0]
 
 	require.Equal(t, http.StatusOK, e.get(t, "/v1/portfolio?date=2026-10-12", e.all).Code)
 	require.Equal(t, http.StatusOK, e.get(t, "/v1/portfolio?date=2026-10-12", e.all).Code)
+	require.Equal(t, http.StatusOK, e.get(t, retentionPath(msk, "from=2026-10-01&to=2026-10-12"), e.all).Code)
 	require.Equal(t, http.StatusBadRequest, e.get(t, retentionPath(msk, "from=2026-10-12&to=2026-10-01"), e.all).Code)
 	require.Equal(t, http.StatusUnauthorized, e.get(t, "/v1/apps", "sk_unknown").Code)
 
-	families, err := e.metrics.Gather()
+	require.Equal(t, map[string]uint64{"getPortfolio/200": 2, "getRetention/200": 1, "getRetention/400": 1},
+		histogramCounts(t, e.metrics, "api_request_duration_seconds", "operation", "status"))
+	require.Equal(t, map[string]uint64{"portfolio": 2, "retention": 1},
+		histogramCounts(t, e.metrics, "api_clickhouse_query_duration_seconds", "report"))
+}
+
+// histogramCounts — число наблюдений гистограммы name по значениям меток labels (через «/»).
+func histogramCounts(t *testing.T, g prometheus.Gatherer, name string, labels ...string) map[string]uint64 {
+	t.Helper()
+	families, err := g.Gather()
 	require.NoError(t, err)
-	counts := map[string]uint64{}
+	out := map[string]uint64{}
 	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
 		for _, m := range f.GetMetric() {
-			labels := map[string]string{}
+			values := map[string]string{}
 			for _, l := range m.GetLabel() {
-				labels[l.GetName()] = l.GetValue()
+				values[l.GetName()] = l.GetValue()
 			}
-			counts[labels["operation"]+"/"+labels["status"]] = m.GetHistogram().GetSampleCount()
+			key := make([]string, len(labels))
+			for i, l := range labels {
+				key[i] = values[l]
+			}
+			out[strings.Join(key, "/")] = m.GetHistogram().GetSampleCount()
 		}
 	}
-	require.Equal(t, map[string]uint64{"getPortfolio/200": 2, "getRetention/400": 1}, counts)
+	return out
 }
