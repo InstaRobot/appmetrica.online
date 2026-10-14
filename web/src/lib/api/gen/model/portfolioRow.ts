@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.1.0
  */
 import type { AppSummary } from "./appSummary";
+import type { PlatformActive } from "./platformActive";
 import type { SparklinePoint } from "./sparklinePoint";
 
 export interface PortfolioRow {
@@ -39,4 +40,9 @@ export interface PortfolioRow {
    * @maxItems 30
    */
   sparkline: SparklinePoint[];
+  /**
+   * Активные за date по events.platform, по убыванию active, затем по порядку enum.
+   * Человек на двух платформах учитывается в обеих строках: сумма может быть больше active_date.
+   */
+  platforms: PlatformActive[];
 }

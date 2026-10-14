@@ -1,9 +1,11 @@
 package reports
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -70,7 +72,17 @@ type PortfolioRow struct {
 	RetentionD1           *float64         `json:"retention_d1"`
 	RetentionD7           *float64         `json:"retention_d7"`
 	Sparkline             []SparklinePoint `json:"sparkline"`
+	Platforms             []PlatformActive `json:"platforms"`
 }
+
+// PlatformActive — активные за дату на платформе events.platform (FR-4).
+type PlatformActive struct {
+	Platform string `json:"platform"`
+	Active   uint64 `json:"active"`
+}
+
+// platformOrder — порядок enum Platform (api.yaml, app_platform): в нём идут платформы с равным active.
+var platformOrder = []string{"ios", "android", "web", "macos", "windows", "linux", "bot", "server", "other"}
 
 // SparklinePoint — активные за день Day (YYYY-MM-DD в TZ приложения).
 type SparklinePoint struct {
@@ -95,6 +107,14 @@ FROM daily_stats FINAL
 WHERE app_id = {app_id:UUID} AND environment = {env:String} AND unit = {unit:String}
   AND day BETWEEN {closed_from:Date} AND {closed_to:Date}
 ORDER BY day`
+
+	// qPortfolioPlatforms — активные периода по events.platform: человек на двух платформах — в обеих строках.
+	qPortfolioPlatforms = `WITH ` + identity.LinksCTE + `
+SELECT e.platform AS platform, uniqExact(` + identity.PersonKeyExpr + `) AS active
+FROM events AS e
+LEFT JOIN links AS l ON l.install_id = e.install_id
+WHERE ` + eventsFilter + `
+GROUP BY platform`
 )
 
 // qPortfolioDate — метрики даты по событиям периода date − 7 … date ({date:Date}): активные за date и date − 7,
@@ -186,6 +206,9 @@ func (s *Service) portfolioRow(ctx context.Context, q PortfolioQuery, app Portfo
 	if err := s.conn.QueryRow(p.Bind(ctx), qPortfolioSessions).Scan(&row.SessionsDate); err != nil {
 		return PortfolioRow{}, fmt.Errorf("sessions: %w", err)
 	}
+	if row.Platforms, err = s.platformActive(ctx, p); err != nil {
+		return PortfolioRow{}, fmt.Errorf("platforms: %w", err)
+	}
 
 	p.Period = Period{From: today, To: today}
 	todayActive, err := s.dailyActive(ctx, p)
@@ -212,6 +235,43 @@ func (s *Service) portfolioRow(ctx context.Context, q PortfolioQuery, app Portfo
 	}
 	row.Sparkline = sparkline(from, closed, live)
 	return row, nil
+}
+
+// platformActive — активные периода p по платформам в порядке sortPlatformActive; нет событий — пустой список.
+func (s *Service) platformActive(ctx context.Context, p Params) ([]PlatformActive, error) {
+	rows, err := s.conn.Query(p.Bind(ctx), qPortfolioPlatforms)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []PlatformActive{}
+	for rows.Next() {
+		var v PlatformActive
+		if err := rows.Scan(&v.Platform, &v.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sortPlatformActive(out)
+	return out, nil
+}
+
+// sortPlatformActive — по убыванию active, затем в порядке enum; неизвестные платформы — после известных
+// по алфавиту.
+func sortPlatformActive(v []PlatformActive) {
+	rank := func(p string) int {
+		if i := slices.Index(platformOrder, p); i >= 0 {
+			return i
+		}
+		return len(platformOrder)
+	}
+	slices.SortFunc(v, func(a, b PlatformActive) int {
+		return cmp.Or(cmp.Compare(b.Active, a.Active), cmp.Compare(rank(a.Platform), rank(b.Platform)),
+			cmp.Compare(a.Platform, b.Platform))
+	})
 }
 
 // dailyActive — активные по дням периода p (YYYY-MM-DD → active).

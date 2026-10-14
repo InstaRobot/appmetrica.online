@@ -116,6 +116,10 @@ func portfolioRowModel(app sqlc.App, r reports.PortfolioRow) (gen.PortfolioRow, 
 		RetentionD1:           nullableFloat(r.RetentionD1),
 		RetentionD7:           nullableFloat(r.RetentionD7),
 		Sparkline:             make([]gen.SparklinePoint, 0, len(r.Sparkline)),
+		Platforms:             make([]gen.PlatformActive, 0, len(r.Platforms)),
+	}
+	for _, p := range r.Platforms {
+		row.Platforms = append(row.Platforms, gen.PlatformActive{Platform: p.Platform, Active: toInt64(p.Active)})
 	}
 	for _, p := range r.Sparkline {
 		d, err := parseDay(p.Day)

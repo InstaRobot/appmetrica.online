@@ -18,6 +18,7 @@ import type {
   TimeSeriesPoint,
   Unit,
 } from "@/lib/api/gen/model";
+import { Platform } from "@/lib/api/gen/model";
 import { addDays, rangeDays, todayIn } from "@/lib/period";
 import { DEMO_APPS, DEMO_OWNER_TIMEZONE } from "./apps";
 import {
@@ -101,6 +102,17 @@ export function portfolio(
       sparkline: eachDay(addDays(date, -29), date).map((d) => ({
         day: d,
         active: dayStats(scope, d).active,
+      })),
+      platforms: breakdown(
+        scope,
+        date,
+        date,
+        "platform",
+        "active",
+        Object.keys(Platform).length,
+      ).rows.map((r) => ({
+        platform: r.value,
+        active: r.count,
       })),
     });
   }

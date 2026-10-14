@@ -45,6 +45,12 @@ export const getGetPortfolioResponseMock = (
     sparkline: Array.from({ length: faker.number.int({ min: 30, max: 30 }) }, (_, i) => i + 1).map(
       () => ({ day: faker.date.past().toISOString().slice(0, 10), active: faker.number.int() }),
     ),
+    platforms: Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(
+      () => ({
+        platform: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        active: faker.number.int({ min: 0 }),
+      }),
+    ),
   })),
   ...overrideResponse,
 });

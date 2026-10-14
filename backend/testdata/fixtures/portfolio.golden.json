@@ -10,6 +10,12 @@
         "active_today": 3,
         "app_id": "5ce0a000-0000-4000-8000-000000000001",
         "new_date": 3,
+        "platforms": [
+          {
+            "active": 8,
+            "platform": "ios"
+          }
+        ],
         "retention_d1": null,
         "retention_d7": 0.5,
         "sessions_date": 10,
@@ -143,6 +149,12 @@
         "active_today": 2,
         "app_id": "5ce0a000-0000-4000-8000-000000000002",
         "new_date": 0,
+        "platforms": [
+          {
+            "active": 2,
+            "platform": "android"
+          }
+        ],
         "retention_d1": null,
         "retention_d7": null,
         "sessions_date": 3,
@@ -276,6 +288,12 @@
         "active_today": 3,
         "app_id": "5ce0a000-0000-4000-8000-000000000003",
         "new_date": 0,
+        "platforms": [
+          {
+            "active": 1,
+            "platform": "web"
+          }
+        ],
         "retention_d1": 0,
         "retention_d7": 0,
         "sessions_date": 1,
@@ -416,6 +434,12 @@
         "active_today": 3,
         "app_id": "5ce0a000-0000-4000-8000-000000000001",
         "new_date": 3,
+        "platforms": [
+          {
+            "active": 8,
+            "platform": "ios"
+          }
+        ],
         "retention_d1": null,
         "retention_d7": 0,
         "sessions_date": 10,
@@ -549,6 +573,12 @@
         "active_today": 2,
         "app_id": "5ce0a000-0000-4000-8000-000000000002",
         "new_date": 0,
+        "platforms": [
+          {
+            "active": 2,
+            "platform": "android"
+          }
+        ],
         "retention_d1": null,
         "retention_d7": null,
         "sessions_date": 3,
@@ -682,6 +712,12 @@
         "active_today": 3,
         "app_id": "5ce0a000-0000-4000-8000-000000000003",
         "new_date": 0,
+        "platforms": [
+          {
+            "active": 1,
+            "platform": "web"
+          }
+        ],
         "retention_d1": 0,
         "retention_d7": 0,
         "sessions_date": 1,

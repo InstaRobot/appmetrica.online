@@ -36,6 +36,8 @@ export const getPortfolioResponseRowsItemRetentionD7Max = 1;
 export const getPortfolioResponseRowsItemSparklineMin = 30;
 export const getPortfolioResponseRowsItemSparklineMax = 30;
 
+export const getPortfolioResponseRowsItemPlatformsItemActiveMin = 0;
+
 export const GetPortfolioResponse = zod.object({
   date: zod.iso.date(),
   environment: zod
@@ -93,6 +95,18 @@ export const GetPortfolioResponse = zod.object({
         )
         .min(getPortfolioResponseRowsItemSparklineMin)
         .max(getPortfolioResponseRowsItemSparklineMax),
+      platforms: zod
+        .array(
+          zod.object({
+            platform: zod
+              .string()
+              .describe("events.platform; неизвестные значения не отбрасываются"),
+            active: zod.int().min(getPortfolioResponseRowsItemPlatformsItemActiveMin),
+          }),
+        )
+        .describe(
+          "Активные за date по events.platform, по убыванию active, затем по порядку enum.\nЧеловек на двух платформах учитывается в обеих строках: сумма может быть больше active_date.\n",
+        ),
     }),
   ),
 });

@@ -1216,7 +1216,7 @@ components:
         active: { type: integer, format: int64 }
     PortfolioRow:
       type: object
-      required: [app, active_today, active_date, active_same_day_prev_week, active_delta_pct, new_date, sessions_date, retention_d1, retention_d7, sparkline]
+      required: [app, active_today, active_date, active_same_day_prev_week, active_delta_pct, new_date, sessions_date, retention_d1, retention_d7, sparkline, platforms]
       properties:
         app: { $ref: '#/components/schemas/AppSummary' }
         active_today: { type: integer, format: int64 }
@@ -1232,6 +1232,18 @@ components:
           minItems: 30
           maxItems: 30
           items: { $ref: '#/components/schemas/SparklinePoint' }
+        platforms:
+          type: array
+          description: |
+            Активные за date по events.platform, по убыванию active, затем по порядку enum.
+            Человек на двух платформах учитывается в обеих строках: сумма может быть больше active_date.
+          items: { $ref: '#/components/schemas/PlatformActive' }
+    PlatformActive:
+      type: object
+      required: [platform, active]
+      properties:
+        platform: { type: string, description: 'events.platform; неизвестные значения не отбрасываются' }
+        active: { type: integer, format: int64, minimum: 0 }
     Portfolio:
       type: object
       required: [date, environment, unit, rows]

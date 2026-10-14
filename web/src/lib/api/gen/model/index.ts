@@ -89,6 +89,7 @@ export * from "./passkey";
 export * from "./passkeyList";
 export * from "./passkeyTransportsItem";
 export * from "./platform";
+export * from "./platformActive";
 export * from "./platformList";
 export * from "./portfolio";
 export * from "./portfolioRow";
