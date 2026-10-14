@@ -74,6 +74,10 @@ run-api-e2e: ## api для make e2e: APP_ENV=e2e открывает /internal/e2
 run-worker: ## Запустить worker на :8082 (метрики :9093)
 	cd $(BACKEND) && METRICS_LISTEN_ADDR=:9093 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RW_PASSWORD) go run ./cmd/appmetrica worker
 
+.PHONY: run-worker-e2e
+run-worker-e2e: ## worker для make e2e: APP_ENV=e2e и MERGE_KEYS_WAIT=0 — слияние приложений без 17 минут ожидания ключей
+	$(MAKE) --no-print-directory run-worker APP_ENV=e2e MERGE_KEYS_WAIT=0
+
 .PHONY: run-web
 run-web: ## Запустить Next.js dev-сервер на :3000
 	cd $(WEB) && pnpm dev
@@ -107,8 +111,8 @@ migrate-status: ## Показать статус миграций Postgres и Cl
 	cd $(BACKEND) && go run ./cmd/appmetrica migrate status
 
 .PHONY: seed
-seed: ## Залить демо-данные: 3 приложения, write-ключ DEV_WRITE_KEY, 35 дней событий в ClickHouse
-	cd $(BACKEND) && CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RW_PASSWORD) go run ./cmd/seed --apps 3 --days 35 --daily-installs 400 --write-key $(DEV_WRITE_KEY)
+seed: ## Залить демо-данные: 4 приложения (с мультиплатформенным «Seed Notes»), write-ключ DEV_WRITE_KEY, 35 дней событий в ClickHouse
+	cd $(BACKEND) && CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD=$(CLICKHOUSE_RW_PASSWORD) go run ./cmd/seed --apps 4 --days 35 --daily-installs 400 --write-key $(DEV_WRITE_KEY)
 
 .PHONY: passkey-link
 passkey-link: ## Напечатать одноразовую ссылку регистрации passkey (15 минут)
@@ -211,7 +215,7 @@ test-web: ## Unit-тесты web (Vitest)
 	cd $(WEB) && pnpm test
 
 .PHONY: e2e
-e2e: ## E2E Playwright (требует запущенных ingest, api с APP_ENV=e2e и worker: `make dev-infra migrate-up geo-db seed` + run-ingest/run-api-e2e/run-worker)
+e2e: ## E2E Playwright (требует запущенных ingest, api с APP_ENV=e2e и worker: `make dev-infra migrate-up geo-db seed` + run-ingest/run-api-e2e/run-worker-e2e)
 	cd $(WEB) && pnpm build && pnpm e2e
 
 .PHONY: lint

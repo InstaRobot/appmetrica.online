@@ -172,10 +172,10 @@ make gen-sqlc         # если менялась схема Postgres
 ```bash
 make seed
 ```
-`backend/cmd/seed` создаёт в Postgres 3 приложения («Seed iOS» ios, «Seed Android» android, «Seed Site» web, TZ
-`Europe/Moscow`), write-ключ `DEV_WRITE_KEY` для «Seed iOS» и пишет в ClickHouse напрямую (минуя ingest и окно 7 дней)
+`backend/cmd/seed` создаёт в Postgres 4 приложения («Seed iOS» ios, «Seed Android» android, «Seed Site» web и
+«Seed Notes» ios+android+web, TZ `Europe/Moscow`), write-ключ `DEV_WRITE_KEY` для «Seed iOS» и пишет в ClickHouse напрямую (минуя ingest и окно 7 дней)
 35 дней событий: ~400 новых установок в день, сессии по кривой удержания D1≈35 %, D7≈15 %, 20 % установок с `user_id`,
-5 % установок со вторым устройством того же `user_id`. Повторный запуск идемпотентен (детерминированный seed RNG; флаг `--seed <uint64>`, по умолчанию 1). Остальные флаги — `--apps`, `--days`, `--daily-installs`, `--write-key`.
+5 % установок со вторым устройством того же `user_id` на той же платформе; у «Seed Notes» около 5 % людей с одним `user_id` на iOS и Web. Повторный запуск идемпотентен (детерминированный seed RNG; флаг `--seed <uint64>`, по умолчанию 1). Остальные флаги — `--apps`, `--days`, `--daily-installs`, `--write-key`.
 
 ---
 
@@ -285,8 +285,8 @@ cd web && pnpm test:coverage   # пороги web: lines/statements/functions 70
 ```bash
 cd web && pnpm exec playwright install chromium   # один раз
 make dev-infra migrate-up geo-db                  # инфраструктура
-make seed                                         # «Seed iOS» и др.: данные для audience.spec.ts, retention.spec.ts, realtime.spec.ts
-make run-ingest & make run-api-e2e & make run-worker &  # backend в фоне; api с APP_ENV=e2e, worker — job deletion
+make seed                                         # «Seed iOS», «Seed Notes» и др.: данные для audience, retention, realtime и multi-platform
+make run-ingest & make run-api-e2e & make run-worker-e2e &  # backend в фоне; api и worker с APP_ENV=e2e, MERGE_KEYS_WAIT=0 для слияния
 make e2e                                          # pnpm build && pnpm e2e (webServer поднимает next start)
 cd web && pnpm e2e:ui                             # интерактивный режим
 ```

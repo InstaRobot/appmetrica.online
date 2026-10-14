@@ -208,7 +208,7 @@ jobs:
           make dev-infra
           make migrate-up
           make geo-db
-          # Демо-данные для отчётных спек (audience.spec.ts открывает «Seed iOS»).
+          # Демо-данные для отчётных спек (audience.spec.ts открывает «Seed iOS», multi-platform.spec.ts — «Seed Notes»).
           make seed
 
       - name: Start ingest, api and worker
@@ -219,8 +219,9 @@ jobs:
           METRICS_LISTEN_ADDR=:9091 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica ingest > ../ingest.log 2>&1 &
           # APP_ENV=e2e открывает /internal/e2e/* для global-setup (сброс владельца и ссылка на passkey).
           APP_ENV=e2e METRICS_LISTEN_ADDR=:9092 CLICKHOUSE_USER=appmetrica_ro CLICKHOUSE_PASSWORD="$CLICKHOUSE_RO_PASSWORD" ../bin/appmetrica api > ../api.log 2>&1 &
-          # Job deletion для profiles-deletion.spec.ts («deletes user data end to end»).
-          WORKER_JOBS_ENABLED=deletion METRICS_LISTEN_ADDR=:9093 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica worker > ../worker.log 2>&1 &
+          # Job deletion для profiles-deletion.spec.ts («deletes user data end to end»), app_merge для
+          # multi-platform.spec.ts («merges two apps»): MERGE_KEYS_WAIT=0 (только APP_ENV=e2e) вместо 17 минут ожидания ключей.
+          APP_ENV=e2e MERGE_KEYS_WAIT=0 WORKER_JOBS_ENABLED=deletion,app_merge METRICS_LISTEN_ADDR=:9093 CLICKHOUSE_USER=appmetrica_rw CLICKHOUSE_PASSWORD="$CLICKHOUSE_RW_PASSWORD" ../bin/appmetrica worker > ../worker.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080/ready >/dev/null && curl -fsS http://localhost:8081/ready >/dev/null \
               && curl -fsS http://localhost:8082/health >/dev/null; then echo "backend ready"; exit 0; fi

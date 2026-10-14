@@ -61,7 +61,7 @@ cd web && pnpm biome check . && pnpm typecheck && pnpm test && cd ..
 cd backend && go test -race -count=1 -tags=integration ./... && cd ..
 ```
 
-Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e`. Цель собирает web и запускает Playwright, а сервисы должны быть уже запущены: `make dev-infra migrate-up geo-db seed` (демо-данные нужны `audience.spec.ts`, `retention.spec.ts`, `realtime.spec.ts`), затем `make run-ingest`, `make run-api-e2e` (`APP_ENV=e2e`, сбрасывает владельца и passkey в базе!) и `make run-worker` (см. `12-dev-runbook.md`).
+Если тикет затрагивает UI-флоу — дополнительно E2E: `make e2e`. Цель собирает web и запускает Playwright, а сервисы должны быть уже запущены: `make dev-infra migrate-up geo-db seed` (демо-данные нужны `audience.spec.ts`, `retention.spec.ts`, `realtime.spec.ts`, `multi-platform.spec.ts`), затем `make run-ingest`, `make run-api-e2e` (`APP_ENV=e2e`, сбрасывает владельца и passkey в базе!) и `make run-worker-e2e` (`MERGE_KEYS_WAIT=0`: слияние в `multi-platform.spec.ts` проходит за минуту, а не за 17; см. `12-dev-runbook.md`).
 
 Если тикет добавляет клиентский код или зависимость в web — дополнительно бюджет initial JS: `cd web && pnpm build && pnpm check:bundle` (≤ 250 KB gzip на страницу дашборда).
 

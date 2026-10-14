@@ -348,6 +348,7 @@ Tailscale (`.github/workflows/deploy.yml`), описан в [`deploy/dokploy/REA
 | `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST` | `100`, `1000` | Лимит на установку; лишние события отклоняются с повторяемым кодом `install_rate_limited` |
 | `KEY_CACHE_REFRESH` | `15s` | Как часто ingest перечитывает ключи записи (задержка, после которой отозванный `pk_` перестаёт работать) |
 | `WORKER_JOBS_ENABLED` | все задачи | Через запятую: `system_check`, `digest`, `close_day`, `deletion`, `session_cleanup`, `app_merge`. Без `app_merge` [слияние приложений](#платформы-и-слияние-приложений) ждёт в `pending` |
+| `MERGE_KEYS_WAIT` | — | Только e2e-стенд (`APP_ENV=e2e`, иначе ошибка запуска): сколько слияние ждёт перезагрузки write-ключей в ingest вместо 17 минут; в CI `0` |
 
 ## Первые события
 
@@ -473,7 +474,7 @@ make env          # .env из .env.example с рабочими dev-значен�
 make install      # модули Go и зависимости pnpm
 make dev-infra    # ClickHouse и Postgres в Docker
 make dev          # миграции + ingest :8081, api :8080, worker :8082, web :3000
-make seed         # демо-данные: 3 приложения, 35 дней событий
+make seed         # демо-данные: 4 приложения (одно на iOS, Android и Web), 35 дней событий
 make passkey-link # одноразовая ссылка регистрации passkey для http://localhost:3000
 ```
 

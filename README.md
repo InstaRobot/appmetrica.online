@@ -349,6 +349,7 @@ Any S3-compatible storage works (AWS S3, Hetzner Object Storage, Cloudflare R2, 
 | `RATE_INSTALL_PER_MIN`, `RATE_INSTALL_BURST` | `100`, `1000` | Per-install limit; extra events are rejected as retryable `install_rate_limited` |
 | `KEY_CACHE_REFRESH` | `15s` | How often ingest reloads write keys (delay before a revoked `pk_` key stops working) |
 | `WORKER_JOBS_ENABLED` | all jobs | Comma-separated list of `system_check`, `digest`, `close_day`, `deletion`, `session_cleanup`, `app_merge`. A list without `app_merge` leaves [app merges](#platforms-and-merging-apps) waiting in `pending` |
+| `MERGE_KEYS_WAIT` | — | E2E stand only (`APP_ENV=e2e`, rejected otherwise): how long a merge waits for ingest to reload write keys instead of 17 minutes; `0` in CI |
 
 ## Sending your first events
 
@@ -474,7 +475,7 @@ make env          # .env from .env.example with working dev values
 make install      # Go modules and pnpm dependencies
 make dev-infra    # ClickHouse and Postgres in Docker
 make dev          # migrations + ingest :8081, api :8080, worker :8082, web :3000
-make seed         # demo data: 3 apps, 35 days of events
+make seed         # demo data: 4 apps (one on iOS, Android and Web), 35 days of events
 make passkey-link # one-time passkey sign-up link for http://localhost:3000
 ```
 
