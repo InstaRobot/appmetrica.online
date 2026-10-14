@@ -1737,6 +1737,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AppList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -1753,6 +1754,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/App' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }

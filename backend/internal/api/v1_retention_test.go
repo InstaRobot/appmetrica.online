@@ -54,10 +54,9 @@ func requireRetention(t *testing.T, want reports.Retention, rec *httptest.Respon
 func TestGetRetention_HTTP(t *testing.T) {
 	e := newPortfolioEnv(t)
 	msk, nyc, tyo := testutil.ScenarioApps[0], testutil.ScenarioApps[1], testutil.ScenarioApps[2]
-	ctx := t.Context()
 
 	t.Run("day_defaults", func(t *testing.T) {
-		want, err := e.reports.Retention(ctx, audienceParams(t, msk, "2026-09-13", "2026-10-12"),
+		want, err := e.reports.Retention(t.Context(), audienceParams(t, msk, "2026-09-13", "2026-10-12"),
 			reports.RetentionQuery{Granularity: reports.GranularityDay, Periods: reports.DefaultDayPeriods})
 		require.NoError(t, err)
 		require.Len(t, want.Cohorts, 30)
@@ -68,7 +67,7 @@ func TestGetRetention_HTTP(t *testing.T) {
 		p := audienceParams(t, nyc, "2026-09-28", "2026-10-12")
 		p.Unit = identity.Installs
 		p.Filters = reports.Filters{Platform: []string{"android"}}
-		want, err := e.reports.Retention(ctx, p, reports.RetentionQuery{Granularity: reports.GranularityWeek, Periods: 4})
+		want, err := e.reports.Retention(t.Context(), p, reports.RetentionQuery{Granularity: reports.GranularityWeek, Periods: 4})
 		require.NoError(t, err)
 		require.Len(t, want.Cohorts, 3)
 		requireRetention(t, want, e.get(t, retentionPath(nyc,
@@ -78,7 +77,7 @@ func TestGetRetention_HTTP(t *testing.T) {
 	t.Run("development", func(t *testing.T) {
 		p := audienceParams(t, msk, "2026-10-01", "2026-10-12")
 		p.Env = reports.EnvDevelopment
-		want, err := e.reports.Retention(ctx, p, reports.RetentionQuery{Granularity: reports.GranularityWeek})
+		want, err := e.reports.Retention(t.Context(), p, reports.RetentionQuery{Granularity: reports.GranularityWeek})
 		require.NoError(t, err)
 		requireRetention(t, want, e.get(t, retentionPath(msk,
 			"from=2026-10-01&to=2026-10-12&cohort_granularity=week&environment=development"), e.all))

@@ -27,6 +27,8 @@ type Server struct {
 	apps          *apps.Service
 	reports       *reports.Service // nil — отчёты не подключены (WithReports)
 	settings      SettingsReader
+	ready         []httpx.ReadyCheck
+	metrics       *metrics // nil — метрики не подключены (RegisterMetrics)
 	logger        *slog.Logger
 	appEnv        config.Env
 	publicBaseURL string
@@ -46,20 +48,48 @@ func NewServer(authSvc *auth.Service, appsSvc *apps.Service, logger *slog.Logger
 	}
 }
 
-// WithReadyChecks — заглушка до реализации (T-034).
-func (s *Server) WithReadyChecks(_ ...httpx.ReadyCheck) *Server { return s }
+// WithReadyChecks задаёт проверки хранилищ для GET /ready.
+func (s *Server) WithReadyChecks(checks ...httpx.ReadyCheck) *Server {
+	s.ready = checks
+	return s
+}
+
+// ApiReady — GET /ready: 200 ready, если все проверки прошли, иначе 503 not_ready.
+//
+//nolint:revive // имя метода задаёт gen.StrictServerInterface (operationId apiReady).
+func (s *Server) ApiReady(ctx context.Context, _ gen.ApiReadyRequestObject) (gen.ApiReadyResponseObject, error) {
+	ready, results := httpx.RunReadyChecks(ctx, s.ready)
+	st := gen.ReadyStatus{Status: gen.ReadyStatusStatusReady, Checks: make(map[string]gen.ReadyStatusChecks, len(results))}
+	for name, ok := range results {
+		st.Checks[name] = gen.ReadyStatusChecksFail
+		if ok {
+			st.Checks[name] = gen.ReadyStatusChecksOk
+		}
+	}
+	if !ready {
+		st.Status = gen.ReadyStatusStatusNotReady
+		return gen.ApiReady503JSONResponse(st), nil
+	}
+	return gen.ApiReady200JSONResponse(st), nil
+}
 
 // Register подключает реализованные операции к mux. Пути и методы — как в api.yaml.
 // CSRF стоит перед разбором параметров: запрос без X-Requested-With получает 403 csrf_check_failed, а не 400.
 func (s *Server) Register(mux *http.ServeMux) {
-	si := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{withRequestMeta}, gen.StrictHTTPServerOptions{
+	si := gen.NewStrictHandlerWithOptions(s, []gen.StrictMiddlewareFunc{withRequestMeta, withOperation}, gen.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  invalidRequest,
-		ResponseErrorHandlerFunc: s.internalError,
+		ResponseErrorHandlerFunc: s.responseError,
 	})
-	w := &gen.ServerInterfaceWrapper{Handler: si, ErrorHandlerFunc: invalidRequest}
+	w := &gen.ServerInterfaceWrapper{
+		Handler:            si,
+		HandlerMiddlewares: []gen.MiddlewareFunc{s.metrics.observe},
+		ErrorHandlerFunc:   invalidRequest,
+	}
 	csrf := auth.CSRF(s.publicBaseURL, writeError)
 	limit := s.auth.LimitAttempts(writeError)
 	session := s.auth.RequireSession(writeError)
+
+	mux.HandleFunc("GET /ready", w.ApiReady)
 
 	public := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(h)) }
 	attempt := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, csrf(limit(h))) }
@@ -175,13 +205,6 @@ func paramName(err error) string {
 	default:
 		return ""
 	}
-}
-
-// internalError — обработчик вернул ошибку вместо ответа из контракта.
-func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
-	s.logger.ErrorContext(r.Context(), "request failed",
-		slog.String("request_id", httpx.RequestIDFrom(r.Context())), slog.Any("error", err))
-	httpx.WriteError(w, r, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка. Повторите запрос позже.", nil)
 }
 
 // apiError — конверт ошибки {"error":{code,message,request_id,details}}.

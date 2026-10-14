@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/auth"
@@ -124,7 +125,7 @@ func TestReadAPI_StorageUnavailable(t *testing.T) {
 	down, err := chstore.Open(t.Context(), e.env.ClickHouse)
 	require.NoError(t, err)
 	require.NoError(t, down.Close())
-	h := e.newHandler(reports.NewService(down.Conn(), e.clock), down)
+	h := e.newHandler(t, reports.NewService(down.Conn(), e.clock), down, prometheus.NewRegistry())
 	msk := testutil.ScenarioApps[0]
 
 	for _, path := range []string{
@@ -159,4 +160,30 @@ func TestReadAPI_StorageUnavailable(t *testing.T) {
 		require.JSONEq(t, `{"status":"not_ready","checks":{"postgres":"ok","clickhouse":"fail"}}`, rec.Body.String())
 		validateResponse(t, doc, req, rec)
 	})
+}
+
+// api_request_duration_seconds считает операции по operationId и статусу; отказ аутентификации до операции
+// в метрику не попадает.
+func TestReadAPI_RequestMetrics(t *testing.T) {
+	e := newPortfolioEnv(t)
+	msk := testutil.ScenarioApps[0]
+
+	require.Equal(t, http.StatusOK, e.get(t, "/v1/portfolio?date=2026-10-12", e.all).Code)
+	require.Equal(t, http.StatusOK, e.get(t, "/v1/portfolio?date=2026-10-12", e.all).Code)
+	require.Equal(t, http.StatusBadRequest, e.get(t, retentionPath(msk, "from=2026-10-12&to=2026-10-01"), e.all).Code)
+	require.Equal(t, http.StatusUnauthorized, e.get(t, "/v1/apps", "sk_unknown").Code)
+
+	families, err := e.metrics.Gather()
+	require.NoError(t, err)
+	counts := map[string]uint64{}
+	for _, f := range families {
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+			counts[labels["operation"]+"/"+labels["status"]] = m.GetHistogram().GetSampleCount()
+		}
+	}
+	require.Equal(t, map[string]uint64{"getPortfolio/200": 2, "getRetention/400": 1}, counts)
 }

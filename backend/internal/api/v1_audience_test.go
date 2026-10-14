@@ -66,10 +66,9 @@ func errorBody(t *testing.T, rec *httptest.ResponseRecorder, status int) apiErro
 func TestGetAudience_HTTP(t *testing.T) {
 	e := newPortfolioEnv(t)
 	msk, nyc, tyo := testutil.ScenarioApps[0], testutil.ScenarioApps[1], testutil.ScenarioApps[2]
-	ctx := t.Context()
 
 	t.Run("summary_defaults", func(t *testing.T) {
-		want, err := e.reports.AudienceSummary(ctx, audienceParams(t, msk, "2026-10-06", "2026-10-12"), true)
+		want, err := e.reports.AudienceSummary(t.Context(), audienceParams(t, msk, "2026-10-06", "2026-10-12"), true)
 		require.NoError(t, err)
 		require.NotNil(t, want.Compare, "compare=previous_period по умолчанию")
 		requireJSON(t, want, e.get(t, audiencePath(msk, "summary", "from=2026-10-06&to=2026-10-12"), e.all))
@@ -79,7 +78,7 @@ func TestGetAudience_HTTP(t *testing.T) {
 		p := audienceParams(t, msk, "2026-10-01", "2026-10-12")
 		p.Env, p.Unit = reports.EnvDevelopment, identity.Installs
 		p.Filters = reports.Filters{Platform: []string{"ios", "android"}, Country: []string{"RU"}}
-		want, err := e.reports.AudienceSummary(ctx, p, false)
+		want, err := e.reports.AudienceSummary(t.Context(), p, false)
 		require.NoError(t, err)
 		rec := e.get(t, audiencePath(msk, "summary",
 			"from=2026-10-01&to=2026-10-12&compare=none&environment=development&unit=installs&platform=ios&platform=android&country=RU"), e.all)
@@ -89,7 +88,7 @@ func TestGetAudience_HTTP(t *testing.T) {
 
 	t.Run("timeseries", func(t *testing.T) {
 		p := audienceParams(t, nyc, "2026-10-31", "2026-11-01")
-		want, err := e.reports.AudienceTimeseries(ctx, p, reports.TimeseriesQuery{
+		want, err := e.reports.AudienceTimeseries(t.Context(), p, reports.TimeseriesQuery{
 			Granularity: reports.GranularityHour, Metric: reports.MetricSessions,
 		})
 		require.NoError(t, err)
@@ -98,13 +97,13 @@ func TestGetAudience_HTTP(t *testing.T) {
 			"from=2026-10-31&to=2026-11-01&granularity=hour&metric=sessions&compare=none"), e.all))
 
 		p = audienceParams(t, msk, "2026-10-01", "2026-10-12")
-		want, err = e.reports.AudienceTimeseries(ctx, p, reports.TimeseriesQuery{
+		want, err = e.reports.AudienceTimeseries(t.Context(), p, reports.TimeseriesQuery{
 			Granularity: reports.GranularityDay, Metric: reports.MetricActive, Compare: true,
 		})
 		require.NoError(t, err)
 		requireJSON(t, want, e.get(t, audiencePath(msk, "timeseries", "from=2026-10-01&to=2026-10-12"), e.all))
 
-		want, err = e.reports.AudienceTimeseries(ctx, p, reports.TimeseriesQuery{
+		want, err = e.reports.AudienceTimeseries(t.Context(), p, reports.TimeseriesQuery{
 			Granularity: reports.GranularityWeek, Metric: reports.MetricAvgDuration, Compare: true,
 		})
 		require.NoError(t, err)
@@ -113,7 +112,7 @@ func TestGetAudience_HTTP(t *testing.T) {
 	})
 
 	t.Run("rolling_active", func(t *testing.T) {
-		want, err := e.reports.RollingActive(ctx, audienceParams(t, msk, "2026-09-13", "2026-10-12"))
+		want, err := e.reports.RollingActive(t.Context(), audienceParams(t, msk, "2026-09-13", "2026-10-12"))
 		require.NoError(t, err)
 		require.Len(t, want.Points, 30)
 		requireJSON(t, want, e.get(t, audiencePath(msk, "rolling-active", "from=2026-09-13&to=2026-10-12"), e.all))
@@ -121,14 +120,14 @@ func TestGetAudience_HTTP(t *testing.T) {
 
 	t.Run("breakdown", func(t *testing.T) {
 		p := audienceParams(t, msk, "2026-10-01", "2026-10-12")
-		want, err := e.reports.AudienceBreakdown(ctx, p, reports.BreakdownQuery{
+		want, err := e.reports.AudienceBreakdown(t.Context(), p, reports.BreakdownQuery{
 			Dimension: reports.DimensionCountry, Metric: reports.MetricActive, Limit: 50,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, want.Rows)
 		requireJSON(t, want, e.get(t, audiencePath(msk, "breakdown", "from=2026-10-01&to=2026-10-12&dimension=country"), e.all))
 
-		want, err = e.reports.AudienceBreakdown(ctx, p, reports.BreakdownQuery{
+		want, err = e.reports.AudienceBreakdown(t.Context(), p, reports.BreakdownQuery{
 			Dimension: reports.DimensionAppVersion, Metric: reports.MetricNew, Limit: 1,
 		})
 		require.NoError(t, err)

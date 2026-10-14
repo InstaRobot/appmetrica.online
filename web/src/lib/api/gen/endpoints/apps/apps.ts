@@ -31,6 +31,7 @@ import { apiFetch } from "../../../fetcher";
 import type {
   App,
   AppList,
+  BadRequestResponse,
   ForbiddenResponse,
   ListAppsParams,
   NotFoundResponse,
@@ -60,6 +61,11 @@ export type listAppsResponse200 = {
   status: 200;
 };
 
+export type listAppsResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
+};
+
 export type listAppsResponse401 = {
   data: UnauthenticatedResponse;
   status: 401;
@@ -79,6 +85,7 @@ export type listAppsResponseSuccess = listAppsResponse200 & {
   headers: Headers;
 };
 export type listAppsResponseError = (
+  | listAppsResponse400
   | listAppsResponse401
   | listAppsResponse403
   | listAppsResponse429
@@ -118,7 +125,7 @@ export const getListAppsQueryKey = (params?: ListAppsParams) => {
 
 export const getListAppsQueryOptions = <
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -141,11 +148,15 @@ export const getListAppsQueryOptions = <
 };
 
 export type ListAppsQueryResult = NonNullable<Awaited<ReturnType<typeof listApps>>>;
-export type ListAppsQueryError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse;
+export type ListAppsQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | RateLimitedResponse;
 
 export function useListApps<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params: undefined | ListAppsParams,
   options: {
@@ -164,7 +175,7 @@ export function useListApps<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useListApps<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -183,7 +194,7 @@ export function useListApps<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useListApps<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -195,7 +206,7 @@ export function useListApps<
 
 export function useListApps<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -215,7 +226,7 @@ export function useListApps<
 
 export const getListAppsSuspenseQueryOptions = <
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -243,13 +254,14 @@ export const getListAppsSuspenseQueryOptions = <
 
 export type ListAppsSuspenseQueryResult = NonNullable<Awaited<ReturnType<typeof listApps>>>;
 export type ListAppsSuspenseQueryError =
+  | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
   | RateLimitedResponse;
 
 export function useListAppsSuspense<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params: undefined | ListAppsParams,
   options: {
@@ -260,7 +272,7 @@ export function useListAppsSuspense<
 ): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useListAppsSuspense<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -271,7 +283,7 @@ export function useListAppsSuspense<
 ): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useListAppsSuspense<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -283,7 +295,7 @@ export function useListAppsSuspense<
 
 export function useListAppsSuspense<
   TData = Awaited<ReturnType<typeof listApps>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
+  TError = BadRequestResponse | UnauthenticatedResponse | ForbiddenResponse | RateLimitedResponse,
 >(
   params?: ListAppsParams,
   options?: {
@@ -305,6 +317,11 @@ export function useListAppsSuspense<
 export type getAppResponse200 = {
   data: App;
   status: 200;
+};
+
+export type getAppResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
 };
 
 export type getAppResponse401 = {
@@ -331,6 +348,7 @@ export type getAppResponseSuccess = getAppResponse200 & {
   headers: Headers;
 };
 export type getAppResponseError = (
+  | getAppResponse400
   | getAppResponse401
   | getAppResponse403
   | getAppResponse404
@@ -361,7 +379,12 @@ export const getGetAppQueryKey = (appId: string) => {
 
 export const getGetAppQueryOptions = <
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -388,6 +411,7 @@ export const getGetAppQueryOptions = <
 
 export type GetAppQueryResult = NonNullable<Awaited<ReturnType<typeof getApp>>>;
 export type GetAppQueryError =
+  | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
   | NotFoundResponse
@@ -395,7 +419,12 @@ export type GetAppQueryError =
 
 export function useGetApp<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options: {
@@ -414,7 +443,12 @@ export function useGetApp<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetApp<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -433,7 +467,12 @@ export function useGetApp<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetApp<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -445,7 +484,12 @@ export function useGetApp<
 
 export function useGetApp<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -465,7 +509,12 @@ export function useGetApp<
 
 export const getGetAppSuspenseQueryOptions = <
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -493,6 +542,7 @@ export const getGetAppSuspenseQueryOptions = <
 
 export type GetAppSuspenseQueryResult = NonNullable<Awaited<ReturnType<typeof getApp>>>;
 export type GetAppSuspenseQueryError =
+  | BadRequestResponse
   | UnauthenticatedResponse
   | ForbiddenResponse
   | NotFoundResponse
@@ -500,7 +550,12 @@ export type GetAppSuspenseQueryError =
 
 export function useGetAppSuspense<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options: {
@@ -511,7 +566,12 @@ export function useGetAppSuspense<
 ): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetAppSuspense<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -522,7 +582,12 @@ export function useGetAppSuspense<
 ): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetAppSuspense<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {
@@ -534,7 +599,12 @@ export function useGetAppSuspense<
 
 export function useGetAppSuspense<
   TData = Awaited<ReturnType<typeof getApp>>,
-  TError = UnauthenticatedResponse | ForbiddenResponse | NotFoundResponse | RateLimitedResponse,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse,
 >(
   appId: string,
   options?: {

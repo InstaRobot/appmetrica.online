@@ -40,5 +40,16 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// StatusWriter — writer, запоминающий статус ответа, для middleware вне httpx.
+type StatusWriter = statusWriter
+
+// NewStatusWriter оборачивает w; статус по умолчанию — 200 (обработчик ничего не записал явно).
+func NewStatusWriter(w http.ResponseWriter) *StatusWriter {
+	return &statusWriter{ResponseWriter: w, status: http.StatusOK}
+}
+
+// Status — записанный статус ответа.
+func (w *statusWriter) Status() int { return w.status }
+
 // Unwrap даёт http.ResponseController доступ к Flush и дедлайнам исходного writer.
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

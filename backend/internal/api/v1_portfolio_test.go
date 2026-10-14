@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/api"
@@ -35,6 +36,7 @@ type portfolioEnv struct {
 	auth       *auth.Service
 	clock      clock.Clock
 	cfg        config.API
+	metrics    *prometheus.Registry
 	all        string // sk_ read на все приложения
 	restricted string // sk_ read только на nyc
 }
@@ -81,21 +83,25 @@ func newPortfolioEnv(t *testing.T) *portfolioEnv {
 		env: env, reports: reports.NewService(env.CH.Conn(), clk), auth: authSvc, clock: clk, cfg: cfg,
 		all: all, restricted: restricted,
 	}
-	e.handler = e.newHandler(e.reports, env.CH)
+	e.metrics = prometheus.NewRegistry()
+	e.handler = e.newHandler(t, e.reports, env.CH, e.metrics)
 	return e
 }
 
-// newHandler — маршруты API с отчётами rep и проверкой /ready по ch, за RequestID, как в `appmetrica api`.
-func (e *portfolioEnv) newHandler(rep *reports.Service, ch *chstore.Store) http.Handler {
+// newHandler — маршруты API с отчётами rep, проверкой /ready по ch и метриками в reg, за RequestID,
+// как в `appmetrica api`.
+func (e *portfolioEnv) newHandler(t *testing.T, rep *reports.Service, ch *chstore.Store, reg prometheus.Registerer) http.Handler {
+	t.Helper()
 	logger := slog.New(slog.DiscardHandler)
-	mux := http.NewServeMux()
-	api.NewServer(e.auth, apps.NewService(e.env.PG, e.clock, logger), logger, e.cfg).
+	srv := api.NewServer(e.auth, apps.NewService(e.env.PG, e.clock, logger), logger, e.cfg).
 		WithReports(rep, e.env.PG.Queries()).
 		WithReadyChecks(
 			httpx.ReadyCheck{Name: "postgres", Check: func(ctx context.Context) error { return e.env.PG.Pool().Ping(ctx) }},
 			httpx.ReadyCheck{Name: "clickhouse", Check: ch.Ping},
-		).
-		Register(mux)
+		)
+	require.NoError(t, srv.RegisterMetrics(reg, e.clock))
+	mux := http.NewServeMux()
+	srv.Register(mux)
 	return httpx.Chain(mux, httpx.RequestID(e.clock))
 }
 
