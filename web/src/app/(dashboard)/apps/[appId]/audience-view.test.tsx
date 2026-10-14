@@ -54,13 +54,23 @@ const summary = (overrides: Partial<AudienceSummary> = {}): AudienceSummary => (
   ...overrides,
 });
 
+const points = (value: number) => [
+  { ts: "2026-10-12T00:00:00+03:00", value },
+  { ts: "2026-10-13T00:00:00+03:00", value: value + 512 },
+];
+
 const series = (params: URLSearchParams, value = 6000): TimeSeries => ({
   metric: (params.get("metric") ?? "active") as TimeSeries["metric"],
   granularity: (params.get("granularity") ?? "day") as TimeSeries["granularity"],
-  points: [
-    { ts: "2026-10-12T00:00:00+03:00", value },
-    { ts: "2026-10-13T00:00:00+03:00", value: value + 512 },
-  ],
+  points: points(value),
+  ...(params.get("split") === "platform"
+    ? {
+        splits: [
+          { platform: "ios", points: points(4000) },
+          { platform: "android", points: points(2500) },
+        ],
+      }
+    : {}),
 });
 
 const breakdown = (params: URLSearchParams): Breakdown => ({
@@ -254,6 +264,113 @@ describe("AudienceView", () => {
 
     await user.click(within(switcher).getByRole("radio", { name: "Все" }));
     await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d"));
+  });
+
+  it("switches the chart to platforms", async () => {
+    const requests = mockApi({ platforms: ["ios", "android"] });
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderView("?period=30d&compare=1", onUrlUpdate);
+    await kpis();
+
+    const mode = await screen.findByRole("radiogroup", { name: "Режим графика" });
+    expect(within(mode).getByRole("radio", { name: "Итог" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.click(within(mode).getByRole("radio", { name: "По платформам" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d&compare=1&split=platform"));
+    await waitFor(() =>
+      expect(
+        requests.timeseries.some(
+          (p) =>
+            p.get("split") === "platform" &&
+            p.get("compare") === "none" &&
+            p.get("metric") === "active" &&
+            p.get("granularity") === "day",
+        ),
+      ).toBe(true),
+    );
+    // Спарклайны KPI остаются итоговыми рядами: со split запрашивается только график.
+    expect(
+      requests.timeseries
+        .filter((p) => p.get("split") === "platform")
+        .every((p) => p.get("metric") === "active"),
+    ).toBe(true);
+
+    const legend = await screen.findByRole("list", { name: "Легенда графика" });
+    expect(
+      within(legend)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["iOS", "Android"]);
+
+    // Сравнение в режиме по платформам недоступно, его значение в URL сохраняется.
+    const compare = screen.getByRole("switch", { name: "Сравнить с предыдущим периодом" });
+    expect(compare).toHaveAttribute("aria-disabled", "true");
+    expect(compare).not.toBeChecked();
+    expect(compare).toHaveAccessibleDescription("Сравнение недоступно в режиме по платформам");
+    await user.click(compare);
+    expect(lastUrl(onUrlUpdate)).toBe("?period=30d&compare=1&split=platform");
+
+    await user.click(within(mode).getByRole("radio", { name: "Итог" }));
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?period=30d&compare=1"));
+    expect(screen.getByRole("switch", { name: "Сравнить с предыдущим периодом" })).toBeChecked();
+  });
+
+  it("offers the platform mode only for all of two or more platforms", async () => {
+    const requests = mockApi({ platforms: ["ios", "android"] });
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderView("?split=platform", onUrlUpdate);
+    await kpis();
+    await screen.findByRole("list", { name: "Легенда графика" });
+
+    // Выбор платформы выключает режим по платформам.
+    await user.click(
+      within(await screen.findByRole("radiogroup", { name: "Платформа" })).getByRole("radio", {
+        name: "iOS",
+      }),
+    );
+    await waitFor(() => expect(lastUrl(onUrlUpdate)).toBe("?platform=ios"));
+    expect(screen.queryByRole("radiogroup", { name: "Режим графика" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        requests.timeseries.some(
+          (p) => p.getAll("platform").join() === "ios" && p.get("metric") === "active",
+        ),
+      ).toBe(true),
+    );
+    expect(
+      requests.timeseries
+        .filter((p) => p.getAll("platform").join() === "ios")
+        .map((p) => p.get("split")),
+    ).not.toContain("platform");
+  });
+
+  it("ignores the platform mode for an app with one platform", async () => {
+    const requests = mockApi({ platforms: ["ios"] });
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}/audience/breakdown`, () =>
+        HttpResponse.json({
+          dimension: "platform",
+          metric: "active",
+          total: 41230,
+          rows: [{ value: "ios", count: 41230, share: 1 }],
+        } satisfies Breakdown),
+      ),
+    );
+    renderView("?split=platform");
+    await kpis();
+
+    expect(
+      await screen.findByRole("img", { name: /^График активных пользователей по дням, / }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Режим графика" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Сравнить с предыдущим периодом" }),
+    ).not.toHaveAttribute("aria-disabled");
+    expect(requests.timeseries.map((p) => p.get("split"))).not.toContain("platform");
   });
 
   it("replaces the platform from a breakdown row", async () => {

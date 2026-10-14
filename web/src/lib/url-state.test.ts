@@ -72,6 +72,7 @@ describe("url-state", () => {
       granularity: "day",
       granularityAdjusted: false,
       compare: false,
+      split: false,
       metric: "active",
       dim: "app_version",
       bmetric: "active",
@@ -84,13 +85,14 @@ describe("url-state", () => {
 
   it("reads every report parameter", () => {
     const state = resolve(
-      "?period=90d&g=month&compare=1&metric=sessions&dim=country&bmetric=new&os_name=iOS&country=RU&country=KZ&env=development&unit=installs",
+      "?period=90d&g=month&compare=1&split=platform&metric=sessions&dim=country&bmetric=new&os_name=iOS&country=RU&country=KZ&env=development&unit=installs",
     );
     expect(state).toMatchObject({
       period: { preset: "90d", from: "2026-07-16", to: TODAY },
       granularity: "month",
       granularityAdjusted: false,
       compare: true,
+      split: true,
       metric: "sessions",
       dim: "country",
       bmetric: "new",
@@ -102,10 +104,11 @@ describe("url-state", () => {
 
   it("ignores invalid values", () => {
     const state = resolve(
-      "?period=year&g=decade&metric=revenue&dim=ip&bmetric=avg_duration_ms&platform=symbian&platform=ios&country=ru&env=staging&unit=devices",
+      "?period=year&g=decade&split=os&metric=revenue&dim=ip&bmetric=avg_duration_ms&platform=symbian&platform=ios&country=ru&env=staging&unit=devices",
     );
     expect(state.period).toEqual({ preset: "7d", from: "2026-10-07", to: TODAY });
     expect(state.granularity).toBe("day");
+    expect(state.split).toBe(false);
     expect(state.metric).toBe("active");
     expect(state.dim).toBe("app_version");
     expect(state.bmetric).toBe("active");

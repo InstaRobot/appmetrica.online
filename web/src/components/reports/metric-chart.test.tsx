@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { TimeSeries } from "@/lib/api/gen/model";
-import { MetricChart } from "./metric-chart";
+import { MetricChart, type MetricChartSeries } from "./metric-chart";
 
 const day = (d: number) => `2026-10-${String(d).padStart(2, "0")}T00:00:00+03:00`;
 
@@ -12,10 +12,25 @@ const daily: TimeSeries = {
   points: [6, 7, 8, 9, 10, 11, 12].map((d) => ({ ts: day(d), value: d === 7 ? 12480 : 9000 + d })),
 };
 
+// Итог — единственная серия с рядом предыдущего периода, как в режиме «Итог» аудитории.
+const total = (ts: TimeSeries): MetricChartSeries[] => [
+  {
+    key: "total",
+    label: "Итог",
+    points: ts.points,
+    ...(ts.compare_points ? { compare: ts.compare_points } : {}),
+  },
+];
+
 describe("MetricChart", () => {
   it("describes the chart for screen readers", () => {
     render(
-      <MetricChart series={daily} granularity="day" metric="active" timezone="Europe/Moscow" />,
+      <MetricChart
+        series={total(daily)}
+        granularity="day"
+        metric="active"
+        timezone="Europe/Moscow"
+      />,
     );
     expect(
       screen.getByRole("img", {
@@ -40,7 +55,12 @@ describe("MetricChart", () => {
       ],
     };
     render(
-      <MetricChart series={series} granularity="hour" metric="sessions" timezone="Europe/Moscow" />,
+      <MetricChart
+        series={total(series)}
+        granularity="hour"
+        metric="sessions"
+        timezone="Europe/Moscow"
+      />,
     );
     expect(screen.getByRole("img")).toHaveAccessibleName(
       /^График сессий по часам, 12\sокт\s2026, максимум 1\s204 12\sокт, 01:00$/,
@@ -68,14 +88,14 @@ describe("MetricChart", () => {
     const user = userEvent.setup();
     const { rerender } = render(
       <MetricChart
-        series={{
+        series={total({
           metric: "avg_duration_ms",
           granularity: "week",
           points: [
             { ts: "2026-09-28T00:00:00+03:00", value: 252000 },
             { ts: "2026-10-05T00:00:00+03:00", value: null },
           ],
-        }}
+        })}
         granularity="week"
         metric="avg_duration_ms"
         timezone="Europe/Moscow"
@@ -89,14 +109,14 @@ describe("MetricChart", () => {
 
     rerender(
       <MetricChart
-        series={{
+        series={total({
           metric: "new",
           granularity: "month",
           points: [
             { ts: "2025-12-01T00:00:00+03:00", value: 5 },
             { ts: "2026-01-01T00:00:00+03:00", value: 7 },
           ],
-        }}
+        })}
         granularity="month"
         metric="new"
         timezone="Europe/Moscow"
@@ -110,7 +130,7 @@ describe("MetricChart", () => {
   it("shows a flat line with a note when the period has no events", () => {
     render(
       <MetricChart
-        series={{ ...daily, points: daily.points.map((p) => ({ ...p, value: 0 })) }}
+        series={total({ ...daily, points: daily.points.map((p) => ({ ...p, value: 0 })) })}
         granularity="day"
         metric="active"
         timezone="Europe/Moscow"
@@ -119,6 +139,86 @@ describe("MetricChart", () => {
     expect(screen.getByText("Нет событий за выбранный период")).toBeVisible();
     expect(screen.getByRole("img")).toHaveAccessibleName(
       /^График активных пользователей по дням, 6–12\sокт\s2026, нет событий$/,
+    );
+  });
+
+  it("renders a line per platform", async () => {
+    const user = userEvent.setup();
+    render(
+      <MetricChart
+        series={[
+          {
+            key: "ios",
+            label: "iOS",
+            points: [
+              { ts: day(6), value: 5210 },
+              { ts: day(7), value: 5400 },
+            ],
+          },
+          {
+            key: "android",
+            label: "Android",
+            points: [
+              { ts: day(6), value: 3870 },
+              { ts: day(7), value: 3605 },
+            ],
+          },
+        ]}
+        granularity="day"
+        metric="active"
+        timezone="Europe/Moscow"
+      />,
+    );
+
+    const legend = screen.getByRole("list", { name: "Легенда графика" });
+    expect(
+      within(legend)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["iOS", "Android"]);
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /^График активных пользователей по дням по платформам, 6–7\sокт\s2026, iOS: максимум 5\s400 7\sокт, Android: максимум 3\s870 6\sокт$/,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Показать таблицей" }));
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows.map((r) => r.textContent?.replace(/\u00a0/g, " "))).toEqual([
+      "ПериодiOSAndroid",
+      "6 окт5 2103 870",
+      "7 окт5 4003 605",
+    ]);
+    expect(within(rows[0] as HTMLElement).getAllByRole("columnheader")).toHaveLength(3);
+  });
+
+  it("keeps platforms without events and an empty split in the table", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <MetricChart
+        series={[
+          { key: "web", label: "Веб", points: [{ ts: day(6), value: 0 }] },
+          { key: "tvos", label: "tvos", points: [{ ts: day(6), value: null }] },
+        ]}
+        granularity="day"
+        metric="new"
+        timezone="Europe/Moscow"
+      />,
+    );
+    expect(screen.getByText("Нет событий за выбранный период")).toBeVisible();
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /^График новых пользователей по дням по платформам, 6\sокт\s2026, нет событий$/,
+    );
+    await user.click(screen.getByRole("button", { name: "Показать таблицей" }));
+    expect(screen.getAllByRole("row").map((r) => r.textContent)).toEqual([
+      "ПериодВебtvos",
+      expect.stringMatching(/^6\sокт0—$/),
+    ]);
+
+    rerender(
+      <MetricChart series={[]} granularity="day" metric="active" timezone="Europe/Moscow" />,
+    );
+    expect(screen.getByText("Нет событий за выбранный период")).toBeVisible();
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "График активных пользователей по дням, нет событий",
     );
   });
 });
