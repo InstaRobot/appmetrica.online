@@ -48,8 +48,9 @@ counts as new.
 ## Deletion on request [#deletion]
 
 The right to erasure is exercised by `install_id`, by `user_id` or for the whole app. Deleting by
-`user_id` erases the events of that user and of all installations linked to them, and doesn't require
-recalculating the daily aggregates.
+`user_id` erases the events of that user and of all installations linked to them. The past days they
+were active on are recalculated by the next day-closing run after the deletion completes; it runs
+every 15 minutes.
 
 You can start a deletion in two ways:
 

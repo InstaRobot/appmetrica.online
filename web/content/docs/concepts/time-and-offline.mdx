@@ -57,4 +57,7 @@ keep those events in the queue and send them a minute later.
 
 An event that arrives several days late lands on the day it happened. That's why the numbers for past
 days can grow slightly after the fact, within the 7-day window for late events. After that, events
-are rejected as `event_too_old`, and the day's numbers no longer change.
+are rejected as `event_too_old`, and the day's numbers no longer change, with two exceptions: changing
+the app's time zone recalculates every past day in the new zone, and deleting a person's data
+recalculates the days they were active on. Both are done by the next day-closing run, every 15
+minutes.
