@@ -27,7 +27,7 @@ import (
 
 const (
 	// prodIngestBase — адрес ingest в сниппетах документации; тест подставляет локальный сервер.
-	prodIngestBase = "https://i.appmetrica.online"
+	prodIngestBase = "https://i.analytics.example.com"
 	// devWriteKey — DEV_WRITE_KEY из .env.example: write-ключ dev-приложения из seed.
 	devWriteKey = "pk_devseedkey0000000000000000000000"
 
@@ -152,12 +152,12 @@ func TestVetGo_ReportsMDXPosition(t *testing.T) {
 
 func TestIngestCurlSnippets_Selection(t *testing.T) {
 	snips := []docscheck.Snippet{
-		{File: "a.mdx", Line: 1, Lang: "bash", Code: "curl -sS https://i.appmetrica.online/v1/events -H \"X-App-Key: $AM_PK\"\n"},
-		{File: "a.mdx", Line: 5, Lang: "sh", Code: "curl -sS \"https://i.appmetrica.online/v1/events\"\n"},
-		{File: "b.mdx", Line: 1, Lang: "bash", Code: "curl -sS https://api.appmetrica.online/v1/apps -H \"Authorization: Bearer $AM_SK\"\n"},
+		{File: "a.mdx", Line: 1, Lang: "bash", Code: "curl -sS https://i.analytics.example.com/v1/events -H \"X-App-Key: $AM_PK\"\n"},
+		{File: "a.mdx", Line: 5, Lang: "sh", Code: "curl -sS \"https://i.analytics.example.com/v1/events\"\n"},
+		{File: "b.mdx", Line: 1, Lang: "bash", Code: "curl -sS https://api.analytics.example.com/v1/apps -H \"Authorization: Bearer $AM_SK\"\n"},
 		{File: "b.mdx", Line: 9, Lang: "bash", Code: "export AM_PK=pk_…\n"},
-		{File: "c.mdx", Line: 1, Lang: "go", Code: "const endpoint = \"https://i.appmetrica.online/v1/events\"\n"},
-		{File: "c.mdx", Line: 7, Lang: "http", Code: "POST https://i.appmetrica.online/v1/events\n"},
+		{File: "c.mdx", Line: 1, Lang: "go", Code: "const endpoint = \"https://i.analytics.example.com/v1/events\"\n"},
+		{File: "c.mdx", Line: 7, Lang: "http", Code: "POST https://i.analytics.example.com/v1/events\n"},
 	}
 	require.Equal(t, []docscheck.Snippet{snips[0], snips[1]}, ingestCurlSnippets(snips))
 }
@@ -173,7 +173,7 @@ func TestCurlSnippets_CheckResponses(t *testing.T) {
 		return target.take(), out
 	}
 	batch := func(ts string) string {
-		return `curl -sS https://i.appmetrica.online/v1/events -H "Content-Type: application/json" -H "X-App-Key: $AM_PK" ` +
+		return `curl -sS https://i.analytics.example.com/v1/events -H "Content-Type: application/json" -H "X-App-Key: $AM_PK" ` +
 			`--data-binary '{"sent_at":"` + ts + `","context":{"environment":"development"},"events":[{"insert_id":"0199d6a1-7c2e-7b1a-9f00-3c1d2e4f5a61","name":"session_start","timestamp":"` + ts + `","install_id":"6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21","session_id":"0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f"}]}'` + "\n"
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -187,12 +187,12 @@ func TestCurlSnippets_CheckResponses(t *testing.T) {
 	_, err = checkResponses(reqs)
 	require.EqualError(t, err, "сниппет не отправил ни одного запроса в ingest")
 
-	reqs, _ = run(`curl -sS https://i.appmetrica.online/v1/events -H "Content-Type: application/json" -H "X-App-Key: $AM_PK" --data-binary '{"sent_at":'` + "\n")
+	reqs, _ = run(`curl -sS https://i.analytics.example.com/v1/events -H "Content-Type: application/json" -H "X-App-Key: $AM_PK" --data-binary '{"sent_at":'` + "\n")
 	_, err = checkResponses(reqs)
 	require.ErrorContains(t, err, "запрос 1: HTTP 400")
 	require.ErrorContains(t, err, "invalid_json")
 
-	reqs, _ = run(`curl -sS https://i.appmetrica.online/v1/events --data-binary '{}'` + "\n")
+	reqs, _ = run(`curl -sS https://i.analytics.example.com/v1/events --data-binary '{}'` + "\n")
 	_, err = checkResponses(reqs)
 	require.ErrorContains(t, err, "запрос 1: HTTP 415")
 
