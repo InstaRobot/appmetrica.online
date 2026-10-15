@@ -183,7 +183,7 @@ describe("LandingPage in English", () => {
     );
   });
 
-  it("shows the preview in English formats and the EU hosting in the footer", () => {
+  it("shows the preview in English formats and no hosting in the footer", () => {
     renderEnglish();
 
     const preview = screen.getByRole("figure", {
@@ -194,7 +194,8 @@ describe("LandingPage in English", () => {
     expect(preview).toHaveTextContent("▲ +4.1%");
     expect(preview).toHaveTextContent("Daily active users");
     expect(screen.getByText(/Passkey-only sign-in/)).toBeInTheDocument();
-    expect(within(screen.getByRole("contentinfo")).getByText("Hetzner FSN1, EU")).toBeVisible();
+    // Подвал — копирайт и атрибуция DB-IP (CC BY), без названия хостинга.
+    expect(screen.getByRole("contentinfo")).not.toHaveTextContent(/Hetzner|FSN1/);
   });
 });
 
