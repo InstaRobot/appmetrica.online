@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/msw";
+import { renderWithLocale } from "@/test/rtl";
 import { PasskeyButton } from "./passkey-button";
 
 vi.mock("@simplewebauthn/browser", async (importOriginal) => {
@@ -194,5 +195,40 @@ describe("PasskeyButton", () => {
     await waitFor(() => expect(startAuthentication).toHaveBeenCalled());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Войти с passkey" })).toBeEnabled();
+  });
+
+  it("speaks English", async () => {
+    vi.mocked(browserSupportsWebAuthn).mockReturnValue(false);
+    const { unmount } = renderWithLocale(<PasskeyButton />, "en");
+
+    expect(screen.getByRole("button", { name: "Sign in with a passkey" })).toBeDisabled();
+    expect(screen.getByText("Your browser doesn't support passkeys")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Where passkeys work" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^https:\/\//),
+    );
+    unmount();
+
+    vi.mocked(browserSupportsWebAuthn).mockReturnValue(true);
+    mockLoginApi();
+    vi.mocked(startAuthentication).mockRejectedValue(
+      new DOMException("cancelled", "NotAllowedError"),
+    );
+    renderWithLocale(<PasskeyButton />, "en");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't sign in. The confirmation was canceled or the key didn't match. Try again.",
+    );
+  });
+
+  it("speaks English while waiting", async () => {
+    mockLoginApi();
+    vi.mocked(startAuthentication).mockReturnValue(new Promise(() => {}));
+    renderWithLocale(<PasskeyButton />, "en");
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
+
+    expect(await screen.findByRole("button", { name: "Waiting for confirmation…" })).toBeDisabled();
   });
 });

@@ -8,6 +8,7 @@ import {
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/fetcher";
+import { en } from "@/messages/en";
 import { server } from "@/test/msw";
 import {
   deviceNameFromUserAgent,
@@ -79,7 +80,11 @@ describe("deviceNameFromUserAgent", () => {
     ["Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36", "Устройство"],
     ["", "Устройство"],
   ])("%s → %s", (ua, name) => {
-    expect(deviceNameFromUserAgent(ua)).toBe(name);
+    expect(deviceNameFromUserAgent(ua, "Устройство")).toBe(name);
+  });
+
+  it("names an unknown device with the fallback of the interface language", () => {
+    expect(deviceNameFromUserAgent("", en.auth.setup.defaultDeviceName)).toBe("Device");
   });
 });
 
@@ -93,6 +98,12 @@ describe("validateDeviceName", () => {
     expect(validateDeviceName("")).toBe("Введите название устройства");
     expect(validateDeviceName("   ")).toBe("Введите название устройства");
     expect(validateDeviceName("я".repeat(65))).toBe("Не длиннее 64 символов");
+  });
+
+  it("speaks the language of the given dictionary", () => {
+    expect(validateDeviceName("  ", en.auth.deviceName)).toBe("Enter a device name");
+    expect(validateDeviceName("я".repeat(65), en.auth.deviceName)).toBe("64 characters at most");
+    expect(validateDeviceName("MacBook", en.auth.deviceName)).toBeNull();
   });
 });
 
@@ -307,5 +318,31 @@ describe("error helpers", () => {
     ],
   ] as const)("%s: %s → %s", (flow, err, message) => {
     expect(passkeyErrorMessage(err, flow)).toBe(message);
+  });
+
+  it.each([
+    [
+      "login",
+      new DOMException("cancelled", "NotAllowedError"),
+      "Couldn't sign in. The confirmation was canceled or the key didn't match. Try again.",
+    ],
+    ["setup", new Error("x"), "Couldn't create the passkey. Try again."],
+    [
+      "login",
+      new ApiError(0, "network_error", "x", ""),
+      "No connection to the server. Check your connection.",
+    ],
+    [
+      "setup",
+      new ApiError(429, "rate_limited", "x", "r"),
+      "Too many attempts. Try again in a minute.",
+    ],
+    [
+      "login",
+      new ApiError(403, "csrf_check_failed", "x", "r"),
+      "The session is out of date. Refresh the page.",
+    ],
+  ] as const)("in English, %s: %s → %s", (flow, err, message) => {
+    expect(passkeyErrorMessage(err, flow, en.auth.passkeyErrors)).toBe(message);
   });
 });

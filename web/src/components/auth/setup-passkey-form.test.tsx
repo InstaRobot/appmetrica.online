@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/msw";
+import { renderWithLocale } from "@/test/rtl";
 import { SetupPasskeyForm } from "./setup-passkey-form";
 
 vi.mock("@simplewebauthn/browser", async (importOriginal) => {
@@ -197,5 +198,51 @@ describe("SetupPasskeyForm", () => {
 
     expect(screen.getByRole("button", { name: "Создать passkey" })).toBeDisabled();
     expect(screen.getByText("Браузер не поддерживает passkey")).toBeVisible();
+  });
+
+  it("validates and registers in English", async () => {
+    mockSetupApi();
+    renderWithLocale(<SetupPasskeyForm token="tok" defaultName="MacBook" />, "en");
+
+    const input = screen.getByLabelText(/Device name/);
+    await userEvent.clear(input);
+    await userEvent.click(screen.getByRole("button", { name: "Create passkey" }));
+    expect(input).toHaveAccessibleDescription("Enter a device name");
+
+    await userEvent.type(input, "я".repeat(65));
+    await userEvent.click(screen.getByRole("button", { name: "Create passkey" }));
+    expect(screen.getByText("64 characters at most")).toBeVisible();
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "MacBook");
+    await userEvent.click(screen.getByRole("button", { name: "Create passkey" }));
+    expect(await screen.findByText("Passkey created. Opening the dashboard…")).toBeVisible();
+  });
+
+  it("explains an expired link in English", async () => {
+    mockSetupApi({ begin: () => apiError(410, "setup_token_expired") });
+    renderWithLocale(<SetupPasskeyForm token="tok" defaultName="MacBook" />, "en");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create passkey" }));
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("This link has expired or has already been used");
+    expect(status).toHaveTextContent(
+      "Get a new one: run appmetrica admin passkey-link on the server.",
+    );
+  });
+
+  it("shows the English error when the authenticator is cancelled", async () => {
+    mockSetupApi();
+    vi.mocked(startRegistration).mockRejectedValue(
+      new DOMException("cancelled", "NotAllowedError"),
+    );
+    renderWithLocale(<SetupPasskeyForm token="tok" defaultName="MacBook" />, "en");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create passkey" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't create the passkey. Try again.",
+    );
   });
 });
