@@ -120,6 +120,52 @@ describe("LandingPage", () => {
   });
 });
 
+// Телефон (< md): одна колонка, кнопки героя на всю ширину и не ниже 44 px, пример кода прокручивается
+// внутри своего блока. Десктопные классы (lg:, xl:) сохраняют прежнюю сетку.
+describe("LandingPage on a phone", () => {
+  it("stacks the hero in one column and stretches its buttons", () => {
+    render(<LandingPage locale="ru" />);
+
+    const hero = screen.getByRole("heading", { level: 1 }).closest("section");
+    expect(hero).toHaveClass("grid-cols-1");
+    expect(hero?.className).toMatch(/\blg:grid-cols-\[/);
+
+    const main = screen.getByRole("main");
+    for (const name of ["Войти в панель", "Посмотреть демо-данные", "GitHub"]) {
+      // h-12 — 48 px: цель нажатия не меньше 44 px.
+      expect(within(main).getByRole("link", { name })).toHaveClass("h-12", "w-full", "md:w-auto");
+    }
+  });
+
+  it("lays the report areas out in one, two, then three columns", () => {
+    render(<LandingPage locale="ru" />);
+
+    const grid = screen
+      .getByRole("heading", { level: 3, name: "Портфель" })
+      .closest("article")?.parentElement;
+    expect(grid).toHaveClass("grid-cols-1", "md:grid-cols-2", "xl:grid-cols-3");
+  });
+
+  it("scrolls the curl snippet inside its own box", () => {
+    render(<LandingPage locale="ru" />);
+
+    const snippet = screen.getByLabelText("Пример запроса на приём событий");
+    expect(snippet).toHaveClass("min-w-0");
+    const pre = snippet.querySelector("pre");
+    expect(pre).toHaveClass("overflow-x-auto");
+    // Прокручиваемая область доступна с клавиатуры.
+    expect(pre).toHaveAttribute("tabindex", "0");
+  });
+
+  it("puts the admin call to action under its text with a full-width button", () => {
+    render(<LandingPage locale="ru" />);
+
+    const admin = screen.getByRole("region", { name: "Панель администратора" });
+    expect(admin).toHaveClass("flex-col", "md:flex-row");
+    expect(within(admin).getByRole("link", { name: "Войти" })).toHaveClass("w-full", "md:w-auto");
+  });
+});
+
 describe("LandingPage in English", () => {
   const renderEnglish = () => renderWithLocale(<LandingPage locale="en" />, "en");
 
