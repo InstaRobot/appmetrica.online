@@ -356,7 +356,7 @@ jqt "deploy: один деплой за раз" "$deploy_wf" '.concurrency["canc
 jqt "deploy: входы не подставляются в run (защита от инъекций)" "$deploy_wf" '[.. | objects | .run? // empty | test("\\$\\{\\{ *(inputs|github\\.event)\\.")] | any | not'
 jqt "deploy: секреты не подставляются в run" "$deploy_wf" '[.. | objects | .run? // empty | test("\\$\\{\\{ *secrets\\.")] | any | not'
 
-jqt "geo-refresh: cron 0 6 2 * *" "$geo_wf" '.on.schedule == [{"cron": "0 6 2 * *"}]'
+jqt "geo-refresh: без расписания — прод на Dokploy Compose обновляет гео-базу через GEO_MONTH" "$geo_wf" '.on | has("schedule") | not'
 jqt "geo-refresh: ручной запуск" "$geo_wf" '.on | has("workflow_dispatch")'
 jqt "geo-refresh: строгий месяц DB-IP" "$geo_wf" '[.jobs.build.steps[] | .run? // ""] | join("\n") | test("GEO_STRICT=1") and test("scripts/geo-month.sh")'
 jqt "geo-refresh: деплой через deploy.yml только ingest по тегу" "$geo_wf" '.jobs.deploy.uses == "./.github/workflows/deploy.yml" and .jobs.deploy.with.services == "ingest" and (.jobs.deploy.with.tag | test("needs.build.outputs"))'
