@@ -1,46 +1,46 @@
 ---
-title: "Read API: обзор"
-description: Те же отчёты, что в дашборде, для скриптов и выгрузок по секретному ключу sk_.
+title: "Read API: overview"
+description: The same reports as in the dashboard, for scripts and exports, with a secret sk_ key.
 ---
 
-Read API отдаёт портфель, аудиторию, retention, realtime, профили и здоровье интеграции в JSON. Это
-те же эндпоинты, которыми пользуется дашборд, поэтому цифры совпадают с экранами до последней
-единицы. Полный список параметров и схем — в разделе
+The Read API returns the portfolio, audience, retention, realtime, profiles and integration health as
+JSON. These are the same endpoints the dashboard uses, so the numbers match the screens down to the
+last unit. The full list of parameters and schemas is in the
 [API reference](/docs/api-reference/read/list-apps).
 
-## Адрес и ключ [#auth]
+## Base URL and key [#auth]
 
-Базовый адрес — API вашей установки; в примерах стоит условный `https://api.analytics.example.com`.
-Ключ `sk_…` создаётся в «Настройки → API-ключи» и показывается один раз: сервер хранит только хеш и
-префикс. Ключ передаётся в заголовке:
+The base URL is your installation's API; the examples use the placeholder
+`https://api.analytics.example.com`. An `sk_…` key is created in **Settings → API keys** and is shown
+only once: the server stores only its hash and prefix. Pass the key in a header:
 
 ```bash
 export AM_SK="sk_…"
 curl -sS https://api.analytics.example.com/v1/apps -H "Authorization: Bearer $AM_SK"
 ```
 
-Ключ в query string не принимается. Write-ключ `pk_…` для Read API не подходит.
+Keys in the query string are not accepted. A `pk_…` write key doesn't work with the Read API.
 
-| Настройка ключа | Что даёт |
+| Key setting | What it grants |
 |---|---|
-| scope `read` | Все `GET /v1/*` |
-| scope `delete` | Создание запросов на удаление данных (`POST …/deletion-requests`) |
-| Привязка к приложению | Ключ видит только одно приложение; остальные отвечают `404 app_not_found` |
+| scope `read` | All `GET /v1/*` |
+| scope `delete` | Creating data deletion requests (`POST …/deletion-requests`) |
+| Bound to an app | The key sees only one app; the others respond with `404 app_not_found` |
 
-Отозванный ключ перестаёт работать сразу.
+A revoked key stops working immediately.
 
-## Общие параметры отчётов [#params]
+## Common report parameters [#params]
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
-| `from`, `to` | Даты `YYYY-MM-DD` в часовом поясе приложения, обе включительно; не больше 366 дней |
-| `environment` | `production` (по умолчанию) или `development` |
-| `unit` | `persons` (по умолчанию) — люди, `installs` — установки, как в AppMetrica (см. [Идентичность](/docs/concepts/identity#units)) |
-| `platform`, `app_version`, `os_name`, `country` | Фильтры; параметр можно повторить: значения одного параметра объединяются через ИЛИ, разные параметры — через И |
-| `compare` | `previous_period` (по умолчанию) — добавить такой же период перед `from`; `none` — без сравнения |
-| `split` | Только `audience/timeseries`: `platform` — отдельный ряд на каждую платформу периода в `splits[]`, `compare` при этом игнорируется; `none` (по умолчанию) — один ряд |
+| `from`, `to` | `YYYY-MM-DD` dates in the app's time zone, both inclusive; at most 366 days |
+| `environment` | `production` (default) or `development` |
+| `unit` | `persons` (default) for people, `installs` for installations, as in AppMetrica (see [Identity](/docs/concepts/identity#units)) |
+| `platform`, `app_version`, `os_name`, `country` | Filters; a parameter can be repeated: values of one parameter are combined with OR, different parameters with AND |
+| `compare` | `previous_period` (default) adds a period of the same length before `from`; `none` means no comparison |
+| `split` | `audience/timeseries` only: `platform` returns a separate series for each platform of the period in `splits[]`, and `compare` is ignored; `none` (default) returns a single series |
 
-Пример — сводка аудитории за неделю для iOS-версий 3.4.0 и 3.5.0:
+Example: an audience summary for a week for iOS versions 3.4.0 and 3.5.0:
 
 ```bash
 curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/summary" \
@@ -74,46 +74,46 @@ curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/summary"
 }
 ```
 
-Доли (`retention`, `share`) — числа от 0 до 1, `delta_pct` — проценты, `null` при нулевой базе.
-Время — UTC, кроме начала корзин рядов (`ts`, `minute`): они со смещением часового пояса
-приложения, чтобы граница суток совпадала с отчётом.
+Shares (`retention`, `share`) are numbers from 0 to 1, `delta_pct` is in percent and is `null` when
+the base is zero. Times are in UTC, except for series bucket starts (`ts`, `minute`): those carry the
+app's time zone offset so that day boundaries match the report.
 
-## Эндпоинты [#endpoints]
+## Endpoints [#endpoints]
 
-| Эндпоинт | Что возвращает |
+| Endpoint | Returns |
 |---|---|
-| [`GET /v1/apps`](/docs/api-reference/read/list-apps) | Приложения; `include_archived=true` — с архивными |
-| [`GET /v1/apps/{app_id}`](/docs/api-reference/read/get-app) | Одно приложение: платформы (`platforms`; поле `platform` устарело), часовой пояс, статус |
-| [`GET /v1/portfolio`](/docs/api-reference/read/get-portfolio) | Портфель: DAU и его изменение к тому же дню прошлой недели, новые, сессии, D1, D7, тренд за 30 дней и доли активных по платформам (`platforms`, сумма долей может превышать DAU) по каждому приложению |
-| [`GET /v1/apps/{app_id}/audience/summary`](/docs/api-reference/read/get-audience-summary) | Активные, новые, сессии, длительность за период |
-| [`GET /v1/apps/{app_id}/audience/timeseries`](/docs/api-reference/read/get-audience-timeseries) | Ряд метрики по часам, дням, неделям или месяцам; `split=platform` — ряд на каждую платформу |
-| [`GET /v1/apps/{app_id}/audience/rolling-active`](/docs/api-reference/read/get-rolling-active) | DAU, WAU, MAU по дням |
-| [`GET /v1/apps/{app_id}/audience/breakdown`](/docs/api-reference/read/get-audience-breakdown) | Разбивка по платформе, ОС и её версии, версии приложения, модели и типу устройства, стране, городу, языку |
-| [`GET /v1/apps/{app_id}/retention`](/docs/api-reference/read/get-retention) | Классический retention по дневным и недельным когортам |
-| [`GET /v1/apps/{app_id}/realtime`](/docs/api-reference/read/get-realtime) | Активные сейчас и последние события; фильтр `platform` |
-| [`GET /v1/apps/{app_id}/profiles`](/docs/api-reference/read/search-profiles) | Поиск людей по точному `user_id` или `install_id` |
-| [`GET /v1/apps/{app_id}/profiles/{person_key}`](/docs/api-reference/read/get-profile) | Профиль и лента сессий |
-| [`GET /v1/apps/{app_id}/integration/health`](/docs/api-reference/read/get-integration-health) | Первое событие, принятые и отклонённые события по часам, причины отказов, версии клиентов |
-| [`POST /v1/apps/{app_id}/deletion-requests`](/docs/api-reference/read/create-deletion-request) | Удаление данных человека (scope `delete`) |
-| [`GET /v1/apps/{app_id}/deletion-requests/{request_id}`](/docs/api-reference/read/get-deletion-request) | Статус запроса на удаление (scope `read` или `delete`) |
+| [`GET /v1/apps`](/docs/api-reference/read/list-apps) | Apps; `include_archived=true` includes archived ones |
+| [`GET /v1/apps/{app_id}`](/docs/api-reference/read/get-app) | A single app: platforms (`platforms`; the `platform` field is deprecated), time zone, status |
+| [`GET /v1/portfolio`](/docs/api-reference/read/get-portfolio) | Portfolio: DAU and its change vs. the same day last week, new users, sessions, D1, D7, a 30-day trend and the shares of active users by platform (`platforms`; the shares can add up to more than DAU) for each app |
+| [`GET /v1/apps/{app_id}/audience/summary`](/docs/api-reference/read/get-audience-summary) | Active and new users, sessions, duration for the period |
+| [`GET /v1/apps/{app_id}/audience/timeseries`](/docs/api-reference/read/get-audience-timeseries) | A metric series by hour, day, week or month; `split=platform` returns a series per platform |
+| [`GET /v1/apps/{app_id}/audience/rolling-active`](/docs/api-reference/read/get-rolling-active) | DAU, WAU, MAU by day |
+| [`GET /v1/apps/{app_id}/audience/breakdown`](/docs/api-reference/read/get-audience-breakdown) | Breakdown by platform, OS and its version, app version, device model and type, country, city, language |
+| [`GET /v1/apps/{app_id}/retention`](/docs/api-reference/read/get-retention) | Classic retention by daily and weekly cohorts |
+| [`GET /v1/apps/{app_id}/realtime`](/docs/api-reference/read/get-realtime) | Active now and the latest events; `platform` filter |
+| [`GET /v1/apps/{app_id}/profiles`](/docs/api-reference/read/search-profiles) | Search for people by exact `user_id` or `install_id` |
+| [`GET /v1/apps/{app_id}/profiles/{person_key}`](/docs/api-reference/read/get-profile) | Profile and session feed |
+| [`GET /v1/apps/{app_id}/integration/health`](/docs/api-reference/read/get-integration-health) | First event, accepted and rejected events by hour, rejection reasons, client versions |
+| [`POST /v1/apps/{app_id}/deletion-requests`](/docs/api-reference/read/create-deletion-request) | Deleting a person's data (`delete` scope) |
+| [`GET /v1/apps/{app_id}/deletion-requests/{request_id}`](/docs/api-reference/read/get-deletion-request) | Status of a deletion request (`read` or `delete` scope) |
 
-Сессии в профиле листаются курсором: `sessions_limit` (до 500) и `before` — значение `next_before`
-из предыдущего ответа. Остальные списки отдаются целиком.
+Profile sessions are paginated with a cursor: `sessions_limit` (up to 500) and `before`, the
+`next_before` value from the previous response. All other lists are returned in full.
 
-## Ошибки и лимиты [#errors]
+## Errors and limits [#errors]
 
-Ошибки приходят в конверте `error` с полями `code`, `message` и `request_id`, как в ingest (см.
-[Ошибки и повторы](/docs/errors-and-retries#batch-errors)).
+Errors come in an `error` envelope with `code`, `message` and `request_id` fields, as in ingest (see
+[Errors and retries](/docs/errors-and-retries#batch-errors)).
 
-| HTTP | Код | Причина |
+| HTTP | Code | Reason |
 |---|---|---|
-| 400 | `invalid_request` | Неверный параметр; поле — в `details.field` |
-| 400 | `range_too_large` | Период больше 366 дней или больше 7 дней для `granularity=hour` |
-| 401 | `unauthenticated` | Нет ключа, ключ неверный или отозван |
-| 403 | `insufficient_scope` | У ключа нет нужного scope |
-| 404 | `app_not_found` | Приложения нет или ключ к нему не привязан |
-| 429 | `rate_limited` | Больше 10 запросов в секунду на ключ (кратковременно до 30); ответ с `Retry-After` |
-| 503 | `storage_unavailable` | Хранилище недоступно; ответ с `Retry-After` |
+| 400 | `invalid_request` | Invalid parameter; the field name is in `details.field` |
+| 400 | `range_too_large` | The period is longer than 366 days, or longer than 7 days for `granularity=hour` |
+| 401 | `unauthenticated` | No key, or the key is invalid or revoked |
+| 403 | `insufficient_scope` | The key doesn't have the required scope |
+| 404 | `app_not_found` | The app doesn't exist or the key isn't bound to it |
+| 429 | `rate_limited` | More than 10 requests per second per key (short bursts up to 30); the response includes `Retry-After` |
+| 503 | `storage_unavailable` | Storage is unavailable; the response includes `Retry-After` |
 
-В дашборде у каждого отчёта аудитории есть кнопка «Скопировать как запрос к Read API» — она кладёт в
-буфер готовую команду curl с текущим периодом и фильтрами.
+In the dashboard, every audience report has a **Copy as Read API request** button: it puts a
+ready-to-run curl command with the current period and filters on the clipboard.

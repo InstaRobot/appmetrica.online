@@ -1,36 +1,36 @@
 ---
-title: Ошибки и повторы
-description: Коды ответа ingest, причины отклонения событий и что делать клиенту в каждом случае.
+title: Errors and retries
+description: Ingest response codes, event rejection reasons and what the client should do in each case.
 ---
 
-Ingest отвечает двумя способами:
+Ingest responds in one of two ways:
 
-- **`200` с `IngestResult`** — батч обработан. Часть событий может быть отклонена (`rejected`) или
-  принята с поправкой (`warnings`). Это не ошибка батча.
-- **`4xx` или `5xx` с конвертом `error`** — батч не обработан целиком.
+- **`200` with an `IngestResult`**: the batch has been processed. Some events may be rejected
+  (`rejected`) or accepted with a correction (`warnings`). This is not a batch error.
+- **`4xx` or `5xx` with an `error` envelope**: the batch as a whole was not processed.
 
-Клиент ветвится только по HTTP-статусу и полю `code`, а не по тексту `message`.
+The client branches only on the HTTP status and the `code` field, never on the `message` text.
 
-## Что делать клиенту [#retry-policy]
+## What the client should do [#retry-policy]
 
-| Ответ | Действие |
+| Response | Action |
 |---|---|
-| `200`, `rejected` пуст | Удалить батч из очереди |
-| `200`, в `rejected` есть `retryable: false` | Удалить эти события навсегда, записать `code` в лог |
-| `200`, в `rejected` есть `retryable: true` | Оставить эти события в очереди и отправить следующим батчем не раньше чем через 60 с |
-| `400`, `413`, `415` | Не повторять: удалить батч, записать ошибку в лог — это баг клиента |
-| `401`, `403` | Не повторять и не очищать очередь: остановить отправку до обновления приложения или ключа |
-| `429`, `503` | Повторить весь батч через `Retry-After` секунд |
-| `500`, сетевая ошибка, таймаут | Повторить весь батч: задержка 1 с, затем ×2, максимум 300 с, разброс ±20 % |
-| События старше 7 дней в очереди | Удалить до отправки |
+| `200`, `rejected` is empty | Remove the batch from the queue |
+| `200`, `rejected` has `retryable: false` | Drop those events for good and log the `code` |
+| `200`, `rejected` has `retryable: true` | Keep those events in the queue and send them with the next batch no sooner than 60 s later |
+| `400`, `413`, `415` | Don't retry: drop the batch and log the error, it's a client bug |
+| `401`, `403` | Don't retry and don't clear the queue: stop sending until the app or the key is updated |
+| `429`, `503` | Retry the whole batch after `Retry-After` seconds |
+| `500`, network error, timeout | Retry the whole batch: 1 s delay, then ×2, up to 300 s, ±20% jitter |
+| Events older than 7 days in the queue | Drop them before sending |
 
-Повтор того же батча безопасен: дубликаты отсекаются по `insert_id`, а метрики считаются по
-уникальным идентификаторам. При каждом повторе выставляйте новый `sent_at`. Готовые повторы — в
-рецептах [curl](/docs/recipes/curl#retry) (скрипт на bash) и [Go](/docs/recipes/go#go-client).
+Retrying the same batch is safe: duplicates are filtered out by `insert_id`, and metrics are
+calculated over unique identifiers. Set a new `sent_at` on every retry. Ready-made retry logic is
+in the [curl](/docs/recipes/curl#retry) (a bash script) and [Go](/docs/recipes/go#go-client) recipes.
 
-## Частичный успех [#partial-success]
+## Partial success [#partial-success]
 
-Батч из двух событий, где у второго `user_id` похож на телефон:
+A batch of two events where the second event's `user_id` looks like a phone number:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -62,7 +62,7 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-Первое событие принято, второе отклонено:
+The first event is accepted, the second one is rejected:
 
 ```json
 {
@@ -82,38 +82,38 @@ JSON
 }
 ```
 
-`index` — позиция события в массиве `events`, `field` — путь к полю с ошибкой.
+`index` is the event's position in the `events` array, and `field` is the path to the invalid field.
 
-## Отклонённые события [#rejections]
+## Rejected events [#rejections]
 
-| Код | Причина | Повторять |
+| Code | Reason | Retry |
 |---|---|---|
-| `missing_field` | Нет обязательного поля: `insert_id`, `name`, `timestamp`, `install_id`, `session_id` | Нет |
-| `invalid_field` | Поле неверного формата: не UUID, нулевой UUID, время без смещения, `user_id` длиннее 128 символов, `duration_ms` вне 0..86 400 000, недопустимое значение в `context` (`platform`, `device_type`, длина строк) | Нет |
-| `unknown_event_name` | `name` не `session_start` и не `session_end` | Нет |
-| `duration_required` | У `session_end` нет `duration_ms` | Нет |
-| `event_too_old` | После коррекции часов событие старше 7 дней | Нет |
-| `user_id_looks_like_pii` | `user_id` похож на email или телефон | Нет |
-| `install_rate_limited` | С этой установки больше 1000 событий сразу или 100 в минуту | Да, через 60 с |
+| `missing_field` | A required field is missing: `insert_id`, `name`, `timestamp`, `install_id`, `session_id` | No |
+| `invalid_field` | A field has an invalid format: not a UUID, the nil UUID, a time without an offset, a `user_id` longer than 128 characters, `duration_ms` outside 0..86,400,000, an invalid value in `context` (`platform`, `device_type`, string length) | No |
+| `unknown_event_name` | `name` is neither `session_start` nor `session_end` | No |
+| `duration_required` | A `session_end` has no `duration_ms` | No |
+| `event_too_old` | After clock correction, the event is older than 7 days | No |
+| `user_id_looks_like_pii` | `user_id` looks like an email address or a phone number | No |
+| `install_rate_limited` | More than 1,000 events at once or 100 per minute from this installation | Yes, after 60 s |
 
-Отклонённые события видны на вкладке «Интеграция» с кодом и версией приложения 7 дней, затем
-удаляются.
+Rejected events are shown on the **Integration** tab, with their code and app version, for 7 days
+and are deleted after that.
 
-## Предупреждения [#warnings]
+## Warnings [#warnings]
 
-Событие с предупреждением принято и учтено в `accepted`.
+An event with a warning is accepted and counted in `accepted`.
 
-| Код | Что произошло |
+| Code | What happened |
 |---|---|
-| `timestamp_in_future_clamped` | Время события больше чем на 10 минут в будущем; заменено временем приёма |
-| `duplicate_insert_id_in_batch` | `insert_id` повторяется внутри батча; учтено первое событие, повтор пропущен |
-| `geo_ip_invalid` | `context.ip` не является IP-адресом; страна и город не определены |
-| `platform_missing` | Платформа не определена: нет `context.platform`, у ключа нет платформы, а у приложения их несколько; событие записано с платформой `other` |
+| `timestamp_in_future_clamped` | The event time is more than 10 minutes in the future; it was replaced with the time of receipt |
+| `duplicate_insert_id_in_batch` | The `insert_id` repeats within the batch; the first event is counted, the repeat is skipped |
+| `geo_ip_invalid` | `context.ip` is not an IP address; country and city are not determined |
+| `platform_missing` | The platform couldn't be determined: there is no `context.platform`, the key has no platform, and the app has several; the event is stored with the platform `other` |
 
-`platform_missing` приходит по одному на событие. Чтобы его не было, передавайте `context.platform` или
-отправляйте события ключом нужной платформы — см. [Платформа события](/docs#platform).
+`platform_missing` comes once per event. To avoid it, pass `context.platform` or send events with the
+key of the right platform; see [Event platform](/docs#platform).
 
-## Ошибки батча [#batch-errors]
+## Batch errors [#batch-errors]
 
 ```json
 {
@@ -126,21 +126,22 @@ JSON
 }
 ```
 
-`request_id` совпадает с заголовком ответа `X-Request-Id`. По нему запрос находится в логах сервера.
+`request_id` matches the `X-Request-Id` response header. Use it to find the request in the server
+logs.
 
-| HTTP | Код | Причина |
+| HTTP | Code | Reason |
 |---|---|---|
-| 400 | `invalid_json` | Тело не JSON |
-| 400 | `invalid_batch` | Нет `sent_at`, в `events` не от 1 до 500 событий, `app_key` не совпадает с `X-App-Key` |
-| 400 | `unsupported_content_encoding` | `Content-Encoding` не `gzip` и не `identity` или передан несколько раз |
-| 401 | `missing_app_key` | Нет ни `X-App-Key`, ни `app_key` |
-| 401 | `invalid_app_key` | Ключ не найден или отозван. Отзыв действует не позже чем через 15 с |
-| 403 | `app_archived` | Приложение в архиве, приём остановлен |
-| 413 | `payload_too_large` | Тело больше 1 048 576 байт после распаковки gzip — разбейте батч |
-| 415 | `unsupported_media_type` | `Content-Type` не `application/json` и не `text/plain` |
-| 429 | `app_rate_limited` | Больше 2000 событий в секунду на приложение; ответ с `Retry-After` |
-| 500 | `internal_error` | Ошибка сервера; повторите батч |
-| 503 | `storage_unavailable` | Хранилище недоступно; повторите через `Retry-After` |
+| 400 | `invalid_json` | The body is not JSON |
+| 400 | `invalid_batch` | No `sent_at`, `events` doesn't hold 1 to 500 events, `app_key` doesn't match `X-App-Key` |
+| 400 | `unsupported_content_encoding` | `Content-Encoding` is neither `gzip` nor `identity`, or is sent more than once |
+| 401 | `missing_app_key` | Neither `X-App-Key` nor `app_key` is present |
+| 401 | `invalid_app_key` | The key wasn't found or has been revoked. Revocation takes effect within 15 s |
+| 403 | `app_archived` | The app is archived; ingestion is stopped |
+| 413 | `payload_too_large` | The body is larger than 1,048,576 bytes after gzip decompression; split the batch |
+| 415 | `unsupported_media_type` | `Content-Type` is neither `application/json` nor `text/plain` |
+| 429 | `app_rate_limited` | More than 2,000 events per second per app; the response includes `Retry-After` |
+| 500 | `internal_error` | Server error; retry the batch |
+| 503 | `storage_unavailable` | Storage is unavailable; retry after `Retry-After` |
 
-Ответ `200` приходит только после того, как ClickHouse подтвердил запись. Если подтверждения нет за
-5 секунд, весь батч получает `503`, и клиент повторяет его целиком.
+A `200` response arrives only after ClickHouse has confirmed the write. If there is no confirmation
+within 5 seconds, the whole batch gets a `503`, and the client retries it in full.

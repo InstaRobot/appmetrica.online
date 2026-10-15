@@ -1,60 +1,60 @@
 ---
-title: Приватность и GDPR
-description: Какие данные хранятся, сколько и как удалить данные пользователя по запросу.
+title: Privacy and GDPR
+description: What data is stored, for how long, and how to delete a user's data on request.
 ---
 
-appmetrica.online собирает минимум данных, нужный для отчётов: технический контекст сессии и
-непрозрачные идентификаторы. Ни рекламных идентификаторов, ни IP-адресов, ни персональных данных в
-явном виде система не хранит.
+appmetrica.online collects the minimum data needed for reports: the technical context of a session
+and opaque identifiers. The system stores no advertising identifiers, no IP addresses and no personal
+data in plain form.
 
-## Что хранится [#stored]
+## What is stored [#stored]
 
-| Данные | Пример | Зачем |
+| Data | Example | Purpose |
 |---|---|---|
-| `install_id` | `6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21` | Установка приложения |
-| `user_id` | `a3f9c2d1-77b4-…` | Склейка установок одного аккаунта |
-| Время события, `session_id`, `duration_ms` | — | Сессии и их длительность |
-| Платформа, ОС и её версия, версия и сборка приложения, модель и тип устройства, язык | `iOS 26.0.1`, `iPhone17,3`, `ru-RU` | Разбивки отчётов |
-| Страна и город | `RU`, `Москва` | Разбивка по географии |
-| Окружение | `production` | Отделение тестовых событий |
+| `install_id` | `6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21` | App installation |
+| `user_id` | `a3f9c2d1-77b4-…` | Merging the installations of one account |
+| Event time, `session_id`, `duration_ms` | — | Sessions and their duration |
+| Platform, OS and its version, app version and build, device model and type, language | `iOS 26.0.1`, `iPhone17,3`, `ru-RU` | Report breakdowns |
+| Country and city | `RU`, `Moscow` | Breakdown by geography |
+| Environment | `production` | Separating test events |
 
-Данные лежат в собственных ClickHouse и Postgres на выделенном сервере в ЕС (Hetzner, Германия) и
-не передаются третьим лицам.
+The data lives in self-managed ClickHouse and Postgres on a dedicated server in the EU (Hetzner,
+Germany) and is not shared with third parties.
 
-## Чего нет [#not-stored]
+## What is not stored [#not-stored]
 
-- **IP-адреса.** IP используется только в памяти, чтобы определить страну и город, и сразу
-  отбрасывается. Его нет в базах, логах, метриках и отклонённых событиях.
-- **Email и телефоны.** Сервер отклоняет `user_id`, похожий на email или телефон, с кодом
-  `user_id_looks_like_pii`.
-- **Рекламные идентификаторы** (IDFA, GAID), отпечатки браузера, cookie сторонних доменов.
+- **IP addresses.** The IP is used only in memory to determine the country and city and is discarded
+  right away. It is not in the databases, logs, metrics or rejected events.
+- **Email addresses and phone numbers.** The server rejects a `user_id` that looks like an email
+  address or a phone number with the code `user_id_looks_like_pii`.
+- **Advertising identifiers** (IDFA, GAID), browser fingerprints, third-party cookies.
 
-Ответственность клиента — не передавать в `user_id` публичные идентификаторы, по которым легко найти
-человека. Внутренний ID аккаунта подходит, Telegram ID — только в виде HMAC (см.
-[Боты и бэкенды](/docs/recipes/bots-and-backends#identity)).
+It's the client's responsibility not to put public identifiers that make a person easy to find into
+`user_id`. An internal account ID is fine; a Telegram ID only as an HMAC (see
+[Bots and backends](/docs/recipes/bots-and-backends#identity)).
 
-## Сроки хранения [#retention]
+## Retention periods [#retention]
 
-| Данные | Срок |
+| Data | Period |
 |---|---|
-| События | 25 месяцев |
-| Первое появление установки и пользователя, связки установок с аккаунтами | 25 месяцев с последней активности |
-| Отклонённые события (вкладка «Интеграция») | 7 дней |
-| Дневные агрегаты отчётов | Без срока: в них нет идентификаторов |
+| Events | 25 months |
+| First-seen dates of installations and users, links between installations and accounts | 25 months after the last activity |
+| Rejected events (**Integration** tab) | 7 days |
+| Daily report aggregates | Indefinitely: they contain no identifiers |
 
-Если установка молчит 25 месяцев, её история удаляется целиком, и вернувшийся пользователь
-считается новым.
+If an installation stays silent for 25 months, its entire history is deleted, and a returning user
+counts as new.
 
-## Удаление по запросу [#deletion]
+## Deletion on request [#deletion]
 
-Право на удаление выполняется по `install_id`, по `user_id` или для всего приложения. Удаление по
-`user_id` стирает события этого пользователя и всех установок, привязанных к нему, а дневные
-агрегаты пересчитывать не требует.
+The right to erasure is exercised by `install_id`, by `user_id` or for the whole app. Deleting by
+`user_id` erases the events of that user and of all installations linked to them, and doesn't require
+recalculating the daily aggregates.
 
-Запустить удаление можно двумя способами:
+You can start a deletion in two ways:
 
-- в дашборде — из профиля человека, кнопка «Удалить данные»;
-- через Read API ключом со scope `delete`:
+- in the dashboard: from the person's profile, with the **Delete data** button;
+- through the Read API, with a key that has the `delete` scope:
 
 ```bash
 curl -sS -X POST "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests" \
@@ -63,39 +63,39 @@ curl -sS -X POST "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-req
   -d '{"subject_type": "user", "subject_value": "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90"}'
 ```
 
-Ответ `202` возвращает запрос со статусом `pending`. Удаление выполняется в фоне. Повтор с теми же
-параметрами, пока запрос не завершён, вернёт тот же запрос. Статус проверяется так:
+A `202` response returns the request with the `pending` status. Deletion runs in the background.
+Repeating the call with the same parameters before the request completes returns the same request.
+Check the status like this:
 
 ```bash
 curl -sS "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests/$REQUEST_ID" \
   -H "Authorization: Bearer $AM_SK"
 ```
 
-Статус `done` означает, что данные удалены из всех таблиц. Если удаление не удалось после нескольких
-попыток, статус станет `failed`, а владелец получит уведомление в Telegram.
+The `done` status means the data has been deleted from all tables. If deletion still fails after
+several attempts, the status becomes `failed`, and the owner gets a notification in Telegram.
 
-## Слияние приложений [#merge]
+## Merging apps [#merge]
 
-Если одно приложение подключено как два — например, iOS и Android отдельно, — их можно объединить:
-«Настройки → Опасная зона → Объединить…» в приложении, которое останется. События, отклонённые события
-и ключи записи переносятся в него, приложение-источник удаляется, а люди с одним `user_id` в двух
-приложениях становятся одним человеком. Ключи источника продолжают работать, поэтому выпущенные версии
-приложений обновлять не нужно.
+If one app is connected as two (for example, iOS and Android separately), you can merge them:
+**Settings → Danger zone → Merge…** in the app that stays. Events, rejected events and write keys are
+moved into it, the source app is deleted, and people with the same `user_id` in both apps become one
+person. The source app's keys keep working, so released app versions don't need an update.
 
-Слияние не меняет состав данных: переносятся только события владельца между его же приложениями, IP
-по-прежнему не хранится. Перенесённые события сохраняют свою дату, поэтому срок хранения 25 месяцев
-считается от неё, а не от даты слияния.
+A merge doesn't change what data is stored: only the owner's events move between the owner's own
+apps, and IPs are still not stored. Moved events keep their date, so the 25-month retention period
+counts from that date, not from the date of the merge.
 
-Пока по любому из двух приложений выполняется удаление по запросу, начать слияние нельзя: сначала
-дождитесь статуса `done`. После слияния удаление данных пользователя запрашивается в приложении, которое
-осталось. Слияние не отменяется — перед ним стоит сделать бэкап.
+While a deletion request is running for either of the two apps, a merge can't be started: wait for
+the `done` status first. After a merge, request user data deletion in the app that stayed. A merge
+can't be undone, so make a backup before you start.
 
-## Выгрузка данных пользователя [#export]
+## Exporting user data [#export]
 
-Для запроса на доступ к данным откройте профиль человека в дашборде или запросите
-[`getProfile`](/docs/api-reference/read/get-profile) через Read API: там первое и последнее
-появление, установки, устройства и лента сессий.
+For a data access request, open the person's profile in the dashboard or call
+[`getProfile`](/docs/api-reference/read/get-profile) through the Read API: it shows the first-seen
+and last-seen dates, installations, devices and the session feed.
 
-## Атрибуция [#attribution]
+## Attribution [#attribution]
 
-Геолокация по IP — база [IP Geolocation by DB-IP](https://db-ip.com) (лицензия CC BY 4.0).
+IP geolocation uses the [IP Geolocation by DB-IP](https://db-ip.com) database (CC BY 4.0 license).
