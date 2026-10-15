@@ -1,62 +1,45 @@
 import { ArrowRight, ChartColumn } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { richText } from "@/components/common/rich-text";
 import { PublicHeader } from "@/components/layout/public-header";
+import type { Locale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
+import { getMessages, type Messages } from "@/messages";
 import { HeroPreview } from "./hero-preview";
 
-// S-00 Лендинг (макет «Dashboard v2», решение владельца от 2026-10-14): публичная страница на «/».
-// Серверный компонент без данных: клиентский код — только переключатель темы.
+// S-00 Лендинг (макет «Dashboard v2», решение владельца от 2026-10-14): публичная страница на «/» и «/ru».
+// Серверный компонент без данных: язык приходит из адреса, клиентский код — только переключатели темы и
+// языка в шапке.
 export const GITHUB_URL = "https://github.com/InstaRobot/appmetrica.online";
 
 // Маршрут /demo — route handler (включает демо-режим), typedRoutes его не перечисляет.
 const DEMO = "/demo" as Route;
 
-const FACTS = [
-  { value: "≤ 500", label: "событий в батче" },
-  { value: "7 дней", label: "окно офлайн-досыла" },
-  { value: "25 мес", label: "хранение сырых событий" },
-  { value: "≤ 500 мс", label: "P99 приёма событий" },
-] as const;
+type LandingMessages = Messages["landing"];
+
+const FACTS = ["batch", "offline", "storage", "latency"] as const satisfies readonly Exclude<
+  keyof LandingMessages["facts"],
+  "label"
+>[];
 
 const FEATURES = [
-  {
-    icon: "{ }",
-    title: "Приём событий по HTTP",
-    text: "POST /v1/events: батч до 500 событий, идемпотентность по insert_id, ответ 200 только после записи в ClickHouse.",
-  },
-  {
-    icon: "Σ",
-    title: "Портфель",
-    text: "Все приложения на одном экране: DAU, новые, сессии, D1/D7 и тренд за 30 дней. Утренний дайджест в Telegram.",
-  },
-  {
-    icon: "◔",
-    title: "Аудитория",
-    text: "DAU/WAU/MAU, новые, сессии и длительность. Разбивки по версии, ОС, устройству, стране и языку, сравнение периодов.",
-  },
-  {
-    icon: "D7",
-    title: "Retention",
-    text: "Классические когорты D0–D30 и W0–W12 с определениями как в AppMetrica. Heatmap и средняя кривая.",
-  },
-  {
-    icon: "●",
-    title: "Realtime",
-    text: "Активные сейчас, старты сессий по минутам и лента последних событий с переходом в профиль.",
-  },
-  {
-    icon: "⌫",
-    title: "GDPR и приватность",
-    text: "IP не хранится — только страна и город. Удаление данных человека по запросу, журнал удалений, PII-guard для user_id.",
-  },
-] as const;
+  { key: "ingest", icon: "{ }" },
+  { key: "portfolio", icon: "Σ" },
+  { key: "audience", icon: "◔" },
+  { key: "retention", icon: "D7" },
+  { key: "realtime", icon: "●" },
+  { key: "privacy", icon: "⌫" },
+] as const satisfies readonly {
+  key: Exclude<keyof LandingMessages["features"], "title" | "lead">;
+  icon: string;
+}[];
 
 const STEPS = [
-  "Создайте приложение: название, платформа, часовой пояс. Write-ключ pk_… выпускается автоматически.",
-  "Отправьте первый батч с session_start — curl, Swift, Kotlin, JavaScript или Go.",
-  "Статус «Ждём первое событие» сменится на «Получено», и приложение появится в портфеле.",
-] as const;
+  "create",
+  "send",
+  "done",
+] as const satisfies readonly (keyof LandingMessages["integration"]["steps"])[];
 
 // Пример на лендинге — с условным доменом (analytics.example.com, как в README), а не с адресом этой
 // установки: лендинг показывает формат запроса, свой адрес ingest владелец видит во вкладке «Интеграция».
@@ -83,7 +66,8 @@ const PRIMARY =
   "bg-linear-to-b from-(--primary-top) to-primary text-primary-foreground shadow-(--shadow-primary) hover:from-(--primary-hover) hover:to-(--primary-hover)";
 const OUTLINE = "border border-(--border-strong) bg-card text-foreground hover:bg-subtle";
 
-export function LandingPage() {
+export function LandingPage({ locale }: { locale: Locale }) {
+  const m = getMessages(locale).landing;
   return (
     <div className="flex min-h-screen flex-col">
       <PublicHeader className="mx-auto max-w-[1200px]" />
@@ -93,25 +77,24 @@ export function LandingPage() {
           <div className="flex flex-col gap-6">
             <span className="inline-flex h-7 items-center gap-2 self-start rounded-full bg-selected px-3 text-xs font-semibold text-fg-link">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-success-500" />
-              Данные в ЕС · без SDK · без семплирования
+              {m.hero.badge}
             </span>
             <h1 className="text-[52px] leading-[56px] font-extrabold tracking-[-0.035em] text-balance">
-              Аналитика ваших приложений — по одному HTTP-запросу
+              {m.hero.title}
             </h1>
             <p className="max-w-[520px] text-lg leading-7 text-fg-muted text-pretty">
-              Портфель всех приложений, аудитория, retention и realtime — считаются по людям, а не
-              по устройствам. Одно событие{" "}
-              <code className="font-mono text-base">session_start</code> — и приложение уже в
-              отчётах.
+              {richText(m.hero.lead, {
+                event: <code className="font-mono text-base">session_start</code>,
+              })}
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/login" className={cn(BIG_BUTTON, PRIMARY)}>
-                Войти в панель
+                {m.hero.signIn}
                 <ArrowRight aria-hidden="true" className="size-4" />
               </Link>
               <Link href={DEMO} prefetch={false} className={cn(BIG_BUTTON, OUTLINE)}>
                 <ChartColumn aria-hidden="true" className="size-4" />
-                Посмотреть демо-данные
+                {m.hero.demo}
               </Link>
               <a
                 href={GITHUB_URL}
@@ -123,16 +106,18 @@ export function LandingPage() {
                 GitHub
               </a>
             </div>
-            <ul aria-label="Ключевые ограничения" className="flex flex-wrap gap-8 pt-2">
-              {FACTS.map((f) => (
-                <li key={f.label} className="flex flex-col gap-0.5">
-                  <span className="text-2xl font-extrabold tracking-[-0.03em]">{f.value}</span>
-                  <span className="text-caption text-fg-muted">{f.label}</span>
+            <ul aria-label={m.facts.label} className="flex flex-wrap gap-8 pt-2">
+              {FACTS.map((key) => (
+                <li key={key} className="flex flex-col gap-0.5">
+                  <span className="text-2xl font-extrabold tracking-[-0.03em]">
+                    {m.facts[key].value}
+                  </span>
+                  <span className="text-caption text-fg-muted">{m.facts[key].label}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <HeroPreview />
+          <HeroPreview locale={locale} />
         </section>
 
         <section aria-labelledby="landing-features" className="flex flex-col gap-6">
@@ -141,17 +126,14 @@ export function LandingPage() {
               id="landing-features"
               className="text-[32px] leading-[38px] font-extrabold tracking-[-0.03em]"
             >
-              Что внутри панели
+              {m.features.title}
             </h2>
-            <p className="text-base leading-6 text-fg-muted">
-              Фиксированный набор отчётов, которые нужны каждое утро. Без конструктора и лишних
-              настроек.
-            </p>
+            <p className="text-base leading-6 text-fg-muted">{m.features.lead}</p>
           </div>
           <div className="grid grid-cols-3 gap-4">
             {FEATURES.map((f) => (
               <article
-                key={f.title}
+                key={f.key}
                 className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)"
               >
                 <span
@@ -160,8 +142,8 @@ export function LandingPage() {
                 >
                   {f.icon}
                 </span>
-                <h3 className="text-heading-3">{f.title}</h3>
-                <p className="text-body-md text-fg-muted">{f.text}</p>
+                <h3 className="text-heading-3">{m.features[f.key].title}</h3>
+                <p className="text-body-md text-fg-muted">{m.features[f.key].text}</p>
               </article>
             ))}
           </div>
@@ -177,28 +159,25 @@ export function LandingPage() {
                 id="landing-integration"
                 className="text-[32px] leading-[38px] font-extrabold tracking-[-0.03em]"
               >
-                Интеграция за пять минут
+                {m.integration.title}
               </h2>
-              <p className="text-base leading-6 text-fg-muted">
-                Создайте приложение, скопируйте write-ключ и отправьте первый батч. Формат одинаков
-                для iOS, Android, веба, ботов и бэкендов — SDK не нужен.
-              </p>
+              <p className="text-base leading-6 text-fg-muted">{m.integration.lead}</p>
             </div>
-            <ol aria-label="Шаги интеграции" className="flex flex-col gap-3">
-              {STEPS.map((text, i) => (
-                <li key={text} className="flex items-start gap-3">
+            <ol aria-label={m.integration.stepsLabel} className="flex flex-col gap-3">
+              {STEPS.map((key, i) => (
+                <li key={key} className="flex items-start gap-3">
                   <span
                     aria-hidden="true"
                     className="flex size-7 shrink-0 items-center justify-center rounded-full bg-selected text-sm font-bold text-fg-link"
                   >
                     {i + 1}
                   </span>
-                  <span className="pt-1 text-body-md">{text}</span>
+                  <span className="pt-1 text-body-md">{m.integration.steps[key]}</span>
                 </li>
               ))}
             </ol>
           </div>
-          <figure aria-label="Пример запроса на приём событий" className="min-w-0">
+          <figure aria-label={m.integration.snippetLabel} className="min-w-0">
             <pre className="overflow-x-auto rounded-2xl bg-code-bg p-6 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card)">
               {SNIPPET}
             </pre>
@@ -211,17 +190,15 @@ export function LandingPage() {
         >
           <div className="flex flex-col gap-2">
             <h2 id="landing-admin" className="text-2xl font-extrabold tracking-[-0.02em]">
-              Панель администратора
+              {m.admin.title}
             </h2>
-            <p className="max-w-[640px] text-base leading-6">
-              Вход только по passkey. Приватные данные пользователей не покидают ЕС.
-            </p>
+            <p className="max-w-[640px] text-base leading-6">{m.admin.text}</p>
           </div>
           <Link
             href="/login"
             className="inline-flex h-11 shrink-0 items-center rounded-xl bg-white px-5 text-[15px] font-semibold text-[#2d55c7] outline-none hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-white/60"
           >
-            Войти
+            {m.admin.signIn}
           </Link>
         </section>
       </main>
@@ -236,7 +213,7 @@ export function LandingPage() {
           (CC BY 4.0)
         </span>
         <span aria-hidden="true">·</span>
-        <span>Hetzner FSN1, ЕС</span>
+        <span>{m.hosting}</span>
       </footer>
     </div>
   );

@@ -3,8 +3,10 @@ import { JetBrains_Mono, Manrope } from "next/font/google";
 import { LazyToaster } from "@/components/common/lazy-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { langInitScript } from "@/lib/i18n/lang-script";
+import { DEFAULT_LOCALE } from "@/lib/i18n/locale";
 import { themeInitScript } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { getMessages } from "@/messages";
 import "./globals.css";
 
 // Шрифты по макету «Dashboard v2»: Manrope для интерфейса, JetBrains Mono для ID и кода.
@@ -21,9 +23,11 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// Корневой layout не знает языка запроса (cookie читается только под Suspense), поэтому описание — на
+// языке по умолчанию; лендинг задаёт своё на языке адреса (app/[lang]/page.tsx).
 export const metadata: Metadata = {
   title: { default: "appmetrica.online", template: "%s · appmetrica.online" },
-  description: "Аналитика приложений без SDK",
+  description: getMessages(DEFAULT_LOCALE).landing.meta.description,
   // Внутренняя система одного владельца: поисковым роботам здесь делать нечего.
   robots: { index: false, follow: false },
 };

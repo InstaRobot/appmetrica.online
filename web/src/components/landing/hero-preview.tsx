@@ -1,3 +1,7 @@
+import { createFormatters } from "@/lib/format";
+import type { Locale } from "@/lib/i18n/locale";
+import { getMessages } from "@/messages";
+
 // Превью дашборда на лендинге (S-00): статичная карточка «Notes iOS» с тремя KPI и графиком активных
 // за 30 дней. Данные иллюстративные и не зависят от времени: страница пререндерится при сборке.
 const SERIES = Array.from({ length: 30 }, (_, i) => {
@@ -8,9 +12,9 @@ const SERIES = Array.from({ length: 30 }, (_, i) => {
 });
 
 const KPIS = [
-  { label: "Активные", value: "12 480", delta: "▲ +4,1 %" },
-  { label: "Новые", value: "1 204", delta: "▲ +2,3 %" },
-  { label: "Сессии", value: "31 022", delta: "▲ +3,8 %" },
+  { label: "active", value: 12_480, delta: 4.1 },
+  { label: "new", value: 1_204, delta: 2.3 },
+  { label: "sessions", value: 31_022, delta: 3.8 },
 ] as const;
 
 function paths(series: number[], width: number, height: number) {
@@ -28,10 +32,12 @@ function paths(series: number[], width: number, height: number) {
 
 const { line, area } = paths(SERIES, 1000, 300);
 
-export function HeroPreview() {
+export function HeroPreview({ locale }: { locale: Locale }) {
+  const m = getMessages(locale).landing.preview;
+  const f = createFormatters(locale);
   return (
     <figure
-      aria-label="Пример отчёта: приложение Notes iOS за последние 30 дней"
+      aria-label={m.label}
       className="relative flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)"
     >
       <div className="flex items-center gap-2.5">
@@ -39,16 +45,16 @@ export function HeroPreview() {
           iOS
         </span>
         <span className="font-bold">Notes iOS</span>
-        <span className="ml-auto text-caption text-fg-subtle">Последние 30 дней</span>
+        <span className="ml-auto text-caption text-fg-subtle">{m.period}</span>
       </div>
       <dl className="grid grid-cols-3 gap-3">
         {KPIS.map((k) => (
           <div key={k.label} className="flex flex-col gap-1 rounded-xl bg-subtle p-3.5">
-            <dt className="text-caption font-semibold text-fg-subtle">{k.label}</dt>
+            <dt className="text-caption font-semibold text-fg-subtle">{m[k.label]}</dt>
             <dd className="text-[22px] leading-7 font-extrabold tracking-tight tabular-nums">
-              {k.value}
+              {f.formatInt(k.value)}
             </dd>
-            <dd className="text-caption font-semibold text-positive">{k.delta}</dd>
+            <dd className="text-caption font-semibold text-positive">▲ {f.formatDelta(k.delta)}</dd>
           </div>
         ))}
       </dl>
@@ -74,9 +80,9 @@ export function HeroPreview() {
         />
       </svg>
       <figcaption className="flex justify-between text-caption text-fg-subtle">
-        <span>30 дней назад</span>
-        <span>Активные по дням</span>
-        <span>вчера</span>
+        <span>{m.from}</span>
+        <span>{m.chart}</span>
+        <span>{m.to}</span>
       </figcaption>
       <span className="absolute -top-3 right-6 inline-flex h-6 items-center gap-1.5 rounded-full bg-linear-to-b from-(--primary-top) to-primary px-2.5 text-[11px] font-bold text-primary-foreground shadow-(--shadow-primary)">
         <span
