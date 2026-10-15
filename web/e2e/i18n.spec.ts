@@ -3,7 +3,7 @@ import { expectNoA11yViolations } from "./helpers/a11y";
 
 // Языки RU/EN: английский — в корне, русский — /ru; выбор живёт в cookie am_lang год; панель берёт язык из
 // cookie без префикса в адресе.
-const lang = (page: Page) => page.evaluate(() => document.documentElement.lang);
+const lang = (page: Page) => page.evaluate(() => document.documentElement?.lang);
 const savedLocale = async (page: Page) =>
   (await page.context().cookies()).find((c) => c.name === "am_lang")?.value;
 
@@ -72,8 +72,11 @@ test.describe("owner", () => {
     await expect(page).toHaveURL("/portfolio");
     expect(await lang(page)).toBe("en");
 
+    // Панель перезагружается на месте: ждём load новой загрузки, а не опрашиваем документ во время замены.
+    const reloaded = page.waitForEvent("load");
     await page.getByRole("button", { name: "Switch to Русский" }).click();
-    await expect.poll(() => lang(page)).toBe("ru");
+    await reloaded;
+    expect(await lang(page)).toBe("ru");
     await expect(page).toHaveURL("/portfolio");
     expect(await savedLocale(page)).toBe("ru");
   });
