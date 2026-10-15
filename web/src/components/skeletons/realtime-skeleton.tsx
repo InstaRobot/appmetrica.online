@@ -1,15 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingStatus } from "./loading-status";
 
 const FEED_ROWS = 8;
 
 // Скелет S-07 (14-ux-ui-spec.md S-07, loading): счётчик 56 px, график 200 px и 8 строк ленты.
 export function RealtimeSkeleton() {
   return (
-    <div
-      role="status"
-      aria-label="Загрузка…"
-      className="flex flex-col gap-6 animate-in fade-in fill-mode-backwards delay-200"
-    >
+    <LoadingStatus className="flex flex-col gap-6 animate-in fade-in fill-mode-backwards delay-200">
       <div className="grid grid-cols-[320px_1fr] gap-4">
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6">
           <Skeleton className="h-4 w-32" />
@@ -27,6 +24,6 @@ export function RealtimeSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </LoadingStatus>
   );
 }

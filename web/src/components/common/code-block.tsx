@@ -3,7 +3,8 @@
 import { Copy } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { copyText } from "@/lib/clipboard";
+import { useCopyText } from "@/lib/clipboard";
+import { useMessages } from "@/lib/i18n/client";
 
 export type CodeBlockLang = "bash" | "swift" | "kotlin" | "javascript" | "go" | "json";
 
@@ -21,6 +22,8 @@ const components = { pre: ({ children }: { children?: ReactNode }) => children }
 // Подсветка shiki из fumadocs-core грузится лениво: до неё код показывается без цвета. Тема
 // github-light-default на белом фоне держит контраст AA (axe color-contrast на S-10).
 export function CodeBlock({ code, lang, ariaLabel, maxHeight = 480 }: CodeBlockProps) {
+  const m = useMessages().common.copy;
+  const copy = useCopyText();
   const [highlighted, setHighlighted] = useState<{ code: string; node: ReactNode } | null>(null);
 
   useEffect(() => {
@@ -55,9 +58,9 @@ export function CodeBlock({ code, lang, ariaLabel, maxHeight = 480 }: CodeBlockP
         type="button"
         variant="outline"
         size="icon-sm"
-        aria-label="Копировать код"
+        aria-label={m.code}
         className="absolute top-2 right-2 bg-card"
-        onClick={() => void copyText(code)}
+        onClick={() => void copy(code)}
       >
         <Copy aria-hidden="true" />
       </Button>

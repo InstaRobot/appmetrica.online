@@ -7,8 +7,13 @@ import type { PlatformGlyphProps } from "@/components/icons/platform/platform-sv
 import { ServerIcon } from "@/components/icons/platform/server";
 import { WebIcon } from "@/components/icons/platform/web";
 import type { Platform } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 
-export const PLATFORM_LABELS: Record<Platform, string> = {
+export type PlatformLabels = Record<Platform, string>;
+
+// Русские подписи для экранов, ещё не переведённых на словарь (common.platforms, usePlatformLabel);
+// удаляются вместе с русскими обёртками lib/format.
+export const PLATFORM_LABELS: PlatformLabels = {
   ios: "iOS",
   android: "Android",
   web: "Веб",
@@ -52,11 +57,21 @@ const GLYPHS: Record<Platform, (props: PlatformGlyphProps) => React.JSX.Element>
   other: OtherIcon,
 };
 
-// Подпись платформы устройства: известное значение — по-русски, неизвестное — как есть, пустое — «—».
+// Подпись платформы устройства: известное значение — из подписей языка, неизвестное — как есть,
+// пустое — «—».
+export function platformLabelIn(labels: PlatformLabels, platform: string): string {
+  return Object.hasOwn(labels, platform) ? labels[platform as Platform] : platform || "—";
+}
+
+// Русская подпись (PLATFORM_LABELS) для ещё не переведённых экранов.
 export function platformLabel(platform: string): string {
-  return Object.hasOwn(PLATFORM_LABELS, platform)
-    ? PLATFORM_LABELS[platform as Platform]
-    : platform || "—";
+  return platformLabelIn(PLATFORM_LABELS, platform);
+}
+
+// Подпись платформы на языке интерфейса (словарь common.platforms).
+export function usePlatformLabel(): (platform: string) => string {
+  const labels = useMessages().common.platforms;
+  return (platform) => platformLabelIn(labels, platform);
 }
 
 type PlatformIconProps = { platform: Platform | string; className?: string; title?: string };

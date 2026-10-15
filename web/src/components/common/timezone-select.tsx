@@ -13,6 +13,7 @@ import {
 } from "@/components/common/lazy-command";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMessages } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type TimezoneSelectProps = {
@@ -75,6 +76,7 @@ export function TimezoneSelect({
   onClose,
   ref,
 }: TimezoneSelectProps) {
+  const m = useMessages().common.timezone;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -107,20 +109,16 @@ export function TimezoneSelect({
           aria-required={required || undefined}
           className={cn("w-full justify-between font-normal", !value && "text-muted-foreground")}
         >
-          <span className="truncate">{value ? timezoneLabel(value) : "Выберите часовой пояс"}</span>
+          <span className="truncate">{value ? timezoneLabel(value) : m.placeholder}</span>
           <ChevronsUpDown aria-hidden="true" className="text-fg-subtle" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
         <Suspense fallback={<CommandSkeleton />}>
           <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Найти часовой пояс…"
-              value={search}
-              onValueChange={setSearch}
-            />
+            <CommandInput placeholder={m.search} value={search} onValueChange={setSearch} />
             <CommandList>
-              <CommandEmpty>Ничего не найдено</CommandEmpty>
+              <CommandEmpty>{m.notFound}</CommandEmpty>
               {visible.length > 0 ? (
                 <CommandGroup>
                   {visible.map((tz) => (

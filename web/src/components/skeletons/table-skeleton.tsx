@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingStatus } from "./loading-status";
 
 type TableSkeletonProps = { rows?: number; rowHeight?: "default" | "portfolio" };
 
@@ -6,11 +7,7 @@ type TableSkeletonProps = { rows?: number; rowHeight?: "default" | "portfolio" }
 // Появляется с задержкой 200 мс, чтобы быстрые ответы не мигали.
 export function TableSkeleton({ rows = 5, rowHeight = "default" }: TableSkeletonProps) {
   return (
-    <div
-      role="status"
-      aria-label="Загрузка…"
-      className="flex flex-col gap-px animate-in fade-in fill-mode-backwards delay-200"
-    >
+    <LoadingStatus className="flex flex-col gap-px animate-in fade-in fill-mode-backwards delay-200">
       <Skeleton className="h-9 rounded-none bg-subtle" />
       {Array.from({ length: rows }, (_, i) => (
         <div
@@ -24,6 +21,6 @@ export function TableSkeleton({ rows = 5, rowHeight = "default" }: TableSkeleton
           <Skeleton className="h-4 w-full" />
         </div>
       ))}
-    </div>
+    </LoadingStatus>
   );
 }

@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingStatus } from "./loading-status";
 
 type KpiSkeletonProps = { count?: number };
 
@@ -6,11 +7,7 @@ type KpiSkeletonProps = { count?: number };
 // спарклайн 100 % × 32. Появляется с задержкой 200 мс.
 export function KpiSkeleton({ count = 4 }: KpiSkeletonProps) {
   return (
-    <div
-      role="status"
-      aria-label="Загрузка…"
-      className="grid grid-cols-4 gap-4 animate-in fade-in fill-mode-backwards delay-200"
-    >
+    <LoadingStatus className="grid grid-cols-4 gap-4 animate-in fade-in fill-mode-backwards delay-200">
       {Array.from({ length: count }, (_, i) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: карточки скелета не переупорядочиваются
@@ -24,6 +21,6 @@ export function KpiSkeleton({ count = 4 }: KpiSkeletonProps) {
           <Skeleton className="h-8 w-full" />
         </div>
       ))}
-    </div>
+    </LoadingStatus>
   );
 }

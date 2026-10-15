@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingStatus } from "./loading-status";
 
 function TableCard({ rows }: { rows: number }) {
   return (
@@ -17,11 +18,7 @@ function TableCard({ rows }: { rows: number }) {
 // Скелет S-09 (14-ux-ui-spec.md S-09, loading): карточка профиля и две таблицы — устройства и сессии.
 export function ProfileSkeleton() {
   return (
-    <div
-      role="status"
-      aria-label="Загрузка…"
-      className="flex flex-col gap-6 animate-in fade-in fill-mode-backwards delay-200"
-    >
+    <LoadingStatus className="flex flex-col gap-6 animate-in fade-in fill-mode-backwards delay-200">
       <div
         data-skeleton-card
         className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6"
@@ -32,6 +29,6 @@ export function ProfileSkeleton() {
       </div>
       <TableCard rows={2} />
       <TableCard rows={5} />
-    </div>
+    </LoadingStatus>
   );
 }

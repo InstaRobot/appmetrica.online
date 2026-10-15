@@ -1,9 +1,10 @@
 "use client";
 
 import type * as React from "react";
-import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon";
+import { PlatformIcon } from "@/components/common/platform-icon";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Platform } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 
 const PLATFORMS = Object.values(Platform);
 
@@ -29,6 +30,7 @@ export function PlatformToggleGroup({
   ref,
   ...aria
 }: PlatformToggleGroupProps) {
+  const labels = useMessages().common.platforms;
   return (
     <ToggleGroup
       type="multiple"
@@ -49,7 +51,7 @@ export function PlatformToggleGroup({
           className="min-w-[104px] justify-start data-[state=on]:border-primary"
         >
           <PlatformIcon platform={platform} />
-          {PLATFORM_LABELS[platform]}
+          {labels[platform]}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

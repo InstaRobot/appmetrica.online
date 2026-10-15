@@ -3,12 +3,14 @@
 import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { copyText } from "@/lib/clipboard";
+import { useCopyText } from "@/lib/clipboard";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { cn } from "@/lib/utils";
 
 type CopyFieldProps = {
   value: string;
-  /** Для aria-label поля и кнопки: «Копировать {label}». */
+  /** Для aria-label поля и кнопки: «Копировать {label}» (common.copy.value). */
   label: string;
   /** Моноширинный шрифт, по умолчанию true. */
   mono?: boolean;
@@ -18,6 +20,8 @@ type CopyFieldProps = {
 
 // CopyField (14-ux-ui-spec.md §16.13): ключи, ID, ссылки и команды в поле только для чтения.
 export function CopyField({ value, label, mono = true, masked = false }: CopyFieldProps) {
+  const m = useMessages().common.copy;
+  const copy = useCopyText();
   return (
     <div className="flex items-center gap-2">
       <Input
@@ -31,8 +35,8 @@ export function CopyField({ value, label, mono = true, masked = false }: CopyFie
         type="button"
         variant="outline"
         size="icon"
-        aria-label={`Копировать ${label}`}
-        onClick={() => void copyText(value)}
+        aria-label={fmt(m.value, { label })}
+        onClick={() => void copy(value)}
       >
         <Copy aria-hidden="true" />
       </Button>

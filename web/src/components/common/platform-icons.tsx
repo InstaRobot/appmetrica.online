@@ -1,4 +1,4 @@
-import { PlatformIcon, platformLabel } from "@/components/common/platform-icon";
+import { PlatformIcon, usePlatformLabel } from "@/components/common/platform-icon";
 import type { Platform } from "@/lib/api/gen/model";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ type PlatformIconsProps = {
 // Иконки платформ приложения: первые `max` и «+N», все названия — в title.
 // Декоративны для скринридеров: рядом всегда есть название приложения или подпись платформ.
 export function PlatformIcons({ platforms, max = 3, className }: PlatformIconsProps) {
+  const platformLabel = usePlatformLabel();
   if (platforms.length === 0) return null;
   const shown = platforms.slice(0, max);
   const hidden = platforms.length - shown.length;

@@ -57,11 +57,12 @@ async function redirectToLogin(): Promise<void> {
   redirect("/login");
 }
 
+// Сообщения ApiError без конверта ошибки — технические: пользователь видит текст словаря по коду (lib/errors).
 async function toApiError(res: Response): Promise<ApiError> {
   const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
   const e = body?.error;
   if (!e || typeof e.code !== "string") {
-    return new ApiError(res.status, `http_${res.status}`, res.statusText || "Ошибка запроса", "");
+    return new ApiError(res.status, `http_${res.status}`, res.statusText || "Request failed", "");
   }
   return new ApiError(
     res.status,
@@ -91,7 +92,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
   } catch (err) {
     // Отмена запроса (смена фильтров, размонтирование) — не сетевая ошибка; TanStack Query её ожидает как есть.
     if (init.signal?.aborted) throw err;
-    throw new ApiError(0, "network_error", "Нет соединения с сервером", "");
+    throw new ApiError(0, "network_error", "No connection to the server", "");
   }
 
   if (!res.ok) {

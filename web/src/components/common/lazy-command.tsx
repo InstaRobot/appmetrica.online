@@ -2,6 +2,7 @@
 
 import { lazy } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMessages } from "@/lib/i18n/client";
 
 // Ленивые части shadcn Command (cmdk и Radix Dialog из components/ui/command.tsx, ≈ 8 KB gz).
 // Поиск по списку нужен только в открытом popover (AppSwitcher, FilterBar, TimezoneSelect), поэтому
@@ -18,5 +19,5 @@ export const CommandItem = lazy(() => chunk().then((m) => ({ default: m.CommandI
 export const CommandSeparator = lazy(() => chunk().then((m) => ({ default: m.CommandSeparator })));
 
 export function CommandSkeleton() {
-  return <Skeleton role="status" aria-label="Загрузка…" className="m-2 h-24" />;
+  return <Skeleton role="status" aria-label={useMessages().common.loading} className="m-2 h-24" />;
 }
