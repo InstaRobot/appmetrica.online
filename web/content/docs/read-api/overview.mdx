@@ -10,12 +10,13 @@ Read API отдаёт портфель, аудиторию, retention, realtime,
 
 ## Адрес и ключ [#auth]
 
-Базовый адрес — `https://api.appmetrica.online`. Ключ `sk_…` создаётся в «Настройки → API-ключи» и
-показывается один раз: сервер хранит только хеш и префикс. Ключ передаётся в заголовке:
+Базовый адрес — API вашей установки; в примерах стоит условный `https://api.analytics.example.com`.
+Ключ `sk_…` создаётся в «Настройки → API-ключи» и показывается один раз: сервер хранит только хеш и
+префикс. Ключ передаётся в заголовке:
 
 ```bash
 export AM_SK="sk_…"
-curl -sS https://api.appmetrica.online/v1/apps -H "Authorization: Bearer $AM_SK"
+curl -sS https://api.analytics.example.com/v1/apps -H "Authorization: Bearer $AM_SK"
 ```
 
 Ключ в query string не принимается. Write-ключ `pk_…` для Read API не подходит.
@@ -42,7 +43,7 @@ curl -sS https://api.appmetrica.online/v1/apps -H "Authorization: Bearer $AM_SK"
 Пример — сводка аудитории за неделю для iOS-версий 3.4.0 и 3.5.0:
 
 ```bash
-curl -sS -G "https://api.appmetrica.online/v1/apps/$APP_ID/audience/summary" \
+curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/summary" \
   -H "Authorization: Bearer $AM_SK" \
   --data-urlencode "from=2026-10-06" \
   --data-urlencode "to=2026-10-12" \

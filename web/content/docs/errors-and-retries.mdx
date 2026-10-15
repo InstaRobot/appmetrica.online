@@ -34,7 +34,7 @@ Ingest отвечает двумя способами:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON

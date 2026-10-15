@@ -57,7 +57,7 @@ appmetrica.online собирает минимум данных, нужный д�
 - через Read API ключом со scope `delete`:
 
 ```bash
-curl -sS -X POST "https://api.appmetrica.online/v1/apps/$APP_ID/deletion-requests" \
+curl -sS -X POST "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests" \
   -H "Authorization: Bearer $AM_SK" \
   -H "Content-Type: application/json" \
   -d '{"subject_type": "user", "subject_value": "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90"}'
@@ -67,7 +67,7 @@ curl -sS -X POST "https://api.appmetrica.online/v1/apps/$APP_ID/deletion-request
 параметрами, пока запрос не завершён, вернёт тот же запрос. Статус проверяется так:
 
 ```bash
-curl -sS "https://api.appmetrica.online/v1/apps/$APP_ID/deletion-requests/$REQUEST_ID" \
+curl -sS "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests/$REQUEST_ID" \
   -H "Authorization: Bearer $AM_SK"
 ```
 

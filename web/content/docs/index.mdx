@@ -27,11 +27,12 @@ Write-ключ не секретный: он вшивается в прилож�
 export AM_PK="pk_…"
 ```
 
-и отправьте одно событие:
+и отправьте одно событие. В примерах документации стоит условный домен `analytics.example.com`:
+замените `i.analytics.example.com` на адрес ingest своей установки, он есть на вкладке «Интеграция».
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON

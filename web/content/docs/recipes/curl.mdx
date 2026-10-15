@@ -21,8 +21,9 @@ Write-ключ `pk_…` показан в дашборде: откройте п�
 export AM_PK="pk_…"
 ```
 
-События принимает ingest по адресу `https://i.appmetrica.online/v1/events`. В своей установке
-appmetrica.online замените адрес на её ingest: он подставлен в сниппеты на вкладке «Интеграция».
+События принимает ingest по адресу `/v1/events`. В примерах стоит условный домен
+`https://i.analytics.example.com`: замените его на адрес ingest своей установки, он подставлен в
+сниппеты на вкладке «Интеграция».
 Для Read API нужен другой, секретный ключ — см. [Read API](#read-api).
 
 Общие приёмы во всех примерах:
@@ -41,7 +42,7 @@ appmetrica.online замените адрес на её ingest: он подст�
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON
@@ -77,7 +78,7 @@ JSON
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON
@@ -127,7 +128,7 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 FIRST=$(uuidgen | tr A-Z a-z)
 SECOND=$(uuidgen | tr A-Z a-z)
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON
@@ -188,7 +189,7 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
 USER_ID="acct_8f14e45f" # ID аккаунта в вашем бэкенде, не email и не телефон
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON
@@ -240,7 +241,7 @@ ENDED=$(date -u -d "-2 days +5 minutes" "$FMT" 2>/dev/null || date -u -v-2d -v+5
 NOW=$(date -u "$FMT")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   --data-binary @- <<JSON
@@ -315,7 +316,7 @@ cat > batch.json <<JSON
   ]
 }
 JSON
-gzip -c batch.json | curl -sS https://i.appmetrica.online/v1/events \
+gzip -c batch.json | curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "Content-Encoding: gzip" \
   -H "X-App-Key: $AM_PK" \
@@ -357,7 +358,7 @@ for attempt in 1 2 3 4 5 6 7 8; do
 }
 JSON
   status=$(curl -sS -o response.json -D headers.txt -w "%{http_code}" \
-    https://i.appmetrica.online/v1/events \
+    https://i.analytics.example.com/v1/events \
     -H "Content-Type: application/json" \
     -H "X-App-Key: $AM_PK" \
     --data-binary @batch.json) || status=000
@@ -408,7 +409,7 @@ fi
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
-curl -sS https://i.appmetrica.online/v1/events \
+curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
   -o response.json \
@@ -472,7 +473,7 @@ export AM_SK="sk_…"
 ### Список приложений [#read-api-apps]
 
 ```bash
-curl -sS https://api.appmetrica.online/v1/apps \
+curl -sS https://api.analytics.example.com/v1/apps \
   -H "Authorization: Bearer $AM_SK" \
   | jq -r '.items[] | [.id, .platform, .timezone, .name] | @tsv'
 ```
@@ -490,7 +491,7 @@ curl -sS https://api.appmetrica.online/v1/apps \
 
 ```bash
 APP_ID="0199d5f0-0000-7000-8000-000000000002"
-curl -sS -G "https://api.appmetrica.online/v1/apps/$APP_ID/audience/timeseries" \
+curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/timeseries" \
   -H "Authorization: Bearer $AM_SK" \
   --data-urlencode "from=2026-10-06" \
   --data-urlencode "to=2026-10-12" \
@@ -526,14 +527,14 @@ Read API ограничивает частоту: больше 10 запросо
 
 ```bash
 APP_ID="0199d5f0-0000-7000-8000-000000000002"
-REQUEST_ID=$(curl -sS -X POST "https://api.appmetrica.online/v1/apps/$APP_ID/deletion-requests" \
+REQUEST_ID=$(curl -sS -X POST "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests" \
   -H "Authorization: Bearer $AM_SK" \
   -H "Content-Type: application/json" \
   -d '{"subject_type": "user", "subject_value": "acct_8f14e45f"}' \
   | jq -r .id)
 
 while :; do
-  STATUS=$(curl -sS "https://api.appmetrica.online/v1/apps/$APP_ID/deletion-requests/$REQUEST_ID" \
+  STATUS=$(curl -sS "https://api.analytics.example.com/v1/apps/$APP_ID/deletion-requests/$REQUEST_ID" \
     -H "Authorization: Bearer $AM_SK" | jq -r .status)
   echo "$STATUS"
   case "$STATUS" in

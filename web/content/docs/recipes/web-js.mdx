@@ -27,7 +27,7 @@ description: Сессии сайта через visibilitychange, navigator.send
 ## Модуль analytics.js [#module]
 
 ```js title="analytics.js"
-const ENDPOINT = "https://i.appmetrica.online/v1/events";
+const ENDPOINT = "https://i.analytics.example.com/v1/events";
 const WRITE_KEY = "pk_…"; // ключ платформы «Веб» на вкладке «Интеграция»
 const QUEUE_KEY = "am_queue";
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
@@ -197,7 +197,7 @@ export function Analytics({ userId }: { userId: string | null }) {
 - **`install_id` живёт в `localStorage`.** Очистка данных сайта, режим инкогнито и другой браузер —
   новая установка. Вход по `user_id` склеивает такие установки в одного человека.
 - **Блокировщики рекламы** могут резать запросы к аналитике. Если это важно, проксируйте ingest
-  через свой домен — например, `/a/v1/events` на `https://i.appmetrica.online/v1/events`.
+  через свой домен — например, `/a/v1/events` на `https://i.analytics.example.com/v1/events`.
 - **Страна и город** определяются по IP браузера, сам IP не сохраняется.
 
 ## Проверка [#verify]

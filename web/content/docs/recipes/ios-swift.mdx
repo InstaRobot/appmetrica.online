@@ -59,7 +59,7 @@ struct IngestResult: Decodable, Sendable {
 }
 
 enum Analytics {
-    static let endpoint = URL(string: "https://i.appmetrica.online/v1/events")!
+    static let endpoint = URL(string: "https://i.analytics.example.com/v1/events")!
     static let writeKey = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
 
     struct Response: Sendable {
