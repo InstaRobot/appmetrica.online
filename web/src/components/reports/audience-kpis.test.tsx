@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AudienceSummary } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { AudienceKpis } from "./audience-kpis";
 
 const summary: AudienceSummary = {
@@ -92,5 +93,30 @@ describe("AudienceKpis", () => {
   it("shows skeleton cards while the summary loads", () => {
     render(<AudienceKpis summary={undefined} loading selected="active" onSelect={vi.fn()} />);
     expect(screen.getAllByRole("status", { name: "Загрузка…" })).toHaveLength(4);
+  });
+
+  it("names and formats the KPIs in English", () => {
+    renderWithLocale(<AudienceKpis summary={summary} selected="active" onSelect={vi.fn()} />, "en");
+
+    const region = screen.getByRole("region", { name: "Key metrics" });
+    const cards = within(region)
+      .getAllByRole("button")
+      .filter((b) => b.hasAttribute("aria-pressed"));
+    expect(cards.map((c) => c.querySelector("[data-kpi-label]")?.textContent)).toEqual([
+      "Active users",
+      "New users",
+      "Sessions",
+      "Avg. duration",
+    ]);
+    expect(within(region).getByRole("button", { name: /^Active users/ })).toHaveTextContent(
+      "12,480",
+    );
+    expect(
+      within(region).getByRole("img", { name: "up 4.1% vs. the previous period" }),
+    ).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: /^Avg\. duration/ })).toHaveTextContent(
+      "4m 12smedian 2m 5s",
+    );
+    expect(within(region).getByRole("button", { name: "What is “Sessions”?" })).toBeInTheDocument();
   });
 });

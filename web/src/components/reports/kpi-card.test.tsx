@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { createFormatters } from "@/lib/format";
+import { getMessages } from "@/messages";
+import { renderWithLocale } from "@/test/rtl";
 import { deltaLabel, KpiCard } from "./kpi-card";
 
 const days = (values: number[]) =>
@@ -92,11 +95,62 @@ describe("KpiCard", () => {
   });
 });
 
+describe("KpiCard in English", () => {
+  it("formats the value, delta and trend in English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(
+      <KpiCard
+        label="Active users"
+        definition="People with at least one session."
+        value={41230}
+        format="number"
+        deltaPct={-3}
+        secondary="median 2m 5s"
+        sparkline={days([3, 2, 1])}
+      />,
+      "en",
+    );
+    const card = screen.getByRole("button", { name: /^Active users/ });
+    expect(card).toHaveTextContent("41,230");
+    expect(screen.getByRole("img", { name: "down 3% vs. the previous period" })).toBeVisible();
+    expect(screen.getByText("Trend for the period: down")).toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: "What is “Active users”?" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "People with at least one session.",
+    );
+  });
+
+  it("formats durations and announces loading in English", () => {
+    const { rerender } = renderWithLocale(
+      <KpiCard label="Avg. duration" definition="…" value={252000} format="duration" />,
+      "en",
+    );
+    expect(screen.getByRole("button", { pressed: false })).toHaveTextContent("4m 12s");
+
+    rerender(
+      <KpiCard label="Avg. duration" definition="…" value={null} format="duration" loading />,
+    );
+    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument();
+  });
+});
+
 describe("deltaLabel", () => {
+  const ru = getMessages("ru").reports.kpi.delta;
+  const en = getMessages("en").reports.kpi.delta;
+
   it("describes growth, decline and no change in words", () => {
-    expect(deltaLabel(4.1)).toBe("рост на 4,1 % к предыдущему периоду");
-    expect(deltaLabel(-1.24)).toBe("снижение на 1,2 % к предыдущему периоду");
-    expect(deltaLabel(0.04)).toBe("без изменений к предыдущему периоду");
-    expect(deltaLabel(null)).toBeNull();
+    const f = createFormatters("ru");
+    expect(deltaLabel(4.1, ru, f)).toBe("рост на 4,1 % к предыдущему периоду");
+    expect(deltaLabel(-1.24, ru, f)).toBe("снижение на 1,2 % к предыдущему периоду");
+    expect(deltaLabel(0.04, ru, f)).toBe("без изменений к предыдущему периоду");
+    expect(deltaLabel(null, ru, f)).toBeNull();
+  });
+
+  it("describes the change in English", () => {
+    const f = createFormatters("en");
+    expect(deltaLabel(4.1, en, f)).toBe("up 4.1% vs. the previous period");
+    expect(deltaLabel(-1.24, en, f)).toBe("down 1.2% vs. the previous period");
+    expect(deltaLabel(0.04, en, f)).toBe("no change vs. the previous period");
   });
 });

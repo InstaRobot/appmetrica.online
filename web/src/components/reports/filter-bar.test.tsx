@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { FilterBar } from "./filter-bar";
 
 const options = {
@@ -125,5 +126,44 @@ describe("FilterBar", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "Сбросить фильтры" })).not.toBeInTheDocument();
+  });
+});
+
+describe("FilterBar in English", () => {
+  it("names dimensions, chips and actions in English", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    renderWithLocale(
+      <FilterBar
+        dims={["app_version", "os_name", "country"]}
+        value={{ app_version: ["2.1.0"] }}
+        onChange={onChange}
+        options={{ ...options, app_version: [{ value: "2.1.1", count: 12480 }] }}
+      />,
+      "en",
+    );
+
+    expect(screen.getByText("App version: 2.1.0")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove the “App version” filter" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset filters" })).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "Filter", expanded: false }));
+    const search = await screen.findByRole("combobox");
+    expect(search).toHaveAttribute("aria-label", "Find a value");
+    expect(search).toHaveAttribute("placeholder", "Find a value…");
+    expect(screen.getByRole("group", { name: "App version" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Country" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /^2\.1\.1/ })).toHaveTextContent("12,480");
+    await user.type(screen.getByRole("combobox"), "zzz");
+    expect(screen.getByText("Nothing found")).toBeInTheDocument();
+  });
+
+  it("says that values are loading in English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<FilterBar value={{}} onChange={vi.fn()} options={{}} loading />, "en");
+    await user.click(await screen.findByRole("button", { name: "Filter", expanded: false }));
+    expect(screen.getByText("Loading values…")).toBeInTheDocument();
   });
 });

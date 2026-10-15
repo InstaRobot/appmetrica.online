@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { TimeSeries } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
+import { MetricChart as LazyMetricChart } from "./lazy-charts";
 import { MetricChart, type MetricChartSeries } from "./metric-chart";
 
 const day = (d: number) => `2026-10-${String(d).padStart(2, "0")}T00:00:00+03:00`;
@@ -220,5 +222,96 @@ describe("MetricChart", () => {
     expect(screen.getByRole("img")).toHaveAccessibleName(
       "График активных пользователей по дням, нет событий",
     );
+  });
+});
+
+describe("MetricChart in English", () => {
+  it("describes the chart and the table in English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(
+      <MetricChart
+        series={total({
+          ...daily,
+          compare_points: daily.points.map((p) => ({ ...p, value: 9000 })),
+        })}
+        granularity="day"
+        metric="active"
+        timezone="Europe/Moscow"
+      />,
+      "en",
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /^Active users chart by day, Oct\s6–12, 2026, peak 12,480 \(Oct\s7\)$/,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Show as table" }));
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows.slice(0, 3).map((r) => r.textContent?.replace(/\u00a0/g, " "))).toEqual([
+      "PeriodActive usersPrevious period",
+      "Oct 69,0069,000",
+      "Oct 712,4809,000",
+    ]);
+    expect(screen.getByRole("button", { name: "Hide table" })).toBeInTheDocument();
+  });
+
+  it("describes durations by hour and an empty period in English", () => {
+    const { rerender } = renderWithLocale(
+      <MetricChart
+        series={total({
+          metric: "avg_duration_ms",
+          granularity: "hour",
+          points: [
+            { ts: "2026-10-12T00:00:00+03:00", value: 60000 },
+            { ts: "2026-10-12T01:00:00+03:00", value: 252000 },
+          ],
+        })}
+        granularity="hour"
+        metric="avg_duration_ms"
+        timezone="Europe/Moscow"
+      />,
+      "en",
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /^Average session duration chart by hour, Oct\s12, 2026, peak 4m 12s \(Oct\s12, 01:00\)$/,
+    );
+
+    rerender(
+      <MetricChart series={[]} granularity="week" metric="sessions" timezone="Europe/Moscow" />,
+    );
+    expect(screen.getByText("No events in the selected period")).toBeVisible();
+    expect(screen.getByRole("img")).toHaveAccessibleName("Sessions chart by week, no events");
+  });
+
+  it("names the platform lines in English", () => {
+    renderWithLocale(
+      <MetricChart
+        series={[
+          { key: "ios", label: "iOS", points: [{ ts: day(6), value: 5210 }] },
+          { key: "android", label: "Android", points: [{ ts: day(6), value: 3870 }] },
+        ]}
+        granularity="month"
+        metric="new"
+        timezone="Europe/Moscow"
+      />,
+      "en",
+    );
+    expect(screen.getByRole("list", { name: "Chart legend" })).toBeInTheDocument();
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /^New users chart by month per platform, Oct\s6, 2026, iOS: peak 5,210 \(Oct\s2026\), Android: peak 3,870 \(Oct\s2026\)$/,
+    );
+  });
+
+  it("announces the chart while its code loads", async () => {
+    renderWithLocale(
+      <LazyMetricChart
+        series={total(daily)}
+        granularity="day"
+        metric="active"
+        timezone="Europe/Moscow"
+      />,
+      "en",
+    );
+    expect(screen.getByRole("status", { name: "Loading chart…" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /^Active users chart/ })).toBeInTheDocument();
   });
 });

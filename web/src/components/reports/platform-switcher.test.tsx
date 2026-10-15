@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Platform } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { PlatformSwitcher } from "./platform-switcher";
 
 type Props = {
@@ -118,5 +119,13 @@ describe("PlatformSwitcher", () => {
     render(<Controlled appPlatforms={["ios", "android"]} observed={[]} onChange={onChange} />);
     await user.click(screen.getByRole("radio", { name: "Все" }));
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlatformSwitcher in English", () => {
+  it("names the group and the option for all platforms in English", () => {
+    renderWithLocale(<Controlled appPlatforms={["ios", "android"]} observed={[]} />, "en");
+    expect(screen.getByRole("radiogroup", { name: "Platform" })).toBeInTheDocument();
+    expect(options()).toEqual(["All", "iOS", "Android"]);
   });
 });

@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Breakdown } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { BreakdownTable } from "./breakdown-table";
 
 const versions: Breakdown = {
@@ -137,5 +138,61 @@ describe("BreakdownTable", () => {
       />,
     );
     expect(screen.getByText("Нет данных за выбранный период")).toBeInTheDocument();
+  });
+});
+
+describe("BreakdownTable in English", () => {
+  it("names dimensions, columns and values in English", async () => {
+    const onRowClick = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = renderWithLocale(
+      <BreakdownTable
+        dimension="app_version"
+        onDimensionChange={noop}
+        metric="active"
+        onMetricChange={noop}
+        data={versions}
+        onRowClick={onRowClick}
+      />,
+      "en",
+    );
+
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "App version",
+      "OS",
+      "OS version",
+      "Device",
+      "Device type",
+      "Country",
+      "City",
+      "Language",
+      "Platform",
+    ]);
+    expect(screen.getByRole("radiogroup", { name: "Dimension" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Metric" })).toHaveTextContent("Active users");
+    const table = screen.getByRole("table", { name: "Breakdown: App version" });
+    expect(
+      within(table)
+        .getAllByRole("row")
+        .map((r) => r.textContent),
+    ).toEqual(["ValueActive usersShare", "2.1.124,00158.2%", "2.1.012,33029.9%", "Not set150%"]);
+    expect(
+      screen.getByText(
+        "Shares can add up to more than 100%: a person may have used several values during the period.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filter: App version 2.1.0" }));
+    expect(onRowClick).toHaveBeenCalledWith("2.1.0");
+
+    rerender(
+      <BreakdownTable
+        dimension="country"
+        onDimensionChange={noop}
+        metric="active"
+        onMetricChange={noop}
+        data={{ dimension: "country", metric: "active", total: 0, rows: [] }}
+      />,
+    );
+    expect(screen.getByText("No data for the selected period")).toBeInTheDocument();
   });
 });

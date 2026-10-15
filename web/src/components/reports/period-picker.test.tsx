@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { CompareToggle } from "./compare-toggle";
 import { GranularitySelect } from "./granularity-select";
 import { PeriodPicker } from "./period-picker";
@@ -139,5 +140,52 @@ describe("CompareToggle", () => {
     render(<CompareToggle checked={false} onCheckedChange={onCheckedChange} />);
     await user.click(screen.getByRole("switch", { name: "Сравнить с предыдущим периодом" }));
     expect(onCheckedChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("report controls in English", () => {
+  it("names the presets and a custom range in English", () => {
+    const { rerender } = renderWithLocale(
+      <PeriodPicker
+        value={{ preset: "7d", from: "2026-10-07", to: "2026-10-13" }}
+        onChange={vi.fn()}
+        timezone="Europe/Moscow"
+      />,
+      "en",
+    );
+    expect(screen.getByRole("radiogroup", { name: "Period" })).toHaveTextContent(
+      "TodayYesterday7 days30 days90 days",
+    );
+    expect(screen.getByRole("button", { name: "Pick dates" })).toBeInTheDocument();
+
+    rerender(
+      <PeriodPicker
+        value={{ preset: "custom", from: "2026-09-28", to: "2026-10-05" }}
+        onChange={vi.fn()}
+        timezone="Europe/Moscow"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /^Pick dates: Sep\s28 – Oct\s5, 2026$/ }),
+    ).toBeVisible();
+  });
+
+  it("names granularities and comparison in English", () => {
+    renderWithLocale(
+      <>
+        <GranularitySelect value="day" allowed={["hour", "day"]} onChange={vi.fn()} />
+        <CompareToggle checked={false} onCheckedChange={vi.fn()} />
+        <CompareToggle checked={false} onCheckedChange={vi.fn()} disabledReason="Not now" />
+      </>,
+      "en",
+    );
+    expect(screen.getByRole("radiogroup", { name: "Granularity" })).toHaveTextContent(
+      "HourDayWeekMonth",
+    );
+    expect(screen.getByRole("radio", { name: "Day" })).toHaveAttribute("aria-checked", "true");
+    const switches = screen.getAllByRole("switch", { name: "Compare with the previous period" });
+    expect(switches).toHaveLength(2);
+    expect(switches[1]).toHaveAccessibleDescription("Not now");
+    expect(screen.getAllByText("Compare")).toHaveLength(2);
   });
 });
