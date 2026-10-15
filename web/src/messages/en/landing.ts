@@ -60,7 +60,7 @@ export const landing = {
   },
   admin: {
     title: "Admin dashboard",
-    text: "Passkey-only sign-in. Your users' private data never leaves the EU.",
+    text: "Passkey-only sign-in.",
     signIn: "Sign in",
   },
   preview: {

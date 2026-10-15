@@ -61,7 +61,7 @@ export const landing: typeof en = {
   },
   admin: {
     title: "Панель администратора",
-    text: "Вход только по passkey. Приватные данные пользователей не покидают ЕС.",
+    text: "Вход только по passkey.",
     signIn: "Войти",
   },
   preview: {
