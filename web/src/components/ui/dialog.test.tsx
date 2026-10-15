@@ -54,3 +54,38 @@ describe("ConfirmDeleteDialog in English", () => {
     expect(screen.getByRole("button", { name: "Deleting…" })).toBeDisabled();
   });
 });
+
+// На телефоне диалог не шире экрана, а длинное содержимое прокручивается внутри него.
+describe("Dialog on phones", () => {
+  it("fits the screen and scrolls inside", () => {
+    render(<OpenDialog />);
+
+    const dialog = screen.getByRole("dialog", { name: "Title" });
+    expect(dialog).toHaveClass(
+      "max-w-[calc(100%-2rem)]",
+      "max-h-[calc(100dvh-2rem)]",
+      "overflow-y-auto",
+    );
+  });
+
+  it("keeps the confirmation within the screen and scrolls inside", () => {
+    render(
+      <ConfirmDeleteDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Удалить приложение?"
+        description="Это нельзя отменить."
+        confirmText="Notes"
+        confirmLabel="Удалить"
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("alertdialog", { name: "Удалить приложение?" });
+    expect(dialog).toHaveClass(
+      "data-[size=default]:max-w-[calc(100%-2rem)]",
+      "max-h-[calc(100dvh-2rem)]",
+      "overflow-y-auto",
+    );
+  });
+});
