@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { DEMO_COOKIE } from "@/lib/demo-mode";
 import {
+  isLocale,
   LOCALE_COOKIE,
   LOCALE_COOKIE_MAX_AGE,
   LOCALES,
@@ -42,9 +43,34 @@ function localePrefix(pathname: string): { locale: Locale; rest: string } | null
   return null;
 }
 
+// Разделы приложения вне app/[lang] (proxy.test.ts сверяет список с каталогом app). Любой другой первый
+// сегмент без языкового префикса Next отдал бы в app/[lang] как язык, и «не найдено» пришло бы со
+// статусом 200 (оболочка уже стримится): такой адрес уходит на /en/…, где маршрута нет — настоящий 404.
+export const APP_SEGMENTS = [
+  "api",
+  "apps",
+  "demo",
+  "docs",
+  "login",
+  "portfolio",
+  "settings",
+  "setup",
+] as const;
+
+function isUnknownSection(pathname: string): boolean {
+  const first = pathname.split("/")[1] ?? "";
+  return first !== "" && !isLocale(first) && !(APP_SEGMENTS as readonly string[]).includes(first);
+}
+
 // Next прогоняет переписанный запрос через proxy повторно: метка в заголовке запроса не даёт правилу
 // «/en… → без префикса» сработать на собственный rewrite и зациклить редирект.
 const REWRITE_MARK = "x-am-locale-rewrite";
+
+function markedRewrite(request: NextRequest, target: string): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set(REWRITE_MARK, "1");
+  return NextResponse.rewrite(new URL(target, request.url), { request: { headers } });
+}
 
 function saveLocale(res: NextResponse, locale: Locale): NextResponse {
   res.cookies.set(LOCALE_COOKIE, locale, {
@@ -76,9 +102,7 @@ function routeLocale(request: NextRequest): NextResponse | null {
   });
   const target = `/${locale}${pathname === "/" ? "" : pathname}${search}`;
   if (locale === "ru") return NextResponse.redirect(new URL(target, request.url), 307);
-  const headers = new Headers(request.headers);
-  headers.set(REWRITE_MARK, "1");
-  return NextResponse.rewrite(new URL(target, request.url), { request: { headers } });
+  return markedRewrite(request, target);
 }
 
 export function proxy(request: NextRequest): NextResponse {
@@ -89,7 +113,9 @@ export function proxy(request: NextRequest): NextResponse {
   // В демо-режиме (cookie am_demo=1) дашборд открыт без сессии: данные идут из статичного датасета.
   const demo = request.cookies.get(DEMO_COOKIE)?.value === "1";
   if (isPublic(pathname) || request.cookies.get(SESSION_COOKIE)?.value || demo) {
-    return NextResponse.next();
+    return isUnknownSection(pathname)
+      ? markedRewrite(request, `/en${pathname}${search}`)
+      : NextResponse.next();
   }
 
   const login = new URL("/login", request.url);
