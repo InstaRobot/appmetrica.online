@@ -20,6 +20,21 @@ async function sessionCookie(page: Page) {
   return (await page.context().cookies()).find((c) => c.name === "am_session");
 }
 
+// Автоподтверждение виртуального аутентификатора действует только на запросы, пришедшие после его включения:
+// церемония, попавшая к нему раньше, висит до таймаута (так тест падал в CI). Поэтому begin церемонии по кнопке
+// придерживается, пока тест проверяет состояние ожидания и включает присутствие; release отпускает запрос.
+async function holdLoginBegin(page: Page) {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/admin/v1/auth/login/begin", async (route) => {
+    await released;
+    await route.continue().catch(() => {}); // запрос conditional UI мог быть отменён кликом
+  });
+  return release;
+}
+
 test("first setup registers passkey and lands on portfolio", async ({ page }) => {
   await addVirtualAuthenticator(page);
   const link = await createSetupLink();
@@ -63,9 +78,11 @@ test("login with passkey", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Вход в appmetrica.online" }),
   ).toBeVisible();
   await expectNoA11yViolations(page);
+  let release = await holdLoginBegin(page);
   await page.getByRole("button", { name: "Войти с passkey" }).click();
   await expect(page.getByRole("button", { name: "Ожидаем подтверждение…" })).toBeDisabled();
   await authenticator.setUserPresence(true);
+  release();
   await expect(page).toHaveURL("/settings?tab=passkeys");
   expect(await sessionCookie(page)).toBeDefined();
 
@@ -73,8 +90,10 @@ test("login with passkey", async ({ page }) => {
   await page.context().clearCookies();
   await authenticator.setUserPresence(false);
   await page.goto("/login");
+  release = await holdLoginBegin(page);
   await page.getByRole("button", { name: "Войти с passkey" }).click();
   await authenticator.setUserPresence(true);
+  release();
   await expect(page).toHaveURL("/portfolio");
   expect(await sessionCookie(page)).toBeDefined();
 });
