@@ -27,7 +27,7 @@ gh workflow run deploy.yml (вручную) или geo-refresh.yml → Deploy (d
 
 api идёт первым, потому что при старте применяет миграции. При первой же ошибке выкатка останавливается, и следующие сервисы остаются на прежней версии.
 
-Geo DB refresh (`geo-refresh.yml`) запускается 2-го числа каждого месяца в 06:00 UTC. Он собирает `appmetrica-backend:<sha main>-geo-YYYYMM` с базой текущего месяца и через `deploy.yml` выкатывает только ingest.
+Geo DB refresh (`geo-refresh.yml`) запускается вручную (`gh workflow run geo-refresh.yml`), раз в месяц после выхода новой базы DB-IP. Он собирает `appmetrica-backend:<sha main>-geo-YYYYMM` с базой текущего месяца и через `deploy.yml` выкатывает только ingest.
 
 ## Один раз: Dokploy (через Tailscale, `http://appmetrica-prod:3000`)
 
