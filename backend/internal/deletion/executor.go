@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/pgstore"
@@ -48,6 +49,10 @@ const (
 // Purger — ClickHouse-часть удаления (05-data-model.md, job deletion). Реализация — NewClickHousePurger.
 type Purger interface {
 	Ping(ctx context.Context) error
+	// InstallFirstDay и UserFirstDay — UTC-дата самого раннего события, которое удалит PurgeInstall или PurgeUser;
+	// ok=false — событий нет.
+	InstallFirstDay(ctx context.Context, appID, installID uuid.UUID) (day time.Time, ok bool, err error)
+	UserFirstDay(ctx context.Context, appID uuid.UUID, userID string) (day time.Time, ok bool, err error)
 	PurgeInstall(ctx context.Context, appID, installID uuid.UUID) error
 	PurgeUser(ctx context.Context, appID uuid.UUID, userID string) error
 	PurgeApp(ctx context.Context, appID uuid.UUID) error
@@ -69,6 +74,8 @@ type queue interface {
 	// pending/running/failed) пропускаются до его конца; ok=false — брать нечего.
 	claim(ctx context.Context, now, appRequestedBefore time.Time) (dr sqlc.DeletionRequest, ok bool, err error)
 	complete(ctx context.Context, id uuid.UUID, now time.Time) error
+	// requestReopen — заявка закрыть заново дни приложения с fromDay (closed_days_reopen).
+	requestReopen(ctx context.Context, appID uuid.UUID, fromDay, now time.Time) error
 	fail(ctx context.Context, id uuid.UUID, msg string) error
 	// deleteApp в одной транзакции копирует запрос (completed_at уже выставлен) в job_runs.details цикла
 	// jobRunID и удаляет строку apps.
@@ -128,7 +135,8 @@ func (e *Executor) RunOnce(ctx context.Context, jobRunID uuid.UUID) (Result, err
 }
 
 // execute удаляет данные субъекта: сначала ClickHouse, затем отметка в Postgres. Для приложения запрос
-// не помечается done — строку apps и с ней запрос снимает deleteApp.
+// не помечается done — строку apps и с ней запрос снимает deleteApp. Человек и установка входят в уже закрытые
+// дни, поэтому до удаления событий ставится заявка закрыть их заново (reopenFrom).
 func (e *Executor) execute(ctx context.Context, dr sqlc.DeletionRequest, jobRunID uuid.UUID) error {
 	switch dr.SubjectType {
 	case sqlc.DeletionSubjectInstall:
@@ -136,10 +144,16 @@ func (e *Executor) execute(ctx context.Context, dr sqlc.DeletionRequest, jobRunI
 		if err != nil {
 			return fmt.Errorf("deletion: install_id: %w", err)
 		}
+		if err := e.reopenFrom(ctx, dr, func() (time.Time, bool, error) { return e.purger.InstallFirstDay(ctx, dr.AppID, id) }); err != nil {
+			return err
+		}
 		if err := e.purger.PurgeInstall(ctx, dr.AppID, id); err != nil {
 			return err
 		}
 	case sqlc.DeletionSubjectUser:
+		if err := e.reopenFrom(ctx, dr, func() (time.Time, bool, error) { return e.purger.UserFirstDay(ctx, dr.AppID, dr.SubjectValue) }); err != nil {
+			return err
+		}
 		if err := e.purger.PurgeUser(ctx, dr.AppID, dr.SubjectValue); err != nil {
 			return err
 		}
@@ -154,6 +168,20 @@ func (e *Executor) execute(ctx context.Context, dr sqlc.DeletionRequest, jobRunI
 		return fmt.Errorf("deletion: unknown subject_type %q", dr.SubjectType)
 	}
 	return e.queue.complete(ctx, dr.ID, e.clock.Now())
+}
+
+// reopenFrom ставит заявку закрыть заново дни приложения с дня перед первым событием субъекта: дата события
+// в UTC в TZ приложения восточнее UTC — уже следующий день. Заявка пишется до удаления событий: после сбоя посреди
+// purge первое событие уже не найти, а close_day не применит её, пока запрос не завершится (ApplyReopenRequests).
+func (e *Executor) reopenFrom(ctx context.Context, dr sqlc.DeletionRequest, firstDay func() (time.Time, bool, error)) error {
+	day, ok, err := firstDay()
+	if err != nil || !ok {
+		return err
+	}
+	if err := e.queue.requestReopen(ctx, dr.AppID, day.AddDate(0, 0, -1), e.clock.Now()); err != nil {
+		return fmt.Errorf("deletion: reopen closed days: %w", err)
+	}
+	return nil
 }
 
 // failed записывает ошибку попытки: pending до maxAttempts, затем failed и onFailed.
@@ -223,6 +251,12 @@ func (q pgQueue) claim(ctx context.Context, now, appRequestedBefore time.Time) (
 
 func (q pgQueue) complete(ctx context.Context, id uuid.UUID, now time.Time) error {
 	return q.store.Queries().CompleteDeletionRequest(ctx, sqlc.CompleteDeletionRequestParams{Now: &now, ID: id})
+}
+
+func (q pgQueue) requestReopen(ctx context.Context, appID uuid.UUID, fromDay, now time.Time) error {
+	return q.store.Queries().RequestReopenClosedDays(ctx, sqlc.RequestReopenClosedDaysParams{
+		AppID: appID, FromDay: pgtype.Date{Time: fromDay, Valid: true}, Now: now,
+	})
 }
 
 func (q pgQueue) fail(ctx context.Context, id uuid.UUID, msg string) error {

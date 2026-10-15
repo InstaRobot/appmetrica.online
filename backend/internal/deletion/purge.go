@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -33,6 +34,14 @@ HAVING argMinMerge(first_user) = {user_id:String}`
 WHERE app_id = {app_id:UUID} AND (user_id = {user_id:String} OR install_id IN {install_ids:Array(UUID)})`
 
 	qDeleteEventsByInstalls = `DELETE FROM events WHERE app_id = {app_id:UUID} AND install_id IN {install_ids:Array(UUID)}`
+
+	// qFirstDayByUser и qFirstDayByInstalls — UTC-дата самого раннего события, которое удалит qDeleteEventsByUser
+	// или qDeleteEventsByInstalls, и число таких событий (min пустого набора — 1970-01-01).
+	qFirstDayByUser = `SELECT min(event_date) AS day, count() AS n FROM events
+WHERE app_id = {app_id:UUID} AND (user_id = {user_id:String} OR install_id IN {install_ids:Array(UUID)})`
+
+	qFirstDayByInstalls = `SELECT min(event_date) AS day, count() AS n FROM events
+WHERE app_id = {app_id:UUID} AND install_id IN {install_ids:Array(UUID)}`
 
 	qDeleteInstallFirstSeen = `ALTER TABLE install_first_seen DELETE
 WHERE app_id = {app_id:UUID} AND install_id IN {install_ids:Array(UUID)}`
@@ -73,6 +82,35 @@ func (p chPurger) Ping(ctx context.Context) error {
 		return fmt.Errorf("clickhouse: ping: %w", err)
 	}
 	return nil
+}
+
+// InstallFirstDay — UTC-дата самого раннего события установки; ok=false — событий нет.
+func (p chPurger) InstallFirstDay(ctx context.Context, appID, installID uuid.UUID) (time.Time, bool, error) {
+	return p.firstDay(ctx, qFirstDayByInstalls, clickhouse.Parameters{
+		"app_id": appID.String(), "install_ids": chstore.UUIDArrayParam([]uuid.UUID{installID}),
+	})
+}
+
+// UserFirstDay — UTC-дата самого раннего события из тех, что удалит PurgeUser; ok=false — событий нет.
+func (p chPurger) UserFirstDay(ctx context.Context, appID uuid.UUID, userID string) (time.Time, bool, error) {
+	installs, err := p.linkedInstalls(ctx, appID, userID)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return p.firstDay(ctx, qFirstDayByUser, clickhouse.Parameters{
+		"app_id": appID.String(), "user_id": chstore.StringParam(userID), "install_ids": chstore.UUIDArrayParam(installs),
+	})
+}
+
+func (p chPurger) firstDay(ctx context.Context, query string, params clickhouse.Parameters) (time.Time, bool, error) {
+	var (
+		day time.Time
+		n   uint64
+	)
+	if err := p.conn.QueryRow(clickhouse.Context(ctx, clickhouse.WithParameters(params)), query).Scan(&day, &n); err != nil {
+		return time.Time{}, false, fmt.Errorf("clickhouse: first event day: %w", err)
+	}
+	return day, n > 0, nil
 }
 
 // PurgeInstall — события, first-seen, связь с пользователем и упоминания в rejected_events установки.
