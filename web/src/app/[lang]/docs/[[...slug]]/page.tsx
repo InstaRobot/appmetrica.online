@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { APIPage } from "@/components/docs/api-page";
 import { docsLink } from "@/components/docs/docs-link";
+import { DocsTable } from "@/components/docs/docs-table";
 import { source } from "@/lib/docs/source";
 import { isLocale, type Locale } from "@/lib/i18n/locale";
 import { getMessages } from "@/messages";
@@ -39,7 +40,7 @@ export default async function DocsRoute({ params }: PageProps<"/[lang]/docs/[[..
       <DocsTitle className={TITLE}>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, a: docsLink(locale) }} />
+        <MDX components={{ ...defaultMdxComponents, a: docsLink(locale), table: DocsTable }} />
       </DocsBody>
     </DocsPage>
   );
