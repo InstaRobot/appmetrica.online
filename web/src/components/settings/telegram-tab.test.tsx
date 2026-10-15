@@ -47,6 +47,17 @@ describe("TelegramTab", () => {
     expect(screen.getByText(/TELEGRAM_BOT_TOKEN/)).toBeInTheDocument();
   });
 
+  it("stacks the form actions full width on phones", async () => {
+    mockSettings(makeSettings());
+    renderWithClient(<TelegramTab />);
+
+    const save = await screen.findByRole("button", { name: "Сохранить" });
+    expect(save.parentElement).toHaveClass("max-md:flex-col-reverse");
+    expect(save.parentElement).toContainElement(
+      screen.getByRole("button", { name: "Отправить тестовое сообщение" }),
+    );
+  });
+
   it("saves changed settings", async () => {
     const patches = mockSettings(makeSettings());
     renderWithClient(<TelegramTab />);

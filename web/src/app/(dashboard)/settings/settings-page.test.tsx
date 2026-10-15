@@ -31,6 +31,15 @@ beforeEach(() => {
 });
 
 describe("SettingsView", () => {
+  it("scrolls the tab list instead of the page on phones", () => {
+    renderView();
+
+    expect(screen.getByRole("tablist", { name: "Разделы настроек" })).toHaveClass(
+      "max-md:max-w-full",
+      "max-md:overflow-x-auto",
+    );
+  });
+
   it("tabs are keyboard navigable", async () => {
     renderView();
     const user = userEvent.setup();

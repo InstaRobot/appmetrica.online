@@ -77,6 +77,18 @@ describe("AppDangerZone", () => {
     expect(toasts.success).toHaveBeenCalledWith("Приложение в архиве");
   });
 
+  it("puts every action under its text and stretches it on phones", () => {
+    mockActions();
+    renderWithClient(<AppDangerZone app={ACTIVE} />);
+
+    for (const name of ["Объединить…", "Архивировать", "Удалить навсегда"]) {
+      expect(screen.getByRole("button", { name }).parentElement).toHaveClass(
+        "max-md:flex-col",
+        "max-md:items-stretch",
+      );
+    }
+  });
+
   it("offers to unarchive an archived app", async () => {
     const calls = mockActions();
     renderWithClient(<AppDangerZone app={ARCHIVED} />);

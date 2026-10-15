@@ -78,6 +78,14 @@ describe("CreateAppForm", () => {
     expect(toasts.success).toHaveBeenCalledWith("Приложение создано");
   });
 
+  it("stacks the form actions full width on phones", () => {
+    renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+
+    const actions = screen.getByRole("button", { name: "Создать" }).parentElement;
+    expect(actions).toHaveClass("max-md:flex-col-reverse");
+    expect(actions).toContainElement(screen.getByRole("link", { name: "Отмена" }));
+  });
+
   it("creates an app with several platforms", async () => {
     const bodies = mockCreate();
     const user = userEvent.setup();

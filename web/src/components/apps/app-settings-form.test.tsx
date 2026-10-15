@@ -54,6 +54,14 @@ async function pickTimezone(name: RegExp) {
 describe("AppSettingsForm", () => {
   beforeEach(mockTimezones);
 
+  it("stretches the save buttons on phones", async () => {
+    renderWithClient(<AppSettingsForm app={OLD_APP} />);
+
+    const saves = screen.getAllByRole("button", { name: "Сохранить" });
+    expect(saves).toHaveLength(2);
+    for (const save of saves) expect(save).toHaveClass("max-md:w-full");
+  });
+
   it("warns about closed days on timezone change", async () => {
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 

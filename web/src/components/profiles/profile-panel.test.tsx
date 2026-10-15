@@ -122,6 +122,18 @@ describe("ProfilePanel", () => {
     ]);
   });
 
+  it("moves the delete action to its own full-width row on phones", async () => {
+    mockApi(() => HttpResponse.json(makeProfile()));
+    renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+
+    const remove = await screen.findByRole("button", { name: "Удалить данные" });
+    expect(remove).toHaveClass("max-md:w-full", "max-md:h-11");
+    expect(remove.parentElement).toHaveClass("max-md:flex-wrap");
+    expect(screen.getByRole("button", { name: "Копировать person_key" })).toHaveClass(
+      "max-md:size-11",
+    );
+  });
+
   it("loads more sessions by before cursor", async () => {
     const befores: (string | null)[] = [];
     mockApi(({ request }) => {
