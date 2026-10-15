@@ -25,7 +25,8 @@ test("visitor explores the demo without signing in and leaves it", async ({ page
   await expect(page.getByRole("navigation", { name: "Разделы приложения" })).toBeVisible();
 
   await banner.getByRole("link", { name: "Выйти из демо" }).click();
-  await expect(page).toHaveURL("/");
+  // Выход ведёт на лендинг; браузер прогона русский (locale ru-RU), поэтому proxy открывает /ru.
+  await expect(page).toHaveURL("/ru");
 
   await page.goto("/portfolio");
   await expect(page).toHaveURL(/\/login\?next=%2Fportfolio/);
