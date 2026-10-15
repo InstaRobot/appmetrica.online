@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
@@ -495,6 +496,27 @@ func TestUpdateApp(t *testing.T) {
 	cur := e.get(t, app.ID)
 	require.Equal(t, "notes IOS", cur.Name)
 	require.Equal(t, "Asia/Tokyo", cur.Timezone)
+}
+
+// Смена часового пояса сдвигает границы уже закрытых дней: обновление ставит заявку переоткрыть все дни
+// приложения, и close_day закроет их заново в новом поясе. Имя или тот же пояс заявку не ставят.
+func TestUpdateAppTimezoneReopensClosedDays(t *testing.T) {
+	e := newEnv(t)
+	app, _ := e.create(t, "Notes iOS", "ios", "Europe/Moscow")
+	reopenFrom := func() []string {
+		rows, err := e.pg.Pool().Query(t.Context(), `SELECT from_day::text FROM closed_days_reopen WHERE app_id = $1`, app.ID)
+		require.NoError(t, err)
+		days, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		require.NoError(t, err)
+		return days
+	}
+
+	require.Equal(t, http.StatusOK, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"name": "Notes"}).Code)
+	require.Equal(t, http.StatusOK, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"timezone": "Europe/Moscow"}).Code)
+	require.Empty(t, reopenFrom())
+
+	require.Equal(t, http.StatusOK, e.call(t, http.MethodPatch, "/admin/v1/apps/"+app.ID, map[string]any{"timezone": "Asia/Tokyo"}).Code)
+	require.Equal(t, []string{"1970-01-01"}, reopenFrom(), "все закрытые дни приложения")
 }
 
 func TestArchiveApp_IdempotentAndUnarchive(t *testing.T) {
