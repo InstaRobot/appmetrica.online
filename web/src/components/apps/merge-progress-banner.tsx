@@ -14,9 +14,13 @@ import { getListWriteKeysQueryKey } from "@/lib/api/gen/endpoints/admin-keys/adm
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { AppMerge } from "@/lib/api/gen/model";
-import { formatInt } from "@/lib/format";
+import type { Formatters } from "@/lib/format";
+import { useFormat, useLocale, useMessages } from "@/lib/i18n/client";
+import { fmt, plural } from "@/lib/i18n/format-message";
+import type { Locale } from "@/lib/i18n/locale";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
+import type { Messages } from "@/messages";
 
 const POLL_MS = 5000;
 const RUNNING = new Set<AppMerge["status"]>(["pending", "running"]);
@@ -39,15 +43,17 @@ export function useActiveMerge(appId: string): AppMerge | undefined {
   return useAppMerges(appId).find((m) => RUNNING.has(m.status) || m.status === "failed");
 }
 
-function stepText(merge: AppMerge): string {
-  const source = `Объединение с «${merge.source_name}»`;
+type BannerTexts = Messages["apps"]["mergeBanner"];
+
+function stepText(merge: AppMerge, t: BannerTexts, locale: Locale, f: Formatters): string {
   if (merge.status === "failed") {
-    return `Объединение прервалось: ${merge.error ?? "причина неизвестна"}`;
+    return fmt(t.failed, { error: merge.error ?? t.unknownReason });
   }
-  if (merge.step === "wait_keys") {
-    return `${source}: ждём, пока приём событий перечитает ключи (до 17 мин)`;
-  }
-  return `${source}: перенесено ${formatInt(merge.copied_events)} из ${formatInt(merge.total_events)} событий`;
+  if (merge.step === "wait_keys") return fmt(t.waitKeys, { source: merge.source_name });
+  return plural(locale, t.progress, merge.total_events, {
+    source: merge.source_name,
+    copied: f.formatInt(merge.copied_events),
+  });
 }
 
 // Баннер AppShell: шаг слияния текстом, «Повторить» у упавшего. Шаг move_keys
@@ -55,6 +61,10 @@ function stepText(merge: AppMerge): string {
 // только слияние прошло этот шаг. Когда отслеживаемое слияние завершилось, перечитываются данные цели
 // (приложение, отчёты, ключи) и списки приложений.
 export function MergeProgressBanner({ appId }: { appId: string }) {
+  const m = useMessages();
+  const t = m.apps.mergeBanner;
+  const locale = useLocale();
+  const f = useFormat();
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const merges = useAppMerges(appId);
@@ -74,7 +84,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
     const finished = merges.find((m) => m.id === tracked.current?.id && m.status === "done");
     if (!finished) return;
     tracked.current = null;
-    toast.success("Приложения объединены");
+    toast.success(t.done);
     void queryClient.invalidateQueries({
       predicate: ({ queryKey }) =>
         typeof queryKey[0] === "string" && queryKey[0].startsWith(`/v1/apps/${appId}`),
@@ -82,7 +92,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
     void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
     void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
     void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
-  }, [active, merges, appId, queryClient]);
+  }, [active, merges, appId, queryClient, t.done]);
 
   const retry = useMutation({
     mutationFn: (mergeId: string) => retryAppMerge(appId, mergeId),
@@ -103,7 +113,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
     >
       {failed ? <CircleAlert aria-hidden="true" /> : <GitMerge aria-hidden="true" />}
       <AlertDescription className={failed ? undefined : "text-foreground"}>
-        {stepText(active)}
+        {stepText(active, t, locale, f)}
       </AlertDescription>
       {failed ? (
         <AlertAction>
@@ -113,7 +123,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
             disabled={retry.isPending}
             onClick={() => retry.mutate(active.id)}
           >
-            Повторить
+            {m.common.retry}
           </Button>
         </AlertAction>
       ) : null}

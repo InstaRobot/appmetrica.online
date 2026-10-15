@@ -37,9 +37,11 @@ import { getListAppsQueryKey, useListApps } from "@/lib/api/gen/endpoints/apps/a
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App, MergePreview } from "@/lib/api/gen/model";
 import type { UiError } from "@/lib/errors";
-import { formatDate, formatInt } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
+import type { Messages } from "@/messages";
 
 export interface MergeAppsDialogProps {
   /** Цель слияния — текущее приложение. */
@@ -59,7 +61,11 @@ export function MergeAppsDialog({ target, open, onOpenChange }: MergeAppsDialogP
   );
 }
 
+type MergeTexts = Messages["apps"]["merge"];
+
 function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
+  const m = useMessages();
+  const t = m.apps.merge;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const [source, setSource] = useState<App | null>(null);
@@ -94,7 +100,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
         confirm_name: confirm.trim(),
       });
       if (res.status !== 202) return;
-      toast.success("Объединение запущено");
+      toast.success(t.started);
       void queryClient.invalidateQueries({ queryKey: getListAppMergesQueryKey(target.id) });
       void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
       void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
@@ -103,11 +109,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
       const ui = uiError(err);
       if (ui.code === "confirm_name_mismatch") setError({ field: true, message: ui.message });
       else if (ui.code === "deletion_pending") {
-        setError({
-          field: false,
-          message:
-            "У одного из приложений есть невыполненная заявка на удаление — дождитесь её выполнения",
-        });
+        setError({ field: false, message: t.deletionPending });
       } else setError({ field: false, message: ui.message });
     }
   };
@@ -125,14 +127,12 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
     >
       <form noValidate onSubmit={submit} className="grid gap-4">
         <DialogHeader>
-          <DialogTitle>Объединить приложения</DialogTitle>
-          <DialogDescription>
-            Данные выбранного приложения переедут в «{target.name}».
-          </DialogDescription>
+          <DialogTitle>{t.title}</DialogTitle>
+          <DialogDescription>{fmt(t.description, { name: target.name })}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-1.5">
-          <Label id={labelId}>Приложение-источник</Label>
+          <Label id={labelId}>{t.source}</Label>
           <SourceCombobox
             ref={sourceRef}
             labelId={labelId}
@@ -146,13 +146,13 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
         </div>
 
         {source ? (
-          <section aria-label="Что переедет" aria-live="polite" className="flex flex-col gap-3">
+          <section aria-label={t.preview} aria-live="polite" className="flex flex-col gap-3">
             {previewData ? (
-              <PreviewCard preview={previewData} />
+              <PreviewCard preview={previewData} texts={t} />
             ) : preview.isError ? (
               <Alert variant="destructive">
                 <CircleAlert aria-hidden="true" />
-                <AlertDescription>{previewErrorText(preview.error, uiError)}</AlertDescription>
+                <AlertDescription>{previewErrorText(preview.error, uiError, t)}</AlertDescription>
                 <AlertAction>
                   <Button
                     type="button"
@@ -160,12 +160,12 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
                     variant="outline"
                     onClick={() => void preview.refetch()}
                   >
-                    Повторить
+                    {m.common.retry}
                   </Button>
                 </AlertAction>
               </Alert>
             ) : (
-              <div role="status" aria-label="Загрузка…" className="flex flex-col gap-2">
+              <div role="status" aria-label={m.common.loading} className="flex flex-col gap-2">
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-5 w-full" />
@@ -175,7 +175,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
         ) : null}
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={confirmId}>Введите название источника, чтобы подтвердить</Label>
+          <Label htmlFor={confirmId}>{t.confirm}</Label>
           <Input
             id={confirmId}
             autoComplete="off"
@@ -205,7 +205,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="ghost">
-              Отмена
+              {m.common.cancel}
             </Button>
           </DialogClose>
           <Button
@@ -213,7 +213,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
             variant="destructive"
             disabled={!matches || !previewData || create.isPending}
           >
-            {create.isPending ? "Объединяем…" : "Объединить"}
+            {create.isPending ? t.submitting : t.submit}
           </Button>
         </DialogFooter>
       </form>
@@ -221,39 +221,45 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
   );
 }
 
-function previewErrorText(error: unknown, uiError: (error: unknown) => UiError): string {
+function previewErrorText(
+  error: unknown,
+  uiError: (error: unknown) => UiError,
+  t: MergeTexts,
+): string {
   const ui = uiError(error);
-  return ui.code === "storage_unavailable" ? "Хранилище данных временно недоступно." : ui.message;
+  return ui.code === "storage_unavailable" ? t.storageUnavailable : ui.message;
 }
 
-function PreviewCard({ preview }: { preview: MergePreview }) {
+function PreviewCard({ preview, texts: t }: { preview: MergePreview; texts: MergeTexts }) {
+  const f = useFormat();
   const days =
     preview.first_day && preview.last_day
-      ? `${formatDate(preview.first_day)} — ${formatDate(preview.last_day)}`
-      : "нет событий";
+      ? `${f.formatDate(preview.first_day)} — ${f.formatDate(preview.last_day)}`
+      : t.noEvents;
   return (
     <>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border p-3 text-body-md">
-        <dt className="text-fg-subtle">Событий</dt>
-        <dd className="tabular-nums">{formatInt(preview.events)}</dd>
-        <dt className="text-fg-subtle">Дни данных</dt>
+        <dt className="text-fg-subtle">{t.events}</dt>
+        <dd className="tabular-nums">{f.formatInt(preview.events)}</dd>
+        <dt className="text-fg-subtle">{t.days}</dt>
         <dd>{days}</dd>
-        <dt className="text-fg-subtle">Ключей записи</dt>
+        <dt className="text-fg-subtle">{t.writeKeys}</dt>
         <dd className="tabular-nums">{preview.write_keys}</dd>
       </dl>
       {preview.timezone_differs ? (
         <Alert role="note" className="border-warning/40 text-warning">
           <TriangleAlert aria-hidden="true" />
           <AlertDescription className="text-warning">
-            {`Часовой пояс останется «${preview.target_timezone}»: дни источника (${preview.source_timezone}) пересчитаются.`}
+            {fmt(t.timezoneDiffers, {
+              target: preview.target_timezone,
+              source: preview.source_timezone,
+            })}
           </AlertDescription>
         </Alert>
       ) : null}
       <Alert role="note">
         <Info aria-hidden="true" />
-        <AlertDescription>
-          Ключи источника продолжат работать — выпущенные версии приложений обновлять не нужно.
-        </AlertDescription>
+        <AlertDescription>{t.keysKeepWorking}</AlertDescription>
       </Alert>
     </>
   );
@@ -269,6 +275,7 @@ type SourceComboboxProps = {
 
 // Выбор источника: активные и архивные приложения кроме цели, поиск по имени (как AppSwitcher).
 function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceComboboxProps) {
+  const t = useMessages().apps.merge;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const apps = useListApps({ include_archived: true });
@@ -297,7 +304,7 @@ function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceCombo
         >
           <span className="flex min-w-0 items-center gap-2">
             {value ? <PlatformIcons platforms={value.platforms} /> : null}
-            <span className="truncate">{value ? value.name : "Выберите приложение"}</span>
+            <span className="truncate">{value ? value.name : t.choose}</span>
           </span>
           <ChevronsUpDown aria-hidden="true" className="text-fg-subtle" />
         </Button>
@@ -306,13 +313,9 @@ function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceCombo
       <PopoverContent align="start" className="z-modal w-(--radix-popover-trigger-width) p-0">
         <Suspense fallback={<CommandSkeleton />}>
           <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Найти приложение…"
-              value={search}
-              onValueChange={setSearch}
-            />
+            <CommandInput placeholder={t.search} value={search} onValueChange={setSearch} />
             <CommandList>
-              <CommandEmpty>{needle ? "Ничего не найдено" : "Других приложений нет"}</CommandEmpty>
+              <CommandEmpty>{needle ? t.notFound : t.noOther}</CommandEmpty>
               {visible.length > 0 ? (
                 <CommandGroup>
                   {visible.map((app) => (
@@ -328,7 +331,7 @@ function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceCombo
                       <PlatformIcons platforms={app.platforms} />
                       <span className="truncate">{app.name}</span>
                       {app.status === "archived" ? (
-                        <span className="ml-auto text-label-sm text-fg-subtle">в архиве</span>
+                        <span className="ml-auto text-label-sm text-fg-subtle">{t.archived}</span>
                       ) : null}
                     </CommandItem>
                   ))}

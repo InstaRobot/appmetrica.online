@@ -1,2 +1,128 @@
-// Пространство имён «apps». Заполняется вместе с переводом соответствующих экранов.
-export const apps = {};
+import { pluralForms } from "@/lib/i18n/format-message";
+
+// Пространство имён «apps»: создание приложения (S-04), настройки (S-11) — основное, платформы, write-ключи,
+// опасная зона и слияние приложений.
+export const apps = {
+  actions: {
+    create: "Create",
+    creating: "Creating…",
+    saving: "Saving…",
+  },
+  fields: {
+    name: "Name",
+    nameRequired: "Enter a name",
+    tooLong: "64 characters max",
+    timezone: "Time zone",
+    timezoneRequired: "Choose a time zone",
+    platforms: "Platforms",
+  },
+  settings: {
+    title: "App settings",
+    basics: {
+      title: "General",
+      timezoneHint: "Changes day boundaries in reports; closed days aren't recalculated.",
+      timezoneWarningLabel: "Time zone change",
+      timezoneWarning:
+        "Closed days aren't recalculated: days older than 8 days have already been counted in the {timezone} time zone. The new time zone applies to the remaining days.",
+      saved: "Settings saved",
+    },
+    platforms: {
+      empty: "Keep at least one platform",
+      hint: "Removing a platform doesn't delete its data: events and keys are kept.",
+      saved: "Platforms saved",
+    },
+  },
+  writeKeys: {
+    title: "Write keys",
+    create: "Create key",
+    dialogTitle: "New write key",
+    dialogDescription: "A key for sending events to ingest.",
+    anyPlatform: "Any platform",
+    keyField: "write key",
+    createdHint:
+      "The key is public: you can embed it in the app. Old keys keep working until you revoke them.",
+    done: "Done",
+    label: "Label",
+    labelPlaceholder: "For example, iOS 2.x",
+    platform: "Platform",
+    platformHint: "Used for events without context.platform.",
+    empty: "No keys yet — create the first one.",
+    revokedBadge: "Revoked",
+    copyKey: "Copy key {key}",
+    revokeKey: "Revoke key {key}",
+    revokeTitle: "Revoke key {key}?",
+    revokeDescription:
+      "Within 15 seconds, all requests with this key will start getting 401 invalid_app_key. Installed app versions with this key will stop sending data.",
+    revoke: "Revoke",
+    revoking: "Revoking…",
+    revoked: "Key revoked",
+    columns: {
+      key: "Key",
+      label: "Label",
+      platform: "Platform",
+      created: "Created",
+      used: "Last used",
+      actions: "Actions",
+    },
+  },
+  danger: {
+    title: "Danger zone",
+    mergeBusy: "A merge is in progress — wait for it to finish",
+    mergeTitle: "Merge with another app",
+    mergeDescription:
+      "The other app's event history and keys will move here, and the app itself will be deleted.",
+    merge: "Merge…",
+    archivedText:
+      "The app is archived: events are rejected, data is kept. Restore it to accept events again.",
+    archiveText: "Archive — event intake stops (403 app_archived), data is kept.",
+    restore: "Restore from archive",
+    restoring: "Restoring…",
+    restored: "App restored from archive",
+    archive: "Archive",
+    archiving: "Archiving…",
+    archived: "App archived",
+    archiveTitle: "Archive “{name}”?",
+    archiveDescription:
+      "Ingest will start rejecting this app's events with code 403 app_archived. Data and reports are kept, and the app can be restored from the archive.",
+    deleteText: "Delete permanently — all events and settings are deleted in the background.",
+    delete: "Delete permanently",
+    deleteTitle: "Delete “{name}” permanently?",
+    deleteDescription:
+      "All of the app's events, keys and settings will be deleted in the background. This can't be undone.",
+    deleteStarted: "Deletion started",
+  },
+  merge: {
+    title: "Merge apps",
+    description: "Data from the selected app will move to “{name}”.",
+    source: "Source app",
+    choose: "Choose an app",
+    search: "Find an app…",
+    notFound: "Nothing found",
+    noOther: "No other apps",
+    archived: "archived",
+    preview: "What will move",
+    events: "Events",
+    days: "Data days",
+    noEvents: "no events",
+    writeKeys: "Write keys",
+    timezoneDiffers:
+      "The time zone stays “{target}”: the source's days ({source}) will be recalculated.",
+    keysKeepWorking: "The source's keys keep working — no need to update released app versions.",
+    storageUnavailable: "The data store is temporarily unavailable.",
+    confirm: "Type the source app's name to confirm",
+    submit: "Merge",
+    submitting: "Merging…",
+    started: "Merge started",
+    deletionPending: "One of the apps has a pending deletion request — wait for it to complete",
+  },
+  mergeBanner: {
+    waitKeys: "Merging with “{source}”: waiting for event intake to reload the keys (up to 17 min)",
+    progress: pluralForms({
+      one: "Merging with “{source}”: moved {copied} of {count} event",
+      other: "Merging with “{source}”: moved {copied} of {count} events",
+    }),
+    failed: "Merge failed: {error}",
+    unknownReason: "unknown reason",
+    done: "Apps merged",
+  },
+};

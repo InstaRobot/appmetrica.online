@@ -21,6 +21,8 @@ import { archiveApp, deleteApp, unarchiveApp } from "@/lib/api/gen/endpoints/adm
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 import { useActiveMerge } from "./merge-progress-banner";
@@ -34,6 +36,8 @@ const MergeAppsDialog = lazy(() =>
 // удаление навсегда вводом точного названия. Удаление выполняет worker, экран сразу уходит в портфель.
 // Слияние другого приложения в это; пока оно не завершено, опасные действия недоступны.
 export function AppDangerZone({ app }: { app: App }) {
+  const m = useMessages();
+  const t = m.apps.danger;
   const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -51,7 +55,7 @@ export function AppDangerZone({ app }: { app: App }) {
   const archive = useMutation({
     mutationFn: () => archiveApp(app.id),
     onSuccess: () => {
-      toast.success("Приложение в архиве");
+      toast.success(t.archived);
       setArchiving(false);
       void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(app.id) });
       refreshLists();
@@ -62,7 +66,7 @@ export function AppDangerZone({ app }: { app: App }) {
   const unarchive = useMutation({
     mutationFn: () => unarchiveApp(app.id),
     onSuccess: () => {
-      toast.success("Приложение возвращено из архива");
+      toast.success(t.restored);
       void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(app.id) });
       refreshLists();
     },
@@ -75,7 +79,7 @@ export function AppDangerZone({ app }: { app: App }) {
     try {
       const res = await remove.mutateAsync();
       if (res.status !== 202) return;
-      toast.success("Удаление запущено");
+      toast.success(t.deleteStarted);
       refreshLists();
       router.push("/portfolio");
     } catch {
@@ -88,18 +92,14 @@ export function AppDangerZone({ app }: { app: App }) {
   return (
     <Card className="border-destructive">
       <CardHeader>
-        <CardTitle>Опасная зона</CardTitle>
+        <CardTitle>{t.title}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {busy ? (
-          <p className="text-body-sm text-fg-subtle">Идёт объединение — дождитесь завершения</p>
-        ) : null}
+        {busy ? <p className="text-body-sm text-fg-subtle">{t.mergeBusy}</p> : null}
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-body-md font-medium">Объединить с другим приложением</p>
-            <p className="text-body-md">
-              История событий и ключи другого приложения переедут сюда, а оно само будет удалено.
-            </p>
+            <p className="text-body-md font-medium">{t.mergeTitle}</p>
+            <p className="text-body-md">{t.mergeDescription}</p>
           </div>
           <Button
             variant="outline"
@@ -110,42 +110,36 @@ export function AppDangerZone({ app }: { app: App }) {
             }}
           >
             <GitMerge aria-hidden="true" />
-            Объединить…
+            {t.merge}
           </Button>
         </div>
         <Separator />
         <div className="flex items-center justify-between gap-4">
-          <p className="text-body-md">
-            {archived
-              ? "Приложение в архиве: события отклоняются, данные сохранены. Верните его, чтобы снова принимать события."
-              : "Архивировать — приём событий прекращается (403 app_archived), данные сохраняются."}
-          </p>
+          <p className="text-body-md">{archived ? t.archivedText : t.archiveText}</p>
           {archived ? (
             <Button
               variant="outline"
               disabled={busy || unarchive.isPending}
               onClick={() => unarchive.mutate()}
             >
-              {unarchive.isPending ? "Возвращаем…" : "Вернуть из архива"}
+              {unarchive.isPending ? t.restoring : t.restore}
             </Button>
           ) : (
             <Button variant="outline" disabled={busy} onClick={() => setArchiving(true)}>
-              Архивировать
+              {t.archive}
             </Button>
           )}
         </div>
         <Separator />
         <div className="flex items-center justify-between gap-4">
-          <p className="text-body-md">
-            Удалить навсегда — все события и настройки удаляются в фоне.
-          </p>
+          <p className="text-body-md">{t.deleteText}</p>
           <Button
             variant="outline"
             className="text-destructive"
             disabled={busy}
             onClick={() => setDeleting(true)}
           >
-            Удалить навсегда
+            {t.delete}
           </Button>
         </div>
       </CardContent>
@@ -153,16 +147,13 @@ export function AppDangerZone({ app }: { app: App }) {
       <AlertDialog open={archiving} onOpenChange={setArchiving}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Архивировать «{app.name}»?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Ingest начнёт отклонять события этого приложения с кодом 403 app_archived. Данные и
-              отчёты сохранятся, приложение можно вернуть из архива.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{fmt(t.archiveTitle, { name: app.name })}</AlertDialogTitle>
+            <AlertDialogDescription>{t.archiveDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogCancel>{m.common.cancel}</AlertDialogCancel>
             <Button disabled={archive.isPending} onClick={() => archive.mutate()}>
-              {archive.isPending ? "Архивируем…" : "Архивировать"}
+              {archive.isPending ? t.archiving : t.archive}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -180,10 +171,10 @@ export function AppDangerZone({ app }: { app: App }) {
           if (!open) remove.reset();
           setDeleting(open);
         }}
-        title={`Удалить «${app.name}» навсегда?`}
-        description="Все события, ключи и настройки приложения будут удалены в фоне. Действие необратимо."
+        title={fmt(t.deleteTitle, { name: app.name })}
+        description={t.deleteDescription}
         confirmText={app.name}
-        confirmLabel="Удалить навсегда"
+        confirmLabel={t.delete}
         pending={remove.isPending}
         {...(remove.isError ? { serverError: uiError(remove.error).message } : {})}
         onConfirm={confirmDelete}

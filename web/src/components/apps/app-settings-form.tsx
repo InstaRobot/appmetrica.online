@@ -16,6 +16,8 @@ import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portf
 import type { App, Platform, UpdateAppBody } from "@/lib/api/gen/model";
 import { isDemoInBrowser } from "@/lib/demo-mode";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 
@@ -29,11 +31,6 @@ export function hasClosedDays(createdAt: string, now: Date = new Date()): boolea
 
 // F-2 (14-ux-ui-spec.md §7.1): как F-1 — trim названия 1–64 и IANA-зона.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.appSettingsSchema);
-
-const messages = {
-  name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },
-  timezone: "Выберите часовой пояс",
-};
 
 // Карточки S-11: «Основное» (FR-009) и «Платформы». У каждой своя кнопка
 // «Сохранить» и свой PATCH. Ключ карточки платформ — набор с сервера: когда он меняется извне (слияние
@@ -66,12 +63,17 @@ function useSavedApp(app: App) {
 // «Основное»: название и часовой пояс. Отправляются только изменённые поля; смена пояса предупреждает,
 // что уже закрытые дни остаются в прежнем поясе.
 function AppBasicsCard({ app }: { app: App }) {
+  const m = useMessages();
+  const t = m.apps;
   const uiError = useUiError();
   const { save } = useSavedApp(app);
 
   const form = useZodForm(schema, {
     defaultValues: { name: app.name, timezone: app.timezone },
-    messages,
+    messages: {
+      name: { too_small: t.fields.nameRequired, too_big: t.fields.tooLong },
+      timezone: t.fields.timezoneRequired,
+    },
     serverErrors: { app_name_taken: "name" },
     onSubmit: async ({ name, timezone }) => {
       const body: UpdateAppBody = {
@@ -79,7 +81,7 @@ function AppBasicsCard({ app }: { app: App }) {
         ...(timezone !== app.timezone ? { timezone } : {}),
       };
       try {
-        if (await save(body)) toast.success("Настройки сохранены");
+        if (await save(body)) toast.success(t.settings.basics.saved);
       } catch (error) {
         if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
@@ -100,7 +102,7 @@ function AppBasicsCard({ app }: { app: App }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle id="app-basics-title">Основное</CardTitle>
+        <CardTitle id="app-basics-title">{t.settings.basics.title}</CardTitle>
       </CardHeader>
       <CardContent>
         <form
@@ -111,7 +113,7 @@ function AppBasicsCard({ app }: { app: App }) {
         >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={name.id}>
-              Название <Required />
+              {t.fields.name} <Required />
             </Label>
             <Input
               {...name}
@@ -126,7 +128,7 @@ function AppBasicsCard({ app }: { app: App }) {
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={timezone.id}>
-              Часовой пояс <Required />
+              {t.fields.timezone} <Required />
             </Label>
             <TimezoneSelect
               id={timezone.id}
@@ -142,20 +144,19 @@ function AppBasicsCard({ app }: { app: App }) {
               <FieldError id={form.errorId("timezone")} message={form.errors.timezone} />
             ) : (
               <p id="timezone-hint" className="text-caption text-fg-muted">
-                Меняет границы суток в отчётах; закрытые дни не пересчитываются.
+                {t.settings.basics.timezoneHint}
               </p>
             )}
             {warnClosedDays ? (
               <Alert
                 id="timezone-warning"
                 role="status"
-                aria-label="Смена часового пояса"
+                aria-label={t.settings.basics.timezoneWarningLabel}
                 className="border-warning/40 text-warning"
               >
                 <TriangleAlert aria-hidden="true" />
                 <AlertDescription className="text-warning">
-                  Закрытые дни не пересчитываются: дни старше 8 суток уже посчитаны в поясе{" "}
-                  {app.timezone}. Новый пояс применится к остальным дням.
+                  {fmt(t.settings.basics.timezoneWarning, { timezone: app.timezone })}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -163,7 +164,7 @@ function AppBasicsCard({ app }: { app: App }) {
 
           <div className="flex justify-end">
             <Button type="submit" disabled={!dirty || form.submitting}>
-              {form.submitting ? "Сохраняем…" : "Сохранить"}
+              {form.submitting ? t.actions.saving : m.common.save}
             </Button>
           </div>
         </form>
@@ -194,6 +195,8 @@ function samePlatforms(a: Platform[], b: Platform[]): boolean {
 // «Платформы» (#platforms): набор платформ приложения, PATCH { platforms }. Пустой набор не сохраняется;
 // в демо мутации недоступны, поэтому чипы и кнопка выключены.
 function AppPlatformsCard({ app }: { app: App }) {
+  const m = useMessages();
+  const t = m.apps;
   const uiError = useUiError();
   const { save, pending } = useSavedApp(app);
   const demo = useDemo();
@@ -204,7 +207,7 @@ function AppPlatformsCard({ app }: { app: App }) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      if (await save({ platforms })) toast.success("Платформы сохранены");
+      if (await save({ platforms })) toast.success(t.settings.platforms.saved);
     } catch (error) {
       toast.error(uiError(error).message);
     }
@@ -214,7 +217,7 @@ function AppPlatformsCard({ app }: { app: App }) {
     <section id="platforms" aria-labelledby="app-platforms-title" className="scroll-mt-6">
       <Card>
         <CardHeader>
-          <CardTitle id="app-platforms-title">Платформы</CardTitle>
+          <CardTitle id="app-platforms-title">{t.fields.platforms}</CardTitle>
         </CardHeader>
         <CardContent>
           <form noValidate onSubmit={submit} className="flex flex-col gap-3">
@@ -229,14 +232,14 @@ function AppPlatformsCard({ app }: { app: App }) {
             </Suspense>
             <FieldError
               id="platforms-empty"
-              message={empty ? "Оставьте хотя бы одну платформу" : undefined}
+              message={empty ? t.settings.platforms.empty : undefined}
             />
             <p id="platforms-hint" className="text-caption text-fg-muted">
-              Убрать платформу — не удалить её данные: события и ключи сохраняются.
+              {t.settings.platforms.hint}
             </p>
             <div className="flex justify-end">
               <Button type="submit" disabled={demo || empty || !dirty || pending}>
-                {pending ? "Сохраняем…" : "Сохранить"}
+                {pending ? t.actions.saving : m.common.save}
               </Button>
             </div>
           </form>

@@ -55,8 +55,9 @@ import {
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { Platform, type WriteKey } from "@/lib/api/gen/model";
 import { copyText } from "@/lib/clipboard";
-import { formatDate, formatDateTime } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 
@@ -70,7 +71,6 @@ const schema = () => import("@/lib/forms/schemas").then((m) => m.writeKeySchema)
 
 // Значение Select для ключа без платформы: пустую строку Radix Select не принимает.
 const ANY_PLATFORM = "any";
-const ANY_PLATFORM_LABEL = "Любая платформа";
 
 // Опции платформы ключа: «Любая платформа», платформы приложения, остальные.
 function platformOptions(appPlatforms: Platform[]): Platform[] {
@@ -78,12 +78,14 @@ function platformOptions(appPlatforms: Platform[]): Platform[] {
 }
 
 function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Platform[] }) {
+  const m = useMessages();
+  const t = m.apps.writeKeys;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const [created, setCreated] = useState<WriteKey | null>(null);
   const form = useZodForm(schema, {
     defaultValues: { label: "", platform: undefined },
-    messages: { label: "Не длиннее 64 символов" },
+    messages: { label: m.apps.fields.tooLong },
     onSubmit: async ({ label, platform }) => {
       try {
         const res = await createWriteKey(appId, platform ? { label, platform } : { label });
@@ -100,15 +102,12 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
     return (
       <>
         <div className="flex flex-col gap-3">
-          <CopyField value={created.key} label="write-ключ" />
-          <p className="text-body-sm text-fg-muted">
-            Ключ публичный: его можно встраивать в приложение. Старые ключи продолжают работать,
-            пока вы их не отзовёте.
-          </p>
+          <CopyField value={created.key} label={t.keyField} />
+          <p className="text-body-sm text-fg-muted">{t.createdHint}</p>
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button>Готово</Button>
+            <Button>{t.done}</Button>
           </DialogClose>
         </DialogFooter>
       </>
@@ -120,11 +119,11 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
   return (
     <form noValidate onSubmit={form.handleSubmit} className="grid gap-4">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={label.id}>Метка</Label>
+        <Label htmlFor={label.id}>{t.label}</Label>
         <Input
           {...label}
           autoComplete="off"
-          placeholder="Например, iOS 2.x"
+          placeholder={t.labelPlaceholder}
           value={form.values.label}
           onChange={(e) => form.setValue("label", e.target.value)}
           onBlur={() => form.blur("label")}
@@ -132,7 +131,7 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
         <FieldError id={form.errorId("label")} message={form.errors.label} />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={platform.id}>Платформа</Label>
+        <Label htmlFor={platform.id}>{t.platform}</Label>
         <Suspense fallback={<div className="h-8 w-full rounded-lg border border-input" />}>
           <Select
             name="platform"
@@ -150,7 +149,7 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
             </SelectTrigger>
             {/* Список в диалоге: z-dropdown ниже затемнения z-overlay, клики уходили бы в него. */}
             <SelectContent className="z-modal">
-              <SelectItem value={ANY_PLATFORM}>{ANY_PLATFORM_LABEL}</SelectItem>
+              <SelectItem value={ANY_PLATFORM}>{t.anyPlatform}</SelectItem>
               {platformOptions(platforms).map((p) => (
                 <SelectItem key={p} value={p}>
                   {PLATFORM_LABELS[p]}
@@ -163,18 +162,18 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
           <FieldError id={form.errorId("platform")} message={form.errors.platform} />
         ) : (
           <p id="write-key-platform-hint" className="text-caption text-fg-muted">
-            Подставляется в события без context.platform.
+            {t.platformHint}
           </p>
         )}
       </div>
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">
-            Отмена
+            {m.common.cancel}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={form.submitting}>
-          {form.submitting ? "Создаём…" : "Создать"}
+          {form.submitting ? m.apps.actions.creating : m.apps.actions.create}
         </Button>
       </DialogFooter>
     </form>
@@ -188,12 +187,14 @@ type RevokeDialogProps = {
 };
 
 function RevokeWriteKeyDialog({ appId, writeKey, onClose }: RevokeDialogProps) {
+  const m = useMessages();
+  const t = m.apps.writeKeys;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const revoke = useMutation({
     mutationFn: (keyId: string) => revokeWriteKey(appId, keyId),
     onSuccess: () => {
-      toast.success("Ключ отозван");
+      toast.success(t.revoked);
       onClose();
       void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
     },
@@ -205,21 +206,18 @@ function RevokeWriteKeyDialog({ appId, writeKey, onClose }: RevokeDialogProps) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Отозвать ключ {writeKey ? shortKey(writeKey.key) : ""}?
+            {fmt(t.revokeTitle, { key: writeKey ? shortKey(writeKey.key) : "" })}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            Через 15 секунд все запросы с этим ключом начнут получать 401 invalid_app_key.
-            Установленные версии приложения с этим ключом перестанут отправлять данные.
-          </AlertDialogDescription>
+          <AlertDialogDescription>{t.revokeDescription}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{m.common.cancel}</AlertDialogCancel>
           <Button
             variant="destructive"
             disabled={revoke.isPending}
             onClick={() => writeKey && revoke.mutate(writeKey.id)}
           >
-            {revoke.isPending ? "Отзываем…" : "Отозвать"}
+            {revoke.isPending ? t.revoking : t.revoke}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -236,11 +234,13 @@ function WriteKeyRows({
   timezone: string;
   onRevoke: (key: WriteKey) => void;
 }) {
+  const t = useMessages().apps.writeKeys;
+  const f = useFormat();
   if (keys.length === 0) {
     return (
       <TableRow>
         <TableCell colSpan={6} className="py-6 text-center text-fg-muted">
-          Ключей нет — создайте первый.
+          {t.empty}
         </TableCell>
       </TableRow>
     );
@@ -253,12 +253,12 @@ function WriteKeyRows({
           <span className="flex items-center gap-2">
             <span className="font-mono text-code">{short}</span>
             {key.revoked_at ? (
-              <Badge variant="secondary">Отозван</Badge>
+              <Badge variant="secondary">{t.revokedBadge}</Badge>
             ) : (
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Копировать ключ ${short}`}
+                aria-label={fmt(t.copyKey, { key: short })}
                 onClick={() => void copyText(key.key)}
               >
                 <Copy aria-hidden="true" />
@@ -267,18 +267,20 @@ function WriteKeyRows({
           </span>
         </TableCell>
         <TableCell>{key.label || "—"}</TableCell>
-        <TableCell>{key.platform ? PLATFORM_LABELS[key.platform] : ANY_PLATFORM_LABEL}</TableCell>
-        <TableCell>{formatDate(key.created_at, timezone)}</TableCell>
-        <TableCell>{key.last_used_at ? formatDateTime(key.last_used_at, timezone) : "—"}</TableCell>
+        <TableCell>{key.platform ? PLATFORM_LABELS[key.platform] : t.anyPlatform}</TableCell>
+        <TableCell>{f.formatDate(key.created_at, timezone)}</TableCell>
+        <TableCell>
+          {key.last_used_at ? f.formatDateTime(key.last_used_at, timezone) : "—"}
+        </TableCell>
         <TableCell className="text-right">
           {key.revoked_at ? null : (
             <Button
               variant="outline"
               size="sm"
-              aria-label={`Отозвать ключ ${short}`}
+              aria-label={fmt(t.revokeKey, { key: short })}
               onClick={() => onRevoke(key)}
             >
-              Отозвать
+              {t.revoke}
             </Button>
           )}
         </TableCell>
@@ -291,6 +293,7 @@ type WriteKeysTableProps = { appId: string; platforms: Platform[]; timezone: str
 
 // Карточка «Write-ключи» S-11 (FR-010): несколько активных ключей, создание с показом ключа и отзыв.
 export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTableProps) {
+  const t = useMessages().apps.writeKeys;
   const query = useListWriteKeys(appId);
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<WriteKey | null>(null);
@@ -301,11 +304,11 @@ export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTablePro
     <section id="write-keys" aria-labelledby="write-keys-title" className="scroll-mt-6">
       <Card>
         <CardHeader>
-          <CardTitle id="write-keys-title">Write-ключи</CardTitle>
+          <CardTitle id="write-keys-title">{t.title}</CardTitle>
           <CardAction>
             <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
               <Plus aria-hidden="true" />
-              Создать ключ
+              {t.create}
             </Button>
           </CardAction>
         </CardHeader>
@@ -319,16 +322,16 @@ export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTablePro
             <TableSkeleton rows={2} />
           ) : (
             <Table>
-              <caption className="sr-only">Write-ключи</caption>
+              <caption className="sr-only">{t.title}</caption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ключ</TableHead>
-                  <TableHead>Метка</TableHead>
-                  <TableHead>Платформа</TableHead>
-                  <TableHead>Создан</TableHead>
-                  <TableHead>Использован</TableHead>
+                  <TableHead>{t.columns.key}</TableHead>
+                  <TableHead>{t.columns.label}</TableHead>
+                  <TableHead>{t.columns.platform}</TableHead>
+                  <TableHead>{t.columns.created}</TableHead>
+                  <TableHead>{t.columns.used}</TableHead>
                   <TableHead>
-                    <span className="sr-only">Действия</span>
+                    <span className="sr-only">{t.columns.actions}</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -342,8 +345,8 @@ export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTablePro
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Новый write-ключ</DialogTitle>
-              <DialogDescription>Ключ для отправки событий в ingest.</DialogDescription>
+              <DialogTitle>{t.dialogTitle}</DialogTitle>
+              <DialogDescription>{t.dialogDescription}</DialogDescription>
             </DialogHeader>
             <CreateWriteKeyForm appId={appId} platforms={platforms} />
           </DialogContent>
