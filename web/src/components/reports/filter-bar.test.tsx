@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithLocale } from "@/test/rtl";
 import { FilterBar } from "./filter-bar";
+import { TOUCH_BUTTON } from "./responsive";
 
 const options = {
   platform: [{ value: "ios", count: 900 }],
@@ -36,6 +37,19 @@ describe("FilterBar", () => {
 
     await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
     expect(onChange).toHaveBeenLastCalledWith({});
+  });
+
+  // jsdom не считает CSS: цели нажатия на телефоне проверяются по брейкпоинт-классам.
+  it("gives the add, remove and reset buttons 44 px targets on a phone", async () => {
+    render(<FilterBar value={{ country: ["RU"] }} onChange={vi.fn()} options={options} />);
+
+    expect(await filterTrigger()).toHaveClass(TOUCH_BUTTON);
+    expect(screen.getByRole("button", { name: "Убрать фильтр «Страна»" })).toHaveClass(
+      "size-11",
+      "md:size-6",
+    );
+    expect(screen.getByRole("button", { name: "Сбросить фильтры" })).toHaveClass(TOUCH_BUTTON);
+    expect(screen.getByText("Страна: RU")).toHaveClass("truncate");
   });
 
   it("adds and removes values from the list", async () => {

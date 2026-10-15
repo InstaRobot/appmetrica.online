@@ -30,6 +30,27 @@ describe("KpiCard", () => {
     expect(screen.getByText("Тренд за период: рост")).toBeInTheDocument();
   });
 
+  it("fits the value and the sparkline into a narrow phone card", () => {
+    const { container } = render(
+      <KpiCard
+        label="Сессии"
+        definition="Число сессий"
+        value={198304}
+        format="number"
+        sparkline={days([1, 2, 3])}
+      />,
+    );
+
+    expect(container.querySelector("[data-kpi-value]")).toHaveClass(
+      "text-heading-2",
+      "md:text-heading-1",
+    );
+    // Спарклайн 200 px ужимается по ширине карточки с сохранением пропорций.
+    const sparkline = container.querySelector("[data-sparkline]");
+    expect(sparkline).toHaveClass("max-w-full");
+    expect(sparkline).toHaveStyle({ width: "200px", aspectRatio: "200 / 32" });
+  });
+
   it("formats durations and shows the secondary line", () => {
     render(
       <KpiCard

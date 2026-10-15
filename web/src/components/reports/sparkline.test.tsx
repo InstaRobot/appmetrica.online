@@ -58,6 +58,19 @@ describe("Sparkline", () => {
     expect(container.querySelector("[data-sparkline] circle")).toHaveAttribute("cx", "92");
   });
 
+  it("shrinks with its container in proportion when fluid", () => {
+    const { container } = render(
+      <Sparkline values={[1, 3, 2]} width={200} height={32} fluid trendLabel="Тренд: рост" />,
+    );
+    const box = container.querySelector("[data-sparkline]");
+    expect(box).toHaveClass("block", "max-w-full");
+    expect(box).toHaveStyle({ width: "200px", aspectRatio: "200 / 32" });
+    const svg = box?.querySelector("svg");
+    expect(svg).toHaveAttribute("width", "100%");
+    expect(svg).toHaveAttribute("height", "100%");
+    expect(svg).toHaveAttribute("viewBox", "0 0 200 32");
+  });
+
   it("renders only the label when there are no values", () => {
     const { container } = render(<Sparkline values={[]} trendLabel="Нет данных" />);
     expect(container.querySelector("[data-sparkline] path")).toBeNull();

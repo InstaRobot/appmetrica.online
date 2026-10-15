@@ -5,6 +5,7 @@ import { renderWithLocale } from "@/test/rtl";
 import { CompareToggle } from "./compare-toggle";
 import { GranularitySelect } from "./granularity-select";
 import { PeriodPicker } from "./period-picker";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_BUTTON, TOUCH_TOGGLE } from "./responsive";
 
 beforeEach(() => {
   // 2026-10-13 01:30 по Москве.
@@ -140,6 +141,47 @@ describe("CompareToggle", () => {
     render(<CompareToggle checked={false} onCheckedChange={onCheckedChange} />);
     await user.click(screen.getByRole("switch", { name: "Сравнить с предыдущим периодом" }));
     expect(onCheckedChange).toHaveBeenCalledWith(true);
+  });
+});
+
+// jsdom не считает CSS: телефонная вёрстка проверяется по брейкпоинт-классам.
+describe("report controls on a phone", () => {
+  it("keeps presets in one stretched row with 44 px targets next to the calendar", () => {
+    render(
+      <PeriodPicker
+        value={{ preset: "7d", from: "2026-10-07", to: "2026-10-13" }}
+        onChange={vi.fn()}
+        timezone="Europe/Moscow"
+      />,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Период" })).toHaveClass(
+      "flex-1",
+      "md:flex-none",
+    );
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveClass(TOUCH_TOGGLE, "flex-auto", "md:flex-none");
+    }
+    expect(screen.getByRole("button", { name: "Выбрать даты" })).toHaveClass(
+      TOUCH_BUTTON,
+      "min-w-11",
+      "md:min-w-0",
+    );
+  });
+
+  it("stretches granularity over the phone width and makes the compare label tall", () => {
+    render(
+      <>
+        <GranularitySelect value="day" allowed={["hour", "day"]} onChange={vi.fn()} />
+        <CompareToggle checked={false} onCheckedChange={vi.fn()} />
+      </>,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Детализация" })).toHaveClass(STRETCH_GROUP);
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveClass(TOUCH_TOGGLE, STRETCH_ITEM);
+    }
+    expect(screen.getByText("Сравнить")).toHaveClass("h-11", "md:h-auto");
   });
 });
 

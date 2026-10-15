@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "@/components/reports/responsive";
 import type { Breakdown, Platform, RetentionMatrix } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
@@ -176,6 +177,23 @@ describe("RetentionView", () => {
 
     await user.click(screen.getByRole("radio", { name: "development" }));
     await waitFor(() => expect(requests.retention.at(-1)?.get("environment")).toBe("development"));
+  });
+
+  // jsdom не считает CSS: телефонная вёрстка проверяется по брейкпоинт-классам.
+  it("stretches cohorts and environment over the phone width", async () => {
+    mockApi();
+    renderView();
+    await dayTable();
+
+    const cohorts = screen.getByRole("radiogroup", { name: "Когорты" });
+    expect(cohorts).toHaveClass(STRETCH_GROUP);
+    for (const radio of within(cohorts).getAllByRole("radio")) {
+      expect(radio).toHaveClass(TOUCH_TOGGLE, STRETCH_ITEM);
+    }
+    expect(screen.getByRole("radiogroup", { name: "Окружение" }).parentElement).toHaveClass(
+      "w-full",
+      "md:w-auto",
+    );
   });
 
   it("loads filter values only when the filter list opens", async () => {

@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderWithLocale } from "@/test/rtl";
+import { CHART_HEIGHT } from "./responsive";
 import { RollingActiveChart } from "./rolling-active-chart";
 
 describe("RollingActiveChart", () => {
@@ -27,6 +28,15 @@ describe("RollingActiveChart", () => {
       "11 окт 202612 01140 10098 000",
       "12 окт 202612 48041 23098 411",
     ]);
+  });
+
+  it("is at most 220 px tall on a phone", () => {
+    render(
+      <RollingActiveChart data={{ points: [{ day: "2026-10-12", dau: 1, wau: 2, mau: 3 }] }} />,
+    );
+    const chart = screen.getByRole("img");
+    expect(chart).toHaveClass(CHART_HEIGHT);
+    expect(chart.style.getPropertyValue("--chart-h")).toBe("280px");
   });
 
   it("says when there is nothing to show", () => {

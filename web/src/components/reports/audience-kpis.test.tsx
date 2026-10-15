@@ -90,6 +90,15 @@ describe("AudienceKpis", () => {
     expect(onSelect).toHaveBeenCalledWith("sessions");
   });
 
+  // jsdom не считает CSS: телефонная сетка проверяется по брейкпоинт-классам.
+  it("lays the cards out 2 × 2 on a phone and in one row from lg", () => {
+    render(<AudienceKpis summary={summary} selected="active" onSelect={vi.fn()} />);
+
+    const grid = screen.getByRole("region", { name: "Ключевые метрики" }).firstElementChild;
+    expect(grid).toHaveClass("grid", "grid-cols-2", "lg:grid-cols-4");
+    expect(grid).not.toHaveClass("grid-cols-4");
+  });
+
   it("shows skeleton cards while the summary loads", () => {
     render(<AudienceKpis summary={undefined} loading selected="active" onSelect={vi.fn()} />);
     expect(screen.getAllByRole("status", { name: "Загрузка…" })).toHaveLength(4);

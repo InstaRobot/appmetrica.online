@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { CHART_HEIGHT } from "@/components/reports/responsive";
 import type { RealtimeMinute } from "@/lib/api/gen/model";
 import { renderWithLocale } from "@/test/rtl";
 import { PerMinuteChart } from "./per-minute-chart";
@@ -25,6 +26,13 @@ describe("PerMinuteChart", () => {
     expect(screen.getByRole("img")).toHaveAccessibleName(
       "Старты сессий по минутам, 11:03–11:04: всего 0, в последнюю минуту 0",
     );
+  });
+
+  it("sets its height through the phone-aware chart height", () => {
+    render(<PerMinuteChart points={points([1, 2])} timezone="Europe/Moscow" />);
+    const chart = screen.getByRole("img");
+    expect(chart).toHaveClass(CHART_HEIGHT);
+    expect(chart.style.getPropertyValue("--chart-h")).toBe("200px");
   });
 
   it("says when there are no points", () => {

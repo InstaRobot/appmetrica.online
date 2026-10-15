@@ -11,6 +11,7 @@ import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
 import { renderWithLocale } from "@/test/rtl";
 import { RealtimePanel } from "./realtime-panel";
+import { TOUCH_BUTTON } from "./responsive";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000007";
 // 2026-10-13 14:32:05 по Москве.
@@ -175,6 +176,21 @@ describe("RealtimePanel", () => {
     expect(rows).toHaveLength(3);
     expect(within(rows[1] as HTMLElement).getByText("session_start")).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText("Android")).toBeInTheDocument();
+  });
+
+  // jsdom не считает CSS: телефонная вёрстка проверяется по брейкпоинт-классам.
+  it("stacks the counter over the chart and stretches the switches on a phone", async () => {
+    mockApi();
+    renderPanel();
+
+    const region = await counter();
+    expect(region.parentElement).toHaveClass("grid-cols-1", "md:grid-cols-[320px_1fr]");
+    expect(screen.getByRole("button", { name: "Пауза" })).toHaveClass(TOUCH_BUTTON);
+    expect(screen.getByRole("radiogroup", { name: "Окружение" }).parentElement).toHaveClass(
+      "w-full",
+      "md:ml-auto",
+      "md:w-auto",
+    );
   });
 
   it("changes environment in the URL and refetches", async () => {

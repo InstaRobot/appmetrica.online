@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderWithLocale } from "@/test/rtl";
+import { CHART_HEIGHT } from "./responsive";
 import { RetentionAverageChart } from "./retention-average-chart";
 
 const plain = (text: string | null) => (text ?? "").replace(/ /g, " ");
@@ -29,6 +30,15 @@ describe("RetentionAverageChart", () => {
     expect(plain(screen.getByRole("img").getAttribute("aria-label"))).toBe(
       "Средняя кривая удержания по неделям: W1 30 %, W4 12 %",
     );
+  });
+
+  it("wraps the key points and caps the chart height on a phone", () => {
+    render(<RetentionAverageChart average={dayAverage} granularity="day" />);
+
+    expect(screen.getByRole("list", { name: "Ключевые точки удержания" })).toHaveClass("flex-wrap");
+    const chart = screen.getByRole("img");
+    expect(chart).toHaveClass(CHART_HEIGHT);
+    expect(chart.style.getPropertyValue("--chart-h")).toBe("220px");
   });
 
   it("shows the curve as a table on demand", async () => {

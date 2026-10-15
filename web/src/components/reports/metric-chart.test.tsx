@@ -5,6 +5,7 @@ import type { TimeSeries } from "@/lib/api/gen/model";
 import { renderWithLocale } from "@/test/rtl";
 import { MetricChart as LazyMetricChart } from "./lazy-charts";
 import { MetricChart, type MetricChartSeries } from "./metric-chart";
+import { CHART_HEIGHT } from "./responsive";
 
 const day = (d: number) => `2026-10-${String(d).padStart(2, "0")}T00:00:00+03:00`;
 
@@ -301,6 +302,22 @@ describe("MetricChart in English", () => {
     );
   });
 
+  // jsdom не считает CSS: высоту на телефоне задают брейкпоинт-классы и переменная --chart-h.
+  it("is at most 220 px tall on a phone and keeps its height from md", () => {
+    render(
+      <MetricChart
+        series={total(daily)}
+        granularity="day"
+        metric="active"
+        timezone="Europe/Moscow"
+      />,
+    );
+    const chart = screen.getByRole("img");
+    expect(chart).toHaveClass(CHART_HEIGHT);
+    expect(chart.style.getPropertyValue("--chart-h")).toBe("360px");
+    expect(chart.style.height).toBe("");
+  });
+
   it("announces the chart while its code loads", async () => {
     renderWithLocale(
       <LazyMetricChart
@@ -311,7 +328,14 @@ describe("MetricChart in English", () => {
       />,
       "en",
     );
-    expect(screen.getByRole("status", { name: "Loading chart…" })).toBeInTheDocument();
+    // Заглушка высотой с график и «Показать таблицей», на телефоне — тоже не выше 220 px графика.
+    const placeholder = screen.getByRole("status", { name: "Loading chart…" });
+    expect(placeholder.style.getPropertyValue("--chart-h")).toBe("360px");
+    expect(placeholder.style.getPropertyValue("--chart-extra")).toBe("40px");
+    expect(placeholder).toHaveClass(
+      "h-[calc(min(var(--chart-h),220px)+var(--chart-extra))]",
+      "md:h-[calc(var(--chart-h)+var(--chart-extra))]",
+    );
     expect(await screen.findByRole("img", { name: /^Active users chart/ })).toBeInTheDocument();
   });
 });

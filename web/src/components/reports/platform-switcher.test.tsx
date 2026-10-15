@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Platform } from "@/lib/api/gen/model";
 import { renderWithLocale } from "@/test/rtl";
 import { PlatformSwitcher } from "./platform-switcher";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "./responsive";
 
 type Props = {
   appPlatforms: Platform[];
@@ -119,6 +120,18 @@ describe("PlatformSwitcher", () => {
     render(<Controlled appPlatforms={["ios", "android"]} observed={[]} onChange={onChange} />);
     await user.click(screen.getByRole("radio", { name: "Все" }));
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// jsdom не считает CSS: телефонная вёрстка проверяется по брейкпоинт-классам.
+describe("PlatformSwitcher on a phone", () => {
+  it("stretches over the phone width with 44 px options", () => {
+    render(<Controlled appPlatforms={["ios", "android"]} observed={[]} />);
+
+    expect(screen.getByRole("radiogroup", { name: "Платформа" })).toHaveClass(STRETCH_GROUP);
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveClass(TOUCH_TOGGLE, STRETCH_ITEM);
+    }
   });
 });
 

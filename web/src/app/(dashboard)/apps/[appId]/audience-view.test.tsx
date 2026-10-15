@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STRETCH_GROUP, TOUCH_BUTTON } from "@/components/reports/responsive";
 import type {
   AudienceSummary,
   Breakdown,
@@ -446,6 +447,30 @@ describe("AudienceView", () => {
       `curl -H "Authorization: Bearer $APPMETRICA_SK" "https://api.appmetrica.online/v1/apps/${APP_ID}/audience/summary?from=2026-09-14&to=2026-10-13&platform=ios&environment=production&unit=persons"`,
     );
     expect(toasts.success).toHaveBeenCalledWith("Запрос скопирован", expect.anything());
+  });
+
+  // jsdom не считает CSS: телефонная вёрстка проверяется по брейкпоинт-классам.
+  it("fits the toolbar and the chart switches into a phone", async () => {
+    mockApi({ platforms: ["ios", "android"] });
+    renderView();
+    await kpis();
+
+    expect(screen.getByRole("button", { name: "Скопировать как запрос к Read API" })).toHaveClass(
+      TOUCH_BUTTON,
+      "md:ml-auto",
+    );
+    expect(screen.getByRole("radiogroup", { name: "Окружение" }).parentElement).toHaveClass(
+      "w-full",
+      "md:w-auto",
+    );
+    // Подписи метрик на узком телефоне прокручиваются внутри карточки, а не раздвигают страницу.
+    expect(screen.getByRole("radiogroup", { name: "Метрика графика" }).parentElement).toHaveClass(
+      "overflow-x-auto",
+      "md:overflow-visible",
+    );
+    expect(await screen.findByRole("radiogroup", { name: "Режим графика" })).toHaveClass(
+      STRETCH_GROUP,
+    );
   });
 
   it("shows onboarding when the app has never sent events", async () => {

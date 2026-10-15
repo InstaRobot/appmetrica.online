@@ -22,6 +22,26 @@ describe("PageHeader", () => {
     expect(screen.getByRole("button", { name: "Добавить приложение" })).toBeVisible();
   });
 
+  // jsdom не считает CSS: перенос на телефоне проверяется по брейкпоинт-классам.
+  it("wraps badges under the title and actions below it on a phone", () => {
+    render(
+      <PageHeader
+        title="Notes iOS"
+        adornment={<span>iOS</span>}
+        actions={<button type="button">Добавить приложение</button>}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).toHaveClass("truncate");
+    expect(heading.parentElement).toHaveClass("flex-wrap", "md:flex-nowrap");
+    expect(screen.getByRole("banner")).toHaveClass("flex-col", "md:flex-row");
+    expect(screen.getByRole("button", { name: "Добавить приложение" }).parentElement).toHaveClass(
+      "flex-wrap",
+      "md:shrink-0",
+    );
+  });
+
   it("renders without optional parts", () => {
     const { container } = render(<PageHeader title="Портфель" />);
 
