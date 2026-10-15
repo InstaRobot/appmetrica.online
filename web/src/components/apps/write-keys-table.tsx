@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/common/lazy-select";
-import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { ErrorState } from "@/components/feedback/error-state";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import {
@@ -54,7 +53,7 @@ import {
   useListWriteKeys,
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { Platform, type WriteKey } from "@/lib/api/gen/model";
-import { copyText } from "@/lib/clipboard";
+import { useCopyText } from "@/lib/clipboard";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
@@ -78,6 +77,7 @@ function platformOptions(appPlatforms: Platform[]): Platform[] {
 }
 
 function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Platform[] }) {
+  const platformLabels = useMessages().common.platforms;
   const m = useMessages();
   const t = m.apps.writeKeys;
   const uiError = useUiError();
@@ -152,7 +152,7 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
               <SelectItem value={ANY_PLATFORM}>{t.anyPlatform}</SelectItem>
               {platformOptions(platforms).map((p) => (
                 <SelectItem key={p} value={p}>
-                  {PLATFORM_LABELS[p]}
+                  {platformLabels[p]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -234,6 +234,8 @@ function WriteKeyRows({
   timezone: string;
   onRevoke: (key: WriteKey) => void;
 }) {
+  const copy = useCopyText();
+  const platformLabels = useMessages().common.platforms;
   const t = useMessages().apps.writeKeys;
   const f = useFormat();
   if (keys.length === 0) {
@@ -259,7 +261,7 @@ function WriteKeyRows({
                 variant="ghost"
                 size="icon-xs"
                 aria-label={fmt(t.copyKey, { key: short })}
-                onClick={() => void copyText(key.key)}
+                onClick={() => void copy(key.key)}
               >
                 <Copy aria-hidden="true" />
               </Button>
@@ -267,7 +269,7 @@ function WriteKeyRows({
           </span>
         </TableCell>
         <TableCell>{key.label || "—"}</TableCell>
-        <TableCell>{key.platform ? PLATFORM_LABELS[key.platform] : t.anyPlatform}</TableCell>
+        <TableCell>{key.platform ? platformLabels[key.platform] : t.anyPlatform}</TableCell>
         <TableCell>{f.formatDate(key.created_at, timezone)}</TableCell>
         <TableCell>
           {key.last_used_at ? f.formatDateTime(key.last_used_at, timezone) : "—"}

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { createParser, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { useId, useState } from "react";
 import { LazyCalendar } from "@/components/common/lazy-calendar";
-import { platformLabel } from "@/components/common/platform-icon";
+import { usePlatformLabel } from "@/components/common/platform-icon";
 import { PlatformIcons } from "@/components/common/platform-icons";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -133,6 +133,7 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
 }
 
 function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
+  const platformLabel = usePlatformLabel();
   const m = useMessages().portfolio.archive;
   const f = useFormat();
   const headingId = useId();

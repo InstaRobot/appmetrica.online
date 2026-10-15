@@ -5,7 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useId } from "react";
 import { CopyField } from "@/components/common/copy-field";
-import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon";
+import { PlatformIcon } from "@/components/common/platform-icon";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import type { Platform, WriteKey } from "@/lib/api/gen/model";
@@ -41,9 +41,10 @@ export function PlatformIntegrationSection({
   received,
   ingestUrl,
 }: PlatformIntegrationSectionProps) {
+  const platformLabels = useMessages().common.platforms;
   const m = useMessages().integration.platform;
   const titleId = useId();
-  const label = PLATFORM_LABELS[platform];
+  const label = platformLabels[platform];
   const vars = { platform: label };
 
   return (

@@ -68,7 +68,7 @@ function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: N
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const invalid = validateDeviceName(name);
+    const invalid = validateDeviceName(name, m.auth.deviceName);
     setError(invalid);
     if (invalid) return;
     setPending(true);
@@ -178,7 +178,7 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
     try {
       await registerAdditionalPasskey(name);
     } catch (error) {
-      return passkeyErrorMessage(error, "setup");
+      return passkeyErrorMessage(error, "setup", m.auth.passkeyErrors);
     }
     toast.success(t.added);
     setAdding(false);

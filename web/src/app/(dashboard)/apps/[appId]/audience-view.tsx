@@ -5,7 +5,7 @@ import { Copy, PlugZap } from "lucide-react";
 import type { Route } from "next";
 import { useParams } from "next/navigation";
 import { lazy, Suspense } from "react";
-import { platformLabel } from "@/components/common/platform-icon";
+import { usePlatformLabel } from "@/components/common/platform-icon";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { AudienceKpis } from "@/components/reports/audience-kpis";
@@ -84,7 +84,12 @@ const isRangeError = (q: { error: unknown }) => apiError(q)?.code === "range_too
 
 // Серии графика: итог с рядом предыдущего периода или линия на каждую платформу из splits. Без splits (нет
 // событий за период) — итоговый ряд, чтобы график показал период и «Нет событий».
-function chartSeries(data: TimeSeries, split: boolean, totalLabel: string): MetricChartSeries[] {
+function chartSeries(
+  data: TimeSeries,
+  split: boolean,
+  totalLabel: string,
+  platformLabel: (platform: string) => string,
+): MetricChartSeries[] {
   if (split && data.splits && data.splits.length > 0) {
     return data.splits.map((s) => ({
       key: s.platform,
@@ -117,6 +122,7 @@ export function AudienceView() {
 }
 
 function AudienceReport({ app }: { app: App }) {
+  const platformLabel = usePlatformLabel();
   const messages = useMessages();
   const errorTexts = messages.errors.codes;
   const m = messages.reports;
@@ -341,7 +347,7 @@ function AudienceReport({ app }: { app: App }) {
             {cardError(chart) ??
               (chartData ? (
                 <MetricChart
-                  series={chartSeries(chartData, split, m.chart.total)}
+                  series={chartSeries(chartData, split, m.chart.total, platformLabel)}
                   granularity={state.granularity}
                   metric={state.metric}
                   timezone={app.timezone}

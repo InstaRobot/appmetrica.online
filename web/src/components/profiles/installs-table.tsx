@@ -1,6 +1,6 @@
 "use client";
 
-import { PlatformIcon, platformLabel } from "@/components/common/platform-icon";
+import { PlatformIcon, usePlatformLabel } from "@/components/common/platform-icon";
 import {
   Table,
   TableBody,
@@ -27,6 +27,7 @@ function os(i: ProfileInstall): string {
 
 // Устройства человека (14-ux-ui-spec.md S-09): контекст последнего события установки, даты — в TZ приложения.
 export function InstallsTable({ installs, timezone }: InstallsTableProps) {
+  const platformLabel = usePlatformLabel();
   const t = useMessages().profiles.installs;
   const { formatDateShort, shortId } = useFormat();
   return (

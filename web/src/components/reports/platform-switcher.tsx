@@ -2,7 +2,6 @@
 
 import { cn } from "cn";
 import { useRef } from "react";
-import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { toggleVariants } from "@/components/ui/toggle";
 import { Platform } from "@/lib/api/gen/model";
 import { useMessages } from "@/lib/i18n/client";
@@ -40,6 +39,7 @@ export function PlatformSwitcher({
   value,
   onChange,
 }: PlatformSwitcherProps) {
+  const platformLabels = useMessages().common.platforms;
   const m = useMessages().reports.platform;
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const platforms = platformOptions(appPlatforms, observed, value);
@@ -94,7 +94,7 @@ export function PlatformSwitcher({
             onClick={() => select(i)}
             className={cn(toggleVariants({ variant: "segmented", size: "sm" }), "px-3")}
           >
-            {option ? PLATFORM_LABELS[option] : m.all}
+            {option ? platformLabels[option] : m.all}
           </button>
         );
       })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { platformLabel } from "@/components/common/platform-icon";
+import { usePlatformLabel } from "@/components/common/platform-icon";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -29,6 +29,7 @@ export function SessionsTable({
   onLoadMore,
   loadingMore = false,
 }: SessionsTableProps) {
+  const platformLabel = usePlatformLabel();
   const t = useMessages().profiles.sessions;
   const { formatDateTime, formatDuration, shortId } = useFormat();
   if (sessions.length === 0) {

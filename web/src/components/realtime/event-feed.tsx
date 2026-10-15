@@ -3,7 +3,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
-import { platformLabel } from "@/components/common/platform-icon";
+import { usePlatformLabel } from "@/components/common/platform-icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import type { RecentEvent } from "@/lib/api/gen/model";
@@ -35,6 +35,7 @@ function freshIds(prev: RecentEvent[], next: RecentEvent[]): ReadonlySet<string>
 // подсвечиваются фоном --bg-selected с затуханием; при prefers-reduced-motion подсветки нет.
 // Install и Человек ведут на профиль person_key. Лента — не live-region.
 export function EventFeed({ events, timezone, appId }: EventFeedProps) {
+  const platformLabel = usePlatformLabel();
   const m = useMessages().realtime.feed;
   const f = useFormat();
   const reducedMotion = usePrefersReducedMotion();

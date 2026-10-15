@@ -4,7 +4,7 @@ import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { DeletionRequest, Profile } from "@/lib/api/gen/model";
-import { copyText } from "@/lib/clipboard";
+import { useCopyText } from "@/lib/clipboard";
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { DeletionStatusBadge } from "./deletion-status-badge";
 
@@ -32,6 +32,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 // Сводка по person (14-ux-ui-spec.md S-09): person_key с копированием, даты в TZ приложения,
 // статус удаления. Пока запрос в очереди или выполняется, «Удалить данные» недоступна.
 export function ProfileCard({ profile, timezone, deletion, onDelete }: ProfileCardProps) {
+  const copy = useCopyText();
   const t = useMessages().profiles.card;
   const f = useFormat();
   return (
@@ -42,7 +43,7 @@ export function ProfileCard({ profile, timezone, deletion, onDelete }: ProfileCa
           variant="ghost"
           size="icon-sm"
           aria-label={t.copyKey}
-          onClick={() => void copyText(profile.person_key)}
+          onClick={() => void copy(profile.person_key)}
         >
           <Copy aria-hidden="true" />
         </Button>

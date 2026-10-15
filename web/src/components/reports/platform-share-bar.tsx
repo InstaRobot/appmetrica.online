@@ -1,6 +1,6 @@
 "use client";
 
-import { platformChartVar, platformLabel } from "@/components/common/platform-icon";
+import { platformChartVar, usePlatformLabel } from "@/components/common/platform-icon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PlatformActive } from "@/lib/api/gen/model";
 import { useFormat, useMessages } from "@/lib/i18n/client";
@@ -15,6 +15,7 @@ type PlatformShareBarProps = {
 // Доли платформ в строке портфеля: полоса 96×8, доли — от суммы по платформам,
 // потому что человек на двух платформах учтён в обеих. Tooltip с абсолютами открывается и по фокусу.
 export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
+  const platformLabel = usePlatformLabel();
   const m = useMessages().portfolio.shares;
   const f = useFormat();
   const sum = items.reduce((s, item) => s + item.active, 0);

@@ -4,19 +4,15 @@ import { describe, expect, it } from "vitest";
 import { Platform } from "@/lib/api/gen/model";
 import { MessagesProvider } from "@/lib/i18n/client";
 import { getMessages } from "@/messages";
-import {
-  PLATFORM_LABELS,
-  PlatformIcon,
-  platformLabel,
-  platformLabelIn,
-  usePlatformLabel,
-} from "./platform-icon";
+import { PlatformIcon, platformLabelIn, usePlatformLabel } from "./platform-icon";
+
+const RU_LABELS = getMessages("ru").common.platforms;
 
 describe("PlatformIcon", () => {
   it.each(Object.values(Platform))("renders labelled icon for %s", (platform) => {
-    render(<PlatformIcon platform={platform} title={PLATFORM_LABELS[platform]} />);
+    render(<PlatformIcon platform={platform} title={RU_LABELS[platform]} />);
 
-    const icon = screen.getByRole("img", { name: PLATFORM_LABELS[platform] });
+    const icon = screen.getByRole("img", { name: RU_LABELS[platform] });
     expect(icon.tagName.toLowerCase()).toBe("svg");
     expect(icon).toHaveAttribute("data-platform-icon");
   });
@@ -46,12 +42,12 @@ describe("PlatformIcon", () => {
   });
 });
 
-describe("platformLabel", () => {
-  it("labels known, unknown and empty platforms", () => {
-    expect(platformLabel("ios")).toBe("iOS");
-    expect(platformLabel("server")).toBe("Бэкенд");
-    expect(platformLabel("tvos")).toBe("tvos");
-    expect(platformLabel("")).toBe("—");
+describe("platformLabelIn", () => {
+  it("labels known, unknown and empty platforms with the Russian dictionary", () => {
+    expect(platformLabelIn(RU_LABELS, "ios")).toBe("iOS");
+    expect(platformLabelIn(RU_LABELS, "server")).toBe("Бэкенд");
+    expect(platformLabelIn(RU_LABELS, "tvos")).toBe("tvos");
+    expect(platformLabelIn(RU_LABELS, "")).toBe("—");
   });
 });
 
