@@ -35,6 +35,17 @@ test("sign-in and a docs page fit a phone", async ({ page }) => {
   await expectNoA11yViolations(page);
 });
 
+// Широкая таблица документации прокручивается внутри обёртки, и до обёртки можно дойти с клавиатуры (axe
+// scrollable-region-focusable). В CI шрифты Linux шире, чем на macOS, и таблица переполняется только там.
+test("docs tables can be scrolled from the keyboard", async ({ page }) => {
+  await page.goto("/ru/docs/concepts/initialization");
+  const tables = page.locator("table");
+  await expect(tables.first()).toBeVisible();
+  for (const table of await tables.all()) {
+    await expect(table.locator("..")).toHaveAttribute("tabindex", "0");
+  }
+});
+
 test.describe("dashboard on a phone", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/demo");
