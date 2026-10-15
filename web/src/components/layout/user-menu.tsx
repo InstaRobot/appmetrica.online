@@ -11,12 +11,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logout } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
+import { useMessages } from "@/lib/i18n/client";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 
 // Меню «⋯» шапки (14-ux-ui-spec.md §6.1): выход из дашборда; в демо-режиме — выход из демо
 // (полная навигация на /demo/exit: route handler снимает cookie и уводит на лендинг).
 export function UserMenu({ demo = false }: { demo?: boolean }) {
+  const m = useMessages();
   const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -32,7 +34,7 @@ export function UserMenu({ demo = false }: { demo?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-lg" aria-label="Меню пользователя">
+        <Button variant="ghost" size="icon-lg" aria-label={m.layout.userMenu.label}>
           <Ellipsis aria-hidden="true" className="size-5" />
         </Button>
       </DropdownMenuTrigger>
@@ -41,13 +43,13 @@ export function UserMenu({ demo = false }: { demo?: boolean }) {
           <DropdownMenuItem asChild>
             <a href="/demo/exit">
               <LogOut aria-hidden="true" />
-              Выйти из демо
+              {m.demo.exit}
             </a>
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem disabled={signOut.isPending} onSelect={() => signOut.mutate()}>
             <LogOut aria-hidden="true" />
-            Выйти
+            {m.layout.userMenu.signOut}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

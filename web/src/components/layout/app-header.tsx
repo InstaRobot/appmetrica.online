@@ -14,8 +14,12 @@ import { usePathname } from "next/navigation";
 import { lazy, Suspense } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
+import { useLocale, useMessages } from "@/lib/i18n/client";
+import { publicHref } from "@/lib/i18n/routes";
 import { cn } from "@/lib/utils";
+import type { Messages } from "@/messages";
 import { parseAppPath } from "./app-tabs";
+import { LanguageSwitcher } from "./language-switcher";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -25,31 +29,32 @@ import { ThemeToggle } from "./theme-toggle";
 const AppSwitcher = lazy(() => import("./app-switcher").then((m) => ({ default: m.AppSwitcher })));
 const UserMenu = lazy(() => import("./user-menu").then((m) => ({ default: m.UserMenu })));
 
-type NavItem = { href: string; label: string; icon: LucideIcon; active: (path: string) => boolean };
+type NavItem = { href: Route; label: keyof Messages["layout"]["header"]; icon: LucideIcon };
 
-const within = (prefix: string) => (path: string) =>
-  path === prefix || path.startsWith(`${prefix}/`);
-
-const NAV: NavItem[] = [
-  { href: "/portfolio", label: "Портфель", icon: LayoutGrid, active: within("/portfolio") },
-  { href: "/docs", label: "Документация", icon: BookOpen, active: within("/docs") },
-  { href: "/settings", label: "Настройки", icon: Settings, active: within("/settings") },
-];
+const within = (prefix: string, path: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 // Шапка дашборда (14-ux-ui-spec.md §6.1, макет «Dashboard v2»): 64 px, sticky, полупрозрачная с размытием. Список приложений для AppSwitcher
 // загружается на клиенте, чтобы после создания или архивации приложения обновляться без перезагрузки.
 // demo — режим статичного датасета (lib/demo-mode.ts): меню предлагает выйти из демо вместо выхода
 // из аккаунта.
 export function AppHeader({ demo = false }: { demo?: boolean }) {
+  const locale = useLocale();
+  const m = useMessages().layout.header;
   const pathname = usePathname();
   const current = parseAppPath(pathname);
   const { data } = useListApps();
   const apps = data?.status === 200 ? data.data.items : [];
+  // Документация публичная и живёт по адресу языка: /docs или /ru/docs.
+  const nav: NavItem[] = [
+    { href: "/portfolio", label: "portfolio", icon: LayoutGrid },
+    { href: publicHref(locale, "/docs"), label: "docs", icon: BookOpen },
+    { href: "/settings", label: "settings", icon: Settings },
+  ];
 
   return (
     <header className="sticky top-0 z-sticky h-16 border-b border-border bg-header backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-[1600px] items-center gap-4 px-8">
-        <Link href="/portfolio" aria-label="appmetrica.online — в портфель" className="rounded-md">
+        <Link href="/portfolio" aria-label={m.home} className="rounded-md">
           <Logo />
         </Link>
         <Suspense
@@ -64,14 +69,14 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
         >
           <AppSwitcher apps={apps} currentAppId={current?.appId} currentTab={current?.tab} />
         </Suspense>
-        <nav aria-label="Основная навигация" className="ml-auto">
+        <nav aria-label={m.nav} className="ml-auto">
           <ul className="flex items-center gap-1">
-            {NAV.map(({ href, label, icon: Icon, active }) => {
-              const isActive = active(pathname);
+            {nav.map(({ href, label, icon: Icon }) => {
+              const isActive = within(href, pathname);
               return (
-                <li key={href}>
+                <li key={label}>
                   <Link
-                    href={href as Route}
+                    href={href}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
                       "flex h-9 items-center gap-2 rounded-md px-3 text-label-md text-fg-muted transition-colors hover:bg-subtle hover:text-foreground",
@@ -79,13 +84,14 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
                     )}
                   >
                     <Icon aria-hidden="true" className="size-5" />
-                    {label}
+                    {m[label]}
                   </Link>
                 </li>
               );
             })}
           </ul>
         </nav>
+        <LanguageSwitcher />
         <ThemeToggle />
         <Suspense
           fallback={

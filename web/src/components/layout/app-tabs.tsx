@@ -12,17 +12,21 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useMessages } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import type { Messages } from "@/messages";
 
 export type AppTab = "" | "retention" | "realtime" | "profiles" | "integration" | "settings";
 
-const TABS: { tab: AppTab; label: string; icon: LucideIcon }[] = [
-  { tab: "", label: "Аудитория", icon: Users },
-  { tab: "retention", label: "Retention", icon: Repeat },
-  { tab: "realtime", label: "Realtime", icon: Radio },
-  { tab: "profiles", label: "Профили", icon: UserSearch },
-  { tab: "integration", label: "Интеграция", icon: PlugZap },
-  { tab: "settings", label: "Настройки", icon: SlidersHorizontal },
+type TabLabel = Exclude<keyof Messages["layout"]["appTabs"], "label">;
+
+const TABS: { tab: AppTab; label: TabLabel; icon: LucideIcon }[] = [
+  { tab: "", label: "audience", icon: Users },
+  { tab: "retention", label: "retention", icon: Repeat },
+  { tab: "realtime", label: "realtime", icon: Radio },
+  { tab: "profiles", label: "profiles", icon: UserSearch },
+  { tab: "integration", label: "integration", icon: PlugZap },
+  { tab: "settings", label: "settings", icon: SlidersHorizontal },
 ];
 
 // Параметры отчётов, которые переживают переход между вкладками и приложениями (14-ux-ui-spec.md §6.1).
@@ -62,12 +66,13 @@ type AppTabsProps = { appId: string };
 
 // Вкладки приложения (AppShell): активная вкладка — aria-current="page" и синяя нижняя граница.
 export function AppTabs({ appId }: AppTabsProps) {
+  const m = useMessages().layout.appTabs;
   const pathname = usePathname();
   const query = reportQuery(useSearchParams());
   const active = parseAppPath(pathname)?.tab;
 
   return (
-    <nav aria-label="Разделы приложения" className="mb-6 h-12 border-b border-border">
+    <nav aria-label={m.label} className="mb-6 h-12 border-b border-border">
       <ul className="flex h-full items-stretch gap-6">
         {TABS.map(({ tab, label, icon: Icon }) => {
           const current = tab === active;
@@ -82,7 +87,7 @@ export function AppTabs({ appId }: AppTabsProps) {
                 )}
               >
                 <Icon aria-hidden="true" className="size-4" />
-                {label}
+                {m[label]}
               </Link>
             </li>
           );

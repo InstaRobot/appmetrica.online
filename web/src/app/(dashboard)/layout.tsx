@@ -32,13 +32,13 @@ async function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <MessagesProvider locale={locale} messages={getMessages(locale)}>
       <HtmlLang locale={locale} />
-      <SkipLink />
-      {demo && <DemoBanner />}
+      <SkipLink locale={locale} />
+      {demo && <DemoBanner locale={locale} />}
       <AppHeader demo={demo} />
       <main id="main" tabIndex={-1} className="mx-auto max-w-[1600px] px-8 pt-6 pb-12 outline-none">
         {children}
       </main>
-      <AppFooter />
+      <AppFooter locale={locale} />
     </MessagesProvider>
   );
 }

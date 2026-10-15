@@ -4,7 +4,7 @@ import { SearchX } from "lucide-react";
 import { useParams } from "next/navigation";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { lazy, Suspense } from "react";
-import { platformLabel } from "@/components/common/platform-icon";
+import { usePlatformLabel } from "@/components/common/platform-icon";
 import { PlatformIcons } from "@/components/common/platform-icons";
 import { ArchivedBanner } from "@/components/feedback/archived-banner";
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -31,7 +31,7 @@ const unitParser = parseAsStringLiteral(Object.values(Unit)).withDefault(Unit.pe
 
 export function AppShellSkeleton() {
   return (
-    <div role="status" aria-label="Загрузка…">
+    <div role="status" aria-label={useMessages().common.loading}>
       <Skeleton className="mb-6 h-12 w-full" />
       <Skeleton className="mb-6 h-7 w-56" />
     </div>
@@ -42,7 +42,8 @@ export function AppShellSkeleton() {
 // и слияния в это приложение.
 // Приложение загружается на клиенте (useGetApp); отчёты вкладок берут его из того же кэша запросов.
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const errorTexts = useMessages().errors.codes;
+  const m = useMessages();
+  const platformLabel = usePlatformLabel();
   const { appId } = useParams<{ appId: string }>();
   const [unit] = useQueryState("unit", unitParser);
   const query = useGetApp(appId);
@@ -57,9 +58,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Card className="mt-6">
           <EmptyState
             icon={SearchX}
-            title={errorTexts.app_not_found}
-            description="Проверьте адрес или выберите приложение в портфеле."
-            action={{ label: "В портфель", href: "/portfolio" }}
+            title={m.errors.codes.app_not_found}
+            description={m.layout.appShell.notFoundHint}
+            action={{ label: m.layout.appShell.toPortfolio, href: "/portfolio" }}
           />
         </Card>
       );
