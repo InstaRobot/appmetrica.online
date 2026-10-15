@@ -1,0 +1,340 @@
+# appmetrica.online
+
+> Product analytics for mobile apps, websites, desktop apps and bots without an SDK. The client app sends two events over HTTP, `session_start` when it comes to the foreground and `session_end` when it goes to the background, and gets active and new users, sessions and their duration, retention, realtime and user profiles. This file tells a coding agent how to integrate it into a client app on every supported platform.
+
+Every recipe linked below contains complete, copy-ready code. The same documentation as plain Markdown, every page and every code sample in one file: https://appmetrica.online/llms-full.txt
+
+## Before you write code
+
+Ask the user for these values; never invent them:
+
+1. **Ingest URL** of their installation. It is shown on the app's **Integration** tab. In this file and in the docs, `https://i.analytics.example.com` is a placeholder: replace it, never send events to it.
+2. **Write key `pk_…` of each platform** you integrate (iOS, Android, Web, …), from the same **Integration** tab. A write key is public by design: it is embedded in the app. An "Any platform" key can be issued in the app settings for one codebase built for several platforms; with it, `context.platform` must be sent in every batch.
+3. **Which platforms the product ships on.** One product is one app with several platforms, not one app per platform: then a person signed in on iPhone and on the web is counted once. Platforms are added in the app settings.
+4. **Where the account ID is available after sign-in**, if the app has accounts. It becomes `user_id`.
+
+Never put a Read API key `sk_…` into a client app: it is a secret that reads all reports.
+
+## What to send
+
+There is no SDK, no custom events, screens or properties. Two event names exist: `session_start` and `session_end`; any other `name` is rejected with `unknown_event_name`. Every report is built from these two events.
+
+- `install_id`: a UUID created on the first launch and kept forever (Keychain, SharedPreferences, `localStorage`, …). Never regenerate it on launch: every launch would become a new user.
+- `session_id`: a new UUID every time the app comes to the foreground; `session_start` and `session_end` of one session share it.
+- `insert_id`: a new UUID for every event; it deduplicates retries, so resending the same event is safe.
+- `timestamp`: when the event happened, by the device clock, RFC 3339 with an offset (`Z` or `+03:00`), preferably with milliseconds. Capture it when the event happens, not when it is sent.
+- `duration_ms` (required on `session_end`): time in the foreground in milliseconds, 0 to 86,400,000, measured with a monotonic clock (`ProcessInfo.systemUptime`, `SystemClock.elapsedRealtime()`, `performance.now()`, Dart `Stopwatch`), never as a difference of wall-clock times.
+- `user_id` (optional): an opaque account ID from the app's backend, 1 to 128 characters, sent with every event while the user is signed in and omitted after sign-out. Not an email or a phone number: those are rejected with `user_id_looks_like_pii`. Hash public IDs such as Telegram IDs (HMAC-SHA256 with a secret).
+- `context`: device and build fields, see below. Put it in every event (or in the batch): an event that waited in the queue across an app update keeps the version it happened in.
+
+## Integration checklist (every platform)
+
+1. **One tracker per process**, created at the app entry point (`@main` App, `Application.onCreate`, `main()`, the bundle entry, the root component), never per screen, route or activity.
+2. **A launch is not a session.** Apps also start in the background (push, background refresh, scheduled work). At the entry point only read `install_id` and flush the queue left from previous launches.
+3. **Sessions follow the whole app's lifecycle**: `session_start` on "entered the foreground", `session_end` on "entered the background". "Inactive" (notification shade, system dialog, incoming call, app switcher) is not the background. A repeated start inside an open session and an end without a session must do nothing, so duplicate lifecycle callbacks are harmless.
+4. **Send asynchronously through an on-disk queue.** Write the event to disk first, send in the background, never block the UI thread. Flush on app start, on `session_start` and when the network returns.
+5. **Batches** hold 1 to 500 events and at most 1,048,576 bytes (after gzip decompression). Drop events older than 7 days before sending.
+6. **Remove events from the queue only after a response**, following the response table below. Retry the same batch with the same `insert_id` values and a fresh `sent_at`.
+7. **`environment: "development"` in debug builds**, `production` in release builds. Reports show production by default.
+8. **Do not send from widgets, app extensions, notification service extensions or background-only processes**: system launches would inflate active users, and separate storage would create extra installations.
+9. **`session_end` may not get out** before the OS suspends the app. Keep it in the queue; it is sent on the next launch and still counts.
+
+## Ingest API
+
+```http
+POST https://i.analytics.example.com/v1/events
+Content-Type: application/json
+X-App-Key: pk_…
+```
+
+- `Content-Type`: `application/json` or `text/plain` (same JSON body; `text/plain` lets browsers skip the CORS preflight). Anything else is `415`.
+- Key: the `X-App-Key` header, or the `app_key` body field when headers can't be set (`navigator.sendBeacon`). If both are present they must match. A key in the query string is not accepted.
+- `Content-Encoding: gzip` is supported; `identity` or no header means plain JSON.
+- A `200` response arrives only after the events are written to storage.
+
+```json
+{
+  "sent_at": "2026-10-13T09:15:02.120Z",
+  "context": {
+    "platform": "ios",
+    "os_name": "iOS",
+    "os_version": "26.0.1",
+    "app_version": "3.4.0",
+    "app_build": "341",
+    "device_model": "iPhone17,3",
+    "device_type": "phone",
+    "locale": "en-US",
+    "environment": "production"
+  },
+  "events": [
+    {
+      "insert_id": "0199d6a1-7c2e-7b1a-9f00-3c1d2e4f5a61",
+      "name": "session_start",
+      "timestamp": "2026-10-13T09:11:58.004Z",
+      "install_id": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
+      "session_id": "0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f",
+      "user_id": "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90"
+    },
+    {
+      "insert_id": "0199d6a4-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+      "name": "session_end",
+      "timestamp": "2026-10-13T09:15:01.990Z",
+      "install_id": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
+      "session_id": "0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f",
+      "user_id": "a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90",
+      "duration_ms": 183986
+    }
+  ]
+}
+```
+
+### Batch fields
+
+| Field | Required | Rules |
+|---|---|---|
+| `sent_at` | Yes | When this HTTP request is sent, by the device clock, RFC 3339 with an offset. Set it anew on every attempt |
+| `events` | Yes | 1 to 500 events |
+| `context` | No | Default context for all events of the batch |
+| `app_key` | No | `pk_…`, instead of the `X-App-Key` header |
+
+### Event fields
+
+| Field | Required | Rules |
+|---|---|---|
+| `insert_id` | Yes | UUID, unique per event (not the nil UUID) |
+| `name` | Yes | `session_start` or `session_end` |
+| `timestamp` | Yes | RFC 3339 with an offset; a time without an offset is rejected |
+| `install_id` | Yes | UUID, stable per installation; lowercase UUIDv4 recommended; not the nil UUID |
+| `session_id` | Yes | UUID shared by both events of a session |
+| `user_id` | No | 1 to 128 characters, opaque account ID |
+| `duration_ms` | On `session_end` | Integer, 0 to 86,400,000 |
+| `context` | No | Overrides the batch `context` field by field |
+
+### Context fields
+
+| Field | Values |
+|---|---|
+| `platform` | `ios`, `android`, `web`, `macos`, `windows`, `linux`, `bot`, `server`, `other` |
+| `device_type` | `phone`, `tablet`, `desktop`, `tv`, `watch`, `server`, `unknown` |
+| `environment` | `production` (default) or `development` |
+| `os_name` | Up to 32 characters, for example `iOS`, `Android`, `tvOS`, `Android TV` |
+| `os_version` | Up to 32 characters |
+| `app_version` | Up to 64 characters, for example `3.4.0` |
+| `app_build` | Up to 64 characters, for example `341` |
+| `device_model` | Up to 64 characters: a hardware model such as `iPhone17,3` or `Google Pixel 9`, never the user-given device name |
+| `locale` | BCP 47, up to 35 characters, for example `en-US` |
+| `ip` | Server-to-server sources only: the end user's IP for country and city lookup, or `"none"` to disable geo. Apps and websites omit it: the server uses the request's address. The IP is never stored |
+
+Any value outside the `platform` and `device_type` lists is rejected with `invalid_field`.
+
+### Platform of an event
+
+The platform is taken from `context.platform` of the event, then of the batch; otherwise from the platform the write key is bound to; otherwise from the app's only platform; otherwise it is `other` with a `platform_missing` warning. Embed the key of each build's own platform, or send `context.platform` explicitly.
+
+Devices without a platform of their own use the platform of their OS family with their own `device_type` and `os_name` (https://appmetrica.online/docs#device-families). Reports filter by `os_name`, so TVs and watches get an OS name of their own:
+
+| Device | `platform` | `device_type` | `os_name` | Key |
+|---|---|---|---|---|
+| iPhone | `ios` | `phone` | `iOS` | iOS |
+| iPad | `ios` | `tablet` | As reported by `UIDevice.current.systemName` | iOS |
+| Apple TV | `ios` | `tv` | `tvOS` | iOS |
+| Apple Watch | `ios` | `watch` | `watchOS` | iOS |
+| Apple Vision Pro | `ios` | `unknown` | `visionOS` | iOS |
+| Mac | `macos` | `desktop` | `macOS` | macOS |
+| Android phone or tablet | `android` | `phone` or `tablet` | `Android` | Android |
+| Android TV, Google TV, Fire TV | `android` | `tv` | `Android TV` | Android |
+| Wear OS watch | `android` | `watch` | `Wear OS` | Android |
+| Windows or Linux desktop app | `windows`, `linux` | `desktop` | `Windows`, `Linux` | Windows, Linux |
+| Website or web app | `web` | `phone` or `desktop` | Optional | Web |
+| Web app on a smart TV (Tizen, webOS) | `web` | `tv` | `Tizen`, `webOS` | Web |
+| Roku and other TV platforms | `other` | `tv` | The OS name, for example `Roku OS` | Other or Any platform |
+| Telegram or other chat bot | `bot` | Omit | Omit | Bot |
+| Backend, CLI, cron job | `server` | `server` | Omit | Server |
+
+### Responses and what the client does
+
+| Response | Client action |
+|---|---|
+| `200`, `rejected` is empty | Remove the batch from the queue |
+| `200`, `rejected` item with `retryable: false` | Drop that event for good and log its `code` |
+| `200`, `rejected` item with `retryable: true` | Keep that event and send it again no sooner than 60 s later |
+| `400`, `413`, `415` | Drop the batch and log the error: it is a client bug (`413`: split the batch) |
+| `401`, `403` | Stop sending, keep the queue: the key was revoked or the app is archived |
+| `429`, `503` | Retry the whole batch after `Retry-After` seconds |
+| `500`, network error, timeout | Retry the whole batch with backoff: 1 s, then ×2 up to 300 s, ±20% jitter |
+
+Branch only on the HTTP status and the `code` field, never on the `message` text.
+
+A `200` body:
+
+```json
+{
+  "accepted": 1,
+  "rejected": [
+    {
+      "index": 1,
+      "insert_id": "0199d6c1-0000-7000-8000-000000000005",
+      "code": "user_id_looks_like_pii",
+      "field": "events[1].user_id",
+      "message": "…",
+      "retryable": false
+    }
+  ],
+  "warnings": [],
+  "server_time": "2026-10-14T09:15:02.318Z"
+}
+```
+
+Rejection codes in `rejected[].code`:
+
+| Code | Reason | Retry |
+|---|---|---|
+| `missing_field` | `insert_id`, `name`, `timestamp`, `install_id` or `session_id` is missing | No |
+| `invalid_field` | Not a UUID, the nil UUID, a time without an offset, `user_id` over 128 characters, `duration_ms` out of range, an invalid `context` value or length | No |
+| `unknown_event_name` | `name` is neither `session_start` nor `session_end` | No |
+| `duration_required` | `session_end` without `duration_ms` | No |
+| `event_too_old` | Older than 7 days after clock correction | No |
+| `user_id_looks_like_pii` | `user_id` looks like an email or a phone number | No |
+| `install_rate_limited` | More than 1,000 events at once or 100 per minute from one installation | Yes, after 60 s |
+
+Warning codes in `warnings[].code` (the event is accepted):
+
+| Code | Meaning |
+|---|---|
+| `timestamp_in_future_clamped` | The event time was more than 10 minutes in the future and was replaced with the receive time |
+| `duplicate_insert_id_in_batch` | The `insert_id` repeats within the batch; the repeat was skipped |
+| `geo_ip_invalid` | `context.ip` is not an IP address; no country or city |
+| `platform_missing` | No platform could be determined; the event is stored as `other` |
+
+Batch errors come as `{"error": {"code", "message", "request_id", "details"}}`: `400 invalid_json`, `400 invalid_batch` (no `sent_at`, not 1 to 500 events, `app_key` differs from `X-App-Key`), `400 unsupported_content_encoding`, `401 missing_app_key`, `401 invalid_app_key`, `403 app_archived`, `413 payload_too_large`, `415 unsupported_media_type`, `429 app_rate_limited` (over 2,000 events per second per app), `500 internal_error`, `503 storage_unavailable`.
+
+### Device clocks and late events
+
+The server computes `event_time = received_at + (timestamp − sent_at)`, so a device clock that is hours off still gives correct times as long as `timestamp` and `sent_at` come from the same clock. An event more than 10 minutes in the future is clamped; an event more than 7 days old is rejected. Late events within 7 days land on the day they happened.
+
+## Platform guides
+
+Each guide lists what the recipe implements; take the code from the recipe page (or from https://appmetrica.online/llms-full.txt) and adapt names. Where to hook the lifecycle on every platform: https://appmetrica.online/docs/concepts/initialization
+
+### iOS, iPadOS and Apple TV (Swift)
+
+Recipe: https://appmetrica.online/docs/recipes/ios-swift (iOS 17+, Swift 6, no dependencies)
+
+- Files: `Analytics.swift` (event model, `URLSession` sending, `JSONEncoder` with snake_case keys and ISO 8601 dates with milliseconds), `InstallID.swift` (Keychain item with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, survives reinstalls), `OfflineQueue.swift` (an `actor` with a JSON file in Application Support, in Caches on tvOS), `SessionTracker.swift` (`@MainActor`, duration from `ProcessInfo.processInfo.systemUptime`).
+- Lifecycle: SwiftUI reads `scenePhase` in the `@main` `App` (not in a `View`): `.active` starts, `.background` ends. UIKit: `sceneDidBecomeActive` starts; `sceneDidEnterBackground` ends only when no scene is in the foreground (iPad multi-window). Without scenes: `UIApplication.didBecomeActiveNotification` and `didEnterBackgroundNotification`.
+- Context: `os_name` from `UIDevice.current.systemName`, `device_model` from `utsname().machine` (such as `iPhone17,3`), `device_type` from `userInterfaceIdiom` (`.pad` is `tablet`, `.tv` is `tv`), `environment` from `#if DEBUG`.
+- Apple TV: the same code and the iOS key. tvOS apps have no persistent storage besides the Keychain and `UserDefaults`, so the queue file lives in Caches.
+- macOS: the same code with `platform: "macos"`, the macOS key and `NSApplication` lifecycle notifications.
+
+### Android, Android TV and Wear OS (Kotlin)
+
+Recipe: https://appmetrica.online/docs/recipes/android-kotlin (API 26+, `HttpURLConnection` and `org.json` from the platform)
+
+- Files: `InstallId.kt` (`SharedPreferences`, restored by Auto Backup; include `appmetrica.xml` from `sharedpref` in custom backup rules), `EventQueue.kt` (a file in `filesDir`, one background thread, batches of up to 500), `SessionTracker.kt` (duration from `SystemClock.elapsedRealtime()`).
+- Lifecycle: create the tracker in `Application.onCreate`, sessions from `ProcessLifecycleOwner` (`androidx.lifecycle:lifecycle-process`): `onStart` starts, `onStop` ends. A dependency-free alternative counts visible activities with `ActivityLifecycleCallbacks`, ignoring `isChangingConfigurations`. Never `Activity.onCreate`: rotation and activity switches would split sessions.
+- Context: `device_type` from `resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK` (`UI_MODE_TYPE_TELEVISION` is `tv`, `UI_MODE_TYPE_WATCH` is `watch`, otherwise `smallestScreenWidthDp >= 600` is `tablet`), `os_name` `Android TV` or `Wear OS` on those devices, `device_model` from `Build.MANUFACTURER` and `Build.MODEL`, `environment` from `BuildConfig.DEBUG` (enable `buildFeatures { buildConfig = true }` in AGP 8).
+- Manifest: `android:name=".App"` on `<application>` and the `android.permission.INTERNET` permission. With `android:process` components, initialize only in the main process.
+
+### Web (JavaScript)
+
+Recipe: https://appmetrica.online/docs/recipes/web-js (plain JavaScript module, no dependencies)
+
+- `install_id` and the queue live in `localStorage`. A session lasts while the tab is visible: `visibilitychange` to `visible` starts, to `hidden` ends, `pagehide` ends; SPA route changes don't create sessions. Call `start()` once per page load (bundle entry or root layout).
+- `session_end` goes out with `navigator.sendBeacon` as `text/plain` with `app_key` in the body (beacons can't set headers and survive the tab closing); other batches use `fetch` with `text/plain`. Don't use `beforeunload` or `unload`.
+- Next.js: a client component rendered in the root layout imports the module dynamically after hydration and passes `userId`.
+- Caveats: each tab is its own session; clearing site data creates a new installation; ad blockers may block requests, so proxy ingest through your own domain if needed.
+
+### React Native (TypeScript)
+
+Recipe: https://appmetrica.online/docs/recipes/react-native (React Native 0.7x+, iOS and Android)
+
+- Packages: `@react-native-async-storage/async-storage`, `react-native-keychain`, `react-native-device-info`, `react-native-get-random-values` (import it on the first line of `index.js`), `uuid`. Expo: `expo-secure-store`, `expo-application`, `expo-device`, `expo-crypto`.
+- `install_id` in the Keychain on iOS and in AsyncStorage on Android; the queue in AsyncStorage; sending with `fetch` (no `sendBeacon`, so an unsent `session_end` goes out on the next launch).
+- Lifecycle: subscribe to `AppState` in the root component: `active` starts, `background` ends, `inactive` (iOS only) is ignored.
+- One JS bundle picks the key and `context.platform` from `Platform.OS`; `device_type` from `DeviceInfo.getDeviceType()` (`Tv` is `tv`) or `DeviceInfo.isTablet()`; duration from `performance.now()`; `environment` from `__DEV__`.
+
+### Flutter (Dart)
+
+Recipe: https://appmetrica.online/docs/recipes/flutter (Dart 3; iOS, Android, macOS, Windows, Linux)
+
+- Packages: `http`, `path_provider`, `flutter_secure_storage` (`install_id` on iOS and macOS), `shared_preferences` (`install_id` elsewhere), `package_info_plus`, `device_info_plus`, `uuid`.
+- The queue is a file in `getApplicationSupportDirectory()`; duration from `Stopwatch`.
+- Lifecycle: a `WidgetsBindingObserver` registered in `main()`: `resumed` starts; `paused` ends on iOS and Android; on desktop `paused` never comes, `hidden` ends; `inactive` is ignored. If `lifecycleState` is already `resumed` at startup, start right away.
+- The key and `context.platform` come from `Platform.isIOS`, `Platform.isAndroid`, `Platform.isMacOS`, `Platform.isWindows`, `Platform.isLinux`. Android TV: `systemFeatures` of `AndroidDeviceInfo` contains `android.software.leanback`.
+- Flutter web uses the web recipe instead (no `dart:io` in browsers).
+
+### Kotlin Multiplatform (Android and iOS)
+
+Recipe: https://appmetrica.online/docs/recipes/kotlin-multiplatform (Kotlin 2.3+, Ktor 3, kotlinx.serialization, kotlinx.coroutines, `kotlin.uuid.Uuid`)
+
+- `commonMain`: the queue, sending and `SessionTracker`. `expect`/`actual` functions supply the key, `install_id` storage (`SharedPreferences` on Android, `NSUserDefaults` on iOS), the queue file and the device context; Ktor engines OkHttp (Android) and Darwin (iOS).
+- Lifecycle stays native: `Application.onCreate` with `ProcessLifecycleOwner` on Android, `scenePhase` in the SwiftUI `App` on iOS; both call the shared `SessionTracker.start()` and `end()`.
+
+### Bots and backends
+
+Recipe: https://appmetrica.online/docs/recipes/bots-and-backends (Go without dependencies; the logic applies to any language)
+
+- `platform` is `bot` for chat bots and `server` for backends. If the bot serves the same people as a mobile app, add the platform to that app.
+- Identity: `user_id` is HMAC-SHA256 of the Telegram user ID keyed with a secret, in hex; `install_id` is a UUID derived from the same HMAC of the chat ID. Never send raw Telegram IDs.
+- Server-side sessions: the first message after a pause opens a session; every message extends it; after 30 minutes of silence `session_end` gets the last message time and `duration_ms` = last message − first message. On shutdown, close open sessions and flush.
+- Queue: send a batch every 5 seconds or at 500 events. `context.ip`: `"none"` for Telegram and cron jobs, the end user's IP when your backend knows it.
+
+### Go
+
+Recipe: https://appmetrica.online/docs/recipes/go (a dependency-free client for backends, CLIs and cron jobs)
+
+- Reads the key from `AM_PK`, sends `context.platform` explicitly, retries `429` and `503` after `Retry-After` and `5xx` and network errors with backoff from 1 s to 300 s and ±20% jitter.
+
+### curl and any other language
+
+Recipe: https://appmetrica.online/docs/recipes/curl (a single event, a full session, batches, `user_id`, late offline delivery, gzip, retries, parsing responses with jq, the Read API, data deletion)
+
+For a stack without a recipe (Unity, .NET MAUI, Electron, Qt, a game engine), implement the checklist above with the platform's HTTP client, take the closest recipe as a template, and set `platform` to the OS the build runs on, or `web` for code running in a browser.
+
+## Verify the integration
+
+1. Send one event from a terminal to check the URL and the key (`environment: "development"` keeps it out of production reports):
+
+```bash
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+curl -sS https://i.analytics.example.com/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  --data-binary @- <<JSON
+{
+  "sent_at": "$NOW",
+  "context": { "platform": "ios", "app_version": "1.0.0", "environment": "development" },
+  "events": [
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$(uuidgen | tr A-Z a-z)",
+      "session_id": "$(uuidgen | tr A-Z a-z)"
+    }
+  ]
+}
+JSON
+```
+
+   The expected answer is `{"accepted": 1, "rejected": [], "warnings": [], …}`.
+2. Run a debug build, send the app to the background and bring it back.
+3. On the **Integration** tab, the latest events and rejection errors by app version appear; the session shows on the **Realtime** tab within 10 seconds. Turn on the development environment to see debug events in reports.
+
+## Read API (server-side reports)
+
+Recipe section: https://appmetrica.online/docs/read-api/overview
+
+Base URL is the installation's API (placeholder `https://api.analytics.example.com`), with `Authorization: Bearer sk_…`. The `sk_…` key is created in **Settings → API keys**, has the `read` or `delete` scope and may be bound to one app. Use it only from servers and scripts, never in client apps. It serves the portfolio, audience, retention, realtime, profiles and integration health as JSON, and data deletion requests (https://appmetrica.online/docs/privacy-and-gdpr#deletion).
+
+## Docs
+
+- [Quick start](https://appmetrica.online/docs): create an app, send the first event, event platform.
+- [Where to initialize analytics](https://appmetrica.online/docs/concepts/initialization): entry points and lifecycle hooks on every platform.
+- [Identity](https://appmetrica.online/docs/concepts/identity): `install_id`, `user_id` and how people are counted across platforms.
+- [Sessions](https://appmetrica.online/docs/concepts/sessions#client-rules): session rules and how metrics are calculated.
+- [Time and the offline queue](https://appmetrica.online/docs/concepts/time-and-offline#offline-queue): clock correction and queue requirements.
+- [Errors and retries](https://appmetrica.online/docs/errors-and-retries#retry-policy): every response and rejection code.
+- [Privacy and GDPR](https://appmetrica.online/docs/privacy-and-gdpr): what is stored, retention, deletion.
+- [Ingestion API reference](https://appmetrica.online/docs/api-reference/ingest/ingest-events): the full batch schema.
+- [Read API](https://appmetrica.online/docs/read-api/overview): reports for scripts with an `sk_…` key.
