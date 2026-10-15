@@ -28,6 +28,8 @@ import {
   FILTER_DIMENSIONS,
   type FilterDimension,
 } from "@/lib/url-state";
+import { cn } from "@/lib/utils";
+import { STICKY_FIRST_COL, STICKY_ROW_HOVER, STICKY_VALUE, TOUCH_TOGGLE } from "./responsive";
 
 type BreakdownTableProps = {
   dimension: BreakdownDim;
@@ -92,7 +94,7 @@ export function BreakdownTable({
       <Table aria-label={fmt(m.table, { dimension: label })}>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead scope="col" className="px-3">
+            <TableHead scope="col" className={cn(STICKY_FIRST_COL, "px-3")}>
               {m.value}
             </TableHead>
             <TableHead scope="col" className="px-3 text-right">
@@ -105,21 +107,27 @@ export function BreakdownTable({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.value}>
-              <TableCell className="px-3">
+            <TableRow key={row.value} className="group/row">
+              <TableCell className={cn(STICKY_FIRST_COL, STICKY_ROW_HOVER, "px-3")}>
                 {row.value === "" ? (
                   <span className="text-fg-muted">{m.notSet}</span>
                 ) : clickable ? (
                   <button
                     type="button"
+                    title={row.value}
                     aria-label={fmt(m.filterBy, { dimension: label, value: row.value })}
                     onClick={() => onRowClick(row.value)}
-                    className="rounded-sm text-fg-link hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className={cn(
+                      STICKY_VALUE,
+                      "rounded-sm text-left text-fg-link hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    )}
                   >
                     {row.value}
                   </button>
                 ) : (
-                  row.value
+                  <span title={row.value} className={STICKY_VALUE}>
+                    {row.value}
+                  </span>
                 )}
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums">
@@ -163,7 +171,7 @@ export function BreakdownTable({
           className="flex-wrap"
         >
           {DIMENSIONS.map((d) => (
-            <ToggleGroupItem key={d} value={d} className="px-3">
+            <ToggleGroupItem key={d} value={d} className={cn(TOUCH_TOGGLE, "px-3")}>
               {labels[d]}
             </ToggleGroupItem>
           ))}
@@ -179,7 +187,11 @@ export function BreakdownTable({
               if (key) onMetricChange(key);
             }}
           >
-            <SelectTrigger size="sm" aria-labelledby={metricLabelId}>
+            <SelectTrigger
+              size="sm"
+              aria-labelledby={metricLabelId}
+              className="data-[size=sm]:h-11 md:data-[size=sm]:h-7"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

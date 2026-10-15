@@ -19,8 +19,10 @@ const PREFIX = { day: "D", week: "W" } as const;
 
 const CELL = "h-8 w-14 min-w-14 px-1 text-center";
 // Закреплённые колонки «Когорта» (132 px) и «Размер»; шапка и строка «Среднее» закреплены сверху.
+// На телефоне по горизонтали закреплена только «Когорта»: «Размер» уезжает под неё вместе с цифрами,
+// поэтому его z-index там ниже, чем у «Когорты».
 const COHORT_COL = "sticky left-0 w-[132px] min-w-[132px] px-3 text-left";
-const SIZE_COL = "sticky left-[132px] w-20 min-w-20 px-3 text-right";
+const SIZE_COL = "sticky md:left-[132px] w-20 min-w-20 px-3 text-right";
 
 // Матрица когорт S-06 (14-ux-ui-spec.md S-06, §16.9): настоящая таблица, 6-шаговая шкала цвета,
 // D0 (W0) не окрашивается, ненаступившие периоды пустые. Клик по шапке периода выделяет колонку.
@@ -103,7 +105,7 @@ export function RetentionHeatmap({ matrix, granularity, unit = "persons" }: Rete
             <th scope="col" className={cn(COHORT_COL, "top-0 z-40 h-8 bg-subtle font-medium")}>
               {m.cohort}
             </th>
-            <th scope="col" className={cn(SIZE_COL, "top-0 z-40 bg-subtle font-medium")}>
+            <th scope="col" className={cn(SIZE_COL, "top-0 z-30 bg-subtle font-medium md:z-40")}>
               {m.size}
             </th>
             {columns.map((n) => (
@@ -129,7 +131,9 @@ export function RetentionHeatmap({ matrix, granularity, unit = "persons" }: Rete
             <th scope="row" className={cn(COHORT_COL, "top-8 z-[25] bg-subtle font-semibold")}>
               {m.average}
             </th>
-            <td className={cn(SIZE_COL, "top-8 z-[25] bg-subtle")}>{f.formatInt(meanSize)}</td>
+            <td className={cn(SIZE_COL, "top-8 z-20 bg-subtle md:z-[25]")}>
+              {f.formatInt(meanSize)}
+            </td>
             {columns.map((n) => valueCell(matrix.average[n], n))}
           </tr>
           {matrix.cohorts.map((cohort) => (
@@ -140,7 +144,7 @@ export function RetentionHeatmap({ matrix, granularity, unit = "persons" }: Rete
               >
                 {label(cohort.cohort_start)}
               </th>
-              <td className={cn(SIZE_COL, "z-10 bg-card")}>{f.formatInt(cohort.size)}</td>
+              <td className={cn(SIZE_COL, "bg-card md:z-10")}>{f.formatInt(cohort.size)}</td>
               {columns.map((n) => valueCell(cohort.values[n], n, cohort))}
             </tr>
           ))}
