@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { portfolioRow } from "@/test/factories";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { PlatformShareBar } from "./platform-share-bar";
 import { PortfolioTable } from "./portfolio-table";
 
@@ -101,5 +102,17 @@ describe("PlatformShareBar", () => {
     rerender(<PlatformShareBar items={[{ platform: "ios", active: 0 }]} total={0} />);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("labels the shares and explains the overlap in English", async () => {
+    const user = userEvent.setup();
+    const items = notes.platforms.filter((p) => p.platform !== "web");
+    renderWithLocale(<PlatformShareBar items={items} total={8000} />, "en");
+
+    expect(screen.getByRole("img", { name: "iOS 57%, Android 43%" })).toBeInTheDocument();
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "iOS 5,210 · Android 3,870. A person on several platforms is counted in each",
+    );
   });
 });

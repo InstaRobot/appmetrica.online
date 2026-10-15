@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { Delta } from "./delta";
 import { Sparkline } from "./sparkline";
 
@@ -19,6 +20,14 @@ describe("Delta", () => {
   it("renders a missing comparison as a dash", () => {
     render(<Delta value={null} />);
     expect(screen.getByText("—")).toHaveClass("text-fg-muted");
+  });
+
+  it.each([
+    [4.1, "+4.1%"],
+    [-1.24, "−1.2%"],
+  ])("formats %d in English", (value, text) => {
+    renderWithLocale(<Delta value={value} />, "en");
+    expect(screen.getByText(text)).toBeInTheDocument();
   });
 });
 

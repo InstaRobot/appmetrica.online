@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -7,9 +8,11 @@ import { PortfolioView } from "@/app/(dashboard)/portfolio-view";
 import { getGetSettingsMockHandler } from "@/lib/api/gen/endpoints/admin-settings/admin-settings.msw";
 import { getListAppsMockHandler } from "@/lib/api/gen/endpoints/apps/apps.msw";
 import type { Portfolio, PortfolioRow } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp, portfolioRow } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { type PortfolioSort, PortfolioTable } from "./portfolio-table";
 
 // Testing Library сводит пробельные символы текста узла (и U+00A0) к обычному пробелу.
@@ -485,5 +488,135 @@ describe("PortfolioTable", () => {
     expect(onSortChange).toHaveBeenLastCalledWith({ key: "name", desc: false });
     await user.click(screen.getByRole("button", { name: /^DAU/ }));
     expect(onSortChange).toHaveBeenLastCalledWith({ key: "active_date", desc: false });
+  });
+});
+
+// Английский интерфейс: подписи из словаря en, числа и даты в формате en-US.
+function renderViewInEnglish(searchParams = "") {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(
+    <QueryClientProvider client={client}>
+      <PortfolioView />
+    </QueryClientProvider>,
+    "en",
+    { wrapper: withNuqsTestingAdapter({ searchParams, hasMemory: true }) },
+  );
+}
+
+describe("PortfolioView in English", () => {
+  it("titles the screen, columns and dates in English", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-10-13T09:00:00Z"));
+    mockApi([notes, maps]);
+    renderViewInEnglish("?unit=installs");
+
+    const t = await screen.findByRole("table", { name: /^App portfolio for Oct\s12, 2026$/ });
+    expect(screen.getByRole("heading", { name: "Portfolio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add app" })).toHaveAttribute("href", "/apps/new");
+    expect(screen.getByText("Installs")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Environment" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Pick a date: Oct\s12, 2026$/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous day" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next day" })).toBeInTheDocument();
+
+    expect(
+      within(t)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual([
+      "App",
+      "Platforms",
+      "Today",
+      "DAU Oct\u00a012",
+      "Δ vs Mon, Oct\u00a05",
+      "New",
+      "Sessions",
+      "D1",
+      "D7",
+      "30 days",
+    ]);
+  });
+
+  it("formats numbers, deltas and trends in English", async () => {
+    mockApi([notes, maps]);
+    renderViewInEnglish();
+
+    const t = await screen.findByRole("table", { name: /^App portfolio for/ });
+    const row = rowOf(t, "Maps Android");
+    expect(within(row).getByText("8,902")).toBeInTheDocument();
+    expect(within(row).getByText(`${MINUS}1.2%`)).toHaveClass("text-negative");
+    expect(within(row).getByText("31%")).toBeInTheDocument();
+    expect(within(row).getByText("30-day trend: down")).toBeInTheDocument();
+    expect(within(rowOf(t, "Notes iOS")).getByText("30-day trend: up")).toBeInTheDocument();
+    expect(within(rowOf(t, "Notes iOS")).getByText("+4.1%")).toHaveClass("text-positive");
+  });
+
+  it("explains the partial current day in a tooltip", async () => {
+    mockApi([notes]);
+    const user = userEvent.setup();
+    renderViewInEnglish();
+
+    const t = await screen.findByRole("table", { name: /^App portfolio for/ });
+    await user.hover(within(t).getByRole("button", { name: /^Today/ }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Partial day: data since 00:00 in the app's time zone",
+    );
+  });
+
+  it("warns about a day without events", async () => {
+    const zero = portfolioRow({
+      ...notes,
+      active_today: 0,
+      active_date: 0,
+      new_date: 0,
+      sessions_date: 0,
+    });
+    mockApi([zero]);
+    renderViewInEnglish();
+
+    expect(
+      await screen.findByText("No events on Oct 12, 2026. Check the Integration tab of your apps."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the empty state", async () => {
+    mockApi([], []);
+    renderViewInEnglish();
+
+    expect(await screen.findByRole("heading", { name: "No apps yet" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add your first app to get a key and ready-made snippets for sending events.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lists archived apps", async () => {
+    const archived = makeApp({
+      id: "0192aaaa-0000-7000-8000-000000000011",
+      name: "Old Notes",
+      platform: "ios",
+      platforms: ["ios"],
+      status: "archived",
+      archived_at: "2026-09-20T10:00:00Z",
+    });
+    mockApi([notes], [makeApp({ ...notes.app }), archived]);
+    const user = userEvent.setup();
+    renderViewInEnglish();
+
+    await screen.findByRole("table", { name: /^App portfolio for/ });
+    await user.click(await screen.findByRole("switch", { name: "Show archived (1)" }));
+
+    const archive = screen.getByRole("table", { name: "Archive" });
+    expect(
+      within(archive)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Name", "Platforms", "Archived on", "Actions"]);
+    expect(within(archive).getByText(/^Sep\s20, 2026$/)).toBeInTheDocument();
+    expect(within(archive).getByRole("link", { name: "Open" })).toBeInTheDocument();
   });
 });
