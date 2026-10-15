@@ -1,5 +1,73 @@
 // Пространство имён «integration»: вкладка «Интеграция» (S-10), сниппеты и коды отказов ingest.
 export const integration = {
+  title: "Integration",
+  showKeys: "Show key and snippets",
+  kpi: {
+    accepted: "Accepted, last {hours}h",
+    rejected: "Rejected, last {hours}h",
+    rejectionRate: "Rejection rate",
+    lastEvent: "Last event",
+  },
+  sections: {
+    hourly: "By hour",
+    reasons: "Rejection reasons",
+    versions: "By app version",
+  },
+  rateWarning: "Rejection rate of 1% or higher",
+  endpoint: {
+    title: "Endpoint",
+    hint: "One for all platforms of the app",
+    field: "endpoint",
+  },
+  addPlatform: "Add platform",
+  platform: {
+    status: "{platform} status",
+    received: "First event received",
+    waiting: "Waiting for the first event from {platform}",
+    writeKeyHint: "Write key (public, embedded in the app)",
+    writeKeyField: "write key",
+    noKey: "No active key for {platform}.",
+    createKey: "Create a key for {platform}",
+  },
+  firstEvent: {
+    label: "First event",
+    toast: "First event received",
+    receivedAt: "First event received at {time}",
+    connected: "— {app} is connected!",
+    waiting: "Waiting for the first event…",
+    polling: "Checking every 3 seconds.",
+    openAudience: "Open Audience",
+  },
+  reasonsTable: {
+    none: "No rejections in the last 24 hours ✓",
+    code: "Code",
+    description: "Description",
+    count: "Count",
+    last: "Last",
+    example: "Example",
+    examplePayload: "Example payload: {code}",
+    examplePayloadJson: "Example payload as JSON",
+  },
+  versionsTable: {
+    none: "No events in the last 24 hours",
+    version: "Version",
+    accepted: "Accepted",
+    rejected: "Rejected",
+    rejectionRate: "Rejection rate",
+    lastEvent: "Last event",
+    notSet: "(not set)",
+  },
+  chart: {
+    accepted: "Accepted",
+    rejected: "Rejected",
+    empty: "No data for the last 24 hours",
+    description: "Events by hour, {from}–{to}: {accepted} accepted, {rejected} rejected",
+  },
+  snippets: {
+    tabs: "Snippet language",
+    code: "Code example in {lang}",
+    recipes: "Full recipes with an offline queue and sessions are in the docs →",
+  },
   // Комментарии внутри сниппетов онбординга (lib/snippets.ts); сам код сниппетов не переводится.
   snippetComments: {
     expectedResponse: "Expected response",

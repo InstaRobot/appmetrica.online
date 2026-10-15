@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatClock } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -26,13 +27,15 @@ export function WaitingForFirstEvent({
   audienceHref,
   timezone,
 }: WaitingForFirstEventProps) {
+  const m = useMessages().integration.firstEvent;
+  const f = useFormat();
   const previous = useRef(firstEventAt);
   useEffect(() => {
     if (previous.current === null && firstEventAt !== null) {
-      toast.success("Первое событие получено");
+      toast.success(m.toast);
     }
     previous.current = firstEventAt;
-  }, [firstEventAt]);
+  }, [firstEventAt, m.toast]);
 
   const received = firstEventAt !== null;
 
@@ -48,23 +51,23 @@ export function WaitingForFirstEvent({
       ) : (
         <Loader2 aria-hidden="true" className="size-5 shrink-0 animate-spin text-fg-muted" />
       )}
-      <p role="status" aria-live="polite" aria-label="Первое событие" className="text-body-md">
+      <p role="status" aria-live="polite" aria-label={m.label} className="text-body-md">
         {received ? (
           <>
             <span className="font-medium text-positive">
-              Первое событие получено {formatClock(firstEventAt, timezone)}
+              {fmt(m.receivedAt, { time: f.formatClock(firstEventAt, timezone) })}
             </span>{" "}
-            — {appName} подключено!
+            {fmt(m.connected, { app: appName })}
           </>
         ) : (
           <>
-            Ждём первое событие… <span className="text-fg-muted">Проверяем каждые 3 секунды.</span>
+            {m.waiting} <span className="text-fg-muted">{m.polling}</span>
           </>
         )}
       </p>
       {received ? (
         <Button asChild size="sm" className="ml-auto">
-          <Link href={audienceHref as Route}>Открыть Аудиторию</Link>
+          <Link href={audienceHref as Route}>{m.openAudience}</Link>
         </Button>
       ) : null}
     </Card>

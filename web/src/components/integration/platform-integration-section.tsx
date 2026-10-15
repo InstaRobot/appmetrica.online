@@ -9,6 +9,8 @@ import { PLATFORM_LABELS, PlatformIcon } from "@/components/common/platform-icon
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import type { Platform, WriteKey } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { cn } from "@/lib/utils";
 import { SnippetTabs } from "./snippet-tabs";
 
@@ -39,8 +41,10 @@ export function PlatformIntegrationSection({
   received,
   ingestUrl,
 }: PlatformIntegrationSectionProps) {
+  const m = useMessages().integration.platform;
   const titleId = useId();
   const label = PLATFORM_LABELS[platform];
+  const vars = { platform: label };
 
   return (
     <section aria-labelledby={titleId}>
@@ -53,7 +57,7 @@ export function PlatformIntegrationSection({
           <p
             role="status"
             aria-live="polite"
-            aria-label={`Статус ${label}`}
+            aria-label={fmt(m.status, vars)}
             className={cn(
               "ml-auto flex items-center gap-1.5 text-body-sm",
               received ? "text-positive" : "text-fg-muted",
@@ -64,27 +68,25 @@ export function PlatformIntegrationSection({
             ) : (
               <Loader2 aria-hidden="true" className="size-4 animate-spin" />
             )}
-            {received ? "Получено первое событие" : `Ждём первое событие с ${label}`}
+            {received ? m.received : fmt(m.waiting, vars)}
           </p>
         </div>
         {writeKey ? (
           <>
-            <p className="text-body-sm text-fg-muted">
-              Write-ключ (публичный, встраивается в приложение)
-            </p>
-            <CopyField value={writeKey.key} label="write-ключ" />
+            <p className="text-body-sm text-fg-muted">{m.writeKeyHint}</p>
+            <CopyField value={writeKey.key} label={m.writeKeyField} />
             <SnippetTabs ingestUrl={ingestUrl} writeKey={writeKey.key} platform={platform} />
           </>
         ) : (
           <Alert className="border-warning/40">
             <TriangleAlert aria-hidden="true" className="text-warning" />
             <AlertDescription className="flex flex-wrap gap-x-2">
-              <span>Для {label} нет активного ключа.</span>
+              <span>{fmt(m.noKey, vars)}</span>
               <Link
                 href={`/apps/${appId}/settings#write-keys` as Route}
                 className="text-fg-link hover:underline"
               >
-                Создать ключ для {label}
+                {fmt(m.createKey, vars)}
               </Link>
             </AlertDescription>
           </Alert>

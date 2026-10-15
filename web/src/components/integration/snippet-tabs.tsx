@@ -1,12 +1,13 @@
 "use client";
 
-import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
 import { CodeBlock, type CodeBlockLang } from "@/components/common/code-block";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Platform } from "@/lib/api/gen/model";
-import { useMessages } from "@/lib/i18n/client";
+import { useLocale, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
+import { publicHref } from "@/lib/i18n/routes";
 import {
   buildSnippet,
   defaultSnippetLang,
@@ -41,11 +42,12 @@ const isSnippetLang = (value: string): value is SnippetLang =>
 // в которые подставлены write-ключ и эндпоинт ingest.
 export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: SnippetTabsProps) {
   const [lang, setLang] = useState<SnippetLang>(defaultLang ?? defaultSnippetLang(platform));
-  const comments = useMessages().integration.snippetComments;
+  const m = useMessages().integration;
+  const locale = useLocale();
 
   return (
     <Tabs value={lang} onValueChange={(value) => isSnippetLang(value) && setLang(value)}>
-      <TabsList aria-label="Язык сниппета">
+      <TabsList aria-label={m.snippets.tabs}>
         {SNIPPET_LANGS.map((l) => (
           <TabsTrigger key={l} value={l}>
             {SNIPPET_LABELS[l]}
@@ -55,17 +57,17 @@ export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: Snip
       {SNIPPET_LANGS.map((l) => (
         <TabsContent key={l} value={l}>
           <CodeBlock
-            code={buildSnippet(l, { ingestUrl, writeKey, platform }, comments)}
+            code={buildSnippet(l, { ingestUrl, writeKey, platform }, m.snippetComments)}
             lang={CODE_LANG[l]}
-            ariaLabel={`Пример кода на ${SNIPPET_LABELS[l]}`}
+            ariaLabel={fmt(m.snippets.code, { lang: SNIPPET_LABELS[l] })}
           />
         </TabsContent>
       ))}
       <Link
-        href={SNIPPET_RECIPES[lang] as Route}
+        href={publicHref(locale, SNIPPET_RECIPES[lang])}
         className="text-body-sm text-fg-link hover:underline"
       >
-        Полные рецепты с офлайн-очередью и сессиями — в документации →
+        {m.snippets.recipes}
       </Link>
     </Tabs>
   );

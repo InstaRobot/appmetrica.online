@@ -13,7 +13,8 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetIntegrationHealth } from "@/lib/api/gen/endpoints/integration/integration";
 import type { App, IntegrationHealth } from "@/lib/api/gen/model";
-import { formatDateTime, formatInt, formatRejectionRate } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { ingestEndpoint } from "@/lib/snippets";
 import { cn } from "@/lib/utils";
 import { isRejectionRateHigh, RejectionRateWarning } from "./rejection-rate-warning";
@@ -33,10 +34,11 @@ const LazyIntegrationOnboarding = lazy(() =>
 );
 
 function IntegrationOnboarding(props: { app: App; ingestUrl: string }) {
+  const m = useMessages();
   return (
     <Suspense
       fallback={
-        <Card role="status" aria-label="Загрузка…" className="gap-3 px-6">
+        <Card role="status" aria-label={m.common.loading} className="gap-3 px-6">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-8 w-full" />
         </Card>
@@ -60,6 +62,7 @@ export function IntegrationPanel({ appId }: IntegrationPanelProps) {
 }
 
 function IntegrationReport({ app }: { app: App }) {
+  const m = useMessages().integration;
   const ingestUrl = ingestEndpoint();
   const health = useGetIntegrationHealth(
     app.id,
@@ -103,7 +106,7 @@ function IntegrationReport({ app }: { app: App }) {
   if (onboarding) {
     return (
       <div className="flex flex-col gap-6">
-        <h2 className="text-heading-2">Интеграция</h2>
+        <h2 className="text-heading-2">{m.title}</h2>
         <IntegrationOnboarding app={app} ingestUrl={ingestUrl} />
         <WaitingForFirstEvent
           firstEventAt={data.first_event_at}
@@ -135,6 +138,8 @@ function HealthKpi({ label, children }: { label: string; children: React.ReactNo
 type IntegrationHealthViewProps = { app: App; data: IntegrationHealth; ingestUrl: string };
 
 function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewProps) {
+  const m = useMessages().integration;
+  const f = useFormat();
   const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const high = isRejectionRateHigh(data.rejected_total, data.accepted_total);
@@ -149,7 +154,7 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <h2 className="text-heading-2">Интеграция</h2>
+        <h2 className="text-heading-2">{m.title}</h2>
         <Button
           variant="outline"
           size="sm"
@@ -158,7 +163,7 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
           aria-controls={sectionId}
           onClick={() => setExpanded(!expanded)}
         >
-          Показать ключ и сниппеты
+          {m.showKeys}
           <ChevronDown
             aria-hidden="true"
             className={cn("transition-transform", expanded && "rotate-180")}
@@ -169,32 +174,34 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
         {expanded ? <IntegrationOnboarding app={app} ingestUrl={ingestUrl} /> : null}
       </div>
       <div className="grid grid-cols-4 gap-4">
-        <HealthKpi label={`Принято за ${data.hours} ч`}>{formatInt(data.accepted_total)}</HealthKpi>
-        <HealthKpi label={`Отклонено за ${data.hours} ч`}>
-          {formatInt(data.rejected_total)}
+        <HealthKpi label={fmt(m.kpi.accepted, { hours: data.hours })}>
+          {f.formatInt(data.accepted_total)}
         </HealthKpi>
-        <HealthKpi label="Доля отказов">
+        <HealthKpi label={fmt(m.kpi.rejected, { hours: data.hours })}>
+          {f.formatInt(data.rejected_total)}
+        </HealthKpi>
+        <HealthKpi label={m.kpi.rejectionRate}>
           <span className={cn(high && "text-warning")}>
-            {formatRejectionRate(data.rejected_total, data.accepted_total)}
+            {f.formatRejectionRate(data.rejected_total, data.accepted_total)}
           </span>
           {high ? <RejectionRateWarning /> : null}
         </HealthKpi>
-        <HealthKpi label="Последнее событие">
+        <HealthKpi label={m.kpi.lastEvent}>
           <span className="text-heading-3">
-            {lastSeen ? formatDateTime(lastSeen, app.timezone) : "—"}
+            {lastSeen ? f.formatDateTime(lastSeen, app.timezone) : "—"}
           </span>
         </HealthKpi>
       </div>
       <Card className="gap-4 px-6">
-        <h3 className="text-heading-3">По часам</h3>
+        <h3 className="text-heading-3">{m.sections.hourly}</h3>
         <HourlyIngestChart hourly={data.hourly} timezone={app.timezone} />
       </Card>
       <Card className="gap-4 px-6">
-        <h3 className="text-heading-3">Причины отказов</h3>
+        <h3 className="text-heading-3">{m.sections.reasons}</h3>
         <RejectionReasonsTable reasons={data.reasons} timezone={app.timezone} />
       </Card>
       <Card className="gap-4 px-6">
-        <h3 className="text-heading-3">По версиям приложения</h3>
+        <h3 className="text-heading-3">{m.sections.versions}</h3>
         <VersionsHealthTable versions={data.versions} timezone={app.timezone} />
       </Card>
     </div>

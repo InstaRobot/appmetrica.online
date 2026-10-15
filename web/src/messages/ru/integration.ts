@@ -1,6 +1,74 @@
 import type { integration as en } from "../en/integration";
 
 export const integration: typeof en = {
+  title: "Интеграция",
+  showKeys: "Показать ключ и сниппеты",
+  kpi: {
+    accepted: "Принято за {hours} ч",
+    rejected: "Отклонено за {hours} ч",
+    rejectionRate: "Доля отказов",
+    lastEvent: "Последнее событие",
+  },
+  sections: {
+    hourly: "По часам",
+    reasons: "Причины отказов",
+    versions: "По версиям приложения",
+  },
+  rateWarning: "Доля отказов 1 % и выше",
+  endpoint: {
+    title: "Эндпоинт",
+    hint: "Один для всех платформ приложения",
+    field: "эндпоинт",
+  },
+  addPlatform: "Добавить платформу",
+  platform: {
+    status: "Статус {platform}",
+    received: "Получено первое событие",
+    waiting: "Ждём первое событие с {platform}",
+    writeKeyHint: "Write-ключ (публичный, встраивается в приложение)",
+    writeKeyField: "write-ключ",
+    noKey: "Для {platform} нет активного ключа.",
+    createKey: "Создать ключ для {platform}",
+  },
+  firstEvent: {
+    label: "Первое событие",
+    toast: "Первое событие получено",
+    receivedAt: "Первое событие получено {time}",
+    connected: "— {app} подключено!",
+    waiting: "Ждём первое событие…",
+    polling: "Проверяем каждые 3 секунды.",
+    openAudience: "Открыть Аудиторию",
+  },
+  reasonsTable: {
+    none: "Отказов за 24 часа нет ✓",
+    code: "Код",
+    description: "Описание",
+    count: "Кол-во",
+    last: "Последний",
+    example: "Пример",
+    examplePayload: "Пример payload: {code}",
+    examplePayloadJson: "Пример payload в JSON",
+  },
+  versionsTable: {
+    none: "Событий за 24 часа нет",
+    version: "Версия",
+    accepted: "Принято",
+    rejected: "Отклонено",
+    rejectionRate: "Доля отказов",
+    lastEvent: "Последнее событие",
+    notSet: "(не задана)",
+  },
+  chart: {
+    accepted: "Принято",
+    rejected: "Отклонено",
+    empty: "Нет данных за 24 часа",
+    description: "События по часам, {from}–{to}: принято {accepted}, отклонено {rejected}",
+  },
+  snippets: {
+    tabs: "Язык сниппета",
+    code: "Пример кода на {lang}",
+    recipes: "Полные рецепты с офлайн-очередью и сессиями — в документации →",
+  },
   snippetComments: {
     expectedResponse: "Ожидаемый ответ",
     swiftSessionStart:

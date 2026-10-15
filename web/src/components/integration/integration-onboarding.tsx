@@ -13,6 +13,7 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useListWriteKeys } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { getGetAudienceBreakdownQueryOptions } from "@/lib/api/gen/endpoints/audience/audience";
 import { type App, Environment } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 import { todayIn, yesterdayIn } from "@/lib/period";
 import { activeWriteKeyFor, PlatformIntegrationSection } from "./platform-integration-section";
 
@@ -26,6 +27,7 @@ type IntegrationOnboardingProps = { app: App; ingestUrl: string };
 // Онбординг S-10 по платформам (FR-7): общий эндпоинт, секция на каждую явную
 // платформу приложения и ссылка «Добавить платформу» в настройки.
 export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingProps) {
+  const m = useMessages();
   const keys = useListWriteKeys(app.id);
   const list = keys.data?.status === 200 ? keys.data.data.items : undefined;
   const observed = useObservedPlatforms(app);
@@ -43,7 +45,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
       );
     }
     return (
-      <Card role="status" aria-label="Загрузка…" className="gap-3 px-6">
+      <Card role="status" aria-label={m.common.loading} className="gap-3 px-6">
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-8 w-full" />
       </Card>
@@ -53,9 +55,9 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
   return (
     <>
       <Card className="gap-3 px-6">
-        <h3 className="text-heading-3">Эндпоинт</h3>
-        <p className="text-body-sm text-fg-muted">Один для всех платформ приложения</p>
-        <CopyField value={ingestUrl} label="эндпоинт" />
+        <h3 className="text-heading-3">{m.integration.endpoint.title}</h3>
+        <p className="text-body-sm text-fg-muted">{m.integration.endpoint.hint}</p>
+        <CopyField value={ingestUrl} label={m.integration.endpoint.field} />
       </Card>
       {app.platforms.map((platform) => (
         <PlatformIntegrationSection
@@ -72,7 +74,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
         className="flex items-center gap-1.5 self-start text-body-sm text-fg-link hover:underline"
       >
         <Plus aria-hidden="true" className="size-4" />
-        Добавить платформу
+        {m.integration.addPlatform}
       </Link>
     </>
   );

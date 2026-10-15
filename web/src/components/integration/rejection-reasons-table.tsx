@@ -12,8 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { IntegrationHealth, IntegrationReason } from "@/lib/api/gen/model";
-import { formatInt, formatTime } from "@/lib/format";
-import { useMessages } from "@/lib/i18n/client";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { rejectionCode } from "@/lib/rejection-codes";
 
 type RejectionReasonsTableProps = { reasons: IntegrationHealth["reasons"]; timezone: string };
@@ -28,7 +28,8 @@ function prettyJson(payload: string): string {
 }
 
 function ExamplePayload({ reason }: { reason: IntegrationReason }) {
-  const label = `Пример payload: ${reason.code}`;
+  const m = useMessages().integration.reasonsTable;
+  const label = fmt(m.examplePayload, { code: reason.code });
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -41,7 +42,7 @@ function ExamplePayload({ reason }: { reason: IntegrationReason }) {
         <CodeBlock
           code={prettyJson(reason.example_payload)}
           lang="json"
-          ariaLabel="Пример payload в JSON"
+          ariaLabel={m.examplePayloadJson}
           maxHeight={320}
         />
         <p className="text-body-sm text-fg-muted">{reason.example_message}</p>
@@ -53,26 +54,27 @@ function ExamplePayload({ reason }: { reason: IntegrationReason }) {
 // Причины отказов за 24 ч (14-ux-ui-spec.md S-10): код, описание с подсказкой из lib/rejection-codes.ts,
 // количество, время последнего отказа и пример payload.
 export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTableProps) {
-  const codes = useMessages().integration.rejectionCodes;
+  const m = useMessages().integration;
+  const f = useFormat();
   if (reasons.length === 0) {
-    return <p className="text-body-md text-positive">Отказов за 24 часа нет ✓</p>;
+    return <p className="text-body-md text-positive">{m.reasonsTable.none}</p>;
   }
 
   return (
     <Table>
-      <caption className="sr-only">Причины отказов</caption>
+      <caption className="sr-only">{m.sections.reasons}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Код</TableHead>
-          <TableHead>Описание</TableHead>
-          <TableHead className="text-right">Кол-во</TableHead>
-          <TableHead className="text-right">Последний</TableHead>
-          <TableHead className="text-right">Пример</TableHead>
+          <TableHead>{m.reasonsTable.code}</TableHead>
+          <TableHead>{m.reasonsTable.description}</TableHead>
+          <TableHead className="text-right">{m.reasonsTable.count}</TableHead>
+          <TableHead className="text-right">{m.reasonsTable.last}</TableHead>
+          <TableHead className="text-right">{m.reasonsTable.example}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {reasons.map((reason) => {
-          const text = rejectionCode(reason.code, codes);
+          const text = rejectionCode(reason.code, m.rejectionCodes);
           return (
             <TableRow key={reason.code}>
               <TableCell className="font-mono text-code">{reason.code}</TableCell>
@@ -82,9 +84,9 @@ export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTab
                   <span className="block text-body-sm text-fg-muted">{text.hint}</span>
                 ) : null}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatInt(reason.count)}</TableCell>
+              <TableCell className="text-right tabular-nums">{f.formatInt(reason.count)}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatTime(reason.last_seen, timezone)}
+                {f.formatTime(reason.last_seen, timezone)}
               </TableCell>
               <TableCell className="text-right">
                 <ExamplePayload reason={reason} />

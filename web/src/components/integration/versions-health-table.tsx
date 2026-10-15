@@ -7,27 +7,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { IntegrationHealth } from "@/lib/api/gen/model";
-import { formatInt, formatRejectionRate, formatTime } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
 import { isRejectionRateHigh, RejectionRateWarning } from "./rejection-rate-warning";
 
 type VersionsHealthTableProps = { versions: IntegrationHealth["versions"]; timezone: string };
 
 // Здоровье по app_version за 24 ч (14-ux-ui-spec.md S-10): доля отказов ≥ 1 % помечается ⚠.
 export function VersionsHealthTable({ versions, timezone }: VersionsHealthTableProps) {
+  const m = useMessages().integration;
+  const f = useFormat();
   if (versions.length === 0) {
-    return <p className="text-body-md text-fg-muted">Событий за 24 часа нет</p>;
+    return <p className="text-body-md text-fg-muted">{m.versionsTable.none}</p>;
   }
 
   return (
     <Table>
-      <caption className="sr-only">По версиям приложения</caption>
+      <caption className="sr-only">{m.sections.versions}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Версия</TableHead>
-          <TableHead className="text-right">Принято</TableHead>
-          <TableHead className="text-right">Отклонено</TableHead>
-          <TableHead className="text-right">Доля отказов</TableHead>
-          <TableHead className="text-right">Последнее событие</TableHead>
+          <TableHead>{m.versionsTable.version}</TableHead>
+          <TableHead className="text-right">{m.versionsTable.accepted}</TableHead>
+          <TableHead className="text-right">{m.versionsTable.rejected}</TableHead>
+          <TableHead className="text-right">{m.versionsTable.rejectionRate}</TableHead>
+          <TableHead className="text-right">{m.versionsTable.lastEvent}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -35,21 +37,21 @@ export function VersionsHealthTable({ versions, timezone }: VersionsHealthTableP
           <TableRow key={v.app_version}>
             <TableCell className="font-mono text-code">
               {v.app_version === "" ? (
-                <span className="font-sans text-fg-muted">(не задана)</span>
+                <span className="font-sans text-fg-muted">{m.versionsTable.notSet}</span>
               ) : (
                 v.app_version
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">{formatInt(v.accepted)}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatInt(v.rejected)}</TableCell>
+            <TableCell className="text-right tabular-nums">{f.formatInt(v.accepted)}</TableCell>
+            <TableCell className="text-right tabular-nums">{f.formatInt(v.rejected)}</TableCell>
             <TableCell className="text-right tabular-nums">
               <span className="inline-flex items-center justify-end gap-1">
-                {formatRejectionRate(v.rejected, v.accepted)}
+                {f.formatRejectionRate(v.rejected, v.accepted)}
                 {isRejectionRateHigh(v.rejected, v.accepted) ? <RejectionRateWarning /> : null}
               </span>
             </TableCell>
             <TableCell className="text-right tabular-nums">
-              {formatTime(v.last_seen, timezone)}
+              {f.formatTime(v.last_seen, timezone)}
             </TableCell>
           </TableRow>
         ))}
