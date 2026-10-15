@@ -110,10 +110,11 @@ export function PasskeyButton({ next, onError }: PasskeyButtonProps) {
           className="sr-only"
         />
       )}
+      {/* Телефон: цель нажатия 44 px, с md — прежние 40 px. */}
       <Button
         ref={buttonRef}
         type="button"
-        className="h-10 w-full"
+        className="h-11 w-full md:h-10"
         disabled={!supported || waiting}
         onClick={login}
       >

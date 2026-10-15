@@ -101,6 +101,8 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
           name="name"
           required
           autoComplete="off"
+          // Телефон: поле 44 px и шрифт 16 px — iOS не увеличивает страницу при фокусе.
+          className="h-11 text-lg md:h-8 md:text-sm"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={busy}
@@ -113,7 +115,7 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
           </p>
         )}
       </div>
-      <Button type="submit" className="h-10 w-full" disabled={!supported || busy}>
+      <Button type="submit" className="h-11 w-full md:h-10" disabled={!supported || busy}>
         {status === "submitting" ? (
           <>
             <Loader2 aria-hidden="true" className="animate-spin" />
