@@ -1,0 +1,146 @@
+---
+title: Ошибки и повторы
+description: Коды ответа ingest, причины отклонения событий и что делать клиенту в каждом случае.
+---
+
+Ingest отвечает двумя способами:
+
+- **`200` с `IngestResult`** — батч обработан. Часть событий может быть отклонена (`rejected`) или
+  принята с поправкой (`warnings`). Это не ошибка батча.
+- **`4xx` или `5xx` с конвертом `error`** — батч не обработан целиком.
+
+Клиент ветвится только по HTTP-статусу и полю `code`, а не по тексту `message`.
+
+## Что делать клиенту [#retry-policy]
+
+| Ответ | Действие |
+|---|---|
+| `200`, `rejected` пуст | Удалить батч из очереди |
+| `200`, в `rejected` есть `retryable: false` | Удалить эти события навсегда, записать `code` в лог |
+| `200`, в `rejected` есть `retryable: true` | Оставить эти события в очереди и отправить следующим батчем не раньше чем через 60 с |
+| `400`, `413`, `415` | Не повторять: удалить батч, записать ошибку в лог — это баг клиента |
+| `401`, `403` | Не повторять и не очищать очередь: остановить отправку до обновления приложения или ключа |
+| `429`, `503` | Повторить весь батч через `Retry-After` секунд |
+| `500`, сетевая ошибка, таймаут | Повторить весь батч: задержка 1 с, затем ×2, максимум 300 с, разброс ±20 % |
+| События старше 7 дней в очереди | Удалить до отправки |
+
+Повтор того же батча безопасен: дубликаты отсекаются по `insert_id`, а метрики считаются по
+уникальным идентификаторам. При каждом повторе выставляйте новый `sent_at`. Готовые повторы — в
+рецептах [curl](/docs/recipes/curl#retry) (скрипт на bash) и [Go](/docs/recipes/go#go-client).
+
+## Частичный успех [#partial-success]
+
+Батч из двух событий, где у второго `user_id` похож на телефон:
+
+```bash
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+curl -sS https://i.analytics.example.com/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  --data-binary @- <<JSON
+{
+  "sent_at": "$NOW",
+  "context": { "platform": "server", "environment": "development", "ip": "none" },
+  "events": [
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$(uuidgen | tr A-Z a-z)",
+      "session_id": "$(uuidgen | tr A-Z a-z)"
+    },
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$(uuidgen | tr A-Z a-z)",
+      "session_id": "$(uuidgen | tr A-Z a-z)",
+      "user_id": "+79161234567"
+    }
+  ]
+}
+JSON
+```
+
+Первое событие принято, второе отклонено:
+
+```json
+{
+  "accepted": 1,
+  "rejected": [
+    {
+      "index": 1,
+      "insert_id": "0199d6c1-0000-7000-8000-000000000005",
+      "code": "user_id_looks_like_pii",
+      "field": "events[1].user_id",
+      "message": "user_id похож на email или телефон. Передавайте непрозрачный ID.",
+      "retryable": false
+    }
+  ],
+  "warnings": [],
+  "server_time": "2026-10-14T09:15:02.318Z"
+}
+```
+
+`index` — позиция события в массиве `events`, `field` — путь к полю с ошибкой.
+
+## Отклонённые события [#rejections]
+
+| Код | Причина | Повторять |
+|---|---|---|
+| `missing_field` | Нет обязательного поля: `insert_id`, `name`, `timestamp`, `install_id`, `session_id` | Нет |
+| `invalid_field` | Поле неверного формата: не UUID, нулевой UUID, время без смещения, `user_id` длиннее 128 символов, `duration_ms` вне 0..86 400 000, недопустимое значение в `context` (`platform`, `device_type`, длина строк) | Нет |
+| `unknown_event_name` | `name` не `session_start` и не `session_end` | Нет |
+| `duration_required` | У `session_end` нет `duration_ms` | Нет |
+| `event_too_old` | После коррекции часов событие старше 7 дней | Нет |
+| `user_id_looks_like_pii` | `user_id` похож на email или телефон | Нет |
+| `install_rate_limited` | С этой установки больше 1000 событий сразу или 100 в минуту | Да, через 60 с |
+
+Отклонённые события видны на вкладке «Интеграция» с кодом и версией приложения 7 дней, затем
+удаляются.
+
+## Предупреждения [#warnings]
+
+Событие с предупреждением принято и учтено в `accepted`.
+
+| Код | Что произошло |
+|---|---|
+| `timestamp_in_future_clamped` | Время события больше чем на 10 минут в будущем; заменено временем приёма |
+| `duplicate_insert_id_in_batch` | `insert_id` повторяется внутри батча; учтено первое событие, повтор пропущен |
+| `geo_ip_invalid` | `context.ip` не является IP-адресом; страна и город не определены |
+| `platform_missing` | Платформа не определена: нет `context.platform`, у ключа нет платформы, а у приложения их несколько; событие записано с платформой `other` |
+
+`platform_missing` приходит по одному на событие. Чтобы его не было, передавайте `context.platform` или
+отправляйте события ключом нужной платформы — см. [Платформа события](/docs#platform).
+
+## Ошибки батча [#batch-errors]
+
+```json
+{
+  "error": {
+    "code": "invalid_batch",
+    "message": "events: от 1 до 500 событий.",
+    "request_id": "01JA8Z3K7Q2M9V4T6R1X5N8C0C",
+    "details": { "field": "events", "issue": "max_items" }
+  }
+}
+```
+
+`request_id` совпадает с заголовком ответа `X-Request-Id`. По нему запрос находится в логах сервера.
+
+| HTTP | Код | Причина |
+|---|---|---|
+| 400 | `invalid_json` | Тело не JSON |
+| 400 | `invalid_batch` | Нет `sent_at`, в `events` не от 1 до 500 событий, `app_key` не совпадает с `X-App-Key` |
+| 400 | `unsupported_content_encoding` | `Content-Encoding` не `gzip` и не `identity` или передан несколько раз |
+| 401 | `missing_app_key` | Нет ни `X-App-Key`, ни `app_key` |
+| 401 | `invalid_app_key` | Ключ не найден или отозван. Отзыв действует не позже чем через 15 с |
+| 403 | `app_archived` | Приложение в архиве, приём остановлен |
+| 413 | `payload_too_large` | Тело больше 1 048 576 байт после распаковки gzip — разбейте батч |
+| 415 | `unsupported_media_type` | `Content-Type` не `application/json` и не `text/plain` |
+| 429 | `app_rate_limited` | Больше 2000 событий в секунду на приложение; ответ с `Retry-After` |
+| 500 | `internal_error` | Ошибка сервера; повторите батч |
+| 503 | `storage_unavailable` | Хранилище недоступно; повторите через `Retry-After` |
+
+Ответ `200` приходит только после того, как ClickHouse подтвердил запись. Если подтверждения нет за
+5 секунд, весь батч получает `503`, и клиент повторяет его целиком.

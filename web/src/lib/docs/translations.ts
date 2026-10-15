@@ -1,6 +1,6 @@
 import type { Translations } from "fumadocs-ui/i18n";
 
-// Тексты интерфейса Fumadocs на русском (документация без i18n-роутинга, один язык).
+// Тексты интерфейса Fumadocs для русской документации; английские — встроенные в fumadocs-ui.
 export const DOCS_TRANSLATIONS: Partial<Translations> = {
   displayName: "Русский",
   "Search(search trigger)": "Поиск",

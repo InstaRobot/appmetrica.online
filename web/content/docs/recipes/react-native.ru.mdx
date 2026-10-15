@@ -1,0 +1,329 @@
+---
+title: React Native (TypeScript)
+description: fetch, install_id в Keychain и AsyncStorage, офлайн-очередь и сессии через AppState для iOS и Android.
+---
+
+Рецепт для React Native 0.7x+ на TypeScript, iOS и Android. Сеть — встроенный `fetch`, очередь —
+`@react-native-async-storage/async-storage`, `install_id` на iOS — `react-native-keychain`, версия и
+модель устройства — `react-native-device-info`, UUID — `uuid` с полифилом
+`react-native-get-random-values`. Код состоит из трёх модулей: `install_id`, офлайн-очередь с
+отправкой и трекер сессий.
+
+```bash
+npm install @react-native-async-storage/async-storage react-native-keychain \
+  react-native-device-info react-native-get-random-values uuid
+cd ios && pod install
+```
+
+Подключите полифил первой строкой точки входа `index.js`:
+`import "react-native-get-random-values";`. Без него `uuid` не найдёт `crypto.getRandomValues`. В
+Expo-проекте те же роли выполняют `expo-secure-store` (Keychain на iOS), `expo-application` (версия
+и номер сборки), `expo-device` (модель и тип устройства) и `expo-crypto` (`randomUUID()` вместо
+`uuid`); AsyncStorage работает и в Expo.
+
+Где подписаться на `AppState` и почему не в экране — в разделе
+[Где инициализировать метрику](/docs/concepts/initialization#react-native).
+
+Приложение на React Native — одно приложение в appmetrica.online с платформами iOS и Android, а не
+два. У каждой платформы свой ключ на вкладке «Интеграция»: один и тот же JS-бандл выбирает ключ и
+`context.platform` по `Platform.OS` во время выполнения. Человек с одним `user_id` на iPhone и на
+Android-планшете считается один раз, а отчёты делятся по платформам — см.
+[Платформа события](/docs#platform). Вместо двух ключей можно выпустить один ключ «Любая платформа»:
+`context.platform` рецепт и так передаёт в каждом событии.
+
+## install_id [#install-id]
+
+`install_id` создаётся при первом запуске и больше не меняется. На iOS он хранится в Keychain, как в
+[iOS-рецепте](/docs/recipes/ios-swift#install-id): запись Keychain переживает удаление и повторную
+установку приложения. На Android — в AsyncStorage: его базу сохраняет Auto Backup, и после
+переустановки с восстановлением из бэкапа `install_id` прежний, как в
+[Android-рецепте](/docs/recipes/android-kotlin#install-id).
+
+```ts title="installId.ts"
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import * as Keychain from "react-native-keychain";
+import { v4 as uuidv4 } from "uuid";
+
+const SERVICE = "online.appmetrica.install-id";
+const STORAGE_KEY = "am_install_id";
+
+let cached: Promise<string> | null = null;
+
+// Читает install_id или создаёт его при первом запуске. Промис кэшируется на процесс.
+export function installId(): Promise<string> {
+  cached ??= Platform.OS === "ios" ? fromKeychain() : fromStorage();
+  return cached;
+}
+
+async function fromKeychain(): Promise<string> {
+  const saved = await Keychain.getGenericPassword({ service: SERVICE });
+  if (saved) return saved.password;
+  const id = uuidv4();
+  await Keychain.setGenericPassword("install_id", id, {
+    service: SERVICE,
+    // Как в iOS-рецепте: читается и при запуске в фоне, на новое устройство не переезжает.
+    accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+  });
+  return id;
+}
+
+async function fromStorage(): Promise<string> {
+  const saved = await AsyncStorage.getItem(STORAGE_KEY);
+  if (saved) return saved;
+  const id = uuidv4();
+  await AsyncStorage.setItem(STORAGE_KEY, id);
+  return id;
+}
+```
+
+Если в приложении настроены свои правила бэкапа (`android:fullBackupContent` или
+`android:dataExtractionRules`), не исключайте из них базу AsyncStorage.
+
+## Офлайн-очередь и отправка [#offline-queue]
+
+`queue.ts` хранит события в AsyncStorage и отправляет их батчами до 500 штук. Интерфейс сеть не
+ждёт: событие сначала записывается на диск, отправка идёт в фоне. Действие по каждому ответу — как в
+[Ошибки и повторы](/docs/errors-and-retries):
+
+- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`: их повторить через
+  минуту;
+- `400`, `413`, `415` — удалить батч: повтор не поможет;
+- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
+- `429`, `503` — повторить через `Retry-After`;
+- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с и разбросом ±20 %.
+
+```ts title="queue.ts"
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+const ENDPOINT = "https://i.analytics.example.com/v1/events";
+// У каждой платформы приложения свой ключ: код выбирает его по ОС во время выполнения.
+const WRITE_KEY = Platform.select({
+  ios: "pk_…", // ключ платформы iOS на вкладке «Интеграция»
+  android: "pk_…", // ключ платформы Android на вкладке «Интеграция»
+  default: "",
+});
+const QUEUE_KEY = "am_queue";
+const MAX_BATCH = 500;
+const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
+const TIMEOUT_MS = 15_000;
+
+export type AnalyticsEvent = {
+  insert_id: string;
+  name: "session_start" | "session_end";
+  timestamp: string;
+  install_id: string;
+  session_id: string;
+  user_id?: string;
+  duration_ms?: number;
+  context: Record<string, string>;
+};
+
+type IngestResult = { rejected: { insert_id: string | null; retryable: boolean }[] };
+
+let events: AnalyticsEvent[] = [];
+let sending = false;
+let stopped = false;
+let retryAt = 0;
+let backoffMs = 1000;
+
+// Очередь прошлых запусков читается один раз; любая операция сначала ждёт её.
+const loaded = AsyncStorage.getItem(QUEUE_KEY)
+  .then((saved) => {
+    events = saved ? JSON.parse(saved) : [];
+  })
+  .catch(() => {});
+
+function save(): Promise<void> {
+  return AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(events));
+}
+
+export async function enqueue(event: AnalyticsEvent): Promise<void> {
+  await loaded;
+  events.push(event);
+  await save(); // сначала на диск: событие переживёт закрытие приложения
+  await flush();
+}
+
+export async function flush(): Promise<void> {
+  await loaded;
+  const minTime = Date.now() - MAX_AGE_MS;
+  events = events.filter((e) => Date.parse(e.timestamp) >= minTime);
+  if (sending || stopped || events.length === 0 || Date.now() < retryAt) return;
+  sending = true;
+
+  const batch = events.slice(0, MAX_BATCH);
+  const sent = new Set(batch.map((e) => e.insert_id));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-App-Key": WRITE_KEY },
+      // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+      body: JSON.stringify({ sent_at: new Date().toISOString(), events: batch }),
+      signal: controller.signal,
+    });
+    if (res.status === 200) {
+      const result: IngestResult = await res.json();
+      const retry = new Set(result.rejected.filter((r) => r.retryable).map((r) => r.insert_id));
+      events = events.filter((e) => !sent.has(e.insert_id) || retry.has(e.insert_id));
+      backoffMs = 1000;
+      if (retry.size > 0) retryLater(60_000);
+    } else if ([400, 413, 415].includes(res.status)) {
+      events = events.filter((e) => !sent.has(e.insert_id)); // повтор не поможет
+    } else if (res.status === 401 || res.status === 403) {
+      stopped = true; // ключ отозван или приложение в архиве
+    } else if (res.status === 429 || res.status === 503) {
+      retryLater((Number(res.headers.get("Retry-After")) || 5) * 1000);
+    } else {
+      backoff();
+    }
+  } catch {
+    backoff(); // сеть, таймаут, неожиданный ответ
+  } finally {
+    clearTimeout(timer);
+    sending = false;
+    await save();
+  }
+}
+
+function backoff() {
+  retryLater(backoffMs * (0.8 + Math.random() * 0.4));
+  backoffMs = Math.min(backoffMs * 2, 300_000);
+}
+
+function retryLater(delayMs: number) {
+  retryAt = Date.now() + delayMs;
+  setTimeout(() => void flush(), delayMs);
+}
+```
+
+События старше 7 дней удаляются до отправки: сервер всё равно отклонил бы их с `event_too_old`.
+Отправленное через три дня событие попадёт в отчёт того дня, когда оно произошло (см.
+[Время и офлайн-очередь](/docs/concepts/time-and-offline)).
+
+## Сессии [#session-lifecycle]
+
+`analytics.ts` создаёт события. Каждое событие несёт свой `context`, чтобы события из очереди ушли с
+той версией приложения, в которой они произошли. Длительность считается по `performance.now()` —
+монотонным часам, которые не меняются, если пользователь переводит время.
+
+```ts title="analytics.ts"
+import { Platform } from "react-native";
+import DeviceInfo from "react-native-device-info";
+import { v4 as uuidv4 } from "uuid";
+import { installId } from "./installId";
+import { type AnalyticsEvent, enqueue, flush } from "./queue";
+
+let session: { id: string; startedAt: number } | null = null;
+let userId: string | null = null;
+
+function context(): Record<string, string> {
+  const ios = Platform.OS === "ios";
+  return {
+    platform: ios ? "ios" : "android",
+    os_name: DeviceInfo.getSystemName(),
+    os_version: DeviceInfo.getSystemVersion(),
+    app_version: DeviceInfo.getVersion(),
+    app_build: DeviceInfo.getBuildNumber(),
+    // На iOS — машинное имя вроде iPhone17,3: имя устройства часто содержит имя человека.
+    device_model: ios
+      ? DeviceInfo.getDeviceId()
+      : `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
+    device_type: DeviceInfo.isTablet() ? "tablet" : "phone",
+    locale: Intl.DateTimeFormat().resolvedOptions().locale,
+    environment: __DEV__ ? "development" : "production",
+  };
+}
+
+async function track(name: AnalyticsEvent["name"], sessionId: string, durationMs?: number) {
+  // Время, user_id и контекст берутся в момент события, а не когда прочитан install_id.
+  const event = {
+    insert_id: uuidv4(),
+    name,
+    timestamp: new Date().toISOString(),
+    session_id: sessionId,
+    user_id: userId ?? undefined, // undefined не попадает в JSON
+    duration_ms: durationMs,
+    context: context(),
+  };
+  await enqueue({ ...event, install_id: await installId() });
+}
+
+export const analytics = {
+  start() {
+    if (session) return;
+    session = { id: uuidv4(), startedAt: performance.now() };
+    void track("session_start", session.id);
+  },
+
+  end() {
+    if (!session) return;
+    const elapsed = Math.round(performance.now() - session.startedAt);
+    void track("session_end", session.id, Math.min(Math.max(elapsed, 0), 86_400_000));
+    session = null;
+  },
+
+  // ID аккаунта из вашего бэкенда, null после выхода. Не email и не телефон.
+  setUserId(id: string | null) {
+    userId = id;
+  },
+
+  flush,
+};
+```
+
+Подпишитесь на `AppState` в корневом компоненте: он живёт всё время работы приложения. `active`
+открывает сессию, `background` закрывает. Состояние `inactive` бывает только на iOS (шторка,
+переключатель приложений, входящий звонок) — его пропускайте. Повторный `start()` в открытой сессии
+и `end()` без сессии ничего не делают.
+
+```tsx title="App.tsx"
+import { useEffect } from "react";
+import { AppState } from "react-native";
+import { analytics } from "./analytics";
+import { RootNavigator } from "./navigation";
+
+export default function App() {
+  useEffect(() => {
+    if (AppState.currentState === "active") analytics.start();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") analytics.start();
+      else if (state === "background") analytics.end();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return <RootNavigator />;
+}
+```
+
+На Android `AppState` переходит в `background` уже по `onPause` активности, поэтому системный
+диалог разрешений поверх приложения закрывает сессию и открывает новую. В фоне у приложения мало
+времени: если `session_end` не успеет уйти, он останется в очереди и отправится при следующем
+запуске.
+
+## user_id после входа [#user-id]
+
+После входа передайте идентификатор аккаунта из вашего бэкенда, после выхода — `null`. Анонимные
+события до входа припишутся этому пользователю (см. [Идентичность](/docs/concepts/identity)). Если
+пользователь вошёл ещё в прошлый раз, вызовите `setUserId` до первого `session_start` — например,
+когда восстанавливаете сессию входа при запуске.
+
+```ts tab="Вход"
+analytics.setUserId(account.id); // "a3f9c2d1-77b4-…", не email
+```
+
+```ts tab="Выход"
+analytics.setUserId(null);
+```
+
+## Проверка [#verify]
+
+1. Запустите debug-сборку (`npx react-native run-ios` или `run-android`): `__DEV__` отправит события
+   с `environment: "development"`.
+2. Сверните и откройте приложение.
+3. На вкладке «Интеграция» появятся `session_start` и `session_end` с платформой iOS или Android.
+   В отчётах включите окружение development.

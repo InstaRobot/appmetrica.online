@@ -1,0 +1,379 @@
+---
+title: Боты и бэкенды
+description: Telegram-боты и серверные источники — HMAC вместо Telegram ID, сессии на сервере и context.ip.
+---
+
+У бота и бэкенда нет экрана и переднего плана, поэтому идентичность, сессии и гео сервер собирает
+сам. Рецепт показывает, как это сделать на Go без сторонних зависимостей. Для других языков логика та
+же.
+
+Боту нужна платформа `bot`, бэкенду — `server`. Если бот или бэкенд обслуживает тех же людей, что и
+мобильное приложение, добавьте платформу к этому приложению и отправляйте события её ключом: человек с
+одним `user_id` в боте и в приложении будет посчитан один раз. Самостоятельному боту или сервису
+создайте отдельное приложение. Подробнее — [Платформа события](/docs#platform).
+
+## Идентичность пользователя [#identity]
+
+Telegram ID — это чужой, но публичный идентификатор: по нему человека легко найти. В аналитику он
+не должен попадать как есть. Сервер такие строки не отклоняет (чисто цифровые `user_id` разрешены),
+поэтому защита — на стороне бота:
+
+- `user_id` = HMAC-SHA256 от Telegram ID с секретом бота, в hex (64 символа). Без секрета по нему
+  нельзя восстановить Telegram ID, а один и тот же человек всегда получает один и тот же `user_id`.
+- `install_id` — стабильный UUID на чат. Удобно выводить его из того же HMAC: тогда не нужно
+  хранить таблицу соответствий.
+
+Секрет храните как остальные секреты бота, например в переменной `ANALYTICS_HMAC_SECRET`. Если
+поменять секрет, все пользователи станут новыми.
+
+```go title="identity.go"
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"strconv"
+)
+
+// UserID — user_id для аналитики: HMAC-SHA256 от Telegram ID пользователя, hex.
+func UserID(secret []byte, telegramUserID int64) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte("user:" + strconv.FormatInt(telegramUserID, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// InstallID — стабильный install_id чата: первые 16 байт HMAC, оформленные как UUIDv8 (RFC 9562).
+func InstallID(secret []byte, chatID int64) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte("chat:" + strconv.FormatInt(chatID, 10)))
+	b := mac.Sum(nil)[:16]
+	b[6] = (b[6] & 0x0f) | 0x80
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func main() {
+	secret := []byte(os.Getenv("ANALYTICS_HMAC_SECRET"))
+	fmt.Println("user_id:   ", UserID(secret, 123456789))
+	fmt.Println("install_id:", InstallID(secret, 123456789))
+}
+```
+
+В личном чате `chat_id` совпадает с ID пользователя, поэтому у человека одна «установка». В группах
+каждый чат — своя установка, а человек склеивается по `user_id` (см.
+[Идентичность](/docs/concepts/identity)).
+
+## Сессии на сервере [#server-sessions]
+
+Сессия бота — серия сообщений пользователя без пауз дольше 30 минут:
+
+1. Первое сообщение после паузы открывает сессию: `session_start` со временем этого сообщения.
+2. Каждое следующее сообщение продлевает сессию.
+3. Если пользователь молчит 30 минут, сессия закрывается: `session_end` со временем последнего
+   сообщения и `duration_ms` = последнее сообщение − первое.
+
+`timestamp` — время самого события, а не момент отправки батча. Длительность одиночного сообщения
+равна нулю — это нормально, сессия всё равно попадёт в отчёт.
+
+При остановке бота закройте открытые сессии и отправьте очередь. Иначе `session_end` потеряются, и
+средняя длительность сессий окажется заниженной.
+
+## Очередь и отправка [#queue]
+
+Отправлять событие на каждое сообщение расточительно. Очередь копит события и отправляет их батчем
+раз в 5 секунд или при 500 событиях. Если ingest недоступен, батч остаётся в очереди до следующей
+попытки. Полная политика повторов — в [Ошибки и повторы](/docs/errors-and-retries) и в клиенте из
+рецепта [Go](/docs/recipes/go#go-client).
+
+```go title="sessions.go"
+package main
+
+import (
+	"bytes"
+	"context"
+	crand "crypto/rand"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"time"
+)
+
+const (
+	endpoint    = "https://i.analytics.example.com/v1/events"
+	idleTimeout = 30 * time.Minute
+	flushEvery  = 5 * time.Second
+	maxBatch    = 500
+)
+
+type Event struct {
+	InsertID   string    `json:"insert_id"`
+	Name       string    `json:"name"`
+	Timestamp  time.Time `json:"timestamp"`
+	InstallID  string    `json:"install_id"`
+	SessionID  string    `json:"session_id"`
+	UserID     string    `json:"user_id,omitempty"`
+	DurationMs *int64    `json:"duration_ms,omitempty"`
+}
+
+type session struct {
+	id, installID, userID string
+	start, last           time.Time
+}
+
+// Tracker ведёт сессии пользователей бота и копит события для отправки.
+type Tracker struct {
+	key  string
+	http *http.Client
+
+	mu       sync.Mutex
+	sessions map[string]*session // по install_id
+	queue    []Event
+}
+
+func NewTracker(key string) *Tracker {
+	return &Tracker{key: key, http: &http.Client{Timeout: 10 * time.Second}, sessions: map[string]*session{}}
+}
+
+// Touch — сообщение пользователя в момент at.
+func (t *Tracker) Touch(installID, userID string, at time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := t.sessions[installID]
+	if s != nil && at.Sub(s.last) >= idleTimeout {
+		t.end(s)
+		s = nil
+	}
+	if s == nil {
+		s = &session{id: newUUID(), installID: installID, userID: userID, start: at, last: at}
+		t.sessions[installID] = s
+		t.queue = append(t.queue, Event{
+			InsertID: newUUID(), Name: "session_start", Timestamp: at,
+			InstallID: installID, SessionID: s.id, UserID: userID,
+		})
+		return
+	}
+	s.last = at
+}
+
+// CloseIdle закрывает сессии без сообщений дольше idleTimeout; all — закрыть все (остановка бота).
+func (t *Tracker) CloseIdle(now time.Time, all bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, s := range t.sessions {
+		if all || now.Sub(s.last) >= idleTimeout {
+			t.end(s)
+		}
+	}
+}
+
+func (t *Tracker) end(s *session) {
+	duration := s.last.Sub(s.start).Milliseconds()
+	t.queue = append(t.queue, Event{
+		InsertID: newUUID(), Name: "session_end", Timestamp: s.last,
+		InstallID: s.installID, SessionID: s.id, UserID: s.userID, DurationMs: &duration,
+	})
+	delete(t.sessions, s.installID)
+}
+
+// Flush отправляет очередь батчами. При ошибке неотправленные события возвращаются в начало очереди.
+func (t *Tracker) Flush(ctx context.Context) error {
+	t.mu.Lock()
+	pending := t.queue
+	t.queue = nil
+	t.mu.Unlock()
+
+	for len(pending) > 0 {
+		n := min(len(pending), maxBatch)
+		if err := t.send(ctx, pending[:n]); err != nil {
+			t.mu.Lock()
+			t.queue = append(pending, t.queue...)
+			t.mu.Unlock()
+			return err
+		}
+		pending = pending[n:]
+	}
+	return nil
+}
+
+func (t *Tracker) send(ctx context.Context, events []Event) error {
+	body, err := json.Marshal(map[string]any{
+		"sent_at": time.Now(),
+		// Бот не знает IP пользователя: "none" отключает гео, иначе страной стал бы адрес сервера бота.
+		"context": map[string]string{"platform": "bot", "app_version": "1.0.0", "ip": "none"},
+		"events":  events,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal batch: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-App-Key", t.key)
+	resp, err := t.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("send batch: %w", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		return fmt.Errorf("ingest: HTTP %d, retry later", resp.StatusCode)
+	default:
+		// 4xx: батч не исправится повтором — логируем и не возвращаем его в очередь.
+		log.Printf("ingest: HTTP %d, batch dropped", resp.StatusCode)
+		return nil
+	}
+}
+
+func newUUID() string {
+	var b [16]byte
+	_, _ = crand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	tracker := NewTracker(os.Getenv("AM_PK"))
+
+	// В боте Touch вызывается из обработчика каждого входящего сообщения.
+	tracker.Touch("0f8fad5b-d9cb-469f-a165-70867728950e", "", time.Now())
+
+	ticker := time.NewTicker(flushEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			tracker.CloseIdle(time.Now(), false)
+			if err := tracker.Flush(ctx); err != nil {
+				log.Print(err)
+			}
+		case <-ctx.Done():
+			tracker.CloseIdle(time.Now(), true)
+			flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := tracker.Flush(flushCtx); err != nil {
+				log.Print(err)
+			}
+			cancel()
+			return
+		}
+	}
+}
+```
+
+Очередь в примере живёт в памяти: при падении процесса события пропадут. Если это важно, храните
+её в Redis или в таблице базы бота. События старше 7 дней удаляйте до отправки — сервер их всё равно
+отклонит с кодом `event_too_old`.
+
+## context.ip [#context-ip]
+
+Страна и город определяются по IP-адресу. По умолчанию это адрес, с которого пришёл HTTP-запрос.
+Для мобильных приложений и сайтов это верно, а для серверных источников — нет: запрос приходит с
+адреса вашего сервера.
+
+| Источник | Что передавать в `context.ip` |
+|---|---|
+| Приложение, сайт | Ничего: сервер возьмёт адрес клиента |
+| Telegram-бот | `"none"`: Telegram не сообщает IP пользователя |
+| Бэкенд, который знает IP пользователя | IP пользователя из запроса к вашему бэкенду |
+| Cron-задача, внутренний сервис | `"none"` |
+
+IP используется только для поиска страны и города и сразу отбрасывается: его нет ни в ClickHouse,
+ни в логах, ни в отклонённых событиях. Невалидный адрес не отклоняет событие: оно принимается с
+предупреждением `geo_ip_invalid` и без гео.
+
+Если в одном батче события разных пользователей, передавайте IP в `context` каждого события — он
+перекрывает `context` батча поле за полем:
+
+```go title="backend.go"
+package main
+
+import (
+	"crypto/rand"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+)
+
+type EventContext struct {
+	IP string `json:"ip,omitempty"`
+}
+
+type Event struct {
+	InsertID  string        `json:"insert_id"`
+	Name      string        `json:"name"`
+	Timestamp time.Time     `json:"timestamp"`
+	InstallID string        `json:"install_id"`
+	SessionID string        `json:"session_id"`
+	Context   *EventContext `json:"context,omitempty"`
+}
+
+// userIP — адрес пользователя за вашим балансировщиком: последний адрес X-Forwarded-For, который
+// дописал доверенный прокси. Без прокси — адрес TCP-соединения.
+func userIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return "none"
+	}
+	return host
+}
+
+// pending читает отправщик батчей — такой же, как Tracker.Flush в sessions.go.
+var pending = make(chan Event, 1024)
+
+func main() {
+	http.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
+		event := Event{
+			InsertID:  newUUID(),
+			Name:      "session_start",
+			Timestamp: time.Now(),
+			InstallID: r.Header.Get("X-Install-Id"),
+			SessionID: newUUID(),
+			Context:   &EventContext{IP: userIP(r)},
+		}
+		select {
+		case pending <- event:
+		default: // очередь переполнена: ответ пользователю не ждёт аналитику
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	go func() {
+		for range pending { // здесь работает отправщик батчей
+		}
+	}()
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func newUUID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+```
+
+## Проверка [#verify]
+
+Отправьте одно событие из терминала, как в рецепте [curl](/docs/recipes/curl#single), и
+откройте вкладку «Интеграция» приложения: событие появится в течение нескольких секунд. Ошибки
+отклонённых событий видны там же с кодом причины.

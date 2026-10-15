@@ -1,0 +1,560 @@
+---
+title: Kotlin Multiplatform
+description: Общий модуль на Ktor и kotlinx.serialization, expect/actual для хранилища, сессии из ProcessLifecycleOwner и scenePhase.
+---
+
+Рецепт для Kotlin Multiplatform с целями Android и iOS на Kotlin 2.3+: с этой версии
+`kotlin.time.Clock` и `Instant` стабильны (в 2.1.20–2.2 им нужен `@OptIn(ExperimentalTime::class)`).
+Очередь, отправка и трекер сессий живут в общем модуле, в `commonMain`: сеть — Ktor 3 client с
+движком OkHttp на Android и Darwin на iOS, JSON — kotlinx.serialization, фоновая работа —
+kotlinx.coroutines, UUID — `kotlin.uuid.Uuid`. Платформенное — ключ, `install_id`, файл очереди и
+контекст устройства — объявлено через `expect`/`actual`. Сессии ведут точки входа приложений:
+`ProcessLifecycleOwner` на Android и `scenePhase` в SwiftUI на iOS.
+
+Где создать трекер на каждой платформе и почему подписка на жизненный цикл остаётся в нативном
+коде, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#kotlin-multiplatform).
+
+Приложение на KMP — одно приложение в appmetrica.online с платформами iOS и Android, а не два. У
+каждой платформы свой ключ на вкладке «Интеграция»: ключ и `context.platform` во время выполнения
+подставляет `actual` той платформы, на которой работает код, а общий код о платформе не знает.
+Человек с одним `user_id` на обеих платформах считается один раз, а отчёты делятся по платформам —
+см. [Платформа события](/docs#platform).
+
+Зависимости общего модуля — фрагмент `build.gradle.kts`; цели Android и iOS и фреймворк с
+`baseName = "Shared"` — как в шаблоне KMP-проекта. В модуль Android-приложения добавьте
+`androidx.lifecycle:lifecycle-process` для `ProcessLifecycleOwner`.
+
+```kotlin title="shared/build.gradle.kts"
+plugins {
+    // …плагины шаблона KMP-проекта
+    kotlin("plugin.serialization") // версия совпадает с версией Kotlin
+}
+
+// Версии — в gradle.properties: Ktor 3.x, kotlinx-coroutines, kotlinx-serialization.
+val ktorVersion: String by project
+val coroutinesVersion: String by project
+val serializationVersion: String by project
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation("io.ktor:ktor-client-core:$ktorVersion")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
+        }
+        androidMain.dependencies {
+            implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
+        }
+        iosMain.dependencies {
+            implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+        }
+    }
+}
+```
+
+## install_id [#install-id]
+
+Общий код объявляет платформенную часть через `expect`, а `androidMain` и `iosMain` дают `actual`.
+Это функции и свойства, а не `expect`-классы: те пока в бете, и без флага `-Xexpect-actual-classes`
+компилятор о них предупреждает. Модель `EventContext` — в следующем разделе.
+
+```kotlin title="commonMain/Platform.kt"
+package analytics
+
+/** Ключ платформы на вкладке «Интеграция»: у Android и iOS ключи разные. */
+internal expect val writeKey: String
+
+/** Контекст устройства и сборки; platform — "android" или "ios". */
+internal expect fun deviceContext(): EventContext
+
+internal expect fun loadInstallId(): String?
+internal expect fun saveInstallId(id: String)
+
+/** Содержимое файла очереди или null, если файла ещё нет. */
+internal expect fun readQueue(): String?
+internal expect fun writeQueue(json: String)
+```
+
+```kotlin title="commonMain/InstallId.kt"
+package analytics
+
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+@OptIn(ExperimentalUuidApi::class)
+internal object InstallId {
+    /** Создаётся при первом запуске и хранится постоянно. */
+    val current: String by lazy {
+        loadInstallId() ?: Uuid.random().toString().also(::saveInstallId)
+    }
+}
+```
+
+На Android `install_id` лежит в `SharedPreferences`, а очередь — в `filesDir`, как в
+[Android-рецепте](/docs/recipes/android-kotlin#install-id): Auto Backup сохраняет их, и после
+переустановки с восстановлением из бэкапа `install_id` прежний. Версию и признак debug-сборки
+`actual` берёт у приложения через `PackageManager`, а не из `BuildConfig`: `BuildConfig` общего
+модуля описывает библиотеку, а не приложение.
+
+На iOS `install_id` лежит в `NSUserDefaults`, а очередь — в файле в Application Support. Это
+компромисс: `NSUserDefaults` читается из Kotlin одной строкой, но удаление приложения стирает его, и
+переустановка станет новой установкой. В [iOS-рецепте](/docs/recipes/ios-swift#install-id)
+`install_id` хранится в Keychain и переживает переустановку. Если это важно, реализуйте
+`loadInstallId` и `saveInstallId` на Keychain: из Kotlin/Native это `SecItemCopyMatching` и
+`SecItemAdd` через cinterop с ручной сборкой `CFDictionary` — кода заметно больше. Готовую обёртку
+даёт, например, `KeychainSettings` из библиотеки multiplatform-settings.
+
+```kotlin tab="Android" title="androidMain/Platform.android.kt"
+package analytics
+
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.Build
+import java.io.File
+import java.util.Locale
+
+// applicationContext живёт столько же, сколько процесс: утечки нет.
+private lateinit var app: Context
+
+/** Вызовите в Application.onCreate до первого события. */
+fun initAnalytics(context: Context) {
+    app = context.applicationContext
+}
+
+internal actual val writeKey: String = "pk_…" // ключ платформы Android на вкладке «Интеграция»
+
+private val prefs get() = app.getSharedPreferences("appmetrica", Context.MODE_PRIVATE)
+private val queueFile get() = File(app.filesDir, "appmetrica-queue.json")
+
+internal actual fun loadInstallId(): String? = prefs.getString("install_id", null)
+
+internal actual fun saveInstallId(id: String) {
+    prefs.edit().putString("install_id", id).commit()
+}
+
+internal actual fun readQueue(): String? = queueFile.takeIf { it.exists() }?.readText()
+
+internal actual fun writeQueue(json: String) {
+    val tmp = File(queueFile.path + ".tmp")
+    tmp.writeText(json)
+    tmp.renameTo(queueFile)
+}
+
+@Suppress("DEPRECATION") // getPackageInfo(String, Int) и versionCode нужны для API 26–32
+internal actual fun deviceContext(): EventContext {
+    val info = app.packageManager.getPackageInfo(app.packageName, 0)
+    val versionCode =
+        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+    val debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    val tablet = app.resources.configuration.smallestScreenWidthDp >= 600
+    return EventContext(
+        platform = "android",
+        osName = "Android",
+        osVersion = Build.VERSION.RELEASE,
+        appVersion = info.versionName.orEmpty(),
+        appBuild = versionCode.toString(),
+        deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+        deviceType = if (tablet) "tablet" else "phone",
+        locale = Locale.getDefault().toLanguageTag(),
+        environment = if (debuggable) "development" else "production",
+    )
+}
+```
+
+```kotlin tab="iOS" title="iosMain/Platform.ios.kt"
+@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class, ExperimentalNativeApi::class)
+
+package analytics
+
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.toKString
+import platform.Foundation.*
+import platform.UIKit.UIDevice
+import platform.UIKit.UIUserInterfaceIdiomPad
+import platform.posix.uname
+import platform.posix.utsname
+import kotlin.experimental.ExperimentalNativeApi
+
+internal actual val writeKey: String = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
+
+private const val INSTALL_ID_KEY = "online.appmetrica.install_id"
+
+internal actual fun loadInstallId(): String? =
+    NSUserDefaults.standardUserDefaults.stringForKey(INSTALL_ID_KEY)
+
+internal actual fun saveInstallId(id: String) {
+    NSUserDefaults.standardUserDefaults.setObject(id, forKey = INSTALL_ID_KEY)
+}
+
+private val queuePath: String by lazy {
+    val dir = NSSearchPathForDirectoriesInDomains(
+        NSApplicationSupportDirectory, NSUserDomainMask, true,
+    ).first() as String
+    NSFileManager.defaultManager.createDirectoryAtPath(
+        dir, withIntermediateDirectories = true, attributes = null, error = null,
+    )
+    "$dir/appmetrica-queue.json"
+}
+
+@Suppress("CAST_NEVER_SUCCEEDS") // NSString и String на iOS — один и тот же объект
+internal actual fun readQueue(): String? = NSString.create(
+    contentsOfFile = queuePath, encoding = NSUTF8StringEncoding, error = null,
+) as String?
+
+@Suppress("CAST_NEVER_SUCCEEDS")
+internal actual fun writeQueue(json: String) {
+    (json as NSString).writeToFile(
+        queuePath, atomically = true, encoding = NSUTF8StringEncoding, error = null,
+    )
+}
+
+internal actual fun deviceContext(): EventContext {
+    val device = UIDevice.currentDevice
+    val info = NSBundle.mainBundle
+    val tablet = device.userInterfaceIdiom == UIUserInterfaceIdiomPad
+    return EventContext(
+        platform = "ios",
+        osName = device.systemName,
+        osVersion = device.systemVersion,
+        appVersion = info.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: "",
+        appBuild = info.objectForInfoDictionaryKey("CFBundleVersion") as? String ?: "",
+        deviceModel = hardwareModel(),
+        deviceType = if (tablet) "tablet" else "phone",
+        locale = NSLocale.currentLocale.localeIdentifier.replace('_', '-'),
+        // Debug-фреймворк Kotlin собирается для конфигурации Debug в Xcode.
+        environment = if (kotlin.native.Platform.isDebugBinary) "development" else "production",
+    )
+}
+
+/** Машинное имя вроде iPhone17,3: имя устройства часто содержит имя человека. */
+private fun hardwareModel(): String = memScoped {
+    val info = alloc<utsname>()
+    uname(info.ptr)
+    info.machine.toKString()
+}
+```
+
+## Офлайн-очередь и отправка [#offline-queue]
+
+Модель событий — классы kotlinx.serialization с именами полей в `snake_case`. Каждое событие несёт
+свой `context`, чтобы события из очереди ушли с той версией приложения, в которой они произошли.
+
+```kotlin title="commonMain/Event.kt"
+package analytics
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
+internal data class EventContext(
+    val platform: String,
+    @SerialName("os_name") val osName: String,
+    @SerialName("os_version") val osVersion: String,
+    @SerialName("app_version") val appVersion: String,
+    @SerialName("app_build") val appBuild: String,
+    @SerialName("device_model") val deviceModel: String,
+    @SerialName("device_type") val deviceType: String,
+    val locale: String,
+    val environment: String,
+)
+
+/** user_id и duration_ms со значением null не попадают в JSON: encodeDefaults выключен. */
+@Serializable
+internal data class Event(
+    @SerialName("insert_id") val insertId: String,
+    val name: String,
+    val timestamp: String, // RFC 3339 в UTC: Clock.System.now().toString()
+    @SerialName("install_id") val installId: String,
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("duration_ms") val durationMs: Long? = null,
+    val context: EventContext,
+)
+
+@Serializable
+internal class Batch(@SerialName("sent_at") val sentAt: String, val events: List<Event>)
+
+@Serializable
+internal class IngestResult(val rejected: List<Rejection> = emptyList()) {
+    @Serializable
+    class Rejection(
+        @SerialName("insert_id") val insertId: String? = null,
+        val retryable: Boolean = false,
+    )
+}
+```
+
+`EventQueue` хранит события в файле и отправляет их батчами до 500 штук. Очередь меняется только в
+диспетчере `limitedParallelism(1)`: он выполняет код между точками приостановки строго по одному, а
+флаг `sending` не даёт начать вторую отправку, пока первая ждёт ответа. Интерфейс сеть не ждёт:
+`enqueue` возвращается сразу. Действие по каждому ответу — как в
+[Ошибки и повторы](/docs/errors-and-retries):
+
+- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`: их повторить через
+  минуту;
+- `400`, `413`, `415` — удалить батч: повтор не поможет;
+- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
+- `429`, `503` — повторить через `Retry-After`;
+- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с и разбросом ±20 %.
+
+```kotlin title="commonMain/EventQueue.kt"
+package analytics
+
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
+
+internal object EventQueue {
+    private const val ENDPOINT = "https://i.analytics.example.com/v1/events"
+    private const val MAX_BATCH = 500
+
+    private val json = Json { ignoreUnknownKeys = true }
+    private val listSerializer = ListSerializer(Event.serializer())
+    // Движок — OkHttp или Darwin — Ktor берёт из зависимостей платформы.
+    private val client = HttpClient { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+
+    // Читается при первом обращении — уже в фоне, в диспетчере очереди.
+    private val events: MutableList<Event> by lazy {
+        val saved = readQueue() ?: return@lazy mutableListOf()
+        runCatching { json.decodeFromString(listSerializer, saved) }.getOrDefault(emptyList())
+            .toMutableList() // повреждённый файл — пустая очередь
+    }
+    private var sending = false
+    private var stopped = false
+    private var retryAtMs = 0L
+    private var backoffMs = 1_000L
+
+    fun enqueue(event: Event) {
+        scope.launch {
+            events += event
+            save() // сначала на диск: событие переживёт закрытие приложения
+            flushNow()
+        }
+    }
+
+    fun flush() {
+        scope.launch { flushNow() }
+    }
+
+    private suspend fun flushNow() {
+        val minTime = Clock.System.now() - 7.days
+        events.removeAll { Instant.parse(it.timestamp) < minTime }
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (sending || stopped || events.isEmpty() || now < retryAtMs) return
+        sending = true
+
+        val batch = events.take(MAX_BATCH)
+        val sent = batch.map { it.insertId }.toSet()
+        try {
+            // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+            val body = Batch(sentAt = Clock.System.now().toString(), events = batch)
+            val response = client.post(ENDPOINT) {
+                contentType(ContentType.Application.Json)
+                header("X-App-Key", writeKey)
+                setBody(json.encodeToString(Batch.serializer(), body))
+            }
+            when (response.status.value) {
+                200 -> {
+                    val text = response.bodyAsText()
+                    val result = json.decodeFromString(IngestResult.serializer(), text)
+                    val retry = result.rejected.filter { it.retryable }.mapNotNull { it.insertId }
+                    val done = sent - retry.toSet()
+                    events.removeAll { it.insertId in done }
+                    backoffMs = 1_000L
+                    if (retry.isNotEmpty()) retryLater(60_000L)
+                }
+                400, 413, 415 -> events.removeAll { it.insertId in sent } // повтор не поможет
+                401, 403 -> stopped = true // ключ отозван или приложение в архиве
+                429, 503 -> {
+                    val seconds = response.headers["Retry-After"]?.toLongOrNull() ?: 5L
+                    retryLater(seconds * 1_000L)
+                }
+                else -> backoff()
+            }
+        } catch (e: Exception) { // сеть, таймаут, неожиданный ответ
+            backoff()
+        } finally {
+            sending = false
+            save()
+        }
+    }
+
+    private fun backoff() {
+        retryLater((backoffMs * Random.nextDouble(0.8, 1.2)).toLong())
+        backoffMs = minOf(backoffMs * 2, 300_000L)
+    }
+
+    private fun retryLater(delayMs: Long) {
+        retryAtMs = Clock.System.now().toEpochMilliseconds() + delayMs
+        scope.launch {
+            delay(delayMs)
+            flushNow()
+        }
+    }
+
+    private fun save() = writeQueue(json.encodeToString(listSerializer, events))
+}
+```
+
+`Clock.System.now().toString()` даёт RFC 3339 в UTC с `Z` — сервер принимает такое время как есть.
+События старше 7 дней удаляются до отправки: сервер всё равно отклонил бы их с `event_too_old`.
+
+## Сессии [#session-lifecycle]
+
+`SessionTracker` — общий трекер для обеих платформ. Длительность считается по
+`TimeSource.Monotonic` — монотонным часам, которые не меняются, если пользователь переводит время.
+Повторный `start()` в открытой сессии и `end()` без сессии ничего не делают.
+
+```kotlin title="commonMain/SessionTracker.kt"
+package analytics
+
+import kotlin.time.Clock
+import kotlin.time.TimeSource
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+/** Трекер сессий для Android и iOS. Вызывайте start() и end() из главного потока. */
+@OptIn(ExperimentalUuidApi::class)
+object SessionTracker {
+    /** ID аккаунта после входа; null — пользователь не вошёл. Не email и не телефон. */
+    var userId: String? = null
+
+    private var sessionId: String? = null
+    private var startedAt = TimeSource.Monotonic.markNow()
+
+    fun start() {
+        if (sessionId != null) return
+        val id = Uuid.random().toString()
+        sessionId = id
+        startedAt = TimeSource.Monotonic.markNow()
+        track("session_start", id, durationMs = null)
+    }
+
+    fun end() {
+        val id = sessionId ?: return
+        val elapsed = startedAt.elapsedNow().inWholeMilliseconds
+        track("session_end", id, durationMs = elapsed.coerceIn(0L, 86_400_000L))
+        sessionId = null
+    }
+
+    /** Досылает очередь прошлых запусков. */
+    fun flush() = EventQueue.flush()
+
+    private fun track(name: String, sessionId: String, durationMs: Long?) {
+        EventQueue.enqueue(
+            Event(
+                insertId = Uuid.random().toString(),
+                name = name,
+                timestamp = Clock.System.now().toString(),
+                installId = InstallId.current,
+                sessionId = sessionId,
+                userId = userId,
+                durationMs = durationMs,
+                context = deviceContext(),
+            ),
+        )
+    }
+}
+```
+
+Общий код о жизненном цикле не знает: `start()` и `end()` вызывают точки входа приложений. На
+Android это `ProcessLifecycleOwner` в `Application.onCreate`, как в
+[Android-рецепте](/docs/recipes/android-kotlin#session-lifecycle). На iOS — `scenePhase` в `App` с
+`@main`, как в [iOS-рецепте](/docs/recipes/ios-swift#session-lifecycle): это API SwiftUI, и
+читается он в Swift. Kotlin-объект `SessionTracker` виден в Swift как `SessionTracker.shared`.
+
+```kotlin tab="Android" title="androidApp/App.kt"
+import analytics.SessionTracker
+import analytics.initAnalytics
+import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        initAnalytics(this) // Context для SharedPreferences и filesDir
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = SessionTracker.start()
+            override fun onStop(owner: LifecycleOwner) = SessionTracker.end()
+        })
+        SessionTracker.flush() // досылает очередь прошлых запусков
+    }
+}
+```
+
+```swift tab="iOS" title="iosApp/iOSApp.swift"
+import Shared
+import SwiftUI
+
+@main
+struct iOSApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // Запуск может быть фоновым, поэтому здесь без session_start.
+        SessionTracker.shared.flush()
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: SessionTracker.shared.start()
+            case .background: SessionTracker.shared.end()
+            default: break // .inactive: шторка, системный алерт — сессия продолжается
+            }
+        }
+    }
+}
+```
+
+На Android не забудьте `android:name=".App"` в `<application>` манифеста и разрешение
+`android.permission.INTERNET`. В фоне у приложения мало времени: если `session_end` не успеет уйти,
+он останется в файле очереди и отправится при следующем запуске.
+
+## user_id после входа [#user-id]
+
+После входа присвойте `SessionTracker.userId` идентификатор аккаунта из вашего бэкенда, после
+выхода — `null`. Анонимные события до входа припишутся этому пользователю (см.
+[Идентичность](/docs/concepts/identity)). Присваивать можно из общего кода или с любой платформы.
+
+```kotlin tab="Kotlin"
+SessionTracker.userId = account.id // "a3f9c2d1-77b4-…", не email; null после выхода
+```
+
+```swift tab="Swift"
+SessionTracker.shared.userId = account.id // nil после выхода
+```
+
+## Проверка [#verify]
+
+1. Запустите debug-сборки: на Android — с `android:debuggable`, на iOS — в конфигурации Debug.
+   События уйдут с `environment: "development"`.
+2. Сверните и откройте приложение на обеих платформах.
+3. На вкладке «Интеграция» появятся `session_start` и `session_end` с платформами Android и iOS — в
+   одном приложении. В отчётах включите окружение development.

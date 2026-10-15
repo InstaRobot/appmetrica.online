@@ -1,0 +1,327 @@
+---
+title: Android (Kotlin)
+description: HttpURLConnection, install_id в SharedPreferences, офлайн-очередь и сессии через ProcessLifecycleOwner.
+---
+
+Рецепт для Android 8.0+ (API 26) на Kotlin. Сеть и JSON — из стандартной библиотеки Android
+(`HttpURLConnection`, `org.json`), жизненный цикл — `androidx.lifecycle:lifecycle-process` или
+`ActivityLifecycleCallbacks` без зависимостей. Код состоит из трёх частей: `install_id`,
+офлайн-очередь с отправкой и трекер сессий.
+
+Почему трекер создаётся в `Application.onCreate`, а не в `Activity.onCreate`, — в разделе
+[Где инициализировать метрику](/docs/concepts/initialization#android).
+
+Вшейте ключ платформы Android из вкладки «Интеграция». Если приложение выходит и на iOS, добавьте
+платформу Android к существующему приложению, а не создавайте второе: у каждой платформы свой ключ, а
+человек с одним `user_id` на обеих считается один раз — см. [Платформа события](/docs#platform).
+
+## install_id [#install-id]
+
+`install_id` создаётся при первом запуске и хранится в `SharedPreferences`. Auto Backup включён по
+умолчанию и сохраняет `SharedPreferences` в Google Drive, поэтому после переустановки с
+восстановлением из бэкапа `install_id` прежний.
+
+```kotlin title="InstallId.kt"
+import android.content.Context
+import java.util.UUID
+
+object InstallId {
+    private const val PREFS = "appmetrica"
+    private const val KEY = "install_id"
+
+    @Volatile private var cached: String? = null
+
+    fun get(context: Context): String = cached ?: synchronized(this) {
+        cached ?: run {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val id = prefs.getString(KEY, null) ?: UUID.randomUUID().toString().also {
+                prefs.edit().putString(KEY, it).commit()
+            }
+            id.also { cached = it }
+        }
+    }
+}
+```
+
+Если в приложении настроены свои правила бэкапа (`android:fullBackupContent` или
+`android:dataExtractionRules`), включите в них файл `appmetrica.xml` из `sharedpref`.
+
+## Офлайн-очередь и отправка [#offline-queue]
+
+`EventQueue` хранит события в файле в `filesDir` и отправляет их батчами до 500 штук в одном фоновом
+потоке. Действие по каждому ответу — как в [Ошибки и повторы](/docs/errors-and-retries).
+
+```kotlin title="EventQueue.kt"
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import kotlin.random.Random
+
+class EventQueue(context: Context) {
+    private val file = File(context.filesDir, "appmetrica-queue.json")
+    private val executor = Executors.newSingleThreadScheduledExecutor()
+    private val events = mutableListOf<JSONObject>()
+    private var retryAt = 0L
+    private var backoffMs = 1_000L
+    private var stopped = false
+
+    init {
+        executor.execute {
+            if (file.exists()) {
+                val saved = JSONArray(file.readText())
+                for (i in 0 until saved.length()) events += saved.getJSONObject(i)
+            }
+        }
+    }
+
+    fun enqueue(event: JSONObject) = executor.execute {
+        events += event
+        save()
+        flushNow()
+    }
+
+    fun flush() = executor.execute { flushNow() }
+
+    private fun flushNow() {
+        val minTime = Instant.now().minusSeconds(MAX_AGE_SECONDS)
+        events.removeAll { Instant.parse(it.getString("timestamp")).isBefore(minTime) }
+        if (stopped || events.isEmpty() || System.currentTimeMillis() < retryAt) return
+
+        val batch = events.take(MAX_BATCH)
+        val sent = batch.map { it.getString("insert_id") }.toSet()
+        try {
+            val response = post(batch)
+            when (response.status) {
+                200 -> {
+                    val keep = response.retryableIds()
+                    events.removeAll { it.getString("insert_id") in sent - keep }
+                    backoffMs = 1_000L
+                    if (keep.isNotEmpty()) retryLater(60_000L)
+                }
+                400, 413, 415 -> events.removeAll { it.getString("insert_id") in sent }
+                401, 403 -> stopped = true
+                429, 503 -> retryLater((response.retryAfterSeconds ?: 5L) * 1_000L)
+                else -> backoff()
+            }
+        } catch (e: Exception) { // сеть, таймаут, неожиданный ответ
+            backoff()
+        }
+        save()
+    }
+
+    private fun backoff() {
+        retryLater((backoffMs * Random.nextDouble(0.8, 1.2)).toLong())
+        backoffMs = minOf(backoffMs * 2, 300_000L)
+    }
+
+    private fun retryLater(delayMs: Long) {
+        retryAt = System.currentTimeMillis() + delayMs
+        executor.schedule(Runnable { flushNow() }, delayMs, TimeUnit.MILLISECONDS)
+    }
+
+    private fun save() {
+        val tmp = File(file.path + ".tmp")
+        tmp.writeText(JSONArray(events).toString())
+        tmp.renameTo(file)
+    }
+
+    private class Response(val status: Int, val body: JSONObject?, val retryAfterSeconds: Long?) {
+        fun retryableIds(): Set<String> {
+            val rejected = body?.optJSONArray("rejected") ?: return emptySet()
+            return (0 until rejected.length()).map { rejected.getJSONObject(it) }
+                .filter { it.optBoolean("retryable") && !it.isNull("insert_id") }
+                .map { it.getString("insert_id") }
+                .toSet()
+        }
+    }
+
+    private fun post(batch: List<JSONObject>): Response {
+        val body = JSONObject()
+            .put("sent_at", Instant.now().toString()) // момент этой попытки
+            .put("events", JSONArray(batch))
+        val conn = URL(ENDPOINT).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("X-App-Key", WRITE_KEY)
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val status = conn.responseCode
+            val text = (if (status < 400) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }
+            return Response(
+                status = status,
+                body = if (status == 200 && text != null) JSONObject(text) else null,
+                retryAfterSeconds = conn.getHeaderField("Retry-After")?.toLongOrNull(),
+            )
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    companion object {
+        private const val ENDPOINT = "https://i.analytics.example.com/v1/events"
+        private const val WRITE_KEY = "pk_…" // ключ платформы Android на вкладке «Интеграция»
+        private const val MAX_BATCH = 500
+        private const val MAX_AGE_SECONDS = 7L * 24 * 3600
+    }
+}
+```
+
+`Instant.toString()` даёт RFC 3339 в UTC с `Z` — сервер принимает такое время как есть.
+
+## Сессии [#session-lifecycle]
+
+`SessionTracker` создаёт события. Каждое событие несёт свой `context`, чтобы события из очереди
+ушли с той версией приложения, в которой они произошли. Длительность считается по
+`SystemClock.elapsedRealtime()` — монотонным часам.
+
+```kotlin title="SessionTracker.kt"
+import android.content.Context
+import android.os.Build
+import android.os.SystemClock
+import org.json.JSONObject
+import java.time.Instant
+import java.util.Locale
+import java.util.UUID
+
+class SessionTracker(private val app: Context, private val queue: EventQueue) {
+    /** ID аккаунта после входа; null — пользователь не вошёл. Не email и не телефон. */
+    @Volatile var userId: String? = null
+
+    private var sessionId: String? = null
+    private var startedAt = 0L
+
+    @Synchronized fun start() {
+        if (sessionId != null) return
+        sessionId = UUID.randomUUID().toString()
+        startedAt = SystemClock.elapsedRealtime()
+        track("session_start", durationMs = null)
+    }
+
+    @Synchronized fun end() {
+        if (sessionId == null) return
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        track("session_end", durationMs = elapsed.coerceIn(0L, 86_400_000L))
+        sessionId = null
+    }
+
+    private fun track(name: String, durationMs: Long?) {
+        val event = JSONObject()
+            .put("insert_id", UUID.randomUUID().toString())
+            .put("name", name)
+            .put("timestamp", Instant.now().toString())
+            .put("install_id", InstallId.get(app))
+            .put("session_id", sessionId)
+            .put("context", context())
+        userId?.let { event.put("user_id", it) }
+        durationMs?.let { event.put("duration_ms", it) }
+        queue.enqueue(event)
+    }
+
+    private fun context(): JSONObject = JSONObject()
+        .put("platform", "android")
+        .put("os_name", "Android")
+        .put("os_version", Build.VERSION.RELEASE)
+        .put("app_version", BuildConfig.VERSION_NAME)
+        .put("app_build", BuildConfig.VERSION_CODE.toString())
+        .put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
+        .put("device_type", if (app.resources.configuration.smallestScreenWidthDp >= 600) "tablet" else "phone")
+        .put("locale", Locale.getDefault().toLanguageTag())
+        .put("environment", if (BuildConfig.DEBUG) "development" else "production")
+}
+```
+
+`BuildConfig` генерирует Android Gradle Plugin; в AGP 8 включите его в модуле приложения:
+`android { buildFeatures { buildConfig = true } }`.
+
+Сессия — время, когда видна хотя бы одна активность приложения. `ProcessLifecycleOwner` сообщает
+именно об этом и не дёргается при повороте экрана и переходах между активностями. Если не хотите
+зависимость, тот же счётчик видимых активностей легко собрать на `ActivityLifecycleCallbacks`.
+
+```kotlin tab="ProcessLifecycleOwner" title="App.kt"
+import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+
+class App : Application() {
+    lateinit var analytics: SessionTracker
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        val queue = EventQueue(this)
+        analytics = SessionTracker(this, queue)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = analytics.start()
+            override fun onStop(owner: LifecycleOwner) = analytics.end()
+        })
+        queue.flush() // досылает очередь прошлых запусков
+    }
+}
+```
+
+```kotlin tab="ActivityLifecycleCallbacks" title="App.kt"
+import android.app.Activity
+import android.app.Application
+import android.os.Bundle
+
+class App : Application() {
+    lateinit var analytics: SessionTracker
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        val queue = EventQueue(this)
+        analytics = SessionTracker(this, queue)
+        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            private var started = 0
+
+            override fun onActivityStarted(activity: Activity) {
+                if (started++ == 0) analytics.start()
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                // Поворот экрана пересоздаёт активность: это не уход в фон.
+                if (--started == 0 && !activity.isChangingConfigurations) analytics.end()
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+        queue.flush()
+    }
+}
+```
+
+Не забудьте `android:name=".App"` в `<application>` манифеста и разрешение
+`android.permission.INTERNET`.
+
+## user_id после входа [#user-id]
+
+После входа присвойте `analytics.userId` идентификатор аккаунта из вашего бэкенда, после выхода —
+`null`. Анонимные дни до входа припишутся этому пользователю (см.
+[Идентичность](/docs/concepts/identity)).
+
+```kotlin
+(application as App).analytics.userId = account.id // не email и не телефон
+```
+
+## Проверка [#verify]
+
+1. Запустите debug-сборку: события уйдут с `environment: "development"`.
+2. Сверните и откройте приложение.
+3. На вкладке «Интеграция» появятся `session_start` и `session_end`. В отчётах включите окружение
+   development.

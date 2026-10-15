@@ -1,0 +1,194 @@
+---
+title: Go
+description: Клиент на Go без зависимостей — отправка батча, повторы через Retry-After и экспоненциальная задержка.
+---
+
+Клиент на Go подходит для бэкендов, CLI и cron-задач. Проверить ключ и посмотреть ответ сервера проще
+из терминала — запросы на чистом curl собраны в рецепте [curl](/docs/recipes/curl). Боты и серверные
+сессии разобраны в рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends).
+
+Клиент берёт write-ключ из переменной окружения `AM_PK`. Ключ платформы `server` показан на вкладке
+«Интеграция» приложения; клиент передаёт `context.platform` явно (см.
+[Платформа события](/docs#platform)):
+
+```bash
+export AM_PK="pk_…"
+```
+
+## Клиент с повторами [#go-client]
+
+Клиент без сторонних зависимостей. Он отправляет батч и повторяет его по правилам из
+[Ошибки и повторы](/docs/errors-and-retries): `429` и `503` — через `Retry-After`, `5xx` и сетевые
+ошибки — с экспоненциальной задержкой от 1 с до 300 с и разбросом ±20 %. Повтор того же батча
+безопасен: дубликаты отсекаются по `insert_id`.
+
+```go title="main.go"
+package main
+
+import (
+	"bytes"
+	"context"
+	crand "crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"math/rand/v2"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+)
+
+const endpoint = "https://i.analytics.example.com/v1/events"
+
+type Context struct {
+	Platform    string `json:"platform,omitempty"`
+	OSName      string `json:"os_name,omitempty"`
+	AppVersion  string `json:"app_version,omitempty"`
+	DeviceType  string `json:"device_type,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	IP          string `json:"ip,omitempty"`
+}
+
+type Event struct {
+	InsertID   string    `json:"insert_id"`
+	Name       string    `json:"name"`
+	Timestamp  time.Time `json:"timestamp"`
+	InstallID  string    `json:"install_id"`
+	SessionID  string    `json:"session_id"`
+	UserID     string    `json:"user_id,omitempty"`
+	DurationMs *int64    `json:"duration_ms,omitempty"`
+}
+
+type Batch struct {
+	SentAt  time.Time `json:"sent_at"`
+	Context Context   `json:"context"`
+	Events  []Event   `json:"events"`
+}
+
+type Rejection struct {
+	Index     int    `json:"index"`
+	InsertID  string `json:"insert_id"`
+	Code      string `json:"code"`
+	Retryable bool   `json:"retryable"`
+}
+
+type Result struct {
+	Accepted int         `json:"accepted"`
+	Rejected []Rejection `json:"rejected"`
+}
+
+// errPermanent — батч повторять бессмысленно: ошибка в клиенте, ключе или приложении.
+var errPermanent = errors.New("permanent ingest error")
+
+type Client struct {
+	Key  string
+	HTTP *http.Client
+}
+
+// Send отправляет батч и повторяет его, пока сервер не ответит 200 или постоянной ошибкой.
+// sent_at выставляется заново при каждой попытке: по нему сервер поправляет часы клиента.
+func (c *Client) Send(ctx context.Context, b Batch) (Result, error) {
+	backoff := time.Second
+	for {
+		b.SentAt = time.Now()
+		res, retryAfter, err := c.post(ctx, b)
+		if err == nil || errors.Is(err, errPermanent) {
+			return res, err
+		}
+		wait := retryAfter
+		if wait == 0 {
+			wait = time.Duration(float64(backoff) * (0.8 + 0.4*rand.Float64()))
+			backoff = min(backoff*2, 300*time.Second)
+		}
+		log.Printf("ingest: %v, retry in %s", err, wait.Round(time.Millisecond))
+		select {
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
+// post — одна попытка. retryAfter > 0 — сервер сам назвал паузу (429, 503).
+func (c *Client) post(ctx context.Context, b Batch) (Result, time.Duration, error) {
+	body, err := json.Marshal(b)
+	if err != nil {
+		return Result{}, 0, fmt.Errorf("%w: marshal: %v", errPermanent, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return Result{}, 0, fmt.Errorf("%w: %v", errPermanent, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-App-Key", c.Key)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return Result{}, 0, err
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		var res Result
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			return Result{}, 0, fmt.Errorf("decode result: %w", err)
+		}
+		return res, 0, nil
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
+		seconds, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		return Result{}, time.Duration(max(seconds, 1)) * time.Second, fmt.Errorf("HTTP %d", resp.StatusCode)
+	case resp.StatusCode >= 500:
+		return Result{}, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
+	default:
+		// 400, 401, 403, 413, 415: повтор не поможет, нужна правка клиента или ключа.
+		return Result{}, 0, fmt.Errorf("%w: HTTP %d", errPermanent, resp.StatusCode)
+	}
+}
+
+func newUUID() string {
+	var b [16]byte
+	_, _ = crand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func main() {
+	client := &Client{Key: os.Getenv("AM_PK"), HTTP: &http.Client{Timeout: 10 * time.Second}}
+	installID, sessionID := newUUID(), newUUID()
+	start := time.Now().Add(-time.Minute)
+	duration := time.Since(start).Milliseconds()
+
+	res, err := client.Send(context.Background(), Batch{
+		Context: Context{Platform: "server", AppVersion: "1.0.0", Environment: "development", IP: "none"},
+		Events: []Event{
+			{InsertID: newUUID(), Name: "session_start", Timestamp: start, InstallID: installID, SessionID: sessionID},
+			{InsertID: newUUID(), Name: "session_end", Timestamp: time.Now(), InstallID: installID, SessionID: sessionID, DurationMs: &duration},
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, r := range res.Rejected {
+		log.Printf("event %d rejected: %s (retryable=%t)", r.Index, r.Code, r.Retryable)
+	}
+	log.Printf("accepted: %d", res.Accepted)
+}
+```
+
+Запуск:
+
+```bash
+AM_PK="pk_…" go run main.go
+```
+
+Что стоит доработать в настоящем сервисе:
+
+- события с `retryable: true` в `rejected` (сейчас это только `install_rate_limited`) оставить в
+  очереди и отправить следующим батчем не раньше чем через 60 с;
+- копить события в памяти или на диске и отправлять батчами по таймеру — пример такой очереди есть в
+  рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends#queue);
+- `time.Time` кодируется в RFC 3339 с наносекундами и offset — сервер хранит время с точностью до
+  миллисекунд.

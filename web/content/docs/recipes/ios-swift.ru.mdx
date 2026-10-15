@@ -1,0 +1,388 @@
+---
+title: iOS (Swift)
+description: URLSession, install_id в Keychain, офлайн-очередь и жизненный цикл сессии для SwiftUI и UIKit.
+---
+
+Рецепт для iOS 17+ и Swift 6 без сторонних зависимостей. Он состоит из четырёх файлов: модель
+событий, `install_id` в Keychain, офлайн-очередь с отправкой через `URLSession` и трекер сессий,
+который подключается к жизненному циклу приложения. Для macOS код тот же, кроме `platform: "macos"`,
+ключа платформы macOS и уведомлений `NSApplication`.
+
+Вшейте ключ платформы iOS из вкладки «Интеграция». Если приложение выходит и на других платформах, это
+одно приложение с несколькими платформами: у каждой свой ключ, а человек с одним `user_id` на iOS и
+Android считается один раз — см. [Платформа события](/docs#platform).
+
+Где создать трекер, почему сессию ведёт приложение, а не экран, и почему расширения и виджеты сессий
+не отправляют, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#ios).
+
+## Модель и отправка [#sending]
+
+Ключи JSON — `snake_case`, время — RFC 3339 с миллисекундами. Каждое событие несёт свой `context`:
+если событие пролежало в очереди до обновления приложения, оно уйдёт со старой версией.
+
+```swift title="Analytics.swift"
+import Foundation
+import UIKit
+
+struct EventContext: Codable, Sendable {
+    var platform = "ios"
+    var osName: String
+    var osVersion: String
+    var appVersion: String
+    var appBuild: String
+    var deviceModel: String
+    var deviceType: String
+    var locale: String
+    var environment: String
+}
+
+struct Event: Codable, Sendable {
+    var insertId = UUID().uuidString.lowercased()
+    var name: String
+    var timestamp = Date.now
+    var installId: String
+    var sessionId: String
+    var userId: String?
+    var durationMs: Int?
+    var context: EventContext
+}
+
+struct IngestResult: Decodable, Sendable {
+    struct Rejection: Decodable, Sendable {
+        let index: Int
+        let insertId: String?
+        let code: String
+        let retryable: Bool
+    }
+    let accepted: Int
+    let rejected: [Rejection]
+}
+
+enum Analytics {
+    static let endpoint = URL(string: "https://i.analytics.example.com/v1/events")!
+    static let writeKey = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
+
+    struct Response: Sendable {
+        let status: Int
+        let result: IngestResult?
+        let retryAfter: TimeInterval?
+    }
+
+    static func send(_ events: [Event]) async throws -> Response {
+        struct Batch: Encodable { let sentAt: Date; let events: [Event] }
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(date.formatted(.iso8601WithMilliseconds))
+        }
+        var request = URLRequest(url: endpoint, timeoutInterval: 15)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(writeKey, forHTTPHeaderField: "X-App-Key")
+        // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+        request.httpBody = try encoder.encode(Batch(sentAt: .now, events: events))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return Response(
+            status: http.statusCode,
+            result: http.statusCode == 200 ? try? decoder.decode(IngestResult.self, from: data) : nil,
+            retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+        )
+    }
+
+    @MainActor static func currentContext() -> EventContext {
+        let info = Bundle.main.infoDictionary ?? [:]
+        #if DEBUG
+        let environment = "development"
+        #else
+        let environment = "production"
+        #endif
+        return EventContext(
+            osName: UIDevice.current.systemName,
+            osVersion: UIDevice.current.systemVersion,
+            appVersion: info["CFBundleShortVersionString"] as? String ?? "",
+            appBuild: info["CFBundleVersion"] as? String ?? "",
+            deviceModel: hardwareModel(),
+            deviceType: UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone",
+            locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
+            environment: environment
+        )
+    }
+
+    private static func hardwareModel() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        return withUnsafeBytes(of: &systemInfo.machine) { raw in
+            String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+    }
+}
+
+extension FormatStyle where Self == Date.ISO8601FormatStyle {
+    static var iso8601WithMilliseconds: Self { .init(includingFractionalSeconds: true) }
+}
+```
+
+`deviceModel` — машинное имя вроде `iPhone17,3`, а не имя устройства, которое задал пользователь:
+имя часто содержит имя человека.
+
+## install_id в Keychain [#install-id]
+
+`install_id` создаётся один раз и хранится в Keychain. В отличие от `UserDefaults`, запись Keychain
+переживает удаление и повторную установку приложения, поэтому переустановка не создаёт нового
+пользователя. `ThisDeviceOnly` не переносит идентификатор на новое устройство из бэкапа: новый
+телефон — новая установка, как в AppMetrica.
+
+```swift title="InstallID.swift"
+import Foundation
+import Security
+
+enum InstallID {
+    private static let service = "online.appmetrica.install-id"
+
+    static let current: String = load() ?? create()
+
+    private static func load() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let id = String(data: data, encoding: .utf8),
+              UUID(uuidString: id) != nil
+        else { return nil }
+        return id
+    }
+
+    private static func create() -> String {
+        let id = UUID().uuidString.lowercased()
+        let attributes: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: Data(id.utf8),
+        ]
+        SecItemAdd(attributes as CFDictionary, nil)
+        return id
+    }
+}
+```
+
+`AfterFirstUnlock` нужен, чтобы идентификатор читался и при запуске в фоне, пока экран заблокирован.
+
+## Офлайн-очередь [#offline-queue]
+
+`OfflineQueue` хранит события в файле в Application Support и отправляет их батчами до 500 штук.
+Действие по каждому ответу сервера — как в [Ошибки и повторы](/docs/errors-and-retries):
+
+- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`;
+- `400`, `413`, `415` — удалить батч: повтор не поможет;
+- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
+- `429`, `503` — повторить через `Retry-After`;
+- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с.
+
+```swift title="OfflineQueue.swift"
+import Foundation
+
+actor OfflineQueue {
+    static let shared = OfflineQueue()
+
+    private static let maxAge: TimeInterval = 7 * 24 * 3600
+    private let fileURL = URL.applicationSupportDirectory.appending(path: "appmetrica-queue.json")
+    private var events: [Event]
+    private var sending = false
+    private var stopped = false
+    private var retryAt = Date.distantPast
+    private var backoff: TimeInterval = 1
+
+    private init() {
+        let data = try? Data(contentsOf: fileURL)
+        events = data.flatMap { try? JSONDecoder().decode([Event].self, from: $0) } ?? []
+    }
+
+    func enqueue(_ event: Event) {
+        events.append(event)
+        save()
+    }
+
+    func flush() async {
+        events.removeAll { $0.timestamp < .now.addingTimeInterval(-Self.maxAge) }
+        guard !sending, !stopped, !events.isEmpty, Date.now >= retryAt else { return }
+        sending = true
+        defer { sending = false; save() }
+
+        let batch = Array(events.prefix(500))
+        let sent = Set(batch.map(\.insertId))
+        do {
+            let response = try await Analytics.send(batch)
+            switch response.status {
+            case 200:
+                let retry = (response.result?.rejected ?? []).filter(\.retryable).compactMap(\.insertId)
+                let done = sent.subtracting(retry)
+                events.removeAll { done.contains($0.insertId) }
+                backoff = 1
+                retryAt = retry.isEmpty ? .distantPast : .now.addingTimeInterval(60)
+            case 400, 413, 415:
+                events.removeAll { sent.contains($0.insertId) }
+            case 401, 403:
+                stopped = true
+            case 429, 503:
+                retryAt = .now.addingTimeInterval(response.retryAfter ?? 5)
+            default:
+                scheduleRetry()
+            }
+        } catch {
+            scheduleRetry()
+        }
+    }
+
+    private func scheduleRetry() {
+        retryAt = .now.addingTimeInterval(backoff * .random(in: 0.8...1.2))
+        backoff = min(backoff * 2, 300)
+    }
+
+    private func save() {
+        try? FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(events).write(to: fileURL, options: .atomic)
+    }
+}
+```
+
+Очередь хранит `timestamp` как есть, поэтому событие, отправленное через три дня, попадёт в отчёт
+того дня, когда оно произошло (см. [Время и офлайн-очередь](/docs/concepts/time-and-offline)).
+
+## Жизненный цикл сессии [#session-lifecycle]
+
+`SessionTracker` открывает сессию при выходе на передний план и закрывает при уходе в фон.
+Длительность считается по `systemUptime` — монотонным часам, которые не меняются, если пользователь
+переводит время.
+
+```swift title="SessionTracker.swift"
+import Foundation
+
+@MainActor
+final class SessionTracker {
+    static let shared = SessionTracker()
+
+    /// ID аккаунта после входа; nil — пользователь не вошёл. Не email и не телефон.
+    var userId: String?
+
+    private var sessionId: String?
+    private var startedUptime: TimeInterval = 0
+
+    func start() {
+        guard sessionId == nil else { return }
+        sessionId = UUID().uuidString.lowercased()
+        startedUptime = ProcessInfo.processInfo.systemUptime
+        track("session_start", durationMs: nil)
+    }
+
+    func end() {
+        guard sessionId != nil else { return }
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedUptime
+        track("session_end", durationMs: min(max(Int(elapsed * 1000), 0), 86_400_000))
+        sessionId = nil
+    }
+
+    private func track(_ name: String, durationMs: Int?) {
+        guard let sessionId else { return }
+        let event = Event(
+            name: name, installId: InstallID.current, sessionId: sessionId,
+            userId: userId, durationMs: durationMs, context: Analytics.currentContext()
+        )
+        Task {
+            await OfflineQueue.shared.enqueue(event)
+            await OfflineQueue.shared.flush()
+        }
+    }
+}
+```
+
+Подключите трекер к приложению. Сессия начинается в состоянии «активно» и заканчивается в «фоне»:
+переход в «неактивно» (шторка уведомлений, системный алерт) сессию не прерывает, а повторный вызов
+`start()` в той же сессии ничего не делает.
+
+```swift tab="SwiftUI" title="NotesApp.swift"
+import SwiftUI
+
+@main
+struct NotesApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: SessionTracker.shared.start()
+            case .background: SessionTracker.shared.end()
+            default: break
+            }
+        }
+    }
+}
+```
+
+```swift tab="UIKit" title="AppDelegate.swift"
+import UIKit
+
+@main
+final class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        let center = NotificationCenter.default
+        center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { SessionTracker.shared.start() }
+        }
+        center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { SessionTracker.shared.end() }
+        }
+        return true
+    }
+}
+```
+
+В фоне у приложения мало времени: если `session_end` не успеет уйти, он останется в файле очереди и
+отправится при следующем запуске.
+
+## user_id после входа [#user-id]
+
+После входа присвойте `SessionTracker.shared.userId` идентификатор аккаунта из вашего бэкенда, после
+выхода — `nil`. Анонимные события до входа сервер задним числом припишет этому пользователю (см.
+[Идентичность](/docs/concepts/identity)).
+
+```swift tab="Вход"
+func didSignIn(account: Account) {
+    SessionTracker.shared.userId = account.id // "a3f9c2d1-77b4-…", не email
+}
+```
+
+```swift tab="Выход"
+func didSignOut() {
+    SessionTracker.shared.userId = nil
+}
+```
+
+## Проверка [#verify]
+
+1. Запустите отладочную сборку: `#if DEBUG` отправит события с `environment: "development"`.
+2. Сверните и откройте приложение.
+3. На вкладке «Интеграция» появятся `session_start` и `session_end`, на вкладке «Realtime» — сессия.
+   Чтобы увидеть их в отчётах, включите окружение development.

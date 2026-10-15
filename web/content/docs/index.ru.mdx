@@ -1,0 +1,122 @@
+---
+title: Быстрый старт
+description: Как начать отправлять события session_start и session_end без SDK.
+---
+
+appmetrica.online принимает системные события приложений по HTTP. SDK не нужен: приложение само
+отправляет `session_start`, когда выходит на передний план, и `session_end`, когда уходит в фон. Из
+этих двух событий строятся все отчёты: активные и новые пользователи, сессии и их длительность,
+retention, realtime и профили.
+
+## 1. Создайте приложение [#create-app]
+
+В портфеле нажмите «Добавить приложение», выберите платформы и часовой пояс. Приложение — это один
+продукт: если он выходит на iOS, Android и в вебе, отметьте все три платформы, а не создавайте три
+приложения. Часовой пояс задаёт границы суток в отчётах. На каждую платформу создаётся свой write-ключ
+`pk_…`, а на вкладке «Интеграция» появятся ключи и готовые сниппеты по каждой платформе. Платформы
+можно добавить позже в настройках приложения.
+
+Write-ключ не секретный: он вшивается в приложение и виден любому, кто его разберёт. От
+злоупотреблений защищают лимиты частоты, а скомпрометированный ключ можно отозвать и выпустить новый.
+
+## 2. Отправьте первое событие [#first-event]
+
+Проверьте ключ из терминала. Подставьте его в переменную `AM_PK`:
+
+```bash
+export AM_PK="pk_…"
+```
+
+и отправьте одно событие. В примерах документации стоит условный домен `analytics.example.com`:
+замените `i.analytics.example.com` на адрес ingest своей установки, он есть на вкладке «Интеграция».
+
+```bash
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+curl -sS https://i.analytics.example.com/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  --data-binary @- <<JSON
+{
+  "sent_at": "$NOW",
+  "context": { "platform": "ios", "app_version": "1.0.0", "environment": "development" },
+  "events": [
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$(uuidgen | tr A-Z a-z)",
+      "session_id": "$(uuidgen | tr A-Z a-z)"
+    }
+  ]
+}
+JSON
+```
+
+Ответ `200` приходит только после записи в хранилище. `accepted` — число принятых событий,
+`rejected` — отклонённые события с кодом причины, `warnings` — события, принятые с поправкой:
+
+```json
+{ "accepted": 1, "rejected": [], "warnings": [], "server_time": "2026-10-14T09:15:02.318Z" }
+```
+
+`environment: "development"` отделяет тестовые события от боевых: отчёты по умолчанию показывают
+только production.
+
+## 3. Встройте отправку в приложение [#integrate]
+
+Аналитика создаётся один раз на процесс, а сессия следует за жизненным циклом всего приложения, а не
+отдельного экрана. Точки входа и хуки для каждой платформы собраны в разделе
+[Где инициализировать метрику](/docs/concepts/initialization).
+
+Затем выберите рецепт для своей платформы. В каждом есть хранение `install_id`, жизненный цикл сессии
+и офлайн-очередь:
+
+- [iOS (Swift)](/docs/recipes/ios-swift) — URLSession, Keychain, SwiftUI и UIKit;
+- [Android (Kotlin)](/docs/recipes/android-kotlin) — HttpURLConnection, SharedPreferences,
+  ProcessLifecycleOwner;
+- [Веб (JavaScript)](/docs/recipes/web-js) — `navigator.sendBeacon`, `localStorage`;
+- [React Native (TypeScript)](/docs/recipes/react-native) — `fetch`, Keychain и AsyncStorage,
+  `AppState`;
+- [Flutter (Dart)](/docs/recipes/flutter) — `package:http`, очередь в файле,
+  `WidgetsBindingObserver` на телефонах и десктопе;
+- [Kotlin Multiplatform](/docs/recipes/kotlin-multiplatform) — Ktor, `expect`/`actual`, общий трекер
+  для Android и iOS;
+- [Боты и бэкенды](/docs/recipes/bots-and-backends) — Telegram-боты, серверные сессии, `context.ip`;
+- [curl](/docs/recipes/curl) — все запросы из терминала: батчи, досыл, gzip, повторы, Read API;
+- [Go](/docs/recipes/go) — клиент с повторами для бэкендов, CLI и cron-задач.
+
+## 4. Проверьте данные [#check]
+
+На вкладке «Интеграция» видны последние события и ошибки отклонённых событий по версиям
+приложения. На вкладке «Realtime» событие появится в течение 10 секунд, на вкладке «Аудитория» —
+DAU и новые пользователи за выбранный период.
+
+## Платформа события [#platform]
+
+Одно приложение принимает события со всех своих платформ. Платформа события определяется по порядку:
+
+1. `context.platform` события или батча; контекст события перекрывает контекст батча;
+2. платформа write-ключа, которым отправлен батч;
+3. единственная платформа приложения, если она одна;
+4. иначе `other`, и ответ несёт предупреждение
+   [`platform_missing`](/docs/errors-and-retries#warnings) с индексом события.
+
+Ключи, созданные вместе с приложением, привязаны к своим платформам: вшейте в каждую сборку ключ её
+платформы, и платформа определится даже без `context.platform`. В настройках можно выпустить ключ
+«Любая платформа» — он удобен, когда одна кодовая база собирается под несколько платформ (Flutter,
+React Native, Kotlin Multiplatform). С таким ключом передавайте `context.platform` в каждом батче.
+Событие с платформой, которой нет в наборе приложения, принимается как есть.
+
+Отчёты по умолчанию сводные и считают людей сквозь платформы — см.
+[Люди на нескольких платформах](/docs/concepts/identity#platforms).
+
+## Что почитать дальше [#next]
+
+- [Где инициализировать метрику](/docs/concepts/initialization) — точки входа и хуки жизненного цикла.
+- [Идентичность](/docs/concepts/identity) — `install_id`, `user_id` и как считаются люди.
+- [Сессии](/docs/concepts/sessions) — когда начинать и заканчивать сессию.
+- [Время и офлайн-очередь](/docs/concepts/time-and-offline) — сбитые часы и досыл через 7 дней.
+- [Ошибки и повторы](/docs/errors-and-retries) — коды ответа и что делать с каждым.
+- [Приватность и GDPR](/docs/privacy-and-gdpr) — что хранится и как удалить данные.
+- [Ingestion API](/docs/api-reference/ingest/ingest-events) — полный формат батча.
+- [Read API](/docs/read-api/overview) — те же отчёты для скриптов по ключу `sk_…`.
