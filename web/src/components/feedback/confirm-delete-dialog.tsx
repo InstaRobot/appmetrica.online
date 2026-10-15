@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 
 type ConfirmDeleteDialogProps = {
   open: boolean;
@@ -41,6 +43,7 @@ export function ConfirmDeleteDialog({
   serverError,
   onConfirm,
 }: ConfirmDeleteDialogProps) {
+  const m = useMessages().common;
   const [value, setValue] = useState("");
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
@@ -72,7 +75,7 @@ export function ConfirmDeleteDialog({
             <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={inputId}>Введите {confirmText}</Label>
+            <Label htmlFor={inputId}>{fmt(m.confirmDelete.type, { text: confirmText })}</Label>
             <Input
               ref={inputRef}
               id={inputId}
@@ -90,9 +93,9 @@ export function ConfirmDeleteDialog({
             ) : null}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel type="button">Отмена</AlertDialogCancel>
+            <AlertDialogCancel type="button">{m.cancel}</AlertDialogCancel>
             <Button type="submit" variant="destructive" disabled={!matches || pending}>
-              {pending ? "Удаляем…" : confirmLabel}
+              {pending ? m.confirmDelete.deleting : confirmLabel}
             </Button>
           </AlertDialogFooter>
         </form>
