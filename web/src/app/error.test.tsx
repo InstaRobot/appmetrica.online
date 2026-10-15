@@ -82,7 +82,34 @@ describe("S-14b error", () => {
   });
 });
 
+// Телефон (от 360 px): поля 16 px, кнопки — цели нажатия 44 px и переносятся, если не помещаются в строку.
+describe("S-14b error on a phone", () => {
+  it("keeps the page readable at 360 px", () => {
+    render(<ErrorPage error={new Error("boom")} reset={() => {}} />);
+
+    const retry = screen.getByRole("button", { name: "Попробовать снова" });
+    expect(retry).toHaveClass("h-11", "md:h-9");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveClass("h-11", "md:h-9");
+    expect(retry.parentElement).toHaveClass("flex-wrap", "justify-center");
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveClass("px-4", "md:px-8");
+  });
+});
+
 describe("global-error", () => {
+  it("keeps the fallback readable on a phone", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<GlobalError error={new Error("fatal")} reset={() => {}} />);
+    spy.mockRestore();
+
+    // Стили встроенные (globals.css может не загрузиться): поля 16 px и перенос кнопок, а размер цели
+    // нажатия 44 px задаёт встроенный <style> только для телефона.
+    expect(screen.getByRole("main")).toHaveStyle({ paddingLeft: "16px", paddingRight: "16px" });
+    const retry = screen.getByRole("button", { name: "Попробовать снова" });
+    expect(retry.parentElement).toHaveStyle({ flexWrap: "wrap", justifyContent: "center" });
+    expect(retry).toHaveClass("global-error-action");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveClass("global-error-action");
+  });
+
   it("repeats the error text with its own html shell", () => {
     const reset = vi.fn();
     // global-error рендерит собственные <html>/<body>; в jsdom проверяем содержимое.

@@ -32,6 +32,23 @@ describe("S-14a not-found", () => {
   });
 });
 
+// Телефон (от 360 px): поля 16 px вместо 32 и кнопка — цель нажатия 44 px; с md — прежние размеры.
+describe("not-found pages on a phone", () => {
+  it("keeps the global 404 readable at 360 px", () => {
+    render(<NotFound />);
+
+    expect(screen.getByRole("main")).toHaveClass("px-4", "md:px-8");
+    expect(screen.getByRole("link", { name: "В портфель" })).toHaveClass("h-11", "md:h-9");
+  });
+
+  it("keeps the docs 404 readable at 360 px", () => {
+    render(<DocsNotFound />);
+
+    expect(screen.getByRole("main")).toHaveClass("px-4", "md:px-8");
+    expect(screen.getByRole("link", { name: "К быстрому старту" })).toHaveClass("h-11", "md:h-9");
+  });
+});
+
 // 404 документации — внутри layout [lang], словарь и язык берутся из провайдера.
 describe("S-13 docs not-found", () => {
   it("speaks English and leads to the English quick start", () => {
