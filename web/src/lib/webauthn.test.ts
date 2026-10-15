@@ -9,6 +9,7 @@ import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/fetcher";
 import { en } from "@/messages/en";
+import { ru } from "@/messages/ru";
 import { server } from "@/test/msw";
 import {
   deviceNameFromUserAgent,
@@ -90,14 +91,14 @@ describe("deviceNameFromUserAgent", () => {
 
 describe("validateDeviceName", () => {
   it("accepts 1..64 characters after trim", () => {
-    expect(validateDeviceName("  MacBook  ")).toBeNull();
-    expect(validateDeviceName("я".repeat(64))).toBeNull();
+    expect(validateDeviceName("  MacBook  ", ru.auth.deviceName)).toBeNull();
+    expect(validateDeviceName("я".repeat(64), ru.auth.deviceName)).toBeNull();
   });
 
   it("rejects empty and too long names", () => {
-    expect(validateDeviceName("")).toBe("Введите название устройства");
-    expect(validateDeviceName("   ")).toBe("Введите название устройства");
-    expect(validateDeviceName("я".repeat(65))).toBe("Не длиннее 64 символов");
+    expect(validateDeviceName("", ru.auth.deviceName)).toBe("Введите название устройства");
+    expect(validateDeviceName("   ", ru.auth.deviceName)).toBe("Введите название устройства");
+    expect(validateDeviceName("я".repeat(65), ru.auth.deviceName)).toBe("Не длиннее 64 символов");
   });
 
   it("speaks the language of the given dictionary", () => {
@@ -317,7 +318,7 @@ describe("error helpers", () => {
       "Сессия устарела. Обновите страницу.",
     ],
   ] as const)("%s: %s → %s", (flow, err, message) => {
-    expect(passkeyErrorMessage(err, flow)).toBe(message);
+    expect(passkeyErrorMessage(err, flow, ru.auth.passkeyErrors)).toBe(message);
   });
 
   it.each([
