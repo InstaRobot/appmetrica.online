@@ -14,11 +14,12 @@ import (
 	"appmetrica.online/backend/internal/pgstore/sqlc"
 )
 
-// CloseDayStore — приложения и closed_days (pgstore/sqlc.Queries).
+// CloseDayStore — приложения, closed_days и заявки на их переоткрытие (pgstore/sqlc.Queries).
 type CloseDayStore interface {
 	ListAppsForJobs(ctx context.Context) ([]sqlc.ListAppsForJobsRow, error)
 	GetLastClosedDay(ctx context.Context, appID uuid.UUID) (pgtype.Date, error)
 	MarkDayClosed(ctx context.Context, arg sqlc.MarkDayClosedParams) error
+	ApplyReopenRequests(ctx context.Context) ([]sqlc.ApplyReopenRequestsRow, error)
 }
 
 // DayCloser — reports.Service: daily_stats одного дня приложения.
@@ -38,6 +39,14 @@ type closedRange struct {
 	To    string    `json:"to"`
 }
 
+// reopenedRange — заявка на переоткрытие, применённая запуском (job_runs.details.reopened): дни приложения
+// с From закрываются заново.
+type reopenedRange struct {
+	AppID uuid.UUID `json:"app_id"`
+	From  string    `json:"from"`
+	Days  int64     `json:"days"`
+}
+
 type closeDay struct {
 	store   CloseDayStore
 	stats   DayCloser
@@ -50,6 +59,8 @@ type closeDay struct {
 // дни до D = сегодня − 8 в его TZ, как только там наступило 03:30. Первый запуск закрывает дни с apps.created_at,
 // дальше — с дня после последнего закрытого, не больше maxDays дней приложения за запуск (DefaultCloseMaxDays). День
 // закрывается записью daily_stats, затем closed_days: сбой между ними безопасен, повтор перезапишет строки.
+// Перед закрытием запуск под своим lock применяет заявки на переоткрытие (смена часового пояса, удаление данных
+// человека): их дни закрываются заново в том же запуске.
 // Ошибка приложения останавливает только его дни; остальные приложения закрываются, запуск — failed.
 func CloseDayJob(store CloseDayStore, stats DayCloser, lock Locker, c clock.Clock, maxDays int) Job {
 	cd := &closeDay{store: store, stats: stats, lock: lock, clock: c, maxDays: maxDays}
@@ -79,6 +90,10 @@ func (cd *closeDay) run(ctx context.Context, _ uuid.UUID) (Details, error) {
 	}
 	defer release()
 
+	reopened, err := cd.reopen(ctx)
+	if err != nil {
+		return nil, err
+	}
 	apps, err := cd.store.ListAppsForJobs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("close_day: list apps: %w", err)
@@ -98,10 +113,28 @@ func (cd *closeDay) run(ctx context.Context, _ uuid.UUID) (Details, error) {
 		}
 	}
 	details := Details{"closed_days": total, "apps": closed}
+	if len(reopened) > 0 {
+		details["reopened"] = reopened
+	}
 	if err := errors.Join(errs...); err != nil {
 		return details, fmt.Errorf("close_day: %w", err)
 	}
 	return details, nil
+}
+
+// reopen применяет заявки на переоткрытие: удаляет closed_days приложений с from_day, и closeApp закрывает эти дни
+// заново. Вызывается под lock запуска: иначе запуск, уже прочитавший последний закрытый день, записал бы следующие,
+// и переоткрытые дни раньше них не закрылись бы никогда.
+func (cd *closeDay) reopen(ctx context.Context) ([]reopenedRange, error) {
+	rows, err := cd.store.ApplyReopenRequests(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("close_day: reopen requests: %w", err)
+	}
+	out := make([]reopenedRange, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, reopenedRange{AppID: r.AppID, From: r.FromDay.Time.Format(time.DateOnly), Days: r.Days})
+	}
+	return out, nil
 }
 
 // closeApp закрывает дни приложения по порядку до первой ошибки: closed_days остаётся без дыр. r — закрытые
