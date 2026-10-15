@@ -17,6 +17,8 @@ import {
   presetPeriod,
   todayIn,
 } from "@/lib/period";
+import { cn } from "@/lib/utils";
+import { TOUCH_BUTTON, TOUCH_TOGGLE } from "./responsive";
 
 type PeriodPickerProps = {
   value: PeriodValue;
@@ -69,6 +71,7 @@ export function PeriodPicker({
       variant={custom ? "secondary" : "outline"}
       size="sm"
       aria-label={custom ? fmt(m.picked, { range }) : m.pick}
+      className={cn(TOUCH_BUTTON, "min-w-11 md:min-w-0")}
     >
       <CalendarDays aria-hidden="true" />
       {custom ? range : null}
@@ -82,15 +85,18 @@ export function PeriodPicker({
     setOpen(false);
   };
 
+  // Телефон: пресеты растягиваются на всю строку рядом с кнопкой календаря; если кнопка с диапазоном
+  // не помещается, она переносится строкой ниже. С md — одной строкой по содержимому, как на десктопе.
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
+    <div className="flex w-full flex-col gap-1 md:w-auto">
+      <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
         <ToggleGroup
           type="single"
           variant="segmented"
           size="sm"
           spacing={0.5}
           aria-label={m.label}
+          className="flex-1 md:flex-none"
           value={custom ? "" : value.preset}
           onValueChange={(next) => {
             // Повторный клик по выбранному пресету даёт "" — период всегда выбран.
@@ -98,7 +104,11 @@ export function PeriodPicker({
           }}
         >
           {PRESETS.filter((p) => !presets || presets.includes(p)).map((p) => (
-            <ToggleGroupItem key={p} value={p} className="px-3">
+            <ToggleGroupItem
+              key={p}
+              value={p}
+              className={cn("flex-auto px-0.5 md:flex-none md:px-3", TOUCH_TOGGLE)}
+            >
               {m.presets[p]}
             </ToggleGroupItem>
           ))}
@@ -112,7 +122,12 @@ export function PeriodPicker({
             }}
           >
             <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-0">
+            {/* Два месяца на телефоне идут столбиком: popover не шире экрана, а по высоте прокручивается. */}
+            <PopoverContent
+              align="start"
+              collisionPadding={16}
+              className="max-h-(--radix-popover-content-available-height) w-auto overflow-y-auto p-0"
+            >
               <LazyCalendar
                 mode="range"
                 numberOfMonths={2}

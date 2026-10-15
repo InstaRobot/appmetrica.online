@@ -1,20 +1,29 @@
 "use client";
 
-import { type ComponentProps, lazy, Suspense } from "react";
+import { type ComponentProps, type CSSProperties, lazy, Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMessages } from "@/lib/i18n/client";
+import { chartHeight } from "./responsive";
 
 // Графики Recharts (с d3, redux и immer ≈ 150 KB gz) загружаются отдельным чанком после первой
 // загрузки страницы: в initial JS они не укладываются в бюджет 250 KB gz (NFR-006, T-044).
 // Данные графиков всё равно приходят запросом с клиента, поэтому чанк грузится параллельно с ними.
 // Заглушка той же высоты, что и график (плюс «Показать таблицей» у графиков с таблицей), не сдвигает
-// страницу, когда график появляется.
+// страницу, когда график появляется. На телефоне график ниже (CHART_HEIGHT), заглушка — тоже.
 
 const TABLE_TOGGLE_HEIGHT = 40;
 
-function ChartSkeleton({ height }: { height: number }) {
+function ChartSkeleton({ height, extra = 0 }: { height: number; extra?: number }) {
   const m = useMessages().reports.chart;
-  return <Skeleton role="status" aria-label={m.loading} style={{ height }} />;
+  const style = { ...chartHeight(height), "--chart-extra": `${extra}px` } as CSSProperties;
+  return (
+    <Skeleton
+      role="status"
+      aria-label={m.loading}
+      className="h-[calc(min(var(--chart-h),220px)+var(--chart-extra))] md:h-[calc(var(--chart-h)+var(--chart-extra))]"
+      style={style}
+    />
+  );
 }
 
 const LazyMetricChart = lazy(() =>
@@ -37,7 +46,7 @@ const LazyHourlyIngestChart = lazy(() =>
 
 export function MetricChart(props: ComponentProps<typeof LazyMetricChart>) {
   return (
-    <Suspense fallback={<ChartSkeleton height={(props.height ?? 360) + TABLE_TOGGLE_HEIGHT} />}>
+    <Suspense fallback={<ChartSkeleton height={props.height ?? 360} extra={TABLE_TOGGLE_HEIGHT} />}>
       <LazyMetricChart {...props} />
     </Suspense>
   );
@@ -45,7 +54,7 @@ export function MetricChart(props: ComponentProps<typeof LazyMetricChart>) {
 
 export function RollingActiveChart(props: ComponentProps<typeof LazyRollingActiveChart>) {
   return (
-    <Suspense fallback={<ChartSkeleton height={(props.height ?? 280) + TABLE_TOGGLE_HEIGHT} />}>
+    <Suspense fallback={<ChartSkeleton height={props.height ?? 280} extra={TABLE_TOGGLE_HEIGHT} />}>
       <LazyRollingActiveChart {...props} />
     </Suspense>
   );
@@ -53,7 +62,7 @@ export function RollingActiveChart(props: ComponentProps<typeof LazyRollingActiv
 
 export function RetentionAverageChart(props: ComponentProps<typeof LazyRetentionAverageChart>) {
   return (
-    <Suspense fallback={<ChartSkeleton height={(props.height ?? 220) + TABLE_TOGGLE_HEIGHT} />}>
+    <Suspense fallback={<ChartSkeleton height={props.height ?? 220} extra={TABLE_TOGGLE_HEIGHT} />}>
       <LazyRetentionAverageChart {...props} />
     </Suspense>
   );

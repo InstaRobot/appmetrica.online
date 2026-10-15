@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { toggleVariants } from "@/components/ui/toggle";
 import { Platform } from "@/lib/api/gen/model";
 import { useMessages } from "@/lib/i18n/client";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "./responsive";
 
 const PLATFORMS = Object.values(Platform);
 
@@ -74,7 +75,7 @@ export function PlatformSwitcher({
       role="radiogroup"
       aria-label={m.label}
       onKeyDown={onKeyDown}
-      className="flex w-fit items-center gap-0.5 rounded-[9px] bg-muted p-0.5"
+      className={cn("flex items-center gap-0.5 rounded-[9px] bg-muted p-0.5", STRETCH_GROUP)}
     >
       {options.map((option, i) => {
         const checked = i === current;
@@ -92,7 +93,12 @@ export function PlatformSwitcher({
             data-state={checked ? "on" : "off"}
             data-variant="segmented"
             onClick={() => select(i)}
-            className={cn(toggleVariants({ variant: "segmented", size: "sm" }), "px-3")}
+            className={cn(
+              toggleVariants({ variant: "segmented", size: "sm" }),
+              STRETCH_ITEM,
+              TOUCH_TOGGLE,
+              "px-3",
+            )}
           >
             {option ? platformLabels[option] : m.all}
           </button>

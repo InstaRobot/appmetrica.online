@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
 import { FILTER_DIMENSIONS, type FilterDimension, type Filters } from "@/lib/url-state";
+import { TOUCH_BUTTON } from "./responsive";
 
 type FilterOption = { value: string; count: number };
 
@@ -66,7 +67,7 @@ export function FilterBar({
   };
 
   const trigger = (
-    <Button variant="outline" size="sm">
+    <Button variant="outline" size="sm" className={TOUCH_BUTTON}>
       <Plus aria-hidden="true" />
       {m.add}
     </Button>
@@ -77,7 +78,7 @@ export function FilterBar({
       <Suspense fallback={trigger}>
         <Popover open={open} onOpenChange={changeOpen}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-          <PopoverContent align="start" className="w-72 p-0">
+          <PopoverContent align="start" collisionPadding={16} className="w-72 p-0">
             <Suspense fallback={<CommandSkeleton />}>
               <Command>
                 <CommandInput placeholder={m.searchPlaceholder} aria-label={m.search} />
@@ -124,13 +125,18 @@ export function FilterBar({
         </Popover>
       </Suspense>
       {active.map((dim) => (
-        <Badge key={dim} variant="secondary" className="h-7 gap-1 pr-1 text-label-sm">
-          <span>
+        <Badge
+          key={dim}
+          variant="secondary"
+          className="h-11 max-w-full gap-1 pr-0 text-label-sm md:h-7 md:pr-1"
+        >
+          <span className="truncate">
             {labels[dim]}: {value[dim]?.join(", ")}
           </span>
           <Button
             variant="ghost"
             size="icon-xs"
+            className="size-11 md:size-6"
             aria-label={fmt(m.remove, { dimension: labels[dim] })}
             onClick={() => {
               const { [dim]: _, ...rest } = value;
@@ -142,7 +148,7 @@ export function FilterBar({
         </Badge>
       ))}
       {active.length > 0 ? (
-        <Button variant="link" size="sm" onClick={() => onChange(kept)}>
+        <Button variant="link" size="sm" className={TOUCH_BUTTON} onClick={() => onChange(kept)}>
           {m.reset}
         </Button>
       ) : null}

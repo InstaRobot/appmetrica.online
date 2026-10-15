@@ -17,6 +17,12 @@ import { MetricChart, RollingActiveChart } from "@/components/reports/lazy-chart
 import type { MetricChartSeries } from "@/components/reports/metric-chart";
 import { PeriodPicker } from "@/components/reports/period-picker";
 import { PlatformSwitcher, platformOptions } from "@/components/reports/platform-switcher";
+import {
+  STRETCH_GROUP,
+  STRETCH_ITEM,
+  TOUCH_BUTTON,
+  TOUCH_TOGGLE,
+} from "@/components/reports/responsive";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -63,6 +69,7 @@ import {
   reportParams,
   useAudienceState,
 } from "@/lib/url-state";
+import { cn } from "@/lib/utils";
 import AudienceLoading from "./loading";
 
 // Разбивка — последняя карточка страницы: таблица с Radix Select грузится отдельным чанком
@@ -224,6 +231,8 @@ function AudienceReport({ app }: { app: App }) {
     toast.success(m.audience.requestCopied, { duration: 1500 });
   };
 
+  // Панель отчёта: на телефоне период, детализация, платформа и окружение — каждый на всю ширину,
+  // сравнение, запрос и фильтры переносятся строками; с md — две строки, как на десктопе.
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
@@ -239,7 +248,7 @@ function AudienceReport({ app }: { app: App }) {
             allowed={allowedGranularities(state.period)}
             onChange={(g) => void update({ g })}
           />
-          <div className="flex h-8 items-center">
+          <div className="flex h-11 items-center md:h-8">
             <CompareToggle
               checked={state.compare}
               onCheckedChange={(compare) => void update({ compare })}
@@ -249,7 +258,7 @@ function AudienceReport({ app }: { app: App }) {
           <Button
             variant="outline"
             size="sm"
-            className="ml-auto"
+            className={cn(TOUCH_BUTTON, "md:ml-auto")}
             onClick={() => void copyRequest()}
           >
             <Copy aria-hidden="true" />
@@ -271,7 +280,7 @@ function AudienceReport({ app }: { app: App }) {
             onOpenChange={filterOptions.onOpenChange}
             loading={filterOptions.loading}
           />
-          <div className="ml-auto">
+          <div className="w-full md:ml-auto md:w-auto">
             <EnvironmentSwitch value={state.env} onChange={(env) => void update({ env })} />
           </div>
         </div>
@@ -303,26 +312,34 @@ function AudienceReport({ app }: { app: App }) {
             error={cardError(summary)}
           />
 
-          <Card className="gap-4 px-6">
-            <div className="flex items-center justify-between gap-3">
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                spacing={0}
-                aria-label={m.audience.chartMetric}
-                value={state.metric}
-                onValueChange={(next) => {
-                  const metric = METRICS.find((x) => x === next);
-                  if (metric) void update({ metric });
-                }}
-              >
-                {METRICS.map((metric) => (
-                  <ToggleGroupItem key={metric} value={metric} className="px-3">
-                    {metrics[metric].label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+          <Card className="gap-4 px-4 md:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* На узком телефоне подписи метрик не помещаются в строку — переключатель прокручивается. */}
+              <div className="w-full overflow-x-auto md:w-auto md:overflow-visible">
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  aria-label={m.audience.chartMetric}
+                  className={STRETCH_GROUP}
+                  value={state.metric}
+                  onValueChange={(next) => {
+                    const metric = METRICS.find((x) => x === next);
+                    if (metric) void update({ metric });
+                  }}
+                >
+                  {METRICS.map((metric) => (
+                    <ToggleGroupItem
+                      key={metric}
+                      value={metric}
+                      className={cn("flex-auto md:flex-none", TOUCH_TOGGLE, "px-3")}
+                    >
+                      {metrics[metric].label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
               {canSplit ? (
                 <ToggleGroup
                   type="single"
@@ -330,15 +347,19 @@ function AudienceReport({ app }: { app: App }) {
                   size="sm"
                   spacing={0}
                   aria-label={m.audience.chartMode}
+                  className={STRETCH_GROUP}
                   value={split ? "platform" : "total"}
                   onValueChange={(next) => {
                     if (next) void update({ split: next === "platform" ? "platform" : null });
                   }}
                 >
-                  <ToggleGroupItem value="total" className="px-3">
+                  <ToggleGroupItem value="total" className={cn(STRETCH_ITEM, TOUCH_TOGGLE, "px-3")}>
                     {m.chart.total}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="platform" className="px-3">
+                  <ToggleGroupItem
+                    value="platform"
+                    className={cn(STRETCH_ITEM, TOUCH_TOGGLE, "px-3")}
+                  >
                     {m.audience.byPlatform}
                   </ToggleGroupItem>
                 </ToggleGroup>
@@ -356,12 +377,12 @@ function AudienceReport({ app }: { app: App }) {
                 <Skeleton
                   role="status"
                   aria-label={messages.common.loading}
-                  className="h-90 w-full"
+                  className="h-55 w-full md:h-90"
                 />
               ) : null)}
           </Card>
 
-          <Card className="gap-4 px-6">
+          <Card className="gap-4 px-4 md:px-6">
             <h2 className="text-heading-3">DAU / WAU / MAU</h2>
             {cardError(rolling) ??
               (rollingData ? (
@@ -370,12 +391,12 @@ function AudienceReport({ app }: { app: App }) {
                 <Skeleton
                   role="status"
                   aria-label={messages.common.loading}
-                  className="h-70 w-full"
+                  className="h-55 w-full md:h-70"
                 />
               ) : null)}
           </Card>
 
-          <Card className="gap-4 px-6">
+          <Card className="gap-4 px-4 md:px-6">
             <h2 className="text-heading-3">{m.breakdown.title}</h2>
             <Suspense fallback={<TableSkeleton rows={6} />}>
               <BreakdownTable

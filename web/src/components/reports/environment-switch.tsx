@@ -3,6 +3,8 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Environment } from "@/lib/api/gen/model";
 import { useMessages } from "@/lib/i18n/client";
+import { cn } from "@/lib/utils";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "./responsive";
 
 type EnvironmentSwitchProps = {
   value: Environment;
@@ -21,6 +23,7 @@ export function EnvironmentSwitch({ value, onChange }: EnvironmentSwitchProps) {
       size="sm"
       spacing={0.5}
       aria-label={m.environment}
+      className={STRETCH_GROUP}
       value={value}
       onValueChange={(next) => {
         // Повторный клик по выбранному пункту даёт "" — окружение всегда выбрано.
@@ -28,7 +31,11 @@ export function EnvironmentSwitch({ value, onChange }: EnvironmentSwitchProps) {
       }}
     >
       {OPTIONS.map((env) => (
-        <ToggleGroupItem key={env} value={env} className="px-3 font-mono text-label-sm">
+        <ToggleGroupItem
+          key={env}
+          value={env}
+          className={cn(STRETCH_ITEM, TOUCH_TOGGLE, "px-3 font-mono text-label-sm")}
+        >
           {env}
         </ToggleGroupItem>
       ))}

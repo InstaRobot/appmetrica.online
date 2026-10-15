@@ -3,6 +3,8 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMessages } from "@/lib/i18n/client";
 import { GRANULARITIES, type Granularity } from "@/lib/period";
+import { cn } from "@/lib/utils";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "./responsive";
 
 type GranularitySelectProps = {
   value: Granularity;
@@ -21,6 +23,7 @@ export function GranularitySelect({ value, allowed, onChange }: GranularitySelec
       size="sm"
       spacing={0.5}
       aria-label={m.label}
+      className={STRETCH_GROUP}
       value={value}
       onValueChange={(next) => {
         const g = GRANULARITIES.find((x) => x === next);
@@ -28,7 +31,12 @@ export function GranularitySelect({ value, allowed, onChange }: GranularitySelec
       }}
     >
       {GRANULARITIES.map((g) => (
-        <ToggleGroupItem key={g} value={g} disabled={!allowed.includes(g)} className="px-3">
+        <ToggleGroupItem
+          key={g}
+          value={g}
+          disabled={!allowed.includes(g)}
+          className={cn(STRETCH_ITEM, TOUCH_TOGGLE, "px-3")}
+        >
           {m.options[g]}
         </ToggleGroupItem>
       ))}

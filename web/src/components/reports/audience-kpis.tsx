@@ -26,6 +26,7 @@ const METRICS: { key: ChartMetric; format: "number" | "duration" }[] = [
 ];
 
 // Четыре KPI экрана S-05 (Активные, Новые, Сессии, Ср. длительность) с дельтой к предыдущему периоду.
+// На телефоне и узком планшете — сетка 2 × 2, с lg — в один ряд.
 export function AudienceKpis({
   summary,
   sparklines,
@@ -42,7 +43,7 @@ export function AudienceKpis({
       {error ? (
         error
       ) : (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {METRICS.map(({ key, format }) => (
             <KpiCard
               key={key}

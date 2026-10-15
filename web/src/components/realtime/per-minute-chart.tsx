@@ -1,6 +1,7 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { CHART_HEIGHT, chartHeight } from "@/components/reports/responsive";
 import {
   type ChartConfig,
   ChartContainer,
@@ -38,7 +39,7 @@ export function PerMinuteChart({ points, timezone, height = 200 }: PerMinuteChar
   const rows = points.map((p) => ({ ...p, label: f.formatTime(p.minute, timezone) }));
 
   return (
-    <div role="img" aria-label={description} style={{ height }}>
+    <div role="img" aria-label={description} className={CHART_HEIGHT} style={chartHeight(height)}>
       <ChartContainer config={config} className="aspect-auto h-full w-full">
         <BarChart
           data={rows}

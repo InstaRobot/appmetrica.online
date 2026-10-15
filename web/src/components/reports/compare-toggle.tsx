@@ -13,6 +13,9 @@ type CompareToggleProps = {
   disabledReason?: string;
 };
 
+// Подпись переключателя — цель нажатия высотой 44 px на телефоне (переключатель сам по себе мелкий).
+const LABEL = "h-11 md:h-auto";
+
 // Сравнение с предыдущим периодом той же длины (14-ux-ui-spec.md §16.7): пунктир на графике.
 // Недоступное сравнение — aria-disabled, а не disabled: переключатель остаётся в порядке фокуса, чтобы
 // подсказку с причиной открывали и мышь, и клавиатура.
@@ -24,7 +27,9 @@ export function CompareToggle({ checked, onCheckedChange, disabledReason }: Comp
     return (
       <div className="flex items-center gap-2">
         <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} aria-label={m.switch} />
-        <Label htmlFor={id}>{m.label}</Label>
+        <Label htmlFor={id} className={LABEL}>
+          {m.label}
+        </Label>
       </div>
     );
   }
@@ -45,7 +50,7 @@ export function CompareToggle({ checked, onCheckedChange, disabledReason }: Comp
           <TooltipContent>{disabledReason}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <Label htmlFor={id} className="opacity-50">
+      <Label htmlFor={id} className={`${LABEL} opacity-50`}>
         {m.label}
       </Label>
       <span id={reasonId} className="sr-only">

@@ -82,7 +82,7 @@ export function KpiCard({
         type="button"
         aria-pressed={selected}
         onClick={onSelect}
-        className="flex h-full w-full flex-col items-start gap-1.5 rounded-xl p-5 text-left outline-none hover:bg-subtle/60 focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-full w-full flex-col items-start gap-1.5 rounded-xl p-4 text-left outline-none hover:bg-subtle/60 focus-visible:ring-2 focus-visible:ring-ring md:p-5"
       >
         <span data-kpi-label className="pr-8 text-label-md text-fg-muted">
           {label}
@@ -99,7 +99,7 @@ export function KpiCard({
           </span>
         ) : (
           <>
-            <span data-kpi-value className="text-heading-1 tabular-nums">
+            <span data-kpi-value className="text-heading-2 tabular-nums md:text-heading-1">
               {format === "duration" ? f.formatDuration(value) : f.formatInt(value)}
             </span>
             {delta !== null && deltaPct !== undefined ? (
@@ -114,6 +114,7 @@ export function KpiCard({
                   values={points}
                   width={200}
                   height={32}
+                  fluid
                   trendLabel={trendLabel(points, m.trend)}
                 />
               </span>
@@ -128,7 +129,7 @@ export function KpiCard({
               variant="ghost"
               size="icon-xs"
               aria-label={fmt(m.about, { metric: label })}
-              className="absolute top-4 right-4 text-fg-muted"
+              className="absolute top-3 right-3 text-fg-muted md:top-4 md:right-4"
             >
               <Info aria-hidden="true" />
             </Button>

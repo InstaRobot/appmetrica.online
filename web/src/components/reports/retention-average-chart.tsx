@@ -6,6 +6,7 @@ import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
 import { TableToggle } from "./metric-chart";
+import { CHART_HEIGHT, chartHeight } from "./responsive";
 
 type RetentionAverageChartProps = {
   average: Array<number | null>;
@@ -70,7 +71,7 @@ export function RetentionAverageChart({
 
   return (
     <figure className="flex flex-col gap-3">
-      <ul aria-label={m.keyPoints} className="flex gap-8">
+      <ul aria-label={m.keyPoints} className="flex flex-wrap gap-x-8 gap-y-2">
         {keys.map((n) => (
           <li key={n} className="flex items-baseline gap-2">
             <span className="text-label-sm text-fg-muted">
@@ -81,7 +82,7 @@ export function RetentionAverageChart({
           </li>
         ))}
       </ul>
-      <div role="img" aria-label={description} style={{ height }}>
+      <div role="img" aria-label={description} className={CHART_HEIGHT} style={chartHeight(height)}>
         <ChartContainer config={config} className="aspect-auto h-full w-full">
           <LineChart
             data={data}

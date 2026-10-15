@@ -10,6 +10,7 @@ import { FilterBar } from "@/components/reports/filter-bar";
 import { RetentionAverageChart } from "@/components/reports/lazy-charts";
 import { PeriodPicker } from "@/components/reports/period-picker";
 import { PlatformSwitcher } from "@/components/reports/platform-switcher";
+import { STRETCH_GROUP, STRETCH_ITEM, TOUCH_TOGGLE } from "@/components/reports/responsive";
 import { RetentionHeatmap } from "@/components/reports/retention-heatmap";
 import { RetentionSkeleton } from "@/components/skeletons/retention-skeleton";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import {
   retentionParams,
   useRetentionState,
 } from "@/lib/url-state";
+import { cn } from "@/lib/utils";
 
 // S-06 Retention (FR-014). Приложение (TZ) берётся из кэша AppShell.
 export function RetentionView() {
@@ -74,11 +76,11 @@ function RetentionReport({ app }: { app: App }) {
   } else if (matrix) {
     content = (
       <>
-        <Card className="gap-4 px-6">
+        <Card className="gap-4 px-4 md:px-6">
           <h2 className="text-heading-3">{m.average.title}</h2>
           <RetentionAverageChart average={matrix.average} granularity={state.cohort} />
         </Card>
-        <Card className="gap-4 px-6">
+        <Card className="gap-4 px-4 md:px-6">
           <h2 className="text-heading-3">{m.cohorts}</h2>
           <RetentionHeatmap matrix={matrix} granularity={state.cohort} unit={state.unit} />
         </Card>
@@ -88,6 +90,8 @@ function RetentionReport({ app }: { app: App }) {
     content = <RetentionSkeleton />;
   }
 
+  // Панель отчёта: на телефоне когорты, период, платформа и окружение — каждый на всю ширину, фильтры
+  // переносятся строкой; с md — одной строкой, как на десктопе.
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-3">
@@ -97,6 +101,7 @@ function RetentionReport({ app }: { app: App }) {
           size="sm"
           spacing={0}
           aria-label={m.cohorts}
+          className={STRETCH_GROUP}
           value={state.cohort}
           onValueChange={(next) => {
             const cohort = COHORT_GRANULARITIES.find((c) => c === next);
@@ -104,7 +109,7 @@ function RetentionReport({ app }: { app: App }) {
           }}
         >
           {COHORT_GRANULARITIES.map((c) => (
-            <ToggleGroupItem key={c} value={c} className="px-3">
+            <ToggleGroupItem key={c} value={c} className={cn(STRETCH_ITEM, TOUCH_TOGGLE, "px-3")}>
               {m.cohortOptions[c]}
             </ToggleGroupItem>
           ))}
@@ -130,7 +135,7 @@ function RetentionReport({ app }: { app: App }) {
           onOpenChange={filterOptions.onOpenChange}
           loading={filterOptions.loading}
         />
-        <div className="ml-auto">
+        <div className="w-full md:ml-auto md:w-auto">
           <EnvironmentSwitch value={state.env} onChange={(env) => void update({ env })} />
         </div>
       </div>

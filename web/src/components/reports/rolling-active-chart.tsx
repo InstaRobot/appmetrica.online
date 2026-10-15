@@ -14,6 +14,7 @@ import type { RollingActive } from "@/lib/api/gen/model";
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
 import { TableToggle } from "./metric-chart";
+import { CHART_HEIGHT, chartHeight } from "./responsive";
 
 type RollingActiveChartProps = { data: RollingActive; height?: number };
 
@@ -49,7 +50,7 @@ export function RollingActiveChart({ data, height = 280 }: RollingActiveChartPro
 
   return (
     <figure className="flex flex-col gap-2">
-      <div role="img" aria-label={description} style={{ height }}>
+      <div role="img" aria-label={description} className={CHART_HEIGHT} style={chartHeight(height)}>
         <ChartContainer config={config} className="aspect-auto h-full w-full">
           <LineChart
             data={rows}
@@ -65,7 +66,7 @@ export function RollingActiveChart({ data, height = 280 }: RollingActiveChartPro
               tickFormatter={(v: number) => f.formatInt(v)}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <ChartLegend content={<ChartLegendContent />} />
+            <ChartLegend content={<ChartLegendContent className="flex-wrap gap-y-1" />} />
             {SERIES.map((key) => (
               <Line
                 key={key}

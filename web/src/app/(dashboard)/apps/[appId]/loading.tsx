@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function AudienceLoading() {
   return (
     <div className="flex flex-col gap-6">
-      <Skeleton className="h-8 w-[640px]" />
+      <Skeleton className="h-8 w-full max-w-[640px]" />
       <KpiSkeleton />
       <Skeleton className="h-90 w-full rounded-xl" />
       <div className="rounded-xl border border-border bg-card shadow-xs">

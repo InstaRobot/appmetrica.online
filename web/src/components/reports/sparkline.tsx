@@ -2,6 +2,8 @@ type SparklineProps = {
   values: number[];
   width?: number;
   height?: number;
+  /** Ужимается по ширине контейнера с сохранением пропорций (KPI-карточка на телефоне); иначе — ровно width × height. */
+  fluid?: boolean;
   /** sr-only описание тренда: «Тренд за 30 дней: рост». */
   trendLabel: string;
 };
@@ -12,7 +14,13 @@ const PAD = 4;
 // График декоративный, смысл передаёт trendLabel. Рисуется обычным SVG, а не Recharts:
 // sparkline есть в каждой строке портфеля, и Recharts в initial JS не укладывается в бюджет
 // 250 KB gz (NFR-006, OQ-061).
-export function Sparkline({ values, width = 96, height = 28, trendLabel }: SparklineProps) {
+export function Sparkline({
+  values,
+  width = 96,
+  height = 28,
+  fluid = false,
+  trendLabel,
+}: SparklineProps) {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const stepX = values.length > 1 ? (width - 2 * PAD) / (values.length - 1) : 0;
@@ -27,10 +35,19 @@ export function Sparkline({ values, width = 96, height = 28, trendLabel }: Spark
   const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${round(p.x)} ${round(p.y)}`).join(" ");
   const last = points.at(-1);
 
+  // fluid: не шире контейнера, высота — по пропорции viewBox, поэтому точка остаётся кругом.
+  const box = fluid
+    ? { className: "block max-w-full", style: { width, aspectRatio: `${width} / ${height}` } }
+    : { className: "block", style: { width, height } };
+
   return (
-    <span className="inline-flex align-middle">
-      <span data-sparkline aria-hidden="true" className="block" style={{ width, height }}>
-        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <span className={fluid ? "inline-flex max-w-full align-middle" : "inline-flex align-middle"}>
+      <span data-sparkline aria-hidden="true" {...box}>
+        <svg
+          {...(fluid ? { width: "100%", height: "100%", className: "block" } : { width, height })}
+          viewBox={`0 0 ${width} ${height}`}
+          aria-hidden="true"
+        >
           {last ? (
             <>
               <path

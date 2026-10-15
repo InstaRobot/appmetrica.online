@@ -23,6 +23,7 @@ import { useRealtimeState } from "@/lib/url-state";
 import { EnvironmentSwitch } from "./environment-switch";
 import { PerMinuteChart } from "./lazy-charts";
 import { PlatformSwitcher } from "./platform-switcher";
+import { TOUCH_BUTTON } from "./responsive";
 
 // Опрос getRealtime раз в 5 с (14-ux-ui-spec.md S-07); после 3 неудачных опросов подряд — предупреждение.
 const POLL_MS = 5000;
@@ -88,7 +89,8 @@ function RealtimeReport({ app }: { app: App }) {
   if (data) {
     content = (
       <>
-        <div className="grid grid-cols-[320px_1fr] gap-4">
+        {/* Телефон: счётчик над графиком; с md — рядом. */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
           <RealtimeCounter
             value={data.active_now}
             updatedAt={data.generated_at}
@@ -96,7 +98,7 @@ function RealtimeReport({ app }: { app: App }) {
             paused={paused}
             stale={stale}
           />
-          <Card className="gap-4 px-6">
+          <Card className="min-w-0 gap-4 px-4 md:px-6">
             <h2 className="text-heading-3">{m.chart.title}</h2>
             <PerMinuteChart points={data.per_minute} timezone={app.timezone} />
           </Card>
@@ -109,7 +111,7 @@ function RealtimeReport({ app }: { app: App }) {
             </AlertDescription>
           </Alert>
         ) : null}
-        <Card className="gap-4 px-6">
+        <Card className="gap-4 px-4 md:px-6">
           <h2 className="text-heading-3">{m.feed.title}</h2>
           {data.recent_events.length === 0 ? (
             <EmptyState
@@ -139,8 +141,15 @@ function RealtimeReport({ app }: { app: App }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" aria-pressed={paused} onClick={togglePause}>
+      {/* На телефоне платформа и окружение — строками на всю ширину под кнопкой паузы. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={paused}
+          onClick={togglePause}
+          className={TOUCH_BUTTON}
+        >
           {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
           {paused ? m.resume : m.pause}
         </Button>
@@ -150,7 +159,7 @@ function RealtimeReport({ app }: { app: App }) {
           value={platform}
           onChange={(next) => void setPlatform(next)}
         />
-        <div className="ml-auto">
+        <div className="w-full md:ml-auto md:w-auto">
           <EnvironmentSwitch value={env} onChange={(next) => void setEnv(next)} />
         </div>
       </div>

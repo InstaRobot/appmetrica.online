@@ -60,8 +60,8 @@ export function RealtimeCounter({
         : fmt(m.updated, { time: f.formatClock(updatedAt, timezone) });
 
   return (
-    <Card role="region" aria-labelledby={labelId} className="gap-1 px-6">
-      <div className="flex items-center justify-between gap-2">
+    <Card role="region" aria-labelledby={labelId} className="gap-1 px-4 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id={labelId} className="text-label-sm text-fg-muted uppercase">
           {m.title}
         </h2>

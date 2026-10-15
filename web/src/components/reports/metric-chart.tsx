@@ -12,6 +12,7 @@ import { fmt } from "@/lib/i18n/format-message";
 import { useMetricDefinitions } from "@/lib/metric-definitions";
 import { type Granularity, todayIn } from "@/lib/period";
 import type { ChartMetric } from "@/lib/url-state";
+import { CHART_HEIGHT, chartHeight } from "./responsive";
 
 export type MetricChartSeries = {
   /** "total" — итог, иначе значение events.platform. */
@@ -240,7 +241,7 @@ export function MetricChart({
           ))}
         </ul>
       ) : null}
-      <div role="img" aria-label={description} style={{ height }}>
+      <div role="img" aria-label={description} className={CHART_HEIGHT} style={chartHeight(height)}>
         <ChartContainer config={config} className="aspect-auto h-full w-full">
           <AreaChart
             data={data}
