@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { WriteKey } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { activeWriteKeyFor, PlatformIntegrationSection } from "./platform-integration-section";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000012";
@@ -114,5 +115,71 @@ describe("PlatformIntegrationSection", () => {
     );
     expect(within(section).queryByRole("tablist")).not.toBeInTheDocument();
     expect(within(section).queryByRole("textbox", { name: "write-ключ" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PlatformIntegrationSection in English", () => {
+  it("shows the key, the snippets and the waiting status", () => {
+    renderWithLocale(
+      <PlatformIntegrationSection
+        appId={APP_ID}
+        platform="android"
+        writeKey={writeKey({ platform: "android" })}
+        received={false}
+        ingestUrl={INGEST_URL}
+      />,
+      "en",
+    );
+
+    const section = screen.getByRole("region", { name: "Android" });
+    expect(
+      within(section).getByText("Write key (public, embedded in the app)"),
+    ).toBeInTheDocument();
+    expect(within(section).getByRole("textbox", { name: "write key" })).toHaveValue(
+      "pk_AAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaa",
+    );
+    expect(within(section).getByLabelText("Code example in Kotlin").textContent).toContain(
+      "// Call from a background thread (Dispatchers.IO).",
+    );
+    expect(within(section).getByRole("status", { name: "Android status" })).toHaveTextContent(
+      "Waiting for the first event from Android",
+    );
+  });
+
+  it("marks the platform as received", () => {
+    renderWithLocale(
+      <PlatformIntegrationSection
+        appId={APP_ID}
+        platform="ios"
+        writeKey={writeKey()}
+        received
+        ingestUrl={INGEST_URL}
+      />,
+      "en",
+    );
+
+    expect(screen.getByRole("status", { name: "iOS status" })).toHaveTextContent(
+      "First event received",
+    );
+  });
+
+  it("warns without an active key", () => {
+    renderWithLocale(
+      <PlatformIntegrationSection
+        appId={APP_ID}
+        platform="android"
+        writeKey={undefined}
+        received={false}
+        ingestUrl={INGEST_URL}
+      />,
+      "en",
+    );
+
+    const alert = within(screen.getByRole("region", { name: "Android" })).getByRole("alert");
+    expect(alert).toHaveTextContent("No active key for Android.");
+    expect(within(alert).getByRole("link", { name: "Create a key for Android" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/settings#write-keys`,
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { IntegrationHour } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { HourlyIngestChart } from "./hourly-ingest-chart";
 
 const NBSP = "\u00a0";
@@ -24,5 +25,19 @@ describe("HourlyIngestChart", () => {
     render(<HourlyIngestChart hourly={[]} timezone="Europe/Moscow" />);
     expect(screen.getByText("Нет данных за 24 часа")).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("describes the chart in English", () => {
+    const { unmount } = renderWithLocale(
+      <HourlyIngestChart hourly={hours(24)} timezone="Europe/Moscow" />,
+      "en",
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "Events by hour, 15:00–14:00: 24,276 accepted, 12 rejected",
+    );
+    unmount();
+
+    renderWithLocale(<HourlyIngestChart hourly={[]} timezone="Europe/Moscow" />, "en");
+    expect(screen.getByText("No data for the last 24 hours")).toBeInTheDocument();
   });
 });

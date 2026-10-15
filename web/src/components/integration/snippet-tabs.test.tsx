@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { SnippetTabs } from "./snippet-tabs";
 
 const KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
@@ -20,7 +21,7 @@ describe("SnippetTabs", () => {
     expect(swift.textContent).toContain(`URL(string: "${URL}")!`);
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
       "href",
-      "/docs/recipes/ios-swift",
+      "/ru/docs/recipes/ios-swift",
     );
 
     await user.click(screen.getByRole("tab", { name: "Swift" }));
@@ -33,7 +34,7 @@ describe("SnippetTabs", () => {
     );
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
       "href",
-      "/docs/recipes/android-kotlin",
+      "/ru/docs/recipes/android-kotlin",
     );
   });
 
@@ -44,7 +45,7 @@ describe("SnippetTabs", () => {
     expect(screen.getByRole("tab", { name: "Go" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
       "href",
-      "/docs/recipes/go",
+      "/ru/docs/recipes/go",
     );
     unmount();
 
@@ -55,7 +56,22 @@ describe("SnippetTabs", () => {
     );
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveAttribute(
       "href",
-      "/docs/recipes/curl",
+      "/ru/docs/recipes/curl",
     );
+  });
+
+  it("labels tabs and code in English and links to the English docs", () => {
+    renderWithLocale(<SnippetTabs ingestUrl={URL} writeKey={KEY} platform="ios" />, "en");
+
+    expect(screen.getByRole("tablist", { name: "Snippet language" })).toBeInTheDocument();
+    const swift = screen.getByLabelText("Code example in Swift");
+    expect(swift.textContent).toContain(
+      "// Start a session when the app comes to the foreground. InstallID.current is a UUID from the Keychain",
+    );
+    expect(
+      screen.getByRole("link", {
+        name: "Full recipes with an offline queue and sessions are in the docs →",
+      }),
+    ).toHaveAttribute("href", "/docs/recipes/ios-swift");
   });
 });

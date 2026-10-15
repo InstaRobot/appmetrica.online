@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { WaitingForFirstEvent } from "./waiting-for-first-event";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -39,5 +40,23 @@ describe("WaitingForFirstEvent", () => {
     render(<WaitingForFirstEvent {...props} firstEventAt="2026-10-13T11:32:05Z" />);
     expect(screen.getByRole("status")).toHaveTextContent("Первое событие получено 14:32:05");
     expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it("waits and turns green in English", () => {
+    const { rerender } = renderWithLocale(
+      <WaitingForFirstEvent {...props} firstEventAt={null} />,
+      "en",
+    );
+
+    expect(screen.getByRole("status", { name: "First event" })).toHaveTextContent(
+      "Waiting for the first event… Checking every 3 seconds.",
+    );
+
+    rerender(<WaitingForFirstEvent {...props} firstEventAt="2026-10-13T11:32:05Z" />);
+    expect(screen.getByRole("status", { name: "First event" })).toHaveTextContent(
+      "First event received at 14:32:05 — Notes iOS is connected!",
+    );
+    expect(toasts.success).toHaveBeenCalledWith("First event received");
+    expect(screen.getByRole("link", { name: "Open Audience" })).toHaveAttribute("href", "/apps/a1");
   });
 });

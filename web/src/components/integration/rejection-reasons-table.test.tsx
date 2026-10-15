@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { IntegrationReason } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { RejectionReasonsTable } from "./rejection-reasons-table";
 
 const NBSP = "\u00a0";
@@ -81,5 +82,37 @@ describe("RejectionReasonsTable", () => {
     render(<RejectionReasonsTable timezone="UTC" reasons={[]} />);
     expect(screen.getByText("Отказов за 24 часа нет ✓")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("describes rejections in English", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithLocale(
+      <RejectionReasonsTable
+        timezone="Europe/Moscow"
+        reasons={[reason(), reason({ code: "brand_new_code", count: 1204 })]}
+      />,
+      "en",
+    );
+
+    const rows = within(screen.getByRole("table", { name: "Rejection reasons" })).getAllByRole(
+      "row",
+    );
+    expect(
+      within(rows[0] as HTMLElement)
+        .getAllByRole("columnheader")
+        .map((c) => c.textContent),
+    ).toEqual(["Code", "Description", "Count", "Last", "Example"]);
+    const first = within(rows[1] as HTMLElement).getAllByRole("cell");
+    expect(first[1]).toHaveTextContent("Event older than 7 days");
+    expect(first[1]).toHaveTextContent("Drop events older than 7 days from the offline queue");
+    expect(within(rows[2] as HTMLElement).getAllByRole("cell")[2]?.textContent).toBe("1,204");
+
+    await user.click(screen.getByRole("button", { name: "Example payload: event_too_old" }));
+    const dialog = await screen.findByRole("dialog", { name: "Example payload: event_too_old" });
+    expect(within(dialog).getByLabelText("Example payload as JSON")).toBeInTheDocument();
+    unmount();
+
+    renderWithLocale(<RejectionReasonsTable timezone="UTC" reasons={[]} />, "en");
+    expect(screen.getByText("No rejections in the last 24 hours ✓")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { VersionsHealthTable } from "./versions-health-table";
 
 const NBSP = "\u00a0";
@@ -57,5 +58,40 @@ describe("VersionsHealthTable", () => {
   it("says when there are no versions", () => {
     render(<VersionsHealthTable timezone="UTC" versions={[]} />);
     expect(screen.getByText("Событий за 24 часа нет")).toBeInTheDocument();
+  });
+
+  it("shows version health in English", () => {
+    const { unmount } = renderWithLocale(
+      <VersionsHealthTable
+        timezone="Europe/Moscow"
+        versions={[
+          {
+            app_version: "2.0.9",
+            accepted: 98400,
+            rejected: 1190,
+            last_seen: "2026-10-13T11:31:00Z",
+          },
+          { app_version: "", accepted: 5, rejected: 0, last_seen: "2026-10-13T11:00:00Z" },
+        ]}
+      />,
+      "en",
+    );
+
+    const rows = within(screen.getByRole("table", { name: "By app version" })).getAllByRole("row");
+    expect(
+      within(rows[0] as HTMLElement)
+        .getAllByRole("columnheader")
+        .map((c) => c.textContent),
+    ).toEqual(["Version", "Accepted", "Rejected", "Rejection rate", "Last event"]);
+    const bad = within(rows[1] as HTMLElement).getAllByRole("cell");
+    expect(bad.map((c) => c.textContent)).toEqual(["2.0.9", "98,400", "1,190", "1.2%", "14:31"]);
+    expect(
+      within(bad[3] as HTMLElement).getByRole("img", { name: "Rejection rate of 1% or higher" }),
+    ).toBeInTheDocument();
+    expect(within(rows[2] as HTMLElement).getAllByRole("cell")[0]).toHaveTextContent("(not set)");
+    unmount();
+
+    renderWithLocale(<VersionsHealthTable timezone="UTC" versions={[]} />, "en");
+    expect(screen.getByText("No events in the last 24 hours")).toBeInTheDocument();
   });
 });

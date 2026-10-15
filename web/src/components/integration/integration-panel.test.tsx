@@ -1,17 +1,32 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IntegrationHealth } from "@/lib/api/gen/model";
-import { formatDateTime } from "@/lib/format";
+import { createFormatters, formatDateTime } from "@/lib/format";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { IntegrationPanel } from "./integration-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000011";
 const KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
 const NBSP = "\u00a0";
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 function health(overrides: Partial<IntegrationHealth> = {}): IntegrationHealth {
   return {
@@ -164,5 +179,52 @@ describe("IntegrationPanel", () => {
     mockApi(() => health());
     renderWithClient(<IntegrationPanel appId={APP_ID} />);
     expect(screen.getAllByRole("status", { name: "Загрузка…" }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("IntegrationPanel in English", () => {
+  it("shows ingest health in English", async () => {
+    mockApi(() => health());
+    renderInEnglish(<IntegrationPanel appId={APP_ID} />);
+
+    const accepted = await screen.findByRole("group", { name: "Accepted, last 24h" });
+    expect(accepted.textContent).toContain("412,905");
+    expect(screen.getByRole("group", { name: "Rejected, last 24h" }).textContent).toContain(
+      "1,204",
+    );
+    expect(screen.getByRole("group", { name: "Rejection rate" }).textContent).toContain("0.29%");
+    expect(screen.getByRole("group", { name: "Last event" }).textContent).toContain(
+      createFormatters("en").formatDateTime(
+        "2026-10-13T11:32:00Z",
+        makeApp({ id: APP_ID }).timezone,
+      ),
+    );
+    expect(screen.getByRole("heading", { name: "Integration" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "By hour" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /^Events by hour/ })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Rejection reasons" })).toHaveTextContent(
+      "Event older than 7 days",
+    );
+    expect(screen.getByRole("table", { name: "By app version" })).toHaveTextContent("2.1.1");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Show key and snippets" }));
+    expect(await screen.findByRole("textbox", { name: "write key" })).toHaveValue(KEY);
+    expect(screen.getByRole("link", { name: /^Full recipes/ })).toHaveAttribute(
+      "href",
+      "/docs/recipes/android-kotlin",
+    );
+  });
+
+  it("warns about a high rejection rate in English", async () => {
+    mockApi(() => health({ accepted_total: 99, rejected_total: 1, reasons: [], versions: [] }));
+    renderInEnglish(<IntegrationPanel appId={APP_ID} />);
+
+    const rate = await screen.findByRole("group", { name: "Rejection rate" });
+    expect(
+      within(rate).getByRole("img", { name: "Rejection rate of 1% or higher" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No rejections in the last 24 hours ✓")).toBeInTheDocument();
+    expect(screen.getByText("No events in the last 24 hours")).toBeInTheDocument();
   });
 });
