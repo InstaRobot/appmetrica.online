@@ -84,7 +84,7 @@ func TestRunAPI_MigrateOnStart(t *testing.T) {
 	defer func() { require.NoError(t, pp.Close()) }()
 	v, err := pp.GetDBVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), v)
+	require.Equal(t, int64(3), v)
 
 	cp, err := chstore.NewMigrationProvider(chOpts)
 	require.NoError(t, err)
