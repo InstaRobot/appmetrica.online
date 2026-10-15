@@ -63,7 +63,6 @@ export const landing = {
     text: "Passkey-only sign-in. Your users' private data never leaves the EU.",
     signIn: "Sign in",
   },
-  hosting: "Hetzner FSN1, EU",
   preview: {
     label: "Sample report: the Notes iOS app over the last 30 days",
     period: "Last 30 days",

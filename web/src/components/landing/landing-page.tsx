@@ -212,8 +212,6 @@ export function LandingPage({ locale }: { locale: Locale }) {
           </a>{" "}
           (CC BY 4.0)
         </span>
-        <span aria-hidden="true">·</span>
-        <span>{m.hosting}</span>
       </footer>
     </div>
   );

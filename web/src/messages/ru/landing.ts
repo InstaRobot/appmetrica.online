@@ -64,7 +64,6 @@ export const landing: typeof en = {
     text: "Вход только по passkey. Приватные данные пользователей не покидают ЕС.",
     signIn: "Войти",
   },
-  hosting: "Hetzner FSN1, ЕС",
   preview: {
     label: "Пример отчёта: приложение Notes iOS за последние 30 дней",
     period: "Последние 30 дней",
