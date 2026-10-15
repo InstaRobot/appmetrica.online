@@ -75,11 +75,37 @@ func TestDaysToClose(t *testing.T) {
 
 // fakeCloseDayStore — apps и closed_days в памяти.
 type fakeCloseDayStore struct {
-	mu      sync.Mutex
-	apps    []sqlc.ListAppsForJobsRow
-	closed  map[uuid.UUID][]time.Time
-	listErr error
-	markErr error
+	mu       sync.Mutex
+	apps     []sqlc.ListAppsForJobsRow
+	closed   map[uuid.UUID][]time.Time
+	reopen   map[uuid.UUID]time.Time // заявки на переоткрытие: приложение → from_day
+	listErr  error
+	markErr  error
+	applyErr error
+}
+
+// ApplyReopenRequests — как запрос sqlc: удаляет закрытые дни с from_day и сами заявки.
+func (s *fakeCloseDayStore) ApplyReopenRequests(context.Context) ([]sqlc.ApplyReopenRequestsRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.applyErr != nil {
+		return nil, s.applyErr
+	}
+	out := []sqlc.ApplyReopenRequestsRow{}
+	for app, from := range s.reopen {
+		kept := s.closed[app][:0]
+		for _, d := range s.closed[app] {
+			if d.Before(from) {
+				kept = append(kept, d)
+			}
+		}
+		out = append(out, sqlc.ApplyReopenRequestsRow{
+			AppID: app, FromDay: pgtype.Date{Time: from, Valid: true}, Days: int64(len(s.closed[app]) - len(kept)),
+		})
+		s.closed[app] = kept
+	}
+	s.reopen = nil
+	return out, nil
 }
 
 func (s *fakeCloseDayStore) ListAppsForJobs(context.Context) ([]sqlc.ListAppsForJobsRow, error) {
@@ -183,6 +209,42 @@ func TestCloseDayJob_Schedule(t *testing.T) {
 	require.Equal(t, 15*time.Minute, job.Every)
 	require.Positive(t, job.Timeout)
 	require.Less(t, job.Timeout, job.Every+time.Minute)
+}
+
+// Заявка на переоткрытие (смена часового пояса, удаление данных человека) применяется в начале запуска под его
+// lock: дни с from_day закрываются заново в том же запуске, применённые заявки — в details.reopened.
+func TestCloseDayJob_AppliesReopenRequests(t *testing.T) {
+	created := time.Date(2026, 10, 9, 21, 0, 0, 0, time.UTC) // 2026-10-10 в Москве
+	store := &fakeCloseDayStore{
+		apps:   []sqlc.ListAppsForJobsRow{jobApp(appMSK, "Europe/Moscow", created, sqlc.AppStatusActive)},
+		closed: map[uuid.UUID][]time.Time{appMSK: {day("2026-10-10"), day("2026-10-11"), day("2026-10-12"), day("2026-10-13")}},
+		reopen: map[uuid.UUID]time.Time{appMSK: day("2026-10-12")},
+	}
+	closer := &fakeDayCloser{}
+
+	details, err := runCloseDay(t, store, closer, &fakeLocker{ok: true}, DefaultCloseMaxDays)
+	require.NoError(t, err)
+	require.Equal(t, []closeCall{{appMSK, "2026-10-12", "Europe/Moscow"}, {appMSK, "2026-10-13", "Europe/Moscow"}}, closer.calls)
+	require.Equal(t, []string{"2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"}, store.days(appMSK))
+	require.Equal(t, []reopenedRange{{AppID: appMSK, From: "2026-10-12", Days: 2}}, details["reopened"])
+}
+
+// Без lock заявки не применяются; сбой применения прерывает запуск до закрытия дней.
+func TestCloseDayJob_ReopenRequestsNeedLockAndFailRun(t *testing.T) {
+	store := &fakeCloseDayStore{
+		apps:   []sqlc.ListAppsForJobsRow{jobApp(appMSK, "Europe/Moscow", time.Date(2026, 10, 9, 21, 0, 0, 0, time.UTC), sqlc.AppStatusActive)},
+		closed: map[uuid.UUID][]time.Time{appMSK: {day("2026-10-13")}},
+		reopen: map[uuid.UUID]time.Time{appMSK: day("2026-10-12")},
+	}
+	_, err := runCloseDay(t, store, &fakeDayCloser{}, &fakeLocker{ok: false}, DefaultCloseMaxDays)
+	require.NoError(t, err)
+	require.NotEmpty(t, store.reopen, "запуск без lock заявку не трогает")
+
+	store.applyErr = errors.New("postgres: connection reset")
+	closer := &fakeDayCloser{}
+	_, err = runCloseDay(t, store, closer, &fakeLocker{ok: true}, DefaultCloseMaxDays)
+	require.ErrorContains(t, err, "connection reset")
+	require.Empty(t, closer.calls)
 }
 
 // Закрываются все приложения, включая архивные, каждое — в своей TZ; итог — в details.
