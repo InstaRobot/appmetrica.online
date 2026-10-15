@@ -1,10 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { mockTimezones } from "@/test/timezones";
 import { AppSettingsForm, hasClosedDays } from "./app-settings-form";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000043";
@@ -51,6 +52,8 @@ async function pickTimezone(name: RegExp) {
 }
 
 describe("AppSettingsForm", () => {
+  beforeEach(mockTimezones);
+
   it("warns about closed days on timezone change", async () => {
     renderWithClient(<AppSettingsForm app={OLD_APP} />);
 

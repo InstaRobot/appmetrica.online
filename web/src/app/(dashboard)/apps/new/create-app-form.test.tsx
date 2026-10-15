@@ -6,6 +6,7 @@ import type { CreateAppBody } from "@/lib/api/gen/model";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { mockTimezones } from "@/test/timezones";
 import { CreateAppForm } from "./create-app-form";
 
 const nav = vi.hoisted(() => ({ push: vi.fn<(href: string) => void>() }));
@@ -57,6 +58,8 @@ beforeEach(() => {
 });
 
 describe("CreateAppForm", () => {
+  beforeEach(mockTimezones);
+
   it("creates the app and opens its integration screen", async () => {
     const bodies = mockCreate();
     const user = userEvent.setup();

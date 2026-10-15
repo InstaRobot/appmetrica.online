@@ -1,9 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockTimezones } from "@/test/timezones";
 import { isTimezone, TimezoneSelect, timezoneLabel } from "./timezone-select";
 
 describe("TimezoneSelect", () => {
+  beforeEach(mockTimezones);
+
   it("shows the current zone with its UTC offset and filters by name", async () => {
     const onChange = vi.fn<(tz: string) => void>();
     const user = userEvent.setup();
