@@ -78,6 +78,26 @@ describe("RejectionReasonsTable", () => {
     expect(within(raw).getByLabelText("Пример payload в JSON").textContent).toBe("{not json");
   });
 
+  // Телефон: таблица прокручивается вбок внутри своего контейнера, колонка «Код» закреплена слева,
+  // описание не сжимается в узкую колонку, а пример payload помещается в экран.
+  it("pins the code column while the table scrolls sideways on phones", async () => {
+    const user = userEvent.setup();
+    render(<RejectionReasonsTable timezone="UTC" reasons={[reason()]} />);
+
+    expect(table().parentElement).toHaveClass("overflow-x-auto");
+    const [head, body] = within(table()).getAllByRole("row") as [HTMLElement, HTMLElement];
+    const cells = within(body).getAllByRole("cell");
+    for (const pinned of [within(head).getAllByRole("columnheader")[0], cells[0]]) {
+      expect(pinned).toHaveClass("sticky", "left-0", "bg-card");
+    }
+    expect(cells[1]).toHaveClass("min-w-56");
+
+    const example = screen.getByRole("button", { name: "Пример payload: event_too_old" });
+    expect(example).toHaveClass("h-11", "min-w-11", "md:h-6");
+    await user.click(example);
+    expect(await screen.findByRole("dialog")).toHaveClass("w-[min(560px,calc(100vw-2rem))]");
+  });
+
   it("says when there are no rejections", () => {
     render(<RejectionReasonsTable timezone="UTC" reasons={[]} />);
     expect(screen.getByText("Отказов за 24 часа нет ✓")).toBeInTheDocument();

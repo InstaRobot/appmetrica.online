@@ -117,6 +117,24 @@ describe("IntegrationPanel", () => {
     expect(screen.getByRole("tab", { name: "Kotlin" })).toHaveAttribute("aria-selected", "true");
   });
 
+  // Телефон: KPI по два в ряд (с lg — четыре), заголовок с кнопкой переносится, карточки с полями 16 px,
+  // почасовой график — во всю ширину карточки.
+  it("fits the health view on a phone", async () => {
+    mockApi(() => health());
+    renderWithClient(<IntegrationPanel appId={APP_ID} />);
+
+    const accepted = await screen.findByRole("group", { name: "Принято за 24 ч" });
+    expect(accepted.parentElement).toHaveClass("grid-cols-2", "lg:grid-cols-4");
+
+    const toggle = screen.getByRole("button", { name: "Показать ключ и сниппеты" });
+    expect(toggle).toHaveClass("h-11", "md:h-8");
+    expect(toggle.parentElement).toHaveClass("flex-wrap");
+
+    const chart = await screen.findByRole("img", { name: /^События по часам/ });
+    expect(chart).toHaveClass("w-full");
+    expect(chart.closest("[data-slot=card]")).toHaveClass("px-4", "md:px-6");
+  });
+
   it("shows when the last event arrived, taken from the freshest app version", async () => {
     mockApi(() =>
       health({

@@ -36,6 +36,15 @@ describe("WaitingForFirstEvent", () => {
     expect(toasts.success).toHaveBeenCalledTimes(1);
   });
 
+  // Телефон: кнопка переносится под текст и остаётся целью нажатия 44 px.
+  it("wraps the audience button under the text on phones", () => {
+    render(<WaitingForFirstEvent {...props} firstEventAt="2026-10-13T11:32:05Z" />);
+
+    const open = screen.getByRole("link", { name: "Открыть Аудиторию" });
+    expect(open).toHaveClass("h-11", "md:h-8");
+    expect(open.parentElement).toHaveClass("flex-wrap");
+  });
+
   it("shows success without a toast when the event was already there", () => {
     render(<WaitingForFirstEvent {...props} firstEventAt="2026-10-13T11:32:05Z" />);
     expect(screen.getByRole("status")).toHaveTextContent("Первое событие получено 14:32:05");

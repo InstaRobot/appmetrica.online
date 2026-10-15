@@ -26,6 +26,17 @@ describe("CodeBlock", () => {
     expect(pre.textContent?.trimEnd()).toBe(CODE.trimEnd());
   });
 
+  // Телефон: длинные строки прокручиваются внутри блока, кнопка копирования — цель нажатия 44 px.
+  it("scrolls long lines inside the block and enlarges the copy button on phones", () => {
+    render(<CodeBlock code={CODE} lang="javascript" ariaLabel="Пример" />);
+
+    expect(screen.getByLabelText("Пример")).toHaveClass("overflow-auto");
+    expect(screen.getByRole("button", { name: "Копировать код" })).toHaveClass(
+      "size-11",
+      "md:size-8",
+    );
+  });
+
   it("copies the code", async () => {
     const user = userEvent.setup();
     render(<CodeBlock code={CODE} lang="javascript" ariaLabel="Пример" maxHeight={320} />);

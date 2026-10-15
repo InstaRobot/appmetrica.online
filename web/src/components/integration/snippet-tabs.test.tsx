@@ -38,6 +38,21 @@ describe("SnippetTabs", () => {
     );
   });
 
+  // Телефон: вкладки языков не переносятся, а прокручиваются вбок; каждая — цель нажатия от 44 px.
+  it("scrolls the language tabs sideways and enlarges them on phones", () => {
+    render(<SnippetTabs ingestUrl={URL} writeKey={KEY} platform="ios" />);
+
+    const list = screen.getByRole("tablist", { name: "Язык сниппета" });
+    expect(list).toHaveClass("max-w-full", "overflow-x-auto", "justify-start");
+    for (const tab of within(list).getAllByRole("tab")) {
+      expect(tab).toHaveClass("max-md:min-w-11", "shrink-0");
+    }
+    expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveClass(
+      "min-h-11",
+      "md:min-h-0",
+    );
+  });
+
   it("uses the default language and falls back to curl", () => {
     const { unmount } = render(
       <SnippetTabs ingestUrl={URL} writeKey={KEY} platform="ios" defaultLang="go" />,

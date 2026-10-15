@@ -55,6 +55,28 @@ describe("VersionsHealthTable", () => {
     expect(within(rows[3] as HTMLElement).getAllByRole("cell")[0]).toHaveTextContent("(не задана)");
   });
 
+  // Телефон: таблица прокручивается вбок, колонка «Версия» закреплена слева.
+  it("pins the version column while the table scrolls sideways on phones", () => {
+    render(
+      <VersionsHealthTable
+        timezone="UTC"
+        versions={[
+          { app_version: "2.1.1", accepted: 1, rejected: 0, last_seen: "2026-10-13T11:32:00Z" },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole("table", { name: "По версиям приложения" });
+    expect(table.parentElement).toHaveClass("overflow-x-auto");
+    const [head, body] = within(table).getAllByRole("row") as [HTMLElement, HTMLElement];
+    for (const pinned of [
+      within(head).getAllByRole("columnheader")[0],
+      within(body).getAllByRole("cell")[0],
+    ]) {
+      expect(pinned).toHaveClass("sticky", "left-0", "bg-card");
+    }
+  });
+
   it("says when there are no versions", () => {
     render(<VersionsHealthTable timezone="UTC" versions={[]} />);
     expect(screen.getByText("Событий за 24 часа нет")).toBeInTheDocument();
