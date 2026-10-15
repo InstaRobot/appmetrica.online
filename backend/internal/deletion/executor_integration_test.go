@@ -198,8 +198,21 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 	require.Equal(t, uint64(1), count(t, h.env, "user_first_seen", "app_id = {other:UUID}", p))
 	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {other:UUID}", p))
 
-	// daily_stats — агрегаты без персональных данных — не меняются.
+	// daily_stats — агрегаты без персональных данных — не меняются: close_day закроет дни заново с дня перед первым
+	// событием U (анонимная сессия I1 2026-10-11 в UTC).
 	require.Equal(t, statsBefore, dailyStats(t, h.env, appID))
+	require.Equal(t, []string{"2026-10-10"}, reopenFrom(t, h.env, appID))
+	require.Empty(t, reopenFrom(t, h.env, otherApp))
+}
+
+// reopenFrom — from_day заявки на переоткрытие закрытых дней приложения.
+func reopenFrom(t *testing.T, env *testutil.Env, appID uuid.UUID) []string {
+	t.Helper()
+	rows, err := env.PG.Pool().Query(t.Context(), `SELECT from_day::text FROM closed_days_reopen WHERE app_id = $1`, appID)
+	require.NoError(t, err)
+	days, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	return days
 }
 
 // Заявки приложений в незавершённом слиянии (цель и источник) ждут его конца; остальные выполняются.
@@ -274,6 +287,7 @@ func TestDeletion_InstallRemovesInstallData(t *testing.T) {
 	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {app:UUID} AND position(payload_sample, {keep:String}) > 0", p))
 	// user_first_seen по install не чистится: u1 остался на другой установке.
 	require.Equal(t, uint64(1), count(t, h.env, "user_first_seen", "app_id = {app:UUID} AND user_id = 'u1'", p))
+	require.Equal(t, []string{"2026-10-13"}, reopenFrom(t, h.env, appID), "день перед первым событием установки")
 }
 
 // AC-046.2 / AC-6.2.4: удаление приложения очищает все таблицы ClickHouse по app_id, удаляет строку apps
@@ -363,6 +377,10 @@ func TestDeletion_AppRemovesEverything(t *testing.T) {
 type failingPurger struct{ deletion.Purger }
 
 func (failingPurger) Ping(context.Context) error { return nil }
+
+func (failingPurger) UserFirstDay(context.Context, uuid.UUID, string) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
 
 func (failingPurger) PurgeUser(context.Context, uuid.UUID, string) error {
 	return errors.New("code: 159, timeout exceeded")

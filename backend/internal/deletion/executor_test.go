@@ -37,6 +37,27 @@ type fakeQueue struct {
 	deleted   []uuid.UUID // приложения, удалённые deleteApp
 	deleteRun []uuid.UUID // jobRunID каждого deleteApp
 	claimErr  error
+	reopened  []reopenCall // заявки requestReopen
+	reopenErr error
+	onReopen  func() // вызывается в requestReopen: тест проверяет, что purge ещё не начался
+}
+
+type reopenCall struct {
+	app  uuid.UUID
+	from string
+}
+
+func (q *fakeQueue) requestReopen(_ context.Context, appID uuid.UUID, fromDay, _ time.Time) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.onReopen != nil {
+		q.onReopen()
+	}
+	if q.reopenErr != nil {
+		return q.reopenErr
+	}
+	q.reopened = append(q.reopened, reopenCall{appID, fromDay.Format(time.DateOnly)})
+	return nil
 }
 
 func (q *fakeQueue) add(subject sqlc.DeletionSubject, value string, appID uuid.UUID) uuid.UUID {
@@ -140,10 +161,28 @@ func (q *fakeQueue) deleteApp(_ context.Context, dr sqlc.DeletionRequest, jobRun
 
 // fakePurger записывает вызовы ClickHouse-части и возвращает заданные ошибки.
 type fakePurger struct {
-	mu       sync.Mutex
-	calls    []string
-	pingErr  error
-	purgeErr error
+	mu        sync.Mutex
+	calls     []string
+	pingErr   error
+	purgeErr  error
+	firstDays map[string]time.Time // UTC-дата первого события субъекта (install_id или user_id)
+	lookups   []string             // вызовы InstallFirstDay и UserFirstDay
+}
+
+func (p *fakePurger) firstDay(call, subject string) (time.Time, bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lookups = append(p.lookups, call)
+	d, ok := p.firstDays[subject]
+	return d, ok, nil
+}
+
+func (p *fakePurger) InstallFirstDay(_ context.Context, appID, installID uuid.UUID) (time.Time, bool, error) {
+	return p.firstDay("first install "+appID.String()+" "+installID.String(), installID.String())
+}
+
+func (p *fakePurger) UserFirstDay(_ context.Context, appID uuid.UUID, userID string) (time.Time, bool, error) {
+	return p.firstDay("first user "+appID.String()+" "+userID, userID)
 }
 
 func (p *fakePurger) record(call string) error {
@@ -247,6 +286,58 @@ func TestDeletion_ExecutesSubjects(t *testing.T) {
 	}
 	require.Empty(t, failed)
 	require.Empty(t, q.deleted)
+}
+
+// Удаление человека или установки меняет уже закрытые дни: до удаления событий ставится заявка переоткрыть дни
+// с дня перед первым событием субъекта (его дата в UTC может оказаться следующим днём в TZ приложения восточнее
+// UTC). Субъект без событий заявку не ставит. Заявка пишется до удаления: после сбоя посреди purge первое событие
+// уже не найти.
+func TestDeletion_ReopensClosedDaysFromFirstEvent(t *testing.T) {
+	appID := uuid.New()
+	install := uuid.New()
+	q := &fakeQueue{}
+	q.add(sqlc.DeletionSubjectInstall, install.String(), appID)
+	q.add(sqlc.DeletionSubjectUser, "u1", appID)
+	q.add(sqlc.DeletionSubjectUser, "nobody", appID)
+	p := &fakePurger{firstDays: map[string]time.Time{
+		install.String(): time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC),
+		"u1":             time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+	}}
+	var callsAtReopen []int
+	q.onReopen = func() { callsAtReopen = append(callsAtReopen, len(p.calls)) }
+	var failed []failedCall
+
+	res, err := newTestExecutor(q, p, clock.NewFixed(testNow), &failed).RunOnce(t.Context(), uuid.New())
+	require.NoError(t, err)
+	require.Equal(t, Result{Done: 3}, res)
+	require.Equal(t, []reopenCall{{appID, "2026-08-09"}, {appID, "2026-08-31"}}, q.reopened)
+	require.Equal(t, []string{
+		"first install " + appID.String() + " " + install.String(),
+		"first user " + appID.String() + " u1",
+		"first user " + appID.String() + " nobody",
+	}, p.lookups)
+	require.Equal(t, []string{
+		"install " + appID.String() + " " + install.String(),
+		"user " + appID.String() + " u1",
+		"user " + appID.String() + " nobody",
+	}, p.calls)
+	require.Equal(t, []int{0, 1}, callsAtReopen, "заявка субъекта — до его purge")
+}
+
+// Заявка не записалась — purge не начинается, запрос повторится.
+func TestDeletion_ReopenFailureStopsPurge(t *testing.T) {
+	appID := uuid.New()
+	q := &fakeQueue{reopenErr: errors.New("postgres: connection reset")}
+	id := q.add(sqlc.DeletionSubjectUser, "u1", appID)
+	p := &fakePurger{firstDays: map[string]time.Time{"u1": time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)}}
+	var failed []failedCall
+
+	res, err := newTestExecutor(q, p, clock.NewFixed(testNow), &failed).RunOnce(t.Context(), uuid.New())
+	require.ErrorContains(t, err, "connection reset")
+	require.Equal(t, Result{Retried: 1}, res)
+	require.Equal(t, []string{"first user " + appID.String() + " u1"}, p.lookups)
+	require.Empty(t, p.calls)
+	require.Equal(t, sqlc.DeletionStatusPending, q.get(id).Status)
 }
 
 // subject_type=app: сначала ClickHouse, затем строка apps вместе с копией запроса в job_runs текущего цикла.
