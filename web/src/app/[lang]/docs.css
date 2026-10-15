@@ -33,6 +33,14 @@
   --fd-banner-height: 4rem;
 }
 
+/* Телефон (< md): наша шапка уезжает при прокрутке (components/docs/docs-header.tsx), поэтому полосы
+   Fumadocs (меню с поиском и оглавление) прилипают к самому верху окна. */
+@media (width < 48rem) {
+  :root {
+    --fd-banner-height: 0px;
+  }
+}
+
 :root[data-theme="dark"] {
   --color-fd-primary: var(--color-primary-600);
 }
