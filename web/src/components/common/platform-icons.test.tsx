@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { PlatformIcons } from "./platform-icons";
 
 const glyphs = (container: HTMLElement) =>
@@ -16,6 +17,12 @@ describe("PlatformIcons", () => {
     expect(glyphs(container)).toEqual(["apple", "android", "web"]);
     expect(screen.getByText("+1")).toBeInTheDocument();
     expect(screen.getByTitle("iOS, Android, Веб, macOS")).toBeInTheDocument();
+  });
+
+  it("names the platforms in English", () => {
+    renderWithLocale(<PlatformIcons platforms={["web", "server", "tvos"]} />, "en");
+
+    expect(screen.getByTitle("Web, Backend, tvos")).toBeInTheDocument();
   });
 
   it("shows every platform within the limit", () => {

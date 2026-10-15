@@ -1,7 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { Platform } from "@/lib/api/gen/model";
-import { PLATFORM_LABELS, PlatformIcon, platformLabel } from "./platform-icon";
+import { MessagesProvider } from "@/lib/i18n/client";
+import { getMessages } from "@/messages";
+import {
+  PLATFORM_LABELS,
+  PlatformIcon,
+  platformLabel,
+  platformLabelIn,
+  usePlatformLabel,
+} from "./platform-icon";
 
 describe("PlatformIcon", () => {
   it.each(Object.values(Platform))("renders labelled icon for %s", (platform) => {
@@ -43,5 +52,29 @@ describe("platformLabel", () => {
     expect(platformLabel("server")).toBe("Бэкенд");
     expect(platformLabel("tvos")).toBe("tvos");
     expect(platformLabel("")).toBe("—");
+  });
+});
+
+describe("platform labels of the interface language", () => {
+  it("labels known, unknown and empty platforms from the dictionary", () => {
+    const labels = getMessages("en").common.platforms;
+
+    expect(platformLabelIn(labels, "web")).toBe("Web");
+    expect(platformLabelIn(labels, "server")).toBe("Backend");
+    expect(platformLabelIn(labels, "tvos")).toBe("tvos");
+    expect(platformLabelIn(labels, "")).toBe("—");
+  });
+
+  it("takes the labels of the current locale", () => {
+    const english = ({ children }: { children: ReactNode }) => (
+      <MessagesProvider locale="en" messages={getMessages("en")}>
+        {children}
+      </MessagesProvider>
+    );
+
+    expect(renderHook(() => usePlatformLabel()).result.current("bot")).toBe("Бот");
+    expect(renderHook(() => usePlatformLabel(), { wrapper: english }).result.current("bot")).toBe(
+      "Bot",
+    );
   });
 });

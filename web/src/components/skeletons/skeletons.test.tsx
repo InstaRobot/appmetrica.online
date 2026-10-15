@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { IntegrationSkeleton } from "./integration-skeleton";
 import { KpiSkeleton } from "./kpi-skeleton";
 import { ProfileSkeleton } from "./profile-skeleton";
@@ -50,5 +51,21 @@ describe("skeletons", () => {
     expect(screen.getAllByRole("status", { name: "Загрузка…" })).toHaveLength(1);
     expect(container.querySelectorAll("[data-skeleton-card]")).toHaveLength(1);
     expect(container.querySelectorAll("[data-skeleton-row]")).toHaveLength(7);
+  });
+
+  it("announces loading in English", () => {
+    renderWithLocale(
+      <>
+        <TableSkeleton rows={1} />
+        <KpiSkeleton count={1} />
+        <RetentionSkeleton />
+        <RealtimeSkeleton />
+        <IntegrationSkeleton />
+        <ProfileSkeleton />
+      </>,
+      "en",
+    );
+
+    expect(screen.getAllByRole("status", { name: "Loading…" })).toHaveLength(6);
   });
 });

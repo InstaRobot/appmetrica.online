@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { CopyField } from "./copy-field";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -47,5 +48,17 @@ describe("CopyField", () => {
     await user.click(screen.getByRole("button", { name: "Копировать ключ" }));
     expect(toasts.error).toHaveBeenCalledWith("Не удалось скопировать");
     expect(toasts.success).not.toHaveBeenCalled();
+  });
+
+  it("speaks English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<CopyField value="pk_123" label="write key" />, "en");
+
+    await user.click(screen.getByRole("button", { name: "Copy write key" }));
+    expect(toasts.success).toHaveBeenCalledWith("Copied", { duration: 1500 });
+
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    await user.click(screen.getByRole("button", { name: "Copy write key" }));
+    expect(toasts.error).toHaveBeenCalledWith("Couldn't copy");
   });
 });

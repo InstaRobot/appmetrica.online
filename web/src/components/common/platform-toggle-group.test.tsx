@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Platform } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { PlatformToggleGroup } from "./platform-toggle-group";
 
 function Controlled({
@@ -47,6 +48,25 @@ describe("PlatformToggleGroup", () => {
       expect(chip).toHaveAttribute("aria-pressed", "false");
       expect(chip.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     }
+  });
+
+  it("names the platforms in English", () => {
+    renderWithLocale(
+      <PlatformToggleGroup aria-label="Platforms" value={[]} onValueChange={vi.fn()} />,
+      "en",
+    );
+
+    expect(screen.getAllByRole("button").map((chip) => chip.textContent)).toEqual([
+      "iOS",
+      "Android",
+      "Web",
+      "macOS",
+      "Windows",
+      "Linux",
+      "Bot",
+      "Backend",
+      "Other",
+    ]);
   });
 
   it("toggles with the keyboard", async () => {

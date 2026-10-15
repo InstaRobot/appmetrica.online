@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { CodeBlock } from "./code-block";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -33,5 +34,13 @@ describe("CodeBlock", () => {
     await user.click(screen.getByRole("button", { name: "Копировать код" }));
     expect(await navigator.clipboard.readText()).toBe(CODE);
     expect(toasts.success).toHaveBeenCalledWith("Скопировано", { duration: 1500 });
+  });
+
+  it("speaks English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<CodeBlock code={CODE} lang="javascript" ariaLabel="Sample" />, "en");
+
+    await user.click(screen.getByRole("button", { name: "Copy code" }));
+    expect(toasts.success).toHaveBeenLastCalledWith("Copied", { duration: 1500 });
   });
 });

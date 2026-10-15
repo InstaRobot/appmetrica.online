@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { mockTimezones } from "@/test/timezones";
 import { isTimezone, TimezoneSelect, timezoneLabel } from "./timezone-select";
 
@@ -40,6 +41,16 @@ describe("TimezoneSelect", () => {
     await user.clear(await screen.findByPlaceholderText("Найти часовой пояс…"));
     await user.type(await screen.findByPlaceholderText("Найти часовой пояс…"), "Mars");
     expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
+  });
+
+  it("speaks English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<TimezoneSelect value="" onChange={() => {}} />, "en");
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Select a time zone");
+    await user.click(screen.getByRole("combobox"));
+    await user.type(await screen.findByPlaceholderText("Search time zones…"), "Mars");
+    expect(screen.getByText("Nothing found")).toBeInTheDocument();
   });
 });
 
