@@ -11,8 +11,8 @@ apps, audience (DAU/WAU/MAU, new users, sessions, duration, breakdowns), classic
 user profiles and a Read API. Users are counted as people, not devices (`install_id` + optional `user_id`).
 
 - **No SDK.** One documented endpoint: `POST https://<ingest-domain>/v1/events`, batches of up to 500 events,
-  idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, Go, curl and bots
-  are in the public [documentation](https://appmetrica.online/docs).
+  idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, React Native,
+  Flutter, Kotlin Multiplatform, Go, curl and bots are in the public [documentation](https://appmetrica.online/docs).
 - **One app, many platforms.** An app can ship on iOS, Android, the web and more: each platform gets its own write
   key, reports count people across platforms with a platform switcher on top, and duplicate apps can be merged.
 - **Privacy by design.** The client IP is used only in memory for a country/city lookup and is never stored —
