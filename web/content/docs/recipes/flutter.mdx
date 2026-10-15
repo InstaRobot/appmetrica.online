@@ -1,40 +1,41 @@
 ---
 title: Flutter (Dart)
-description: package:http, install_id в Keychain и shared_preferences, очередь в файле и сессии через WidgetsBindingObserver.
+description: package:http, install_id in the Keychain and shared_preferences, a file-backed queue, and sessions via WidgetsBindingObserver.
 ---
 
-Рецепт для Flutter на Dart 3: iOS, Android, macOS, Windows и Linux. Сеть — `package:http`, очередь —
-файл в каталоге `getApplicationSupportDirectory()` из `path_provider`, `install_id` —
-`flutter_secure_storage` на iOS и macOS и `shared_preferences` на остальных платформах, версия и
-модель — `package_info_plus` и `device_info_plus`, UUID — `uuid`. Код состоит из трёх файлов:
-`install_id`, офлайн-очередь с отправкой и трекер сессий.
+A recipe for Flutter on Dart 3: iOS, Android, macOS, Windows, and Linux. Networking is
+`package:http`, the queue is a file in the `getApplicationSupportDirectory()` directory from
+`path_provider`, `install_id` is `flutter_secure_storage` on iOS and macOS and `shared_preferences`
+on the other platforms, the version and model come from `package_info_plus` and
+`device_info_plus`, and UUIDs come from `uuid`. The code is split into three files: `install_id`,
+an offline queue with sending, and a session tracker.
 
 ```bash
 flutter pub add http path_provider flutter_secure_storage shared_preferences \
   package_info_plus device_info_plus uuid
 ```
 
-Где создать трекер и как подписаться на жизненный цикл — в разделе
-[Где инициализировать метрику](/docs/concepts/initialization#flutter). Для Flutter web этот код не
-подходит: в браузере нет `dart:io`, а сессии сайта ведутся по видимости вкладки — см.
-[веб-рецепт](/docs/recipes/web-js).
+Where to create the tracker and how to subscribe to the lifecycle is covered in
+[Where to initialize analytics](/docs/concepts/initialization#flutter). This code doesn't work for
+Flutter web: the browser has no `dart:io`, and website sessions follow tab visibility — see the
+[web recipe](/docs/recipes/web-js).
 
-Приложение на Flutter — одно приложение в appmetrica.online с несколькими платформами: iOS и
-Android, а если вы собираете его и под десктоп — ещё macOS, Windows и Linux. Отметьте все платформы
-в одном приложении, а не заводите приложение на каждую сборку. У каждой платформы свой ключ на вкладке
-«Интеграция»: код выбирает ключ и `context.platform` во время выполнения по `Platform.isIOS`,
-`Platform.isAndroid` и так далее. Человек с одним `user_id` на телефоне и ноутбуке считается один
-раз, а отчёты делятся по платформам — см. [Платформа события](/docs#platform).
+A Flutter app is one app in appmetrica.online with several platforms: iOS and Android, plus macOS,
+Windows, and Linux if you also build for desktop. Select all the platforms in a single app instead
+of creating an app per build. Each platform has its own key on the Integration tab: the code picks
+the key and `context.platform` at runtime from `Platform.isIOS`, `Platform.isAndroid`, and so on. A
+person with the same `user_id` on a phone and a laptop is counted once, and reports are split by
+platform — see [Event platform](/docs#platform).
 
 ## install_id [#install-id]
 
-`install_id` создаётся при первом запуске и больше не меняется. На iOS и macOS он хранится в
-Keychain через `flutter_secure_storage`: запись переживает удаление и повторную установку
-приложения, как в [iOS-рецепте](/docs/recipes/ios-swift#install-id). На Android — в
-`shared_preferences`: их сохраняет Auto Backup, как в
-[Android-рецепте](/docs/recipes/android-kotlin#install-id). `flutter_secure_storage` там не
-подходит: ключ шифрования живёт в Android Keystore и из бэкапа не восстанавливается. На Windows и
-Linux `shared_preferences` — файл в профиле пользователя.
+`install_id` is created on first launch and never changes. On iOS and macOS it's stored in the
+Keychain via `flutter_secure_storage`: the item survives deleting and reinstalling the app, as in
+the [iOS recipe](/docs/recipes/ios-swift#install-id). On Android it's stored in
+`shared_preferences`, which Auto Backup keeps, as in the
+[Android recipe](/docs/recipes/android-kotlin#install-id). `flutter_secure_storage` doesn't fit
+there: its encryption key lives in the Android Keystore and isn't restored from a backup. On
+Windows and Linux, `shared_preferences` is a file in the user's profile.
 
 ```dart title="lib/analytics/install_id.dart"
 import 'dart:io';
@@ -46,13 +47,13 @@ import 'package:uuid/uuid.dart';
 abstract final class InstallId {
   static const _key = 'appmetrica.install_id';
   static const _keychain = FlutterSecureStorage(
-    // Как в iOS-рецепте: читается и при запуске в фоне, на новое устройство не переезжает.
+    // As in the iOS recipe: readable on background launches, never moves to a new device.
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
     mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
   );
   static Future<String>? _value;
 
-  /// Читает install_id или создаёт его при первом запуске. Future кэшируется на процесс.
+  /// Reads install_id or creates it on first launch. The Future is cached per process.
   static Future<String> get() => _value ??= _load();
 
   static Future<String> _load() async {
@@ -72,22 +73,23 @@ abstract final class InstallId {
 }
 ```
 
-На macOS `flutter_secure_storage` пишет в Keychain с защитой данных, и приложению нужно entitlement
-Keychain Sharing (`keychain-access-groups`) — настройка описана в README пакета.
+On macOS, `flutter_secure_storage` writes to the data protection keychain, so the app needs the
+Keychain Sharing entitlement (`keychain-access-groups`) — the setup is described in the package
+README.
 
-## Офлайн-очередь и отправка [#offline-queue]
+## Offline queue and sending [#offline-queue]
 
-`EventQueue` хранит события в файле и отправляет их батчами до 500 штук. Dart выполняет код в одном
-потоке, поэтому состояние очереди меняется без блокировок, а запись файла идёт строго по одной.
-Интерфейс сеть не ждёт: событие сначала записывается на диск, отправка идёт в фоне. Действие по
-каждому ответу — как в [Ошибки и повторы](/docs/errors-and-retries):
+`EventQueue` stores events in a file and sends them in batches of up to 500. Dart runs code on a
+single thread, so the queue state changes without locks, and file writes happen strictly one at a
+time. The UI never waits on the network: an event is written to disk first, and sending happens in
+the background. How to handle each response follows [Errors and retries](/docs/errors-and-retries):
 
-- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`: их повторить через
-  минуту;
-- `400`, `413`, `415` — удалить батч: повтор не поможет;
-- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
-- `429`, `503` — повторить через `Retry-After`;
-- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с и разбросом ±20 %.
+- `200` — remove the sent events, except those rejected with `retryable: true`: retry those in a
+  minute;
+- `400`, `413`, `415` — drop the batch: retrying won't help;
+- `401`, `403` — stop sending until the app restarts: the key was revoked or the app is archived;
+- `429`, `503` — retry after `Retry-After`;
+- anything else and network errors — retry with a backoff from 1 s to 300 s and ±20% jitter.
 
 ```dart title="lib/analytics/event_queue.dart"
 import 'dart:async';
@@ -98,15 +100,15 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-/// Платформа события и её ключ: у каждой платформы приложения свой ключ на вкладке «Интеграция».
+/// The event platform and its key: each platform of the app has its own key on the Integration tab.
 final appPlatform = _detectPlatform();
 
 ({String name, String writeKey}) _detectPlatform() {
-  if (Platform.isIOS) return (name: 'ios', writeKey: 'pk_…'); // ключ платформы iOS
-  if (Platform.isAndroid) return (name: 'android', writeKey: 'pk_…'); // ключ платформы Android
-  if (Platform.isMacOS) return (name: 'macos', writeKey: 'pk_…'); // ключ платформы macOS
-  if (Platform.isWindows) return (name: 'windows', writeKey: 'pk_…'); // ключ платформы Windows
-  if (Platform.isLinux) return (name: 'linux', writeKey: 'pk_…'); // ключ платформы Linux
+  if (Platform.isIOS) return (name: 'ios', writeKey: 'pk_…'); // iOS platform key
+  if (Platform.isAndroid) return (name: 'android', writeKey: 'pk_…'); // Android platform key
+  if (Platform.isMacOS) return (name: 'macos', writeKey: 'pk_…'); // macOS platform key
+  if (Platform.isWindows) return (name: 'windows', writeKey: 'pk_…'); // Windows platform key
+  if (Platform.isLinux) return (name: 'linux', writeKey: 'pk_…'); // Linux platform key
   throw UnsupportedError('appmetrica: платформа ${Platform.operatingSystem} не поддерживается');
 }
 
@@ -128,7 +130,7 @@ class EventQueue {
 
   Future<void> enqueue(Map<String, dynamic> event) async {
     (await _events).add(event);
-    await _save(); // сначала на диск: событие переживёт закрытие приложения
+    await _save(); // disk first: the event survives the app being closed
     await flush();
   }
 
@@ -146,7 +148,7 @@ class EventQueue {
           .post(
             Uri.parse(_endpoint),
             headers: {'Content-Type': 'application/json', 'X-App-Key': appPlatform.writeKey},
-            // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+            // sent_at is this attempt's time: the server uses it to correct a skewed device clock.
             body: jsonEncode({'sent_at': _now(), 'events': batch}),
           )
           .timeout(const Duration(seconds: 15));
@@ -162,9 +164,9 @@ class EventQueue {
           _backoff = const Duration(seconds: 1);
           if (retry.isNotEmpty) _retryLater(const Duration(minutes: 1));
         case 400 || 413 || 415:
-          events.removeWhere((e) => sent.contains(e['insert_id'])); // повтор не поможет
+          events.removeWhere((e) => sent.contains(e['insert_id'])); // retrying won't help
         case 401 || 403:
-          _stopped = true; // ключ отозван или приложение в архиве
+          _stopped = true; // key revoked or app archived
         case 429 || 503:
           final seconds = int.tryParse(response.headers['retry-after'] ?? '') ?? 5;
           _retryLater(Duration(seconds: seconds));
@@ -172,7 +174,7 @@ class EventQueue {
           _scheduleBackoff();
       }
     } catch (_) {
-      _scheduleBackoff(); // сеть, таймаут, неожиданный ответ
+      _scheduleBackoff(); // network error, timeout, unexpected response
     } finally {
       _sending = false;
       await _save();
@@ -190,16 +192,16 @@ class EventQueue {
     _backoff = _backoff * 2 > _maxBackoff ? _maxBackoff : _backoff * 2;
   }
 
-  /// Пишет очередь через временный файл. Записи идут по одной: две сразу испортили бы файл.
+  /// Writes the queue via a temp file. Writes run one at a time: two at once would corrupt it.
   Future<void> _save() => _saving = _saving.then((_) async {
         final file = await _file;
         final tmp = File('${file.path}.tmp');
         await tmp.writeAsString(jsonEncode(await _events));
         await tmp.rename(file.path);
-      }).catchError((_) {}); // ошибка диска: очередь останется в памяти до следующей записи
+      }).catchError((_) {}); // disk error: the queue stays in memory until the next write
 
   Future<File> _openFile() async {
-    final dir = await getApplicationSupportDirectory(); // создаётся, если его нет
+    final dir = await getApplicationSupportDirectory(); // created if it doesn't exist
     return File('${dir.path}/appmetrica-queue.json');
   }
 
@@ -208,23 +210,23 @@ class EventQueue {
       final saved = jsonDecode(await (await _file).readAsString()) as List;
       return saved.cast<Map<String, dynamic>>().toList();
     } catch (_) {
-      return []; // первый запуск или повреждённый файл
+      return []; // first launch or a corrupted file
     }
   }
 }
 
-/// RFC 3339 в UTC с суффиксом Z — сервер принимает такое время как есть.
+/// RFC 3339 in UTC with a Z suffix — the server accepts this time as is.
 String _now() => DateTime.now().toUtc().toIso8601String();
 ```
 
-Очередь хранит `timestamp` как есть, поэтому событие, отправленное через три дня, попадёт в отчёт
-того дня, когда оно произошло (см. [Время и офлайн-очередь](/docs/concepts/time-and-offline)).
+The queue keeps `timestamp` as is, so an event sent three days late lands in the report for the day
+it happened (see [Time and the offline queue](/docs/concepts/time-and-offline)).
 
-## Сессии [#session-lifecycle]
+## Sessions [#session-lifecycle]
 
-`SessionTracker` создаёт события. Каждое событие несёт свой `context`, чтобы события из очереди ушли
-с той версией приложения, в которой они произошли. Длительность считается по `Stopwatch` —
-монотонным часам, которые не меняются, если пользователь переводит время.
+`SessionTracker` creates the events. Each event carries its own `context`, so queued events go out
+with the app version they happened in. Duration is measured with `Stopwatch`, a monotonic clock
+that doesn't change when the user changes the system time.
 
 ```dart title="lib/analytics/session_tracker.dart"
 import 'dart:async';
@@ -240,11 +242,11 @@ import 'package:uuid/uuid.dart';
 import 'event_queue.dart';
 import 'install_id.dart';
 
-/// Один трекер на процесс.
+/// One tracker per process.
 final analytics = SessionTracker();
 
 class SessionTracker {
-  /// ID аккаунта после входа; null — пользователь не вошёл. Не email и не телефон.
+  /// Account ID after sign-in; null if the user isn't signed in. Not an email or phone number.
   String? userId;
 
   final _queue = EventQueue();
@@ -252,7 +254,7 @@ class SessionTracker {
   late final Future<Map<String, String>> _context = _loadContext();
   String? _sessionId;
 
-  /// Досылает очередь прошлых запусков.
+  /// Sends the events left in the queue from previous launches.
   void flush() => unawaited(_queue.flush());
 
   void start() {
@@ -274,7 +276,7 @@ class SessionTracker {
   }
 
   Future<void> _track(String name, String sessionId, {int? durationMs}) async {
-    // Время и user_id фиксируются в момент события, до первого await.
+    // Time and user_id are captured when the event happens, before the first await.
     final event = <String, dynamic>{
       'insert_id': const Uuid().v4(),
       'name': name,
@@ -311,7 +313,7 @@ Future<_Device> _deviceInfo() async {
   return switch (await DeviceInfoPlugin().deviceInfo) {
     AndroidDeviceInfo(:final version, :final manufacturer, :final model) =>
       (osName: 'Android', osVersion: version.release, model: '$manufacturer $model'),
-    // На iOS — машинное имя вроде iPhone17,3: имя устройства часто содержит имя человека.
+    // On iOS, a machine name like iPhone17,3: the device name often contains the owner's name.
     IosDeviceInfo(:final systemName, :final systemVersion, :final utsname) =>
       (osName: systemName, osVersion: systemVersion, model: utsname.machine),
     MacOsDeviceInfo(:final majorVersion, :final minorVersion, :final patchVersion, :final model) =>
@@ -324,7 +326,7 @@ Future<_Device> _deviceInfo() async {
   };
 }
 
-/// Как smallestScreenWidthDp в Android-рецепте: от 600 логических пикселей — планшет.
+/// Like smallestScreenWidthDp in the Android recipe: 600 logical pixels or more is a tablet.
 String _deviceType() {
   if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) return 'desktop';
   final view = PlatformDispatcher.instance.implicitView;
@@ -334,11 +336,11 @@ String _deviceType() {
 }
 ```
 
-Подключите трекер в `main()`. `resumed` открывает сессию, `paused` закрывает её на iOS и Android.
-На десктопе Flutter не присылает `paused`: свёрнутое или скрытое окно — это `hidden`, и на macOS,
-Windows и Linux сессию закрывает он. `inactive` — шторка уведомлений, входящий звонок, окно без
-фокуса — сессию не прерывает. Повторный `start()` в открытой сессии и `end()` без сессии ничего не
-делают.
+Hook the tracker up in `main()`. `resumed` opens a session, and `paused` closes it on iOS and
+Android. On desktop, Flutter never sends `paused`: a minimized or hidden window is `hidden`, and on
+macOS, Windows, and Linux that's what closes the session. `inactive` — the notification shade, an
+incoming call, a window without focus — doesn't interrupt the session. Calling `start()` again
+while a session is open, or `end()` with no session, does nothing.
 
 ```dart title="lib/main.dart"
 import 'dart:io';
@@ -352,10 +354,10 @@ final _desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  analytics.flush(); // запуск может быть фоновым, поэтому здесь без session_start
+  analytics.flush(); // the launch may be a background one, so no session_start here
   WidgetsBinding.instance.addObserver(AnalyticsLifecycle());
   if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-    analytics.start(); // приложение уже на экране
+    analytics.start(); // the app is already on screen
   }
   runApp(const NotesApp());
 }
@@ -367,41 +369,41 @@ class AnalyticsLifecycle with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         analytics.start();
       case AppLifecycleState.paused:
-        analytics.end(); // iOS и Android: приложение ушло в фон
+        analytics.end(); // iOS and Android: the app went to the background
       case AppLifecycleState.hidden when _desktop:
-        analytics.end(); // десктоп: окно свёрнуто, paused здесь не бывает
+        analytics.end(); // desktop: the window is minimized; paused never comes here
       default:
-        break; // inactive: шторка, звонок, окно без фокуса — сессия продолжается
+        break; // inactive: notification shade, call, unfocused window — the session goes on
     }
   }
 }
 ```
 
-В фоне у мобильного приложения мало времени: если `session_end` не успеет уйти, он останется в
-файле очереди и отправится при следующем запуске. Десктопное приложение при закрытии окна может
-завершиться, не перейдя в `hidden`, — тогда у сессии не будет `session_end`. Сессия всё равно
-посчитана по `session_start`, но не войдёт в среднюю длительность (см.
-[Сессии](/docs/concepts/sessions#metrics)).
+A mobile app gets little time in the background: if `session_end` doesn't go out in time, it stays
+in the queue file and is sent on the next launch. A desktop app may exit when its window is closed
+without ever going `hidden` — then the session has no `session_end`. The session is still counted
+from `session_start`, but it isn't included in the average duration (see
+[Sessions](/docs/concepts/sessions#metrics)).
 
-## user_id после входа [#user-id]
+## user_id after sign-in [#user-id]
 
-После входа присвойте `analytics.userId` идентификатор аккаунта из вашего бэкенда, после выхода —
-`null`. Анонимные события до входа припишутся этому пользователю (см.
-[Идентичность](/docs/concepts/identity)). Если пользователь вошёл ещё в прошлый раз, присвойте
-`userId` в `main()` до первого `session_start`.
+After sign-in, set `analytics.userId` to the account ID from your backend; after sign-out, set it
+to `null`. Anonymous events from before sign-in are attributed to that user (see
+[Identity](/docs/concepts/identity)). If the user signed in during a previous run, set `userId` in
+`main()` before the first `session_start`.
 
-```dart tab="Вход"
-analytics.userId = account.id; // "a3f9c2d1-77b4-…", не email
+```dart tab="Sign in"
+analytics.userId = account.id; // "a3f9c2d1-77b4-…", not an email
 ```
 
-```dart tab="Выход"
+```dart tab="Sign out"
 analytics.userId = null;
 ```
 
-## Проверка [#verify]
+## Verify [#verify]
 
-1. Запустите приложение через `flutter run` в режиме debug: `kDebugMode` отправит события с
+1. Run the app in debug mode with `flutter run`: with `kDebugMode`, events go out with
    `environment: "development"`.
-2. Сверните приложение и откройте снова.
-3. На вкладке «Интеграция» появятся `session_start` и `session_end` с платформой текущей ОС. В
-   отчётах включите окружение development.
+2. Minimize the app and open it again.
+3. `session_start` and `session_end` show up on the Integration tab with the current OS as the
+   platform. In reports, turn on the development environment.
