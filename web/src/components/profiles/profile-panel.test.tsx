@@ -1,7 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { type RenderOptions, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { makeQueryClient } from "@/lib/query-client";
 import {
   errorBody,
   app as makeApp,
@@ -11,6 +14,7 @@ import {
 } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { ProfilePanel } from "./profile-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000022";
@@ -154,5 +158,93 @@ describe("ProfilePanel", () => {
     mockApi(() => HttpResponse.json(makeProfile()));
     renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
     expect(screen.getAllByRole("status", { name: "Загрузка…" }).length).toBeGreaterThan(0);
+  });
+});
+
+function renderEnglish(ui: ReactElement, options: RenderOptions = {}) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    "en",
+    options,
+  );
+}
+
+describe("ProfilePanel in English", () => {
+  it("shows the profile, installs and sessions in English", async () => {
+    mockApi(() =>
+      HttpResponse.json(
+        makeProfile({
+          installs: [profileInstall()],
+          sessions: [
+            profileSession(),
+            profileSession({
+              started_at: "2026-10-12T06:15:00Z",
+              ended_at: null,
+              duration_ms: null,
+            }),
+          ],
+          next_before: "2026-10-12T06:15:00Z",
+        }),
+      ),
+    );
+    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+
+    expect(await screen.findByRole("heading", { name: "u:42" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to search" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/profiles`,
+    );
+    expect(screen.getByRole("button", { name: "Copy person_key" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete data" })).toBeEnabled();
+    expect(screen.getByText("First visit:").parentElement).toHaveTextContent("Mar 3, 2026");
+    expect(screen.getByText("Last:").parentElement).toHaveTextContent("Oct 12, 2026, 14:01");
+    expect(screen.getByRole("group", { name: "Deletion status" })).toHaveTextContent(
+      "Deletion status:",
+    );
+
+    expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
+    const installs = screen.getByRole("table", { name: "Devices" });
+    expect(
+      within(installs)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Install ID", "Platform", "Device", "OS", "Version", "Location", "First", "Last"]);
+    expect(within(installs).getAllByRole("row")[1]).toHaveTextContent("Mar 3");
+
+    expect(screen.getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    const sessions = screen.getByRole("table", { name: "Sessions" });
+    expect(
+      within(sessions)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Start", "Duration", "Version", "Platform", "Install"]);
+    const rows = within(sessions).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Oct 12, 2026, 14:01");
+    expect(rows[1]).toHaveTextContent("4m 12s");
+    expect(rows[2]).toHaveTextContent("— (no session_end)");
+    expect(screen.getByRole("button", { name: "Show more" })).toBeInTheDocument();
+  });
+
+  it("says in English that a person has no sessions", async () => {
+    mockApi(() => HttpResponse.json(makeProfile({ sessions: [] })));
+    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+
+    expect(await screen.findByText("No sessions")).toBeInTheDocument();
+  });
+
+  it("shows not found in English", async () => {
+    mockApi(() => HttpResponse.json(errorBody("profile_not_found"), { status: 404 }));
+    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A404" />);
+
+    expect(await screen.findByRole("heading", { name: "Profile not found" })).toBeInTheDocument();
+    expect(
+      screen.getByText("The data may have been deleted or hasn't arrived yet."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to search" })).toHaveAttribute(
+      "href",
+      `/apps/${APP_ID}/profiles`,
+    );
   });
 });

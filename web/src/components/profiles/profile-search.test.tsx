@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { ProfileSearch } from "./profile-search";
 
 describe("ProfileSearch", () => {
@@ -45,5 +46,33 @@ describe("ProfileSearch", () => {
   it("disables the button while searching", () => {
     render(<ProfileSearch defaultValue="42" onSearch={vi.fn()} pending />);
     expect(screen.getByRole("button", { name: "Найти" })).toBeDisabled();
+  });
+});
+
+describe("ProfileSearch in English", () => {
+  it("labels, hints and validates in English", async () => {
+    const onSearch = vi.fn();
+    renderWithLocale(<ProfileSearch onSearch={onSearch} />, "en");
+    const user = userEvent.setup();
+
+    const input = screen.getByRole("searchbox", { name: "install_id or user_id" });
+    expect(input).toHaveAttribute("placeholder", "install_id or user_id");
+    expect(input).toHaveAccessibleDescription(
+      "Exact match search. A person_key like u:… or i:… works too.",
+    );
+    await user.type(input, "   ");
+    await user.click(screen.getByRole("button", { name: "Find" }));
+    await waitFor(() =>
+      expect(input).toHaveAccessibleDescription("Enter an install_id or user_id"),
+    );
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
+  it("limits the query to 200 characters in English", async () => {
+    renderWithLocale(<ProfileSearch defaultValue={"a".repeat(201)} onSearch={vi.fn()} />, "en");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Find" }));
+    await waitFor(() =>
+      expect(screen.getByRole("searchbox")).toHaveAccessibleDescription("200 characters at most"),
+    );
   });
 });

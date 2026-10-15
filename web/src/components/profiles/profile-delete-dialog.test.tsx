@@ -1,8 +1,11 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { type RenderOptions, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { DeletionRequest, Profile } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import {
   deletionRequest,
   errorBody,
@@ -11,6 +14,7 @@ import {
 } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { ProfilePanel } from "./profile-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000021";
@@ -173,5 +177,42 @@ describe("ProfileDeleteDialog", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${APP_ID}/profiles`), {
       timeout: 3000,
     });
+  });
+});
+
+function renderEnglish(ui: ReactElement, options: RenderOptions = {}) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    "en",
+    options,
+  );
+}
+
+describe("ProfileDeleteDialog in English", () => {
+  it("confirms deletion with DELETE and reports the request in English", async () => {
+    const created = mockApi();
+    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Delete data" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete all data for this person?" });
+    expect(dialog).toHaveTextContent(
+      "All events and device links for u:42 in the app “Notes iOS” will be deleted.",
+    );
+    expect(dialog).toHaveTextContent("can't be undone");
+    expect(within(dialog).getByText("u:42")).toHaveClass("font-mono");
+    const confirm = within(dialog).getByRole("button", { name: "Delete data" });
+    await user.type(within(dialog).getByRole("textbox"), "УДАЛИТЬ");
+    expect(confirm).toBeDisabled();
+    await user.clear(within(dialog).getByRole("textbox"));
+    await user.type(within(dialog).getByRole("textbox"), "DELETE");
+    await user.click(confirm);
+
+    await waitFor(() => expect(created).toEqual([{ subject_type: "user", subject_value: "42" }]));
+    const status = await screen.findByRole("group", { name: "Deletion status" });
+    await waitFor(() => expect(status).toHaveTextContent("Queued"));
+    expect(toasts.success).toHaveBeenCalledWith("Deletion request created");
   });
 });

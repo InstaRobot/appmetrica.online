@@ -1,12 +1,16 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { type RenderOptions, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProfileSummary } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp, profileSummary } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { ProfileSearchPanel } from "./profile-search-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000023";
@@ -139,5 +143,50 @@ describe("ProfileSearchPanel", () => {
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Повторить" }));
     expect(await screen.findByRole("table", { name: "Результаты" })).toBeInTheDocument();
+  });
+});
+
+function renderEnglish(ui: ReactElement, options: RenderOptions = {}) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    "en",
+    options,
+  );
+}
+
+describe("ProfileSearchPanel in English", () => {
+  it("lists results with English headers and dates", async () => {
+    mockSearch(() => [
+      profileSummary({ installs_count: 1234 }),
+      profileSummary({ person_key: `i:${INSTALL}`, user_id: null, matched_by: "install_id" }),
+    ]);
+    renderEnglish(<ProfileSearchPanel appId={APP_ID} />, {
+      wrapper: withNuqsTestingAdapter({ searchParams: "?q=42" }),
+    });
+
+    expect(screen.getByRole("heading", { name: "Profiles" })).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Results" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Person", "user_id", "Devices", "First visit", "Last"]);
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("1,234");
+    await waitFor(() => expect(rows[1]).toHaveTextContent("Mar 3, 2026"));
+    expect(rows[1]).toHaveTextContent("Oct 12, 2026");
+    expect(screen.getByRole("link", { name: "Profile u:42" })).toBeInTheDocument();
+  });
+
+  it("explains an empty result in English", async () => {
+    mockSearch(() => []);
+    renderEnglish(<ProfileSearchPanel appId={APP_ID} />, {
+      wrapper: withNuqsTestingAdapter({ searchParams: "?q=nobody" }),
+    });
+
+    expect(await screen.findByRole("heading", { name: "Nothing found" })).toBeInTheDocument();
+    expect(screen.getByText(/search only works with an exact install_id or user_id/)).toBeVisible();
   });
 });
