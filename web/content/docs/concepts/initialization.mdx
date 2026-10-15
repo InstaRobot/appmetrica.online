@@ -1,6 +1,6 @@
 ---
 title: Где инициализировать метрику
-description: Точки входа и хуки жизненного цикла для session_start и session_end на iOS, Android, вебе, React Native, Flutter и в ботах.
+description: Точки входа и хуки жизненного цикла для session_start и session_end на iOS, Android, вебе, React Native, Flutter, Kotlin Multiplatform и в ботах.
 ---
 
 Аналитику создают один раз на процесс — в точке входа приложения, до первого экрана. Сессии
@@ -9,8 +9,10 @@ description: Точки входа и хуки жизненного цикла �
 
 Примеры на этой странице вызывают `start()` и `end()` трекера сессий из рецептов
 ([iOS](/docs/recipes/ios-swift), [Android](/docs/recipes/android-kotlin),
-[веб](/docs/recipes/web-js)). Повторный `start()` в той же сессии и `end()` без открытой сессии
-ничего не делают, поэтому дублирующиеся колбэки жизненного цикла безопасны.
+[веб](/docs/recipes/web-js), [React Native](/docs/recipes/react-native),
+[Flutter](/docs/recipes/flutter), [Kotlin Multiplatform](/docs/recipes/kotlin-multiplatform)).
+Повторный `start()` в той же сессии и `end()` без открытой сессии ничего не делают, поэтому
+дублирующиеся колбэки жизненного цикла безопасны.
 
 ## Общие правила [#rules]
 
@@ -30,7 +32,8 @@ description: Точки входа и хуки жизненного цикла �
 | Android | `Application.onCreate` | `ProcessLifecycleOwner`: `onStart` и `onStop` |
 | Веб | Точка входа бандла | `visibilitychange`, `pagehide` |
 | React Native | Корневой компонент | `AppState`: `active` и `background` |
-| Flutter | `main()` | `AppLifecycleState`: `resumed` и `paused` |
+| Flutter | `main()` | `AppLifecycleState`: `resumed` и `paused`, на десктопе `hidden` |
+| Kotlin Multiplatform | Точки входа Android и iOS | Хуки Android и iOS вызывают общий трекер |
 | Бот, бэкенд | Старт процесса | Первое сообщение после паузы, 30 минут тишины |
 
 ## iOS [#ios]
@@ -240,52 +243,117 @@ export default function App() {
 }
 ```
 
-Трекер устроен как в [веб-рецепте](/docs/recipes/web-js#module), но в React Native нет ни
-`localStorage`, ни `sendBeacon`. `install_id` и очередь храните в постоянном хранилище, а `session_end`
-ставьте в очередь и отправляйте через `fetch`: что не успело уйти, отправится при следующем запуске.
+В React Native нет ни `localStorage`, ни `sendBeacon`, поэтому `install_id` хранится в Keychain на
+iOS и в AsyncStorage на Android, очередь — в AsyncStorage, а `session_end` уходит через `fetch`: что
+не успело уйти, отправится при следующем запуске. Трекер, очередь и выбор ключа по `Platform.OS` — в
+[рецепте React Native](/docs/recipes/react-native).
 
 ## Flutter [#flutter]
 
 Точка входа — `main()`. Наблюдатель `WidgetsBindingObserver` получает состояния приложения: `resumed`
-открывает сессию, `paused` закрывает. `inactive` и `hidden` — промежуточные состояния, ещё не фон.
+открывает сессию, `paused` закрывает её на iOS и Android. На десктопе `paused` не приходит, и фон
+там — `hidden`: окно свёрнуто или скрыто. `inactive` — шторка, звонок, окно без фокуса — ещё не фон.
 
 ```dart title="main.dart"
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
-import 'analytics.dart';
+import 'analytics/session_tracker.dart';
 import 'app.dart';
+
+final _desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final tracker = SessionTracker(); // один на процесс
-  WidgetsBinding.instance.addObserver(AnalyticsLifecycle(tracker));
+  analytics.flush(); // один трекер на процесс; запуск может быть фоновым — без session_start
+  WidgetsBinding.instance.addObserver(AnalyticsLifecycle());
   if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-    tracker.start(); // приложение уже на экране
+    analytics.start(); // приложение уже на экране
   }
   runApp(const NotesApp());
 }
 
 class AnalyticsLifecycle with WidgetsBindingObserver {
-  AnalyticsLifecycle(this.tracker);
-
-  final SessionTracker tracker;
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        tracker.start();
+        analytics.start();
       case AppLifecycleState.paused:
-        tracker.end();
+        analytics.end(); // iOS и Android
+      case AppLifecycleState.hidden when _desktop:
+        analytics.end(); // macOS, Windows, Linux: paused здесь не бывает
       default:
-        break; // inactive и hidden — ещё не фон
+        break; // inactive — ещё не фон
     }
   }
 }
 ```
 
-`SessionTracker` — порт трекера из рецептов: `duration_ms` по `Stopwatch` (монотонные часы),
-очередь в файле, отправка через `HttpClient` из `dart:io`.
+`analytics` — трекер из [рецепта Flutter](/docs/recipes/flutter#session-lifecycle): `duration_ms` по
+`Stopwatch` (монотонные часы), очередь в файле, отправка через `package:http`, ключ и
+`context.platform` по текущей ОС.
+
+## Kotlin Multiplatform [#kotlin-multiplatform]
+
+Трекер, очередь и `install_id` живут в общем модуле, а точки входа остаются нативными, как в
+разделах [Android](#android) и [iOS](#ios-swiftui): `Application.onCreate` с `ProcessLifecycleOwner`
+и `App` с `@main` и `scenePhase`. Общий код о жизненном цикле не знает — платформа сама вызывает
+`SessionTracker.start()` и `end()`. Подписку не переносят в общий код: `scenePhase` — API SwiftUI,
+из Kotlin его не прочитать.
+
+```kotlin tab="Android" title="App.kt"
+import analytics.SessionTracker
+import analytics.initAnalytics
+import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+
+class App : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        initAnalytics(this) // Context для actual-функций: SharedPreferences и filesDir
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = SessionTracker.start()
+            override fun onStop(owner: LifecycleOwner) = SessionTracker.end()
+        })
+        SessionTracker.flush() // досылает очередь прошлых запусков
+    }
+}
+```
+
+```swift tab="iOS" title="iOSApp.swift"
+import Shared
+import SwiftUI
+
+@main
+struct iOSApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        SessionTracker.shared.flush() // запуск может быть фоновым, поэтому без session_start
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: SessionTracker.shared.start()
+            case .background: SessionTracker.shared.end()
+            default: break
+            }
+        }
+    }
+}
+```
+
+`SessionTracker` — общий трекер из
+[рецепта Kotlin Multiplatform](/docs/recipes/kotlin-multiplatform#session-lifecycle): ключ и
+`context.platform` подставляют `actual`-функции каждой платформы.
 
 ## Боты и бэкенды [#bots]
 
@@ -319,7 +387,9 @@ class AnalyticsLifecycle with WidgetsBindingObserver {
 | iOS | Keychain, как в [рецепте](/docs/recipes/ios-swift#install-id) |
 | Android | `SharedPreferences` с Auto Backup, как в [рецепте](/docs/recipes/android-kotlin#install-id) |
 | Веб | `localStorage` |
-| React Native, Flutter | Как в нативных рецептах: Keychain на iOS, обычное хранилище с Auto Backup на Android |
+| React Native | Keychain на iOS, AsyncStorage на Android, как в [рецепте](/docs/recipes/react-native#install-id) |
+| Flutter | Keychain на iOS и macOS, `shared_preferences` на остальных, как в [рецепте](/docs/recipes/flutter#install-id) |
+| Kotlin Multiplatform | `SharedPreferences` на Android; на iOS `NSUserDefaults` или Keychain, см. [рецепт](/docs/recipes/kotlin-multiplatform#install-id) |
 | Бот | Выводится из ID чата через HMAC, см. [рецепт](/docs/recipes/bots-and-backends#identity) |
 
 Чем это грозит при потере и что переживает переустановку — в разделе

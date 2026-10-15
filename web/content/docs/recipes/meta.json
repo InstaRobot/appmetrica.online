@@ -1,5 +1,15 @@
 {
   "title": "Рецепты",
-  "pages": ["curl", "ios-swift", "android-kotlin", "web-js", "bots-and-backends", "go"],
+  "pages": [
+    "curl",
+    "ios-swift",
+    "android-kotlin",
+    "web-js",
+    "react-native",
+    "flutter",
+    "kotlin-multiplatform",
+    "bots-and-backends",
+    "go"
+  ],
   "defaultOpen": true
 }

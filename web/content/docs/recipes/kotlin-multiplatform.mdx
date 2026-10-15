@@ -11,8 +11,8 @@ kotlinx.coroutines, UUID — `kotlin.uuid.Uuid`. Платформенное — 
 контекст устройства — объявлено через `expect`/`actual`. Сессии ведут точки входа приложений:
 `ProcessLifecycleOwner` на Android и `scenePhase` в SwiftUI на iOS.
 
-Где создать трекер на каждой платформе — в разделах [Android](/docs/concepts/initialization#android)
-и [iOS](/docs/concepts/initialization#ios-swiftui) страницы «Где инициализировать метрику».
+Где создать трекер на каждой платформе и почему подписка на жизненный цикл остаётся в нативном
+коде, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#kotlin-multiplatform).
 
 Приложение на KMP — одно приложение в appmetrica.online с платформами iOS и Android, а не два. У
 каждой платформы свой ключ на вкладке «Интеграция»: ключ и `context.platform` во время выполнения
