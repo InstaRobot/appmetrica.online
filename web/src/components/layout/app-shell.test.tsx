@@ -1,11 +1,15 @@
 import { screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MessagesProvider } from "@/lib/i18n/client";
+import { getMessages } from "@/messages";
 import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { AppShell } from "./app-shell";
+import { renderWithLocale } from "@/test/rtl";
+import { AppShell, AppShellSkeleton } from "./app-shell";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000001";
 
@@ -121,5 +125,93 @@ describe("AppShell", () => {
     renderShell();
     expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
     expect(screen.queryByText("Отчёт")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell in English", () => {
+  const NuqsAdapter = withNuqsTestingAdapter({ searchParams: "" });
+  const english = ({ children }: { children: ReactNode }) => (
+    <MessagesProvider locale="en" messages={getMessages("en")}>
+      <NuqsAdapter>{children}</NuqsAdapter>
+    </MessagesProvider>
+  );
+  const renderEnglish = () =>
+    renderWithClient(
+      <AppShell>
+        <p>Report</p>
+      </AppShell>,
+      { wrapper: english },
+    );
+
+  it("names the platforms and the tabs in English", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () =>
+        HttpResponse.json(
+          makeApp({ id: APP_ID, name: "Notes", platform: "ios", platforms: ["ios", "web"] }),
+        ),
+      ),
+    );
+    renderEnglish();
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByText("iOS, Web", { selector: "[data-slot=badge]" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Audience" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows not found in English", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () =>
+        HttpResponse.json(errorBody("app_not_found"), { status: 404 }),
+      ),
+    );
+    renderEnglish();
+
+    expect(
+      await screen.findByRole("heading", { name: "The app was not found or has been deleted" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Check the address or pick an app in the portfolio.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Go to portfolio" })).toHaveAttribute(
+      "href",
+      "/portfolio",
+    );
+  });
+
+  it("warns about an archived app in English", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () =>
+        HttpResponse.json(
+          makeApp({ id: APP_ID, status: "archived", archived_at: "2026-10-01T00:00:00Z" }),
+        ),
+      ),
+    );
+    renderEnglish();
+
+    expect(
+      await screen.findByText(
+        "This app is archived: its events are rejected with the app_archived code.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a retryable error in English", async () => {
+    server.use(
+      http.get(`*/v1/apps/${APP_ID}`, () =>
+        HttpResponse.json(errorBody("internal_error", "boom", "01JREQ"), { status: 500 }),
+      ),
+    );
+    renderEnglish();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Server error. Try again in a minute.",
+    );
+    expect(screen.getByText("Request ID: 01JREQ")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy request ID" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  it("announces loading in English", () => {
+    renderWithLocale(<AppShellSkeleton />, "en");
+
+    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument();
   });
 });

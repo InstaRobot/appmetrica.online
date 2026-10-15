@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
+import { renderWithLocale } from "@/test/rtl";
 import { ThemeToggle } from "./theme-toggle";
 
 const root = () => document.documentElement;
@@ -36,5 +37,13 @@ describe("ThemeToggle", () => {
     render(<ThemeToggle />);
 
     expect(screen.getByRole("button", { name: "Включить светлую тему" })).toBeInTheDocument();
+  });
+
+  it("speaks English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<ThemeToggle />, "en");
+
+    await user.click(screen.getByRole("button", { name: "Switch to dark theme" }));
+    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeInTheDocument();
   });
 });

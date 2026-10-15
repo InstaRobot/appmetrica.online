@@ -1,8 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getListAppsMockHandler } from "@/lib/api/gen/endpoints/apps/apps.msw";
+import { MessagesProvider } from "@/lib/i18n/client";
+import { getMessages } from "@/messages";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -124,7 +127,7 @@ describe("AppHeader", () => {
     );
     expect(within(mainNav()).getByRole("link", { name: "Документация" })).toHaveAttribute(
       "href",
-      "/docs",
+      "/ru/docs",
     );
     await expectSwitcher("Все приложения");
     expect(screen.getByRole("link", { name: "appmetrica.online — в портфель" })).toHaveAttribute(
@@ -223,13 +226,78 @@ describe("AppHeader", () => {
   });
 });
 
-describe("AppHeader theme switch", () => {
-  it("offers the light/dark theme toggle next to the navigation", async () => {
+describe("AppHeader theme and language switches", () => {
+  it("offers the theme toggle and the language switch next to the navigation", async () => {
     document.documentElement.dataset.theme = "light";
 
     renderWithClient(<AppHeader />);
 
     expect(await screen.findByRole("button", { name: "Включить тёмную тему" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Переключить на English" })).toHaveTextContent("EN");
+  });
+
+  it("marks the Russian docs as active inside the Russian documentation", () => {
+    at("/ru/docs/recipes/curl");
+
+    renderWithClient(<AppHeader />);
+
+    expect(within(mainNav()).getByRole("link", { name: "Документация" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+});
+
+const english = ({ children }: { children: ReactNode }) => (
+  <MessagesProvider locale="en" messages={getMessages("en")}>
+    {children}
+  </MessagesProvider>
+);
+
+describe("AppHeader in English", () => {
+  it("speaks English and links the English docs", async () => {
+    const user = userEvent.setup();
+    document.documentElement.dataset.theme = "light";
+    at("/docs/recipes/curl");
+    renderWithClient(<AppHeader />, { wrapper: english });
+
+    const navigation = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(navigation).getByRole("link", { name: "Portfolio" })).toHaveAttribute(
+      "href",
+      "/portfolio",
+    );
+    const docs = within(navigation).getByRole("link", { name: "Documentation" });
+    expect(docs).toHaveAttribute("href", "/docs");
+    expect(docs).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getByRole("link", { name: "Settings" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "appmetrica.online — go to portfolio" }),
+    ).toHaveAttribute("href", "/portfolio");
+    expect(screen.getByRole("button", { name: "Switch to dark theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to Русский" })).toHaveTextContent("RU");
+
+    const appSwitcher = await screen.findByRole("combobox", { name: "App" });
+    await waitFor(() => expect(appSwitcher).toHaveTextContent("All apps"));
+    await user.click(appSwitcher);
+    await user.type(await screen.findByPlaceholderText("Find an app…"), "zzz");
+    expect(screen.getByText("Nothing found")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "+ Add app" })).toBeInTheDocument();
+  });
+
+  it("offers to sign out or to leave the demo", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithClient(<AppHeader />, { wrapper: english });
+
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    expect(await screen.findByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
+    unmount();
+
+    renderWithClient(<AppHeader demo />, { wrapper: english });
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    expect(await screen.findByRole("menuitem", { name: "Exit demo" })).toHaveAttribute(
+      "href",
+      "/demo/exit",
+    );
   });
 });
 
@@ -240,7 +308,7 @@ describe("AppHeader in demo mode", () => {
 
     expect(within(mainNav()).getByRole("link", { name: "Документация" })).toHaveAttribute(
       "href",
-      "/docs",
+      "/ru/docs",
     );
     expect(within(mainNav()).getByRole("link", { name: "Портфель" })).toBeInTheDocument();
 

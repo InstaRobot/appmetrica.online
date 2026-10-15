@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { AppTabs, reportQuery } from "./app-tabs";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000001";
@@ -28,6 +29,23 @@ describe("AppTabs", () => {
     expect(tab("Retention")).toHaveAttribute("href", `/apps/${APP_ID}/retention?platform=ios`);
     expect(tab("Realtime")).toHaveAttribute("href", `/apps/${APP_ID}/realtime?platform=ios`);
     expect(tab("Профили")).toHaveAttribute("href", `/apps/${APP_ID}/profiles?platform=ios`);
+  });
+
+  it("names the tabs in English", () => {
+    renderWithLocale(<AppTabs appId={APP_ID} />, "en");
+
+    const tabs = within(screen.getByRole("navigation", { name: "App sections" })).getAllByRole(
+      "link",
+    );
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Audience",
+      "Retention",
+      "Realtime",
+      "Profiles",
+      "Integration",
+      "Settings",
+    ]);
+    expect(tabs[0]).toHaveAttribute("aria-current", "page");
   });
 
   it("drops parameters of a single report", () => {
