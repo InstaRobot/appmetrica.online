@@ -31,17 +31,21 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 // Сводка по person (14-ux-ui-spec.md S-09): person_key с копированием, даты в TZ приложения,
 // статус удаления. Пока запрос в очереди или выполняется, «Удалить данные» недоступна.
+// На телефоне кнопка удаления переносится под person_key и растягивается на всю ширину.
 export function ProfileCard({ profile, timezone, deletion, onDelete }: ProfileCardProps) {
   const copy = useCopyText();
   const t = useMessages().profiles.card;
   const f = useFormat();
   return (
     <Card className="gap-4 px-6">
-      <div className="flex items-start gap-3">
-        <h2 className="min-w-0 font-mono text-heading-3 break-all">{profile.person_key}</h2>
+      <div className="flex items-start gap-3 max-md:flex-wrap">
+        <h2 className="min-w-0 font-mono text-heading-3 break-all max-md:flex-1">
+          {profile.person_key}
+        </h2>
         <Button
           variant="ghost"
           size="icon-sm"
+          className="max-md:size-11"
           aria-label={t.copyKey}
           onClick={() => void copy(profile.person_key)}
         >
@@ -49,7 +53,7 @@ export function ProfileCard({ profile, timezone, deletion, onDelete }: ProfileCa
         </Button>
         <Button
           variant="outline"
-          className="ml-auto text-destructive"
+          className="ml-auto text-destructive max-md:ml-0 max-md:h-11 max-md:w-full"
           disabled={isDeletionActive(deletion)}
           onClick={onDelete}
         >

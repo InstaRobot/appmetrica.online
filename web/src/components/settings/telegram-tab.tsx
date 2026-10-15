@@ -186,7 +186,8 @@ function TelegramForm({ settings }: { settings: Settings }) {
         </Alert>
       ) : null}
 
-      <div className="flex justify-end gap-2">
+      {/* На телефоне кнопки во всю ширину, «Сохранить» — сверху. */}
+      <div className="flex justify-end gap-2 max-md:flex-col-reverse">
         <Button
           type="button"
           variant="outline"

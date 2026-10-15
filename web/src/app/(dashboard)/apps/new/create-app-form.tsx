@@ -125,7 +125,8 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
             )}
           </div>
 
-          <div className="flex justify-end gap-2">
+          {/* На телефоне кнопки во всю ширину, основное действие — сверху. */}
+          <div className="flex justify-end gap-2 max-md:flex-col-reverse">
             <Button variant="outline" asChild>
               <Link href="/portfolio">{m.common.cancel}</Link>
             </Button>

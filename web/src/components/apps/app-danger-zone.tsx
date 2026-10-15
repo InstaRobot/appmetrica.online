@@ -35,6 +35,7 @@ const MergeAppsDialog = lazy(() =>
 // «Опасная зона» S-11 (FR-009): архивирование (ingest отвечает 403 app_archived), возврат из архива и
 // удаление навсегда вводом точного названия. Удаление выполняет worker, экран сразу уходит в портфель.
 // Слияние другого приложения в это; пока оно не завершено, опасные действия недоступны.
+// На телефоне кнопка каждого действия стоит под его описанием и растянута на всю ширину.
 export function AppDangerZone({ app }: { app: App }) {
   const m = useMessages();
   const t = m.apps.danger;
@@ -96,7 +97,7 @@ export function AppDangerZone({ app }: { app: App }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {busy ? <p className="text-body-sm text-fg-subtle">{t.mergeBusy}</p> : null}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
           <div className="flex flex-col gap-1">
             <p className="text-body-md font-medium">{t.mergeTitle}</p>
             <p className="text-body-md">{t.mergeDescription}</p>
@@ -114,7 +115,7 @@ export function AppDangerZone({ app }: { app: App }) {
           </Button>
         </div>
         <Separator />
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
           <p className="text-body-md">{archived ? t.archivedText : t.archiveText}</p>
           {archived ? (
             <Button
@@ -131,7 +132,7 @@ export function AppDangerZone({ app }: { app: App }) {
           )}
         </div>
         <Separator />
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
           <p className="text-body-md">{t.deleteText}</p>
           <Button
             variant="outline"

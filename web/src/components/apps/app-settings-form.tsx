@@ -163,7 +163,7 @@ function AppBasicsCard({ app }: { app: App }) {
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={!dirty || form.submitting}>
+            <Button type="submit" className="max-md:w-full" disabled={!dirty || form.submitting}>
               {form.submitting ? t.actions.saving : m.common.save}
             </Button>
           </div>
@@ -238,7 +238,11 @@ function AppPlatformsCard({ app }: { app: App }) {
               {t.settings.platforms.hint}
             </p>
             <div className="flex justify-end">
-              <Button type="submit" disabled={demo || empty || !dirty || pending}>
+              <Button
+                type="submit"
+                className="max-md:w-full"
+                disabled={demo || empty || !dirty || pending}
+              >
                 {pending ? t.actions.saving : m.common.save}
               </Button>
             </div>

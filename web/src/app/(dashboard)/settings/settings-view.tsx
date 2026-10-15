@@ -66,7 +66,11 @@ export function SettingsView() {
 
   return (
     <Tabs value={tab} onValueChange={(value) => void setTab(value as Tab)} className="gap-6">
-      <TabsList aria-label={m.tabsLabel}>
+      {/* На узком телефоне пять вкладок не помещаются: список прокручивается сам, а не страница. */}
+      <TabsList
+        aria-label={m.tabsLabel}
+        className="max-md:max-w-full max-md:justify-start max-md:overflow-x-auto"
+      >
         {TABS.map((t) => (
           <TabsTrigger key={t.value} value={t.value}>
             {m.tabs[t.label]}
