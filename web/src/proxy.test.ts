@@ -154,6 +154,19 @@ describe("proxy language routing", () => {
     expect(savedLocale(res)).toBe("en");
   });
 
+  it("marks its own rewrite so the second pass does not send /en back to /", () => {
+    const first = proxy(request("/docs/recipes/curl", undefined, "en-US"));
+    expect(first.headers.get("x-middleware-request-x-am-locale-rewrite")).toBe("1");
+
+    // Next прогоняет переписанный запрос через proxy ещё раз — с заголовками из rewrite.
+    const again = new NextRequest(new URL("/en/docs/recipes/curl", "http://localhost:3000"), {
+      headers: new Headers({ "x-am-locale-rewrite": "1" }),
+    });
+    const second = proxy(again);
+    expect(passesThrough(second)).toBe(true);
+    expect(savedLocale(second)).toBeNull();
+  });
+
   it("does not treat lookalike prefixes as languages", () => {
     expect(proxy(request("/russia")).status).toBe(307);
     expect(proxy(request("/english")).status).toBe(307);
