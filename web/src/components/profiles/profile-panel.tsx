@@ -16,6 +16,7 @@ import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetDeletionRequest } from "@/lib/api/gen/endpoints/deletion/deletion";
 import { getGetProfileQueryKey, getProfile } from "@/lib/api/gen/endpoints/profiles/profiles";
 import type { App, DeletionRequest } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 import { decodePersonKey, encodePersonKey, type PersonKey } from "@/lib/person-key";
 import { toast } from "@/lib/toast";
 import { InstallsTable } from "./installs-table";
@@ -37,13 +38,14 @@ type ProfilePanelProps = {
 const searchHref = (appId: string) => `/apps/${appId}/profiles` as Route;
 
 function NotFound({ appId }: { appId: string }) {
+  const m = useMessages().profiles;
   return (
     <Card className="px-6">
       <EmptyState
         icon={UserX}
-        title="Профиль не найден"
-        description="Возможно, данные удалены или ещё не поступили."
-        action={{ label: "К поиску", href: searchHref(appId) }}
+        title={m.notFound.title}
+        description={m.notFound.description}
+        action={{ label: m.backToSearch, href: searchHref(appId) }}
       />
     </Card>
   );
@@ -97,6 +99,7 @@ function useDeletion(appId: string, key: PersonKey) {
 }
 
 function ProfileView({ app, personKey }: { app: App; personKey: PersonKey }) {
+  const m = useMessages().profiles;
   const router = useRouter();
   const encoded = encodePersonKey(personKey);
   const profile = useInfiniteQuery({
@@ -126,10 +129,10 @@ function ProfileView({ app, personKey }: { app: App; personKey: PersonKey }) {
   const doneId = deletion?.status === "done" && deletion.id === watchedId ? deletion.id : null;
   useEffect(() => {
     if (!doneId) return;
-    toast.success("Данные удалены", { id: `deletion-${doneId}` });
+    toast.success(m.deleted, { id: `deletion-${doneId}` });
     const timer = setTimeout(() => router.push(searchHref(app.id)), REDIRECT_MS);
     return () => clearTimeout(timer);
-  }, [doneId, router, app.id]);
+  }, [doneId, router, app.id, m.deleted]);
 
   if (profile.isPending) return <ProfileSkeleton />;
   if (profile.isError) {
@@ -155,7 +158,8 @@ function ProfileView({ app, personKey }: { app: App; personKey: PersonKey }) {
         href={searchHref(app.id)}
         className="inline-flex w-fit items-center gap-1 text-body-md text-fg-link hover:underline"
       >
-        <ArrowLeft aria-hidden="true" className="size-4" />К поиску
+        <ArrowLeft aria-hidden="true" className="size-4" />
+        {m.backToSearch}
       </Link>
       <ProfileCard
         profile={first}
@@ -164,11 +168,11 @@ function ProfileView({ app, personKey }: { app: App; personKey: PersonKey }) {
         onDelete={() => setDialogOpen(true)}
       />
       <Card className="gap-4 px-6">
-        <h3 className="text-heading-3">Устройства</h3>
+        <h3 className="text-heading-3">{m.installsTitle}</h3>
         <InstallsTable installs={first.installs} timezone={app.timezone} />
       </Card>
       <Card className="gap-4 px-6">
-        <h3 className="text-heading-3">Сессии</h3>
+        <h3 className="text-heading-3">{m.sessionsTitle}</h3>
         <SessionsTable
           sessions={sessions}
           timezone={app.timezone}

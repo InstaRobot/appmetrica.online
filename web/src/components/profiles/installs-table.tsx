@@ -1,3 +1,5 @@
+"use client";
+
 import { PlatformIcon, platformLabel } from "@/components/common/platform-icon";
 import {
   Table,
@@ -8,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProfileInstall } from "@/lib/api/gen/model";
-import { formatDateShort, shortId } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
 
 type InstallsTableProps = { installs: ProfileInstall[]; timezone: string };
 
@@ -25,19 +27,21 @@ function os(i: ProfileInstall): string {
 
 // Устройства человека (14-ux-ui-spec.md S-09): контекст последнего события установки, даты — в TZ приложения.
 export function InstallsTable({ installs, timezone }: InstallsTableProps) {
+  const t = useMessages().profiles.installs;
+  const { formatDateShort, shortId } = useFormat();
   return (
     <Table>
-      <caption className="sr-only">Устройства</caption>
+      <caption className="sr-only">{t.caption}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Install ID</TableHead>
-          <TableHead>Платформа</TableHead>
-          <TableHead>Устройство</TableHead>
-          <TableHead>ОС</TableHead>
-          <TableHead>Версия</TableHead>
-          <TableHead>Гео</TableHead>
-          <TableHead className="text-right">Первый</TableHead>
-          <TableHead className="text-right">Последний</TableHead>
+          <TableHead>{t.columns.installId}</TableHead>
+          <TableHead>{t.columns.platform}</TableHead>
+          <TableHead>{t.columns.device}</TableHead>
+          <TableHead>{t.columns.os}</TableHead>
+          <TableHead>{t.columns.version}</TableHead>
+          <TableHead>{t.columns.geo}</TableHead>
+          <TableHead className="text-right">{t.columns.firstSeen}</TableHead>
+          <TableHead className="text-right">{t.columns.lastSeen}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

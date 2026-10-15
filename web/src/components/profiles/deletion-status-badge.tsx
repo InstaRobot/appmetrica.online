@@ -1,5 +1,8 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import type { DeletionStatus } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type DeletionStatusBadgeProps = { status: DeletionStatus; className?: string };
@@ -7,11 +10,11 @@ type DeletionStatusBadgeProps = { status: DeletionStatus; className?: string };
 type Tone = "neutral" | "info" | "success" | "danger";
 
 // Статус запроса на удаление (14-ux-ui-spec.md §16.11). pending — «В очереди» по AC-042.1 (OQ-058).
-const STATUS: Record<DeletionStatus, { label: string; tone: Tone }> = {
-  pending: { label: "В очереди", tone: "neutral" },
-  running: { label: "Выполняется", tone: "info" },
-  done: { label: "Удалено", tone: "success" },
-  failed: { label: "Ошибка", tone: "danger" },
+const TONE: Record<DeletionStatus, Tone> = {
+  pending: "neutral",
+  running: "info",
+  done: "success",
+  failed: "danger",
 };
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -22,7 +25,8 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 export function DeletionStatusBadge({ status, className }: DeletionStatusBadgeProps) {
-  const { label, tone } = STATUS[status];
+  const label = useMessages().profiles.deletionStatus[status];
+  const tone = TONE[status];
   return (
     <Badge data-tone={tone} className={cn(TONE_CLASS[tone], className)}>
       {label}

@@ -21,7 +21,8 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useSearchProfiles } from "@/lib/api/gen/endpoints/profiles/profiles";
 import type { ProfileSummary } from "@/lib/api/gen/model";
-import { formatDate, formatInt, shortId } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { type PersonKind, parseSearchQuery, profileHref } from "@/lib/person-key";
 import { ProfileSearch } from "./profile-search";
 
@@ -39,6 +40,7 @@ type ProfileSearchPanelProps = { appId: string };
 // Единственный результат поиска, отправленного на этой странице, сразу открывает S-09; поиск из URL
 // («Назад», ссылка) показывает таблицу, чтобы не уводить с экрана повторно.
 export function ProfileSearchPanel({ appId }: ProfileSearchPanelProps) {
+  const m = useMessages().profiles;
   const router = useRouter();
   const app = useGetApp(appId);
   const timezone = app.data?.status === 200 ? app.data.data.timezone : undefined;
@@ -66,7 +68,7 @@ export function ProfileSearchPanel({ appId }: ProfileSearchPanelProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <h2 className="text-heading-2">Профили</h2>
+      <h2 className="text-heading-2">{m.title}</h2>
       <Card className="px-6">
         <ProfileSearch defaultValue={q} onSearch={onSearch} pending={search.isFetching} />
       </Card>
@@ -96,30 +98,26 @@ type SearchResultsProps = {
 };
 
 function SearchResults({ appId, timezone, searchable, items, error, onRetry }: SearchResultsProps) {
+  const t = useMessages().profiles.results;
+  const { formatDate, formatInt, shortId } = useFormat();
   if (error) {
     return <ErrorState error={error} onRetry={onRetry} />;
   }
   if (searchable && !items) return <TableSkeleton rows={2} />;
   if (!items || items.length === 0) {
-    return (
-      <EmptyState
-        icon={SearchX}
-        title="Ничего не найдено"
-        description="Проверьте значение: поиск работает только по точному совпадению install_id или user_id. Данные старше 25 месяцев удаляются."
-      />
-    );
+    return <EmptyState icon={SearchX} title={t.emptyTitle} description={t.emptyDescription} />;
   }
 
   return (
     <Table>
-      <caption className="sr-only">Результаты</caption>
+      <caption className="sr-only">{t.caption}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Человек</TableHead>
-          <TableHead>user_id</TableHead>
-          <TableHead className="text-right">Устройств</TableHead>
-          <TableHead className="text-right">Первый визит</TableHead>
-          <TableHead className="text-right">Последний</TableHead>
+          <TableHead>{t.columns.person}</TableHead>
+          <TableHead>{t.columns.userId}</TableHead>
+          <TableHead className="text-right">{t.columns.installs}</TableHead>
+          <TableHead className="text-right">{t.columns.firstSeen}</TableHead>
+          <TableHead className="text-right">{t.columns.lastSeen}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -128,7 +126,7 @@ function SearchResults({ appId, timezone, searchable, items, error, onRetry }: S
             <TableCell className="font-mono text-code">
               <Link
                 href={profileHref(appId, p.person_key)}
-                aria-label={`Профиль ${p.person_key}`}
+                aria-label={fmt(t.profileLink, { key: p.person_key })}
                 title={p.person_key}
                 className="text-fg-link hover:underline"
               >

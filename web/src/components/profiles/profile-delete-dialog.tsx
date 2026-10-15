@@ -4,6 +4,8 @@ import { useMutation } from "@tanstack/react-query";
 import { ConfirmDeleteDialog } from "@/components/feedback/confirm-delete-dialog";
 import { createDeletionRequest } from "@/lib/api/gen/endpoints/deletion/deletion";
 import type { DeletionRequest } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { deletionSubject, formatPersonKey, type PersonKey } from "@/lib/person-key";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
@@ -28,6 +30,7 @@ export function ProfileDeleteDialog({
   onOpenChange,
   onCreated,
 }: ProfileDeleteDialogProps) {
+  const t = useMessages().profiles.deleteDialog;
   const uiError = useUiError();
   const create = useMutation({
     mutationFn: () => createDeletionRequest(appId, deletionSubject(personKey)),
@@ -37,13 +40,18 @@ export function ProfileDeleteDialog({
     try {
       const res = await create.mutateAsync();
       if (res.status !== 202) return;
-      toast.success("Запрос на удаление создан");
+      toast.success(t.created);
       onCreated(res.data);
       onOpenChange(false);
     } catch {
       // Текст ошибки показывает serverError диалога.
     }
   };
+
+  // person_key в описании — моноширинный: текст словаря делится по плейсхолдеру {key}.
+  const [before = "", after = ""] = t.description
+    .split("{key}")
+    .map((part) => fmt(part, { app: appName }));
 
   return (
     <ConfirmDeleteDialog
@@ -52,17 +60,16 @@ export function ProfileDeleteDialog({
         if (!next) create.reset();
         onOpenChange(next);
       }}
-      title="Удалить все данные этого человека?"
+      title={t.title}
       description={
         <>
-          Будут удалены все события и связки устройств для{" "}
-          <span className="font-mono break-all">{formatPersonKey(personKey)}</span> в приложении «
-          {appName}». Агрегаты закрытых дней не меняются. Удаление выполняется в фоне до 24 часов и
-          необратимо.
+          {before}
+          <span className="font-mono break-all">{formatPersonKey(personKey)}</span>
+          {after}
         </>
       }
-      confirmText="УДАЛИТЬ"
-      confirmLabel="Удалить данные"
+      confirmText={t.confirmText}
+      confirmLabel={t.confirm}
       pending={create.isPending}
       {...(create.isError ? { serverError: uiError(create.error).message } : {})}
       onConfirm={confirm}

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useMessages } from "@/lib/i18n/client";
 
 type ProfileSearchProps = {
   defaultValue?: string;
@@ -14,9 +15,6 @@ type ProfileSearchProps = {
 
 // F-8 (14-ux-ui-spec.md §7.1): значение обрезается по краям, 1–200 символов.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.profileSearchSchema);
-const messages = {
-  q: { too_small: "Введите install_id или user_id", too_big: "Не длиннее 200 символов" },
-};
 const HINT_ID = "profile-search-hint";
 
 // Поиск профиля по точному install_id или user_id (14-ux-ui-spec.md S-08, FR-016): Enter или «Найти».
@@ -25,9 +23,10 @@ export function ProfileSearch({
   onSearch,
   pending = false,
 }: ProfileSearchProps) {
+  const t = useMessages().profiles.search;
   const form = useZodForm(schema, {
     defaultValues: { q: defaultValue },
-    messages,
+    messages: { q: { too_small: t.required, too_big: t.tooLong } },
     onSubmit: ({ q }) => onSearch(q),
   });
   const field = form.field("q");
@@ -36,7 +35,7 @@ export function ProfileSearch({
     <search>
       <form noValidate onSubmit={form.handleSubmit} className="flex flex-col gap-1.5">
         <Label htmlFor={field.id} className="sr-only">
-          install_id или user_id
+          {t.label}
         </Label>
         <div className="flex gap-2">
           <Input
@@ -44,7 +43,7 @@ export function ProfileSearch({
             type="search"
             autoComplete="off"
             spellCheck={false}
-            placeholder="install_id или user_id"
+            placeholder={t.label}
             className="font-mono text-code"
             aria-describedby={field["aria-describedby"] ?? HINT_ID}
             value={form.values.q}
@@ -52,7 +51,7 @@ export function ProfileSearch({
           />
           <Button type="submit" disabled={pending}>
             <Search aria-hidden="true" />
-            Найти
+            {t.submit}
           </Button>
         </div>
         {form.errors.q ? (
@@ -62,7 +61,7 @@ export function ProfileSearch({
           </p>
         ) : (
           <p id={HINT_ID} className="text-caption text-fg-muted">
-            Поиск по точному совпадению. person_key вида u:… или i:… тоже подходит.
+            {t.hint}
           </p>
         )}
       </form>

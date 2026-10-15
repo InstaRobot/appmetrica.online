@@ -1,3 +1,5 @@
+"use client";
+
 import { platformLabel } from "@/components/common/platform-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProfileSession } from "@/lib/api/gen/model";
-import { formatDateTime, formatDuration, shortId } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
 
 type SessionsTableProps = {
   sessions: ProfileSession[];
@@ -27,21 +29,23 @@ export function SessionsTable({
   onLoadMore,
   loadingMore = false,
 }: SessionsTableProps) {
+  const t = useMessages().profiles.sessions;
+  const { formatDateTime, formatDuration, shortId } = useFormat();
   if (sessions.length === 0) {
-    return <p className="text-body-md text-fg-muted">Сессий нет</p>;
+    return <p className="text-body-md text-fg-muted">{t.empty}</p>;
   }
 
   return (
     <div className="flex flex-col gap-3">
       <Table>
-        <caption className="sr-only">Сессии</caption>
+        <caption className="sr-only">{t.caption}</caption>
         <TableHeader>
           <TableRow>
-            <TableHead>Начало</TableHead>
-            <TableHead>Длительность</TableHead>
-            <TableHead>Версия</TableHead>
-            <TableHead>Платформа</TableHead>
-            <TableHead>Install</TableHead>
+            <TableHead>{t.columns.start}</TableHead>
+            <TableHead>{t.columns.duration}</TableHead>
+            <TableHead>{t.columns.version}</TableHead>
+            <TableHead>{t.columns.platform}</TableHead>
+            <TableHead>{t.columns.install}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -52,7 +56,7 @@ export function SessionsTable({
               </TableCell>
               <TableCell className="tabular-nums">
                 {s.ended_at === null ? (
-                  <span className="text-fg-muted">— (нет session_end)</span>
+                  <span className="text-fg-muted">{t.noEnd}</span>
                 ) : (
                   formatDuration(s.duration_ms)
                 )}
@@ -74,7 +78,7 @@ export function SessionsTable({
           aria-busy={loadingMore || undefined}
           onClick={onLoadMore}
         >
-          Показать ещё
+          {t.more}
         </Button>
       ) : null}
     </div>
