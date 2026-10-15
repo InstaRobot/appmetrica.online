@@ -340,8 +340,7 @@ jqt() { # name json filter — фильтр должен вернуть true
 
 jqt "deploy: вход ref в workflow_dispatch" "$deploy_wf" '.on.workflow_dispatch.inputs | has("ref") and has("tag") and has("services")'
 jqt "deploy: те же входы в workflow_call" "$deploy_wf" '.on.workflow_call.inputs | has("ref") and has("tag") and has("services")'
-jqt "deploy: запуск после зелёного CI на main" "$deploy_wf" '.on.workflow_run.workflows == ["CI"] and .on.workflow_run.branches == ["main"]'
-jqt "deploy: автодеплой только по push в main с зелёным CI" "$deploy_wf" '.jobs.plan.if | test("conclusion == .success.") and test("workflow_run.event == .push.")'
+jqt "deploy: только ручной запуск и вызов из geo-refresh — прод выкатывает Dokploy Compose по push" "$deploy_wf" '.on | has("workflow_run") | not'
 jqt "deploy: jobs plan → build → deploy → prune" "$deploy_wf" '.jobs | has("plan") and has("build") and has("deploy") and has("prune")'
 jqt "deploy: build пишет в GHCR" "$deploy_wf" '.jobs.build.permissions.packages == "write"'
 jqt "deploy: build передаёт GEO_MONTH" "$deploy_wf" '[.jobs.build.steps[] | .with["build-args"]? // "" | test("GEO_MONTH=")] | any'
