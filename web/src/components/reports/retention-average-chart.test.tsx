@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { renderWithLocale } from "@/test/rtl";
 import { RetentionAverageChart } from "./retention-average-chart";
 
 const plain = (text: string | null) => (text ?? "").replace(/ /g, " ");
@@ -47,5 +48,40 @@ describe("RetentionAverageChart", () => {
 
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByText("Нет данных за выбранный период")).toBeInTheDocument();
+  });
+});
+
+describe("RetentionAverageChart in English", () => {
+  it("describes and lists the key points in English", async () => {
+    const user = userEvent.setup();
+    renderWithLocale(<RetentionAverageChart average={dayAverage} granularity="day" />, "en");
+
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "Average retention curve by day: D1 40%, D7 5.7%, D30 no data",
+    );
+    const keys = screen.getByRole("list", { name: "Key retention points" });
+    expect(
+      within(keys)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["D140%", "D75.7%", "D30—"]);
+
+    await user.click(screen.getByRole("button", { name: "Show as table" }));
+    expect(within(screen.getByRole("table")).getAllByRole("row")[0]).toHaveTextContent(
+      "DayAverage retention",
+    );
+  });
+
+  it("uses weeks and the placeholder in English", () => {
+    const { rerender } = renderWithLocale(
+      <RetentionAverageChart average={[1, 0.3, 0.2, 0.15, 0.12]} granularity="week" />,
+      "en",
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "Average retention curve by week: W1 30%, W4 12%",
+    );
+
+    rerender(<RetentionAverageChart average={[null, null]} granularity="week" />);
+    expect(screen.getByText("No data for the selected period")).toBeInTheDocument();
   });
 });

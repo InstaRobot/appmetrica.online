@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { RetentionMatrix } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { RetentionHeatmap } from "./retention-heatmap";
 
 const dayMatrix: RetentionMatrix = {
@@ -174,5 +175,60 @@ describe("RetentionHeatmap", () => {
       "sticky",
       "left-0",
     );
+  });
+});
+
+describe("RetentionHeatmap in English", () => {
+  it("names the matrix, its headers and rows in English", () => {
+    renderWithLocale(<RetentionHeatmap matrix={dayMatrix} granularity="day" />, "en");
+
+    expect(
+      screen.getByRole("region", { name: "Cohort matrix, scrolls horizontally" }),
+    ).toBeInTheDocument();
+    const table = screen.getByRole("table", {
+      name: "Retention by day: share of the cohort that returned on day N",
+    });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => plain(h.textContent)),
+    ).toEqual(["Cohort", "Size", "D0", "D1", "D2", "D3"]);
+    expect(
+      within(table)
+        .getAllByRole("rowheader")
+        .map((h) => plain(h.textContent)),
+    ).toEqual(["Average", "Oct 9, 2026", "Oct 10, 2026", "Oct 11, 2026", "Oct 12, 2026"]);
+    expect(within(table).getAllByRole("cell", { name: "no data" })).toHaveLength(10);
+    expect(plain(within(table).getByRole("cell", { name: "38.1%" }).getAttribute("title"))).toBe(
+      "Cohort Oct 9, 2026 (1,310 people) · day 1: 499 people (38.1%)",
+    );
+  });
+
+  it("counts installs and a single person in English", () => {
+    const { rerender } = renderWithLocale(
+      <RetentionHeatmap matrix={weekMatrix} granularity="week" unit="installs" />,
+      "en",
+    );
+    const table = screen.getByRole("table", {
+      name: "Retention by week: share of the cohort that returned in week N",
+    });
+    expect(plain(within(table).getByRole("cell", { name: "14.2%" }).getAttribute("title"))).toBe(
+      "Cohort Sep 28 – Oct 4 (2,400 installs) · week 2: 341 installs (14.2%)",
+    );
+
+    rerender(
+      <RetentionHeatmap
+        matrix={{
+          cohort_granularity: "day",
+          periods: 1,
+          average: [1, 1],
+          cohorts: [{ cohort_start: "2026-10-09", size: 1, values: [1, 1] }],
+        }}
+        granularity="day"
+      />,
+    );
+    expect(
+      plain(screen.getAllByRole("cell", { name: "100%" }).at(-1)?.getAttribute("title") ?? ""),
+    ).toBe("Cohort Oct 9, 2026 (1 person) · day 1: 1 person (100%)");
   });
 });
