@@ -1,11 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { generateMetadata } from "@/app/[lang]/page";
+import { renderWithLocale } from "@/test/rtl";
 import { GITHUB_URL, LandingPage } from "./landing-page";
 
 // S-00 Лендинг (макет «Dashboard v2», решение владельца): публичная страница на «/».
 describe("LandingPage", () => {
   it("leads with the product promise and the three entry points", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     expect(
       screen.getByRole("heading", {
@@ -31,7 +33,7 @@ describe("LandingPage", () => {
   });
 
   it("has its own header with the logo, docs, theme switch and sign-in", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     const header = screen.getByRole("banner");
     expect(within(header).getByRole("link", { name: "Документация" })).toHaveAttribute(
@@ -43,7 +45,7 @@ describe("LandingPage", () => {
   });
 
   it("states the ingest limits from the spec", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     const facts = screen.getByRole("list", { name: "Ключевые ограничения" });
     expect(
@@ -59,7 +61,7 @@ describe("LandingPage", () => {
   });
 
   it("lists the six report areas and the three integration steps", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
       "Приём событий по HTTP",
@@ -75,7 +77,7 @@ describe("LandingPage", () => {
   });
 
   it("shows a curl snippet without a real write key", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     const snippet = screen.getByLabelText("Пример запроса на приём событий");
     expect(snippet).toHaveTextContent("https://i.analytics.example.com/v1/events");
@@ -85,7 +87,7 @@ describe("LandingPage", () => {
 
   it("keeps the example domain in the snippet whatever the installation's ingest URL", () => {
     vi.stubEnv("NEXT_PUBLIC_INGEST_URL", "https://i.appmetrica.online");
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     const snippet = screen.getByLabelText("Пример запроса на приём событий");
     expect(snippet).toHaveTextContent("https://i.analytics.example.com/v1/events");
@@ -94,7 +96,7 @@ describe("LandingPage", () => {
   });
 
   it("promises passkey-only sign-in and keeps the DB-IP attribution", () => {
-    render(<LandingPage />);
+    render(<LandingPage locale="ru" />);
 
     expect(screen.getByText(/Вход только по passkey/)).toBeInTheDocument();
     expect(screen.queryByText(/учётной записи/)).not.toBeInTheDocument();
@@ -103,5 +105,112 @@ describe("LandingPage", () => {
       "href",
       "https://db-ip.com",
     );
+  });
+
+  it("shows the Russian numbers in the dashboard preview", () => {
+    render(<LandingPage locale="ru" />);
+
+    const preview = screen.getByRole("figure", {
+      name: "Пример отчёта: приложение Notes iOS за последние 30 дней",
+    });
+    // toHaveTextContent сводит неразрывные пробелы форматтера к обычным.
+    expect(preview).toHaveTextContent("12 480");
+    expect(preview).toHaveTextContent("▲ +4,1 %");
+  });
+});
+
+describe("LandingPage in English", () => {
+  const renderEnglish = () => renderWithLocale(<LandingPage locale="en" />, "en");
+
+  it("leads with the product promise and the English entry points", () => {
+    renderEnglish();
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Analytics for your apps — with a single HTTP request",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/counted by people, not devices/)).toHaveTextContent(
+      "One session_start event, and the app is already in your reports.",
+    );
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("link", { name: "Sign in to the dashboard" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(within(main).getByRole("link", { name: "View demo data" })).toHaveAttribute(
+      "href",
+      "/demo",
+    );
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("link", { name: "Documentation" })).toHaveAttribute(
+      "href",
+      "/docs",
+    );
+    expect(within(header).getByRole("link", { name: "appmetrica.online — home" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+  });
+
+  it("states the limits, the report areas and the steps in English", () => {
+    renderEnglish();
+
+    expect(
+      within(screen.getByRole("list", { name: "Key limits" }))
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "≤ 500events per batch",
+      "7 daysoffline resend window",
+      "25 moraw event retention",
+      "≤ 500 msP99 ingest latency",
+    ]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "HTTP event ingestion",
+      "Portfolio",
+      "Audience",
+      "Retention",
+      "Realtime",
+      "GDPR and privacy",
+    ]);
+    expect(
+      within(screen.getByRole("list", { name: "Integration steps" })).getAllByRole("listitem"),
+    ).toHaveLength(3);
+    expect(screen.getByLabelText("Sample event ingestion request")).toHaveTextContent(
+      "X-App-Key: $AM_PK",
+    );
+  });
+
+  it("shows the preview in English formats and the EU hosting in the footer", () => {
+    renderEnglish();
+
+    const preview = screen.getByRole("figure", {
+      name: "Sample report: the Notes iOS app over the last 30 days",
+    });
+    expect(preview).toHaveTextContent("Last 30 days");
+    expect(preview).toHaveTextContent("12,480");
+    expect(preview).toHaveTextContent("▲ +4.1%");
+    expect(preview).toHaveTextContent("Daily active users");
+    expect(screen.getByText(/Passkey-only sign-in/)).toBeInTheDocument();
+    expect(within(screen.getByRole("contentinfo")).getByText("Hetzner FSN1, EU")).toBeVisible();
+  });
+});
+
+const metadataOf = (lang: string) =>
+  generateMetadata({ params: Promise.resolve({ lang }), searchParams: Promise.resolve({}) });
+
+// Метаданные лендинга (app/[lang]/page.tsx) — на языке адреса: «/» — английские, «/ru» — русские.
+describe("landing metadata", () => {
+  it("speaks the language of the address", async () => {
+    expect(await metadataOf("en")).toEqual({
+      title: { absolute: "appmetrica.online — app analytics without an SDK" },
+      description: "App analytics without an SDK",
+    });
+    expect(await metadataOf("ru")).toEqual({
+      title: { absolute: "appmetrica.online — аналитика приложений без SDK" },
+      description: "Аналитика приложений без SDK",
+    });
   });
 });
