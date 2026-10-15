@@ -188,8 +188,8 @@ describe("PortfolioView", () => {
       "Сегодня",
       "DAU 12\u00a0окт",
       "Δ к пн\u00a05\u00a0окт",
-      "Новые",
-      "Сессии",
+      "Новые 12\u00a0окт",
+      "Сессии 12\u00a0окт",
       "D1",
       "D7",
       "30 дней",
@@ -265,8 +265,8 @@ describe("PortfolioView", () => {
       "Сегодня",
       "DAU 12\u00a0окт",
       "Δ к пн\u00a05\u00a0окт",
-      "Новые",
-      "Сессии",
+      "Новые 12\u00a0окт",
+      "Сессии 12\u00a0окт",
       "D1",
       "D7",
       "30 дней",
@@ -322,6 +322,33 @@ describe("PortfolioView", () => {
     ).toBeInTheDocument();
   });
 
+  // Дата без событий, а сегодня они уже идут: это не сбой интеграции, а ещё не наступивший день отчёта.
+  it("points to today when the date is empty but events already come in today", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-10-13T09:00:00Z"));
+    const quiet = portfolioRow({
+      ...notes,
+      active_today: 8,
+      active_date: 0,
+      new_date: 0,
+      sessions_date: 0,
+      active_delta_pct: null,
+    });
+    const captured = mockApi([quiet]);
+    const user = userEvent.setup();
+    renderView();
+
+    await table();
+    expect(
+      screen.getByText("За 12 окт 2026 событий нет, а сегодня они уже есть."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Проверьте вкладку «Интеграция»/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Показать сегодня" }));
+
+    await waitFor(() => expect(captured.portfolio.at(-1)?.get("date")).toBe("2026-10-13"));
+  });
+
   it("shows a skeleton while loading", async () => {
     mockApi([notes]);
     renderView();
@@ -369,7 +396,8 @@ describe("PortfolioView", () => {
     await waitFor(() => expect(captured.portfolio.at(-1)?.get("environment")).toBe("development"));
   });
 
-  it("steps the date but not past yesterday in the owner timezone", async () => {
+  // По умолчанию — вчера (полный день), а шаг вперёд доходит до сегодня по поясу владельца.
+  it("steps the date up to today in the owner timezone", async () => {
     vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-10-13T09:00:00Z"));
     const captured = mockApi([notes]);
@@ -382,10 +410,15 @@ describe("PortfolioView", () => {
     expect(
       screen.getByRole("button", { name: /^Выбрать дату: 12\sокт\s2026$/ }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Следующий день" }));
+
+    await waitFor(() => expect(captured.portfolio.at(-1)?.get("date")).toBe("2026-10-13"));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Следующий день" })).toBeDisabled(),
     );
 
+    await user.click(screen.getByRole("button", { name: "Предыдущий день" }));
     await user.click(screen.getByRole("button", { name: "Предыдущий день" }));
 
     expect(onUrlUpdate.mock.lastCall?.[0].searchParams.get("date")).toBe("2026-10-11");
@@ -553,8 +586,8 @@ describe("PortfolioTable", () => {
       "Сегодня",
       "DAU 12\u00a0окт",
       "Δ к пн\u00a05\u00a0окт",
-      "Новые",
-      "Сессии",
+      "Новые 12\u00a0окт",
+      "Сессии 12\u00a0окт",
       "D1",
       "D7",
     ]);
@@ -615,8 +648,8 @@ describe("PortfolioView in English", () => {
       "Today",
       "DAU Oct\u00a012",
       "Δ vs Mon, Oct\u00a05",
-      "New",
-      "Sessions",
+      "New Oct\u00a012",
+      "Sessions Oct\u00a012",
       "D1",
       "D7",
       "30 days",
