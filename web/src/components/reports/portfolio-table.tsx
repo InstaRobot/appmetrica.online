@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PortfolioRow } from "@/lib/api/gen/model";
-import { useFormat, useMessages } from "@/lib/i18n/client";
+import { useFormat, useLocale, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
+import type { Locale } from "@/lib/i18n/locale";
 import { addDays } from "@/lib/period";
 import { cn } from "@/lib/utils";
 import type { Messages } from "@/messages";
@@ -57,17 +58,32 @@ type PortfolioTableProps = {
   onOpenApp?: (appId: string) => void;
 };
 
-const nameCollator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+// Сравнение названий по правилам языка интерфейса: в русском кириллица идёт раньше латиницы.
+const collators = new Map<Locale, Intl.Collator>();
+
+function nameCollator(locale: Locale): Intl.Collator {
+  let collator = collators.get(locale);
+  if (!collator) {
+    collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
+    collators.set(locale, collator);
+  }
+  return collator;
+}
 
 function metric(row: PortfolioRow, key: Exclude<PortfolioSortKey, "name">): number | null {
   return row[key];
 }
 
 // sortPortfolioRows: «—» (null) всегда в конце независимо от направления, при равенстве — по названию.
-export function sortPortfolioRows(rows: PortfolioRow[], sort: PortfolioSort): PortfolioRow[] {
+export function sortPortfolioRows(
+  rows: PortfolioRow[],
+  sort: PortfolioSort,
+  locale: Locale,
+): PortfolioRow[] {
   const dir = sort.desc ? -1 : 1;
+  const collator = nameCollator(locale);
   return rows.toSorted((a, b) => {
-    const byName = nameCollator.compare(a.app.name, b.app.name);
+    const byName = collator.compare(a.app.name, b.app.name);
     if (sort.key === "name") return dir * byName;
     const x = metric(a, sort.key);
     const y = metric(b, sort.key);
@@ -141,6 +157,7 @@ function SortButton({
 
 // PortfolioTable (14-ux-ui-spec.md S-03, §16.4): все приложения за дату, сортировка на клиенте.
 export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: PortfolioTableProps) {
+  const locale = useLocale();
   const m = useMessages().portfolio.table;
   const f = useFormat();
   const columns: Column[] = [
@@ -158,7 +175,7 @@ export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: Po
     { key: "retention_d7", label: "D7" },
     { key: "sparkline", label: m.columns.sparkline },
   ];
-  const sorted = sortPortfolioRows(rows, sort);
+  const sorted = sortPortfolioRows(rows, sort, locale);
 
   return (
     <TooltipProvider>

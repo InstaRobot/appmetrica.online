@@ -37,7 +37,7 @@ import { getListAppsQueryKey, useListApps } from "@/lib/api/gen/endpoints/apps/a
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App, MergePreview } from "@/lib/api/gen/model";
 import type { UiError } from "@/lib/errors";
-import { useFormat, useMessages } from "@/lib/i18n/client";
+import { useFormat, useLocale, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
@@ -275,6 +275,7 @@ type SourceComboboxProps = {
 
 // Выбор источника: активные и архивные приложения кроме цели, поиск по имени (как AppSwitcher).
 function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceComboboxProps) {
+  const locale = useLocale();
   const t = useMessages().apps.merge;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -283,11 +284,11 @@ function SourceCombobox({ ref, labelId, targetId, value, onChange }: SourceCombo
     const items = apps.data?.status === 200 ? apps.data.data.items : [];
     return items
       .filter((app) => app.id !== targetId)
-      .toSorted((a, b) => a.name.localeCompare(b.name, "ru"));
-  }, [apps.data, targetId]);
-  const needle = search.trim().toLocaleLowerCase("ru");
+      .toSorted((a, b) => a.name.localeCompare(b.name, locale));
+  }, [apps.data, targetId, locale]);
+  const needle = search.trim().toLocaleLowerCase(locale);
   const visible = needle
-    ? candidates.filter((app) => app.name.toLocaleLowerCase("ru").includes(needle))
+    ? candidates.filter((app) => app.name.toLocaleLowerCase(locale).includes(needle))
     : candidates;
 
   return (
