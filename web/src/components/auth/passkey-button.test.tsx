@@ -72,6 +72,17 @@ beforeEach(() => {
 });
 
 describe("PasskeyButton", () => {
+  // Телефон: кнопка на всю ширину карточки и не ниже 44 px; с md — прежние 40 px.
+  it("spans the card and is a 44 px touch target on phones", () => {
+    render(<PasskeyButton />);
+
+    expect(screen.getByRole("button", { name: "Войти с passkey" })).toHaveClass(
+      "w-full",
+      "h-11",
+      "md:h-10",
+    );
+  });
+
   it("shows unsupported state", () => {
     vi.mocked(browserSupportsWebAuthn).mockReturnValue(false);
 

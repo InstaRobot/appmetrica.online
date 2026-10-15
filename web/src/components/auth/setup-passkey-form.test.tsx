@@ -74,6 +74,19 @@ describe("SetupPasskeyForm", () => {
     expect(screen.getByRole("button", { name: "Создать passkey" })).toBeEnabled();
   });
 
+  // Телефон: поле и кнопка — цели нажатия не меньше 44 px, кнопка на всю ширину карточки; шрифт поля
+  // 16 px, чтобы iOS не увеличивал страницу при фокусе.
+  it("makes the name field and the submit button 44 px tall on phones", () => {
+    render(<SetupPasskeyForm token="tok" defaultName="iPhone" />);
+
+    expect(nameInput()).toHaveClass("h-11", "md:h-8", "text-lg", "md:text-sm");
+    expect(screen.getByRole("button", { name: "Создать passkey" })).toHaveClass(
+      "w-full",
+      "h-11",
+      "md:h-10",
+    );
+  });
+
   it("validates the name before calling the API", async () => {
     let begun = false;
     mockSetupApi({
