@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getMessages } from "@/messages";
 import { ApiError } from "./api/fetcher";
-import { API_ERRORS, GENERIC_ERROR, messageFor, toUiError } from "./errors";
+import { messageFor as messageForIn, toUiError as toUiErrorIn } from "./errors";
+
+const ru = getMessages("ru").errors;
+const en = getMessages("en").errors;
+const GENERIC_ERROR = ru.generic;
+const API_ERRORS = ru.codes;
+const messageFor = (code: string, opts?: Parameters<typeof messageForIn>[2]) =>
+  messageForIn(code, ru, opts);
+const toUiError = (error: unknown) => toUiErrorIn(error, ru);
 
 // Коды из components.responses контракта: description вида «app_not_found | profile_not_found | not_found».
 function contractErrorCodes(): string[] {
@@ -99,5 +108,22 @@ describe("errors", () => {
     });
     expect(toUiError(new Error("boom"))).toEqual({ code: "unknown", message: GENERIC_ERROR });
     expect(toUiError("boom")).toEqual({ code: "unknown", message: GENERIC_ERROR });
+  });
+
+  it("speaks the language of the dictionary it gets", () => {
+    expect(messageForIn("app_not_found", en)).toBe("The app was not found or has been deleted");
+    expect(messageForIn("rate_limited", en, { retryAfter: 12 })).toBe(
+      "Too many requests. Retrying in 12 s.",
+    );
+    expect(messageForIn("invalid_request", en, { message: "from: invalid date" })).toBe(
+      "Invalid request: from: invalid date",
+    );
+    expect(toUiErrorIn("boom", en)).toEqual({ code: "unknown", message: en.generic });
+  });
+
+  it("has an English text for every error code of the contract", () => {
+    for (const code of contractErrorCodes()) {
+      expect(en.codes, code).toHaveProperty(code);
+    }
   });
 });
