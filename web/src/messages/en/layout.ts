@@ -16,6 +16,11 @@ export const layout = {
     docs: "Documentation",
     settings: "Settings",
   },
+  mobileNav: {
+    open: "Open menu",
+    close: "Close menu",
+    title: "Navigation",
+  },
   userMenu: {
     label: "User menu",
     signOut: "Sign out",

@@ -8,7 +8,7 @@ import { getMessages } from "@/messages";
 export function AppFooter({ locale }: { locale: Locale }) {
   const m = getMessages(locale).layout.footer;
   return (
-    <footer className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-8 pb-8 text-caption text-fg-muted">
+    <footer className="mx-auto flex w-full max-w-[1600px] flex-col items-start gap-2 px-4 pb-8 text-caption text-fg-muted md:flex-row md:items-center md:justify-between md:gap-4 md:px-8">
       <Link href={publicHref(locale, "/docs")} className="hover:text-foreground hover:underline">
         {m.docs}
       </Link>

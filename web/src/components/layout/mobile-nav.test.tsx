@@ -1,18 +1,19 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { publicHref } from "@/lib/i18n/routes";
 import { renderWithClient } from "@/test/render";
-import { MobileNav } from "./mobile-nav";
+import { MobileNav, type MobileNavItem } from "./mobile-nav";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/portfolio",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 
-const panelItems = [
-  { href: "/portfolio" as const, label: "Портфель", active: true },
-  { href: "/ru/docs" as const, label: "Документация" },
-  { href: "/settings" as const, label: "Настройки" },
+const panelItems: MobileNavItem[] = [
+  { href: "/portfolio", label: "Портфель", active: true },
+  { href: publicHref("ru", "/docs"), label: "Документация" },
+  { href: "/settings", label: "Настройки" },
 ];
 
 // Навигация на телефоне (< md): кнопка ☰ открывает боковую панель с разделами, языком, темой и выходом.
@@ -72,7 +73,10 @@ describe("MobileNav", () => {
   it("has no sign-out on public pages and speaks English", async () => {
     const user = userEvent.setup();
     renderWithClient(
-      <MobileNav variant="public" items={[{ href: "/docs" as const, label: "Documentation" }]} />,
+      <MobileNav
+        variant="public"
+        items={[{ href: publicHref("en", "/docs"), label: "Documentation" }]}
+      />,
       { locale: "en" },
     );
 

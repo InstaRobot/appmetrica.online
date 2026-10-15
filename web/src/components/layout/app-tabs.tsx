@@ -12,6 +12,7 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { useMessages } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import type { Messages } from "@/messages";
@@ -70,19 +71,27 @@ export function AppTabs({ appId }: AppTabsProps) {
   const pathname = usePathname();
   const query = reportQuery(useSearchParams());
   const active = parseAppPath(pathname)?.tab;
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  // На телефоне вкладки не помещаются и прокручиваются вбок: активная — в видимой области.
+  useEffect(() => {
+    if (active === undefined) return;
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
 
   return (
     <nav aria-label={m.label} className="mb-6 h-12 border-b border-border">
-      <ul className="flex h-full items-stretch gap-6">
+      <ul className="flex h-full items-stretch gap-4 overflow-x-auto [scrollbar-width:none] md:gap-6 [&::-webkit-scrollbar]:hidden">
         {TABS.map(({ tab, label, icon: Icon }) => {
           const current = tab === active;
           return (
-            <li key={tab} className="flex">
+            <li key={tab} className="flex shrink-0">
               <Link
+                ref={current ? activeRef : undefined}
                 href={appTabHref(appId, tab, query)}
                 aria-current={current ? "page" : undefined}
                 className={cn(
-                  "-mb-px flex items-center gap-2 border-b-2 border-transparent text-label-md text-fg-muted transition-colors hover:text-foreground",
+                  "-mb-px flex items-center gap-2 border-b-2 border-transparent text-label-md whitespace-nowrap text-fg-muted transition-colors hover:text-foreground",
                   current && "border-primary text-fg-link hover:text-fg-link",
                 )}
               >

@@ -8,9 +8,11 @@ export function DemoBanner({ locale }: { locale: Locale }) {
   const m = getMessages(locale).demo;
   return (
     <section aria-label={m.label} className="border-b border-border bg-warning-50">
-      <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-8 py-2.5 text-body-sm">
-        <FlaskConical aria-hidden="true" className="size-4 shrink-0 text-warning" />
-        <p>{m.notice}</p>
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-body-sm md:px-8">
+        <p className="flex items-start gap-3">
+          <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+          {m.notice}
+        </p>
         <a href="/demo/exit" className="ml-auto font-semibold text-fg-link hover:underline">
           {m.exit}
         </a>

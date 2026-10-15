@@ -1,8 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,26 +8,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { logout } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
 import { useMessages } from "@/lib/i18n/client";
-import { toast } from "@/lib/toast";
-import { useUiError } from "@/lib/use-ui-error";
+import { useSignOut } from "./use-sign-out";
 
 // Меню «⋯» шапки (14-ux-ui-spec.md §6.1): выход из дашборда; в демо-режиме — выход из демо
 // (полная навигация на /demo/exit: route handler снимает cookie и уводит на лендинг).
 export function UserMenu({ demo = false }: { demo?: boolean }) {
   const m = useMessages();
-  const uiError = useUiError();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const signOut = useMutation({
-    mutationFn: () => logout(),
-    onSuccess: () => {
-      queryClient.clear();
-      router.replace("/login");
-    },
-    onError: (error) => toast.error(uiError(error).message),
-  });
+  const signOut = useSignOut();
 
   return (
     <DropdownMenu>

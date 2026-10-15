@@ -436,7 +436,6 @@
 
 @layer base {
   body {
-    min-width: 1280px;
     background:
       radial-gradient(1000px 420px at 50% -160px, var(--glow), transparent 70%) no-repeat,
       var(--bg-page);

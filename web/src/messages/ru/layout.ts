@@ -17,6 +17,11 @@ export const layout: typeof en = {
     docs: "Документация",
     settings: "Настройки",
   },
+  mobileNav: {
+    open: "Открыть меню",
+    close: "Закрыть меню",
+    title: "Навигация",
+  },
   userMenu: {
     label: "Меню пользователя",
     signOut: "Выйти",

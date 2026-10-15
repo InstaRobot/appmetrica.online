@@ -40,7 +40,7 @@ async function DashboardShell({ children }: { children: React.ReactNode }) {
         <main
           id="main"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[1600px] flex-1 px-8 pt-6 pb-12 outline-none"
+          className="mx-auto w-full max-w-[1600px] flex-1 px-4 pt-6 pb-12 outline-none md:px-8"
         >
           {children}
         </main>

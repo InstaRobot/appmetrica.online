@@ -21,6 +21,7 @@ import type { Messages } from "@/messages";
 import { parseAppPath } from "./app-tabs";
 import { LanguageSwitcher } from "./language-switcher";
 import { Logo } from "./logo";
+import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "./theme-toggle";
 
 // AppSwitcher (Radix Popover) и меню пользователя (Radix DropdownMenu) — отдельные чанки: их HTML
@@ -53,7 +54,7 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
 
   return (
     <header className="sticky top-0 z-sticky h-16 border-b border-border bg-header backdrop-blur-md">
-      <div className="mx-auto flex h-full max-w-[1600px] items-center gap-4 px-8">
+      <div className="mx-auto flex h-full max-w-[1600px] items-center gap-2 px-4 md:gap-4 md:px-8">
         <Link href="/portfolio" aria-label={m.home} className="rounded-md">
           <Logo />
         </Link>
@@ -69,7 +70,7 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
         >
           <AppSwitcher apps={apps} currentAppId={current?.appId} currentTab={current?.tab} />
         </Suspense>
-        <nav aria-label={m.nav} className="ml-auto">
+        <nav aria-label={m.nav} className="ml-auto hidden md:block">
           <ul className="flex items-center gap-1">
             {nav.map(({ href, label, icon: Icon }) => {
               const isActive = within(href, pathname);
@@ -91,20 +92,32 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
             })}
           </ul>
         </nav>
-        <LanguageSwitcher />
-        <ThemeToggle />
-        <Suspense
-          fallback={
-            <span
-              aria-hidden="true"
-              className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
-            >
-              <Ellipsis className="size-5" />
-            </span>
-          }
-        >
-          <UserMenu demo={demo} />
-        </Suspense>
+        <MobileNav
+          variant="panel"
+          demo={demo}
+          className="ml-auto"
+          items={nav.map(({ href, label }) => ({
+            href,
+            label: m[label],
+            active: within(href, pathname),
+          }))}
+        />
+        <LanguageSwitcher className="hidden md:inline-flex" />
+        <ThemeToggle className="hidden md:inline-flex" />
+        <div className="hidden md:contents">
+          <Suspense
+            fallback={
+              <span
+                aria-hidden="true"
+                className={buttonVariants({ variant: "ghost", size: "icon-lg" })}
+              >
+                <Ellipsis className="size-5" />
+              </span>
+            }
+          >
+            <UserMenu demo={demo} />
+          </Suspense>
+        </div>
       </div>
     </header>
   );
