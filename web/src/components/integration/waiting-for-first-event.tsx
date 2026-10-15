@@ -42,7 +42,7 @@ export function WaitingForFirstEvent({
   return (
     <Card
       className={cn(
-        "flex-row items-center gap-3 px-6",
+        "flex-row flex-wrap items-center gap-3 px-4 md:px-6",
         received && "border-positive/40 bg-positive/5",
       )}
     >
@@ -66,7 +66,7 @@ export function WaitingForFirstEvent({
         )}
       </p>
       {received ? (
-        <Button asChild size="sm" className="ml-auto">
+        <Button asChild size="sm" className="ml-auto h-11 md:h-8">
           <Link href={audienceHref as Route}>{m.openAudience}</Link>
         </Button>
       ) : null}

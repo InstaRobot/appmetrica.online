@@ -73,7 +73,7 @@ describe("VersionsHealthTable", () => {
       within(head).getAllByRole("columnheader")[0],
       within(body).getAllByRole("cell")[0],
     ]) {
-      expect(pinned).toHaveClass("sticky", "left-0", "bg-card");
+      expect(pinned).toHaveClass("max-md:sticky", "max-md:left-0", "max-md:bg-card");
     }
   });
 

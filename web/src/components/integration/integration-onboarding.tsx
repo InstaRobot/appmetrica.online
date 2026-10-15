@@ -36,7 +36,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
     if (keys.isError) {
       // apiFetch бросает ApiError; тип ошибки orval описывает тело ответа, а не исключение.
       return (
-        <Card className="px-6">
+        <Card className="px-4 md:px-6">
           <ErrorState
             error={keys.error as unknown as ApiError}
             onRetry={() => void keys.refetch()}
@@ -45,7 +45,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
       );
     }
     return (
-      <Card role="status" aria-label={m.common.loading} className="gap-3 px-6">
+      <Card role="status" aria-label={m.common.loading} className="gap-3 px-4 md:px-6">
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-8 w-full" />
       </Card>
@@ -54,7 +54,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
 
   return (
     <>
-      <Card className="gap-3 px-6">
+      <Card className="gap-3 px-4 md:px-6">
         <h3 className="text-heading-3">{m.integration.endpoint.title}</h3>
         <p className="text-body-sm text-fg-muted">{m.integration.endpoint.hint}</p>
         <CopyField value={ingestUrl} label={m.integration.endpoint.field} />
@@ -71,7 +71,7 @@ export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingP
       ))}
       <Link
         href={`/apps/${app.id}/settings#platforms` as Route}
-        className="flex items-center gap-1.5 self-start text-body-sm text-fg-link hover:underline"
+        className="flex min-h-11 items-center gap-1.5 self-start text-body-sm text-fg-link hover:underline md:min-h-0"
       >
         <Plus aria-hidden="true" className="size-4" />
         {m.integration.addPlatform}

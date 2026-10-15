@@ -49,7 +49,7 @@ export function PlatformIntegrationSection({
 
   return (
     <section aria-labelledby={titleId}>
-      <Card className="gap-3 px-6">
+      <Card className="gap-3 px-4 md:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <PlatformIcon platform={platform} className="size-5 shrink-0" />
           <h3 id={titleId} className="text-heading-3">

@@ -18,6 +18,11 @@ import { rejectionCode } from "@/lib/rejection-codes";
 
 type RejectionReasonsTableProps = { reasons: IntegrationHealth["reasons"]; timezone: string };
 
+// Первая колонка закреплена при горизонтальной прокрутке таблицы на телефоне; фон карточки не даёт
+// прокручиваемым ячейкам просвечивать под ней. С md таблица помещается, а подсветка строки при наведении
+// не должна обрываться на первой ячейке — поэтому только max-md.
+const PINNED = "max-md:sticky max-md:left-0 max-md:bg-card";
+
 // prettyJson — pretty-print примера payload; не-JSON (invalid_json) показывается как есть.
 function prettyJson(payload: string): string {
   try {
@@ -33,11 +38,23 @@ function ExamplePayload({ reason }: { reason: IntegrationReason }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="xs" aria-label={label} className="font-mono">
+        {/* Телефон: цель нажатия 44 px, с md — компактная кнопка 24 px. */}
+        <Button
+          variant="outline"
+          size="xs"
+          aria-label={label}
+          className="h-11 min-w-11 font-mono md:h-6 md:min-w-0"
+        >
           {"{ }"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent aria-label={label} align="end" className="flex w-[560px] flex-col gap-3">
+      {/* Телефон: поповер не шире экрана и не прижат к его краям. */}
+      <PopoverContent
+        aria-label={label}
+        align="end"
+        collisionPadding={16}
+        className="flex w-[min(560px,calc(100vw-2rem))] flex-col gap-3"
+      >
         {/* context.ip сервер уже вырезал (14-ux-ui-spec.md S-10). */}
         <CodeBlock
           code={prettyJson(reason.example_payload)}
@@ -65,7 +82,7 @@ export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTab
       <caption className="sr-only">{m.sections.reasons}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>{m.reasonsTable.code}</TableHead>
+          <TableHead className={PINNED}>{m.reasonsTable.code}</TableHead>
           <TableHead>{m.reasonsTable.description}</TableHead>
           <TableHead className="text-right">{m.reasonsTable.count}</TableHead>
           <TableHead className="text-right">{m.reasonsTable.last}</TableHead>
@@ -77,8 +94,9 @@ export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTab
           const text = rejectionCode(reason.code, m.rejectionCodes);
           return (
             <TableRow key={reason.code}>
-              <TableCell className="font-mono text-code">{reason.code}</TableCell>
-              <TableCell className="whitespace-normal">
+              <TableCell className={`${PINNED} font-mono text-code`}>{reason.code}</TableCell>
+              {/* min-w-56: на узком экране описание не сжимается в столбик — таблица прокручивается. */}
+              <TableCell className="min-w-56 whitespace-normal">
                 <span className="block">{text.description}</span>
                 {text.hint ? (
                   <span className="block text-body-sm text-fg-muted">{text.hint}</span>

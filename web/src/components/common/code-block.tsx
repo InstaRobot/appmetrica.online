@@ -50,7 +50,7 @@ export function CodeBlock({ code, lang, ariaLabel, maxHeight = 480 }: CodeBlockP
         role="region"
         aria-label={ariaLabel}
         style={{ maxHeight }}
-        className="overflow-auto rounded-md border border-border bg-card p-4 pr-12 text-code outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="overflow-auto rounded-md border border-border bg-card p-4 pr-14 text-code outline-none focus-visible:ring-2 focus-visible:ring-ring md:pr-12"
       >
         {highlighted?.code === code ? highlighted.node : <code>{code}</code>}
       </pre>
@@ -59,7 +59,8 @@ export function CodeBlock({ code, lang, ariaLabel, maxHeight = 480 }: CodeBlockP
         variant="outline"
         size="icon-sm"
         aria-label={m.code}
-        className="absolute top-2 right-2 bg-card"
+        // Телефон: цель нажатия 44 px, с md — компактная кнопка 32 px.
+        className="absolute top-2 right-2 size-11 bg-card md:size-8"
         onClick={() => void copy(code)}
       >
         <Copy aria-hidden="true" />

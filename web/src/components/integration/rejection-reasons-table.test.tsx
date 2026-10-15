@@ -88,7 +88,7 @@ describe("RejectionReasonsTable", () => {
     const [head, body] = within(table()).getAllByRole("row") as [HTMLElement, HTMLElement];
     const cells = within(body).getAllByRole("cell");
     for (const pinned of [within(head).getAllByRole("columnheader")[0], cells[0]]) {
-      expect(pinned).toHaveClass("sticky", "left-0", "bg-card");
+      expect(pinned).toHaveClass("max-md:sticky", "max-md:left-0", "max-md:bg-card");
     }
     expect(cells[1]).toHaveClass("min-w-56");
 

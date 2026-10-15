@@ -29,12 +29,14 @@ export function CopyField({ value, label, mono = true, masked = false }: CopyFie
         value={masked ? `${value.slice(0, 11)}••••` : value}
         aria-label={label}
         onFocus={(e) => e.currentTarget.select()}
-        className={cn("bg-subtle shadow-inner", mono && "font-mono text-code")}
+        // Телефон: поле и кнопка — цели нажатия 44 px, с md — прежние размеры.
+        className={cn("h-11 bg-subtle shadow-inner md:h-8", mono && "font-mono text-code")}
       />
       <Button
         type="button"
         variant="outline"
         size="icon"
+        className="size-11 md:size-9"
         aria-label={fmt(m.value, { label })}
         onClick={() => void copy(value)}
       >

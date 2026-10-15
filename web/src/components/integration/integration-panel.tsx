@@ -38,7 +38,7 @@ function IntegrationOnboarding(props: { app: App; ingestUrl: string }) {
   return (
     <Suspense
       fallback={
-        <Card role="status" aria-label={m.common.loading} className="gap-3 px-6">
+        <Card role="status" aria-label={m.common.loading} className="gap-3 px-4 md:px-6">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-8 w-full" />
         </Card>
@@ -92,7 +92,7 @@ function IntegrationReport({ app }: { app: App }) {
   if (!data || onboarding === null) {
     if (health.isError) {
       return (
-        <Card className="px-6">
+        <Card className="px-4 md:px-6">
           <ErrorState
             error={health.error as unknown as ApiError}
             onRetry={() => void health.refetch()}
@@ -127,7 +127,7 @@ function HealthKpi({ label, children }: { label: string; children: React.ReactNo
     <div
       role="group"
       aria-label={label}
-      className="flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-5 shadow-(--shadow-card)"
+      className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-border bg-card p-4 shadow-(--shadow-card) md:p-5"
     >
       <span className="text-label-md text-fg-muted">{label}</span>
       <span className="flex items-center gap-2 text-heading-1 tabular-nums">{children}</span>
@@ -153,12 +153,13 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
+      {/* Телефон: кнопка переносится под заголовок, если не помещается, и остаётся целью нажатия 44 px. */}
+      <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-heading-2">{m.title}</h2>
         <Button
           variant="outline"
           size="sm"
-          className="ml-auto"
+          className="ml-auto h-11 md:h-8"
           aria-expanded={expanded}
           aria-controls={sectionId}
           onClick={() => setExpanded(!expanded)}
@@ -173,7 +174,8 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
       <div id={sectionId} hidden={!expanded} className="flex flex-col gap-6">
         {expanded ? <IntegrationOnboarding app={app} ingestUrl={ingestUrl} /> : null}
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      {/* KPI: по два в ряд на телефоне и планшете, четыре — с lg. */}
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <HealthKpi label={fmt(m.kpi.accepted, { hours: data.hours })}>
           {f.formatInt(data.accepted_total)}
         </HealthKpi>
@@ -192,15 +194,15 @@ function IntegrationHealthView({ app, data, ingestUrl }: IntegrationHealthViewPr
           </span>
         </HealthKpi>
       </div>
-      <Card className="gap-4 px-6">
+      <Card className="gap-4 px-4 md:px-6">
         <h3 className="text-heading-3">{m.sections.hourly}</h3>
         <HourlyIngestChart hourly={data.hourly} timezone={app.timezone} />
       </Card>
-      <Card className="gap-4 px-6">
+      <Card className="gap-4 px-4 md:px-6">
         <h3 className="text-heading-3">{m.sections.reasons}</h3>
         <RejectionReasonsTable reasons={data.reasons} timezone={app.timezone} />
       </Card>
-      <Card className="gap-4 px-6">
+      <Card className="gap-4 px-4 md:px-6">
         <h3 className="text-heading-3">{m.sections.versions}</h3>
         <VersionsHealthTable versions={data.versions} timezone={app.timezone} />
       </Card>

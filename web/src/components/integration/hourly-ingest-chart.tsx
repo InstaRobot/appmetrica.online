@@ -44,7 +44,7 @@ export function HourlyIngestChart({ hourly, timezone, height = 220 }: HourlyInge
   const rows = hourly.map((h) => ({ ...h, label: f.formatTime(h.hour, timezone) }));
 
   return (
-    <div role="img" aria-label={description} style={{ height }}>
+    <div role="img" aria-label={description} style={{ height }} className="w-full">
       <ChartContainer config={config} className="aspect-auto h-full w-full">
         <BarChart
           data={rows}

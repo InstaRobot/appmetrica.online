@@ -45,7 +45,7 @@ describe("SnippetTabs", () => {
     const list = screen.getByRole("tablist", { name: "Язык сниппета" });
     expect(list).toHaveClass("max-w-full", "overflow-x-auto", "justify-start");
     for (const tab of within(list).getAllByRole("tab")) {
-      expect(tab).toHaveClass("max-md:min-w-11", "shrink-0");
+      expect(tab).toHaveClass("max-md:h-11", "max-md:px-3.5");
     }
     expect(screen.getByRole("link", { name: /Полные рецепты/ })).toHaveClass(
       "min-h-11",

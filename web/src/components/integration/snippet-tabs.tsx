@@ -39,7 +39,9 @@ const isSnippetLang = (value: string): value is SnippetLang =>
   (SNIPPET_LANGS as readonly string[]).includes(value);
 
 // SnippetTabs (FR-017, 14-ux-ui-spec.md §16.12): вкладки Radix (стрелки ←/→) со сниппетами,
-// в которые подставлены write-ключ и эндпоинт ingest.
+// в которые подставлены write-ключ и эндпоинт ingest. На телефоне ряд вкладок не переносится, а
+// прокручивается вбок; вкладки — цели нажатия от 44 px: высота 44 px, а ширину держат отступы (min-width
+// не задаём — иначе вкладка сжимается уже своей подписи).
 export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: SnippetTabsProps) {
   const [lang, setLang] = useState<SnippetLang>(defaultLang ?? defaultSnippetLang(platform));
   const m = useMessages().integration;
@@ -47,9 +49,12 @@ export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: Snip
 
   return (
     <Tabs value={lang} onValueChange={(value) => isSnippetLang(value) && setLang(value)}>
-      <TabsList aria-label={m.snippets.tabs}>
+      <TabsList
+        aria-label={m.snippets.tabs}
+        className="max-w-full justify-start overflow-x-auto max-md:group-data-horizontal/tabs:h-auto"
+      >
         {SNIPPET_LANGS.map((l) => (
-          <TabsTrigger key={l} value={l}>
+          <TabsTrigger key={l} value={l} className="max-md:h-11 max-md:flex-auto max-md:px-3.5">
             {SNIPPET_LABELS[l]}
           </TabsTrigger>
         ))}
@@ -65,7 +70,7 @@ export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: Snip
       ))}
       <Link
         href={publicHref(locale, SNIPPET_RECIPES[lang])}
-        className="text-body-sm text-fg-link hover:underline"
+        className="inline-flex min-h-11 items-center self-start text-body-sm text-fg-link hover:underline md:min-h-0"
       >
         {m.snippets.recipes}
       </Link>
