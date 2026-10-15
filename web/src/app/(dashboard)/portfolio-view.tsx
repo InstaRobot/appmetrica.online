@@ -233,30 +233,26 @@ export function PortfolioView() {
 
   return (
     <>
-      {/* PageHeader (components/layout) держит действия в одну строку справа от заголовка; трём
-          элементам управления портфеля на телефоне там тесно — переносим действия под заголовок. */}
-      <div className="max-md:[&>header]:flex-col max-md:[&>header]:gap-3 max-md:[&>header>div:last-child]:w-full max-md:[&>header>div:last-child]:flex-wrap">
-        <PageHeader
-          title={m.title}
-          adornment={<UnitBadge unit={unit} />}
-          actions={
-            <>
-              <EnvironmentSwitch value={env} onChange={(next) => void setState({ env: next })} />
-              <DateStepper
-                value={current}
-                max={maxDate}
-                onChange={(next) => void setState({ date: next })}
-              />
-              <Button asChild className="max-md:w-full">
-                <Link href="/apps/new">
-                  <Plus aria-hidden="true" />
-                  {m.addApp}
-                </Link>
-              </Button>
-            </>
-          }
-        />
-      </div>
+      <PageHeader
+        title={m.title}
+        adornment={<UnitBadge unit={unit} />}
+        actions={
+          <>
+            <EnvironmentSwitch value={env} onChange={(next) => void setState({ env: next })} />
+            <DateStepper
+              value={current}
+              max={maxDate}
+              onChange={(next) => void setState({ date: next })}
+            />
+            <Button asChild className="max-md:w-full">
+              <Link href="/apps/new">
+                <Plus aria-hidden="true" />
+                {m.addApp}
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       {noEvents ? (
         <Alert className="mb-4">
