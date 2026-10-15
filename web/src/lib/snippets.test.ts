@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Platform } from "@/lib/api/gen/model";
+import { getMessages } from "@/messages";
 import {
   buildSnippet,
   defaultSnippetLang,
@@ -20,6 +21,10 @@ const SPEC = readFileSync(
 );
 const SPEC_KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
 const SPEC_URL = "https://i.appmetrica.online/v1/events";
+// Комментарии внутри сниппетов — на языке интерфейса; эталон спецификации русский.
+const RU = getMessages("ru").integration.snippetComments;
+const EN = getMessages("en").integration.snippetComments;
+const CYRILLIC = /[А-Яа-яЁё]/;
 
 const SPEC_PLATFORMS: Record<SnippetLang, Platform> = {
   curl: "ios",
@@ -66,18 +71,22 @@ describe("snippets", () => {
     expect(SNIPPET_LANGS).toEqual(["curl", "swift", "kotlin", "javascript", "go"]);
 
     for (const lang of SNIPPET_LANGS) {
-      const snippet = buildSnippet(lang, {
-        ingestUrl: SPEC_URL,
-        writeKey: SPEC_KEY,
-        platform: SPEC_PLATFORMS[lang],
-      });
+      const snippet = buildSnippet(
+        lang,
+        {
+          ingestUrl: SPEC_URL,
+          writeKey: SPEC_KEY,
+          platform: SPEC_PLATFORMS[lang],
+        },
+        RU,
+      );
       expect(snippet, lang).toBe(specSnippet(lang));
     }
 
     const key = "pk_AAAAbbbbCCCCddddEEEEffffGGGGhhhh";
     const url = "http://localhost:8081/v1/events";
     for (const lang of SNIPPET_LANGS) {
-      const snippet = buildSnippet(lang, { ingestUrl: url, writeKey: key, platform: "ios" });
+      const snippet = buildSnippet(lang, { ingestUrl: url, writeKey: key, platform: "ios" }, RU);
       expect(snippet, lang).toContain(key);
       expect(snippet, lang).toContain(url);
       expect(snippet, lang).not.toContain(SPEC_KEY);
@@ -85,11 +94,37 @@ describe("snippets", () => {
       expect(snippet, lang).not.toMatch(/YOUR_|<WRITE_KEY>|\{\{\s*\w+\s*\}\}|pk_x{4}/);
     }
 
-    const body = curlJson(buildSnippet("curl", { ingestUrl: url, writeKey: key, platform: "ios" }));
+    const body = curlJson(
+      buildSnippet("curl", { ingestUrl: url, writeKey: key, platform: "ios" }, RU),
+    );
     expect(body).toMatchObject({
       context: { platform: "ios", environment: "development" },
       events: [{ name: "session_start" }],
     });
+  });
+
+  it("translates only the comments of English snippets", () => {
+    for (const lang of SNIPPET_LANGS) {
+      const input = { ingestUrl: SPEC_URL, writeKey: SPEC_KEY, platform: SPEC_PLATFORMS[lang] };
+      const ruLines = buildSnippet(lang, input, RU).split("\n");
+      const enLines = buildSnippet(lang, input, EN).split("\n");
+      expect(enLines, lang).toHaveLength(ruLines.length);
+      ruLines.forEach((line, i) => {
+        if (!CYRILLIC.test(line)) expect(enLines[i], `${lang}:${i + 1}`).toBe(line);
+      });
+      expect(enLines.join("\n"), lang).not.toMatch(CYRILLIC);
+    }
+
+    const input = { ingestUrl: SPEC_URL, writeKey: SPEC_KEY, platform: "ios" } as const;
+    expect(buildSnippet("curl", input, EN)).toContain(
+      '# Expected response: {"accepted":1,"rejected":[],"warnings":[],"server_time":"…"}',
+    );
+    expect(buildSnippet("kotlin", input, EN)).toContain(
+      "// Call from a background thread (Dispatchers.IO). Returns the HTTP response code.",
+    );
+    expect(buildSnippet("go", input, EN)).toContain(
+      `"ip":          "none", // for s2s: pass the user's IP or "none"`,
+    );
   });
 
   it("changes only context values of curl for other platforms", () => {
@@ -104,10 +139,10 @@ describe("snippets", () => {
       ["server", "Linux", "server"],
       ["other", "Other", "unknown"],
     ] as const;
-    const ios = buildSnippet("curl", { ...input, platform: "ios" });
+    const ios = buildSnippet("curl", { ...input, platform: "ios" }, RU);
 
     for (const [platform, osName, deviceType] of cases) {
-      const snippet = buildSnippet("curl", { ...input, platform });
+      const snippet = buildSnippet("curl", { ...input, platform }, RU);
       expect(curlJson(snippet), platform).toMatchObject({
         context: { platform, os_name: osName, device_type: deviceType },
       });
@@ -121,27 +156,33 @@ describe("snippets", () => {
 
   it("uses the app platform inside Swift and Go snippets", () => {
     const input = { ingestUrl: SPEC_URL, writeKey: SPEC_KEY } as const;
-    expect(buildSnippet("swift", { ...input, platform: "macos" })).toContain('platform: "macos"');
-    expect(buildSnippet("swift", { ...input, platform: "ios" })).toContain('platform: "ios"');
-    expect(buildSnippet("go", { ...input, platform: "server" })).toContain(
+    expect(buildSnippet("swift", { ...input, platform: "macos" }, RU)).toContain(
+      'platform: "macos"',
+    );
+    expect(buildSnippet("swift", { ...input, platform: "ios" }, RU)).toContain('platform: "ios"');
+    expect(buildSnippet("go", { ...input, platform: "server" }, RU)).toContain(
       '"platform":    "server"',
     );
-    expect(buildSnippet("go", { ...input, platform: "bot" })).toContain('"platform":    "bot"');
+    expect(buildSnippet("go", { ...input, platform: "bot" }, RU)).toContain('"platform":    "bot"');
   });
 
   it("uses the section platform inside Kotlin and JavaScript snippets", () => {
     const input = { ingestUrl: SPEC_URL, writeKey: SPEC_KEY } as const;
-    expect(buildSnippet("kotlin", { ...input, platform: "ios" })).toContain(
+    expect(buildSnippet("kotlin", { ...input, platform: "ios" }, RU)).toContain(
       '.put("platform", "ios")',
     );
-    expect(buildSnippet("kotlin", { ...input, platform: "android" })).toContain(
+    expect(buildSnippet("kotlin", { ...input, platform: "android" }, RU)).toContain(
       '.put("platform", "android")',
     );
-    expect(buildSnippet("javascript", { ...input, platform: "android" })).toContain(
+    expect(buildSnippet("javascript", { ...input, platform: "android" }, RU)).toContain(
       'platform: "android",',
     );
-    expect(buildSnippet("javascript", { ...input, platform: "web" })).toContain('platform: "web",');
-    expect(buildSnippet("javascript", { ...input, platform: "web" })).not.toContain('"android"');
+    expect(buildSnippet("javascript", { ...input, platform: "web" }, RU)).toContain(
+      'platform: "web",',
+    );
+    expect(buildSnippet("javascript", { ...input, platform: "web" }, RU)).not.toContain(
+      '"android"',
+    );
   });
 
   it("picks the default language by platform", () => {
