@@ -330,6 +330,9 @@ describe("AppHeader on narrow screens", () => {
 
     expect(screen.getByRole("button", { name: "Открыть меню" })).toHaveClass("lg:hidden");
     expect(screen.getByRole("button", { name: "Открыть меню" })).not.toHaveClass("md:hidden");
-    expect(mainNav()).toHaveClass("hidden", "lg:block");
+    // Без базового `hidden`: в документации второй набор утилит Fumadocs (docs.css) объявляет .hidden позже
+    // наших `lg:block`/`md:inline-flex` и перебил бы их — элементы скрываются только на узком экране.
+    expect(mainNav()).toHaveClass("max-lg:hidden");
+    expect(mainNav()).not.toHaveClass("hidden");
   });
 });

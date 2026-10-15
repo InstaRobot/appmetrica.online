@@ -41,3 +41,20 @@ describe("PublicHeader", () => {
     );
   });
 });
+
+describe("PublicHeader on phones", () => {
+  it("hides the docs link, language and theme only below md, without a base hidden class", () => {
+    render(<PublicHeader />);
+
+    const header = screen.getByRole("banner");
+    for (const el of [
+      within(header).getByRole("link", { name: "Документация" }),
+      within(header).getByRole("button", { name: "Переключить на English" }),
+      within(header).getByRole("button", { name: /тему$/ }),
+    ]) {
+      expect(el).toHaveClass("max-md:hidden");
+      expect(el).not.toHaveClass("hidden");
+    }
+    expect(within(header).getByRole("button", { name: "Открыть меню" })).toHaveClass("md:hidden");
+  });
+});
