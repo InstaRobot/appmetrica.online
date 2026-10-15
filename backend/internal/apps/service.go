@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/pgstore"
@@ -154,7 +155,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (CreateResult, err
 }
 
 // Update меняет имя, часовой пояс и/или набор платформ. Ключи и собранные события смена платформ не
-// затрагивает: ключи снятых платформ остаются активными, их отзывают отдельно.
+// затрагивает: ключи снятых платформ остаются активными, их отзывают отдельно. Смена часового пояса сдвигает
+// границы уже закрытых дней, поэтому в той же транзакции ставится заявка переоткрыть все дни приложения: job
+// close_day закроет их заново в новом поясе.
 func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sqlc.App, error) {
 	if in.Name == nil && in.Timezone == nil && in.Platforms == nil {
 		return sqlc.App{}, &ValidationError{Message: "Укажите название, часовой пояс или платформы"}
@@ -181,7 +184,20 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sql
 		}
 		params.Platforms = platforms
 	}
-	app, err := s.store.Queries().UpdateApp(ctx, params)
+	var app sqlc.App
+	err := s.store.InTx(ctx, func(q *sqlc.Queries) error {
+		cur, err := q.GetAppForUpdate(ctx, id)
+		if err != nil {
+			return err
+		}
+		if app, err = q.UpdateApp(ctx, params); err != nil {
+			return err
+		}
+		if app.Timezone == cur.Timezone {
+			return nil
+		}
+		return q.RequestReopenClosedDays(ctx, sqlc.RequestReopenClosedDaysParams{AppID: id, FromDay: allDays, Now: params.Now})
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return sqlc.App{}, ErrNotFound
@@ -192,6 +208,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (sql
 	}
 	return app, nil
 }
+
+// allDays — from_day заявки на переоткрытие, раньше любого закрытого дня.
+var allDays = pgtype.Date{Time: time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 
 // Archive переводит приложение в архив: ingest перестаёт принимать его ключи со следующим обновлением кэша.
 // Повторный вызов ничего не меняет (archived_at остаётся прежним). Во время слияния — ErrMergeInProgress.
