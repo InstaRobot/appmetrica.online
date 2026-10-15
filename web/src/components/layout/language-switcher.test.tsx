@@ -4,12 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, renderWithLocale } from "@/test/rtl";
 import { LanguageSwitcher } from "./language-switcher";
 
-const nav = vi.hoisted(() => ({ pathname: "/", push: vi.fn(), refresh: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 
-vi.mock("next/navigation", () => ({
-  usePathname: () => nav.pathname,
-  useRouter: () => ({ push: nav.push, refresh: nav.refresh }),
-}));
+vi.mock("@/lib/i18n/navigate", () => ({ openPage: nav.push, reloadPage: nav.refresh }));
 
 describe("LanguageSwitcher", () => {
   beforeEach(() => {
@@ -20,7 +17,7 @@ describe("LanguageSwitcher", () => {
   });
 
   it("opens the paired page of a public address and saves the choice", async () => {
-    nav.pathname = "/docs/recipes/curl";
+    window.history.pushState({}, "", "/docs/recipes/curl?tab=1#queue");
     renderWithLocale(<LanguageSwitcher />, "en");
 
     const button = screen.getByRole("button", { name: "Switch to Русский" });
@@ -29,12 +26,12 @@ describe("LanguageSwitcher", () => {
     await userEvent.click(button);
 
     expect(document.cookie).toContain("am_lang=ru");
-    expect(nav.push).toHaveBeenCalledWith("/ru/docs/recipes/curl");
+    expect(nav.push).toHaveBeenCalledWith("/ru/docs/recipes/curl?tab=1#queue");
     expect(nav.refresh).not.toHaveBeenCalled();
   });
 
   it("refreshes the panel in place: its address has no language", async () => {
-    nav.pathname = "/portfolio";
+    window.history.pushState({}, "", "/portfolio");
     render(<LanguageSwitcher />);
 
     await userEvent.click(screen.getByRole("button", { name: "Переключить на English" }));

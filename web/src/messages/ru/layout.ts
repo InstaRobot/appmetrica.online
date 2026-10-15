@@ -5,4 +5,9 @@ export const layout: typeof en = {
     label: "Язык",
     switchTo: "Переключить на {language}",
   },
+  publicHeader: {
+    home: "appmetrica.online — на главную",
+    docs: "Документация",
+    signIn: "Войти",
+  },
 };

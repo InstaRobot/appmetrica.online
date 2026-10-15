@@ -36,7 +36,7 @@ describe("LandingPage", () => {
     const header = screen.getByRole("banner");
     expect(within(header).getByRole("link", { name: "Документация" })).toHaveAttribute(
       "href",
-      "/docs",
+      "/ru/docs",
     );
     expect(within(header).getByRole("link", { name: "Войти" })).toHaveAttribute("href", "/login");
     expect(within(header).getByRole("button", { name: /тему$/ })).toBeInTheDocument();

@@ -6,7 +6,7 @@ import { APIPage } from "@/components/docs/api-page";
 import { source } from "@/lib/docs/source";
 
 // S-13 `/docs/[[...slug]]`: MDX-гайд или страница операции API reference, доступна без входа.
-export default async function DocsRoute({ params }: PageProps<"/docs/[[...slug]]">) {
+export default async function DocsRoute({ params }: PageProps<"/[lang]/docs/[[...slug]]">) {
   const { slug } = await params;
   const page = source.getPage(slug);
   if (!page) notFound();
@@ -37,7 +37,7 @@ export default async function DocsRoute({ params }: PageProps<"/docs/[[...slug]]
 
 export async function generateMetadata({
   params,
-}: PageProps<"/docs/[[...slug]]">): Promise<Metadata> {
+}: PageProps<"/[lang]/docs/[[...slug]]">): Promise<Metadata> {
   const { slug } = await params;
   const page = source.getPage(slug);
   if (!page) return { title: "Документация" };

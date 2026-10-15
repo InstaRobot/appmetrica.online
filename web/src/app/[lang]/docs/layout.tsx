@@ -13,7 +13,7 @@ import "../docs.css";
 // route group запрещён (CONTRIBUTING.md §5).
 // Провайдер Fumadocs читает usePathname, а шапка — cookie запроса, поэтому вся оболочка под
 // Suspense: статическая часть ответа — только полоса шапки.
-export default function DocsShell({ children }: LayoutProps<"/docs">) {
+export default function DocsShell({ children }: LayoutProps<"/[lang]/docs">) {
   return (
     <Providers>
       <Suspense fallback={<div className="h-16 border-b border-border bg-header" />}>

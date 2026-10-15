@@ -1,12 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderWithLocale } from "@/test/rtl";
 import { PublicHeader } from "./public-header";
-
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
-}));
 
 // Шапка публичных страниц (лендинг, документация для гостя): без запросов к API.
 describe("PublicHeader", () => {

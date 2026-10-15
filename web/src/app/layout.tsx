@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono, Manrope } from "next/font/google";
 import { LazyToaster } from "@/components/common/lazy-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { langInitScript } from "@/lib/i18n/lang-script";
 import { themeInitScript } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -27,14 +28,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// data-theme выставляет inline-скрипт до первой отрисовки (без мигания), поэтому атрибуты <html>
-// на клиенте отличаются от серверных — suppressHydrationWarning только для этого узла.
+// data-theme и lang выставляют inline-скрипты до первой отрисовки (без мигания), поэтому атрибуты <html>
+// на клиенте отличаются от серверных — suppressHydrationWarning только для этого узла. Язык по умолчанию —
+// английский; /ru… и выбор в cookie скрипт видит сам, точный язык сервера ставит HtmlLang.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: статичная строка из lib/theme.ts, без пользовательских данных */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: статичная строка из lib/i18n/lang-script.ts, без пользовательских данных */}
+        <script dangerouslySetInnerHTML={{ __html: langInitScript }} />
       </head>
       <body className={cn(manrope.variable, jetbrainsMono.variable, "font-sans antialiased")}>
         <TooltipProvider>{children}</TooltipProvider>

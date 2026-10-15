@@ -1,10 +1,13 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { HtmlLang, langInitScript } from "./html-lang";
+import { HtmlLang } from "./html-lang";
+import { langInitScript } from "./lang-script";
 
 function runAt(path: string, cookie = "") {
   window.history.pushState({}, "", path);
+  // biome-ignore lint/suspicious/noDocumentCookie: тест выставляет cookie, которую читает inline-скрипт
   document.cookie = "am_lang=; max-age=0; path=/";
+  // biome-ignore lint/suspicious/noDocumentCookie: то же — сохранённый выбор языка
   if (cookie) document.cookie = `${cookie}; path=/`;
   document.documentElement.lang = "";
   new Function(langInitScript)();

@@ -1,30 +1,37 @@
-import type { Route } from "next";
+"use client";
+
 import Link from "next/link";
+import { useLocale, useMessages } from "@/lib/i18n/client";
+import { publicHref } from "@/lib/i18n/routes";
 import { cn } from "@/lib/utils";
+import { LanguageSwitcher } from "./language-switcher";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
 // Шапка публичных страниц: лендинг S-00 и документация для гостя. Без запросов к API — шапка
 // дашборда грузит список приложений, и 401 увёл бы гостя на вход.
 export function PublicHeader({ className }: { className?: string }) {
+  const locale = useLocale();
+  const m = useMessages().layout.publicHeader;
   return (
     <header className={cn("flex h-16 w-full items-center gap-4 px-8", className)}>
-      <Link href="/" aria-label="appmetrica.online — на главную" className="rounded-md">
+      <Link href={publicHref(locale, "/")} aria-label={m.home} className="rounded-md">
         <Logo />
       </Link>
       <div className="ml-auto flex items-center gap-2">
         <Link
-          href={"/docs" as Route}
+          href={publicHref(locale, "/docs")}
           className="inline-flex h-9 items-center rounded-lg px-3 text-sm font-semibold text-fg-muted transition-colors outline-none hover:bg-subtle hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          Документация
+          {m.docs}
         </Link>
+        <LanguageSwitcher />
         <ThemeToggle className="border border-(--border-strong) bg-card" />
         <Link
           href="/login"
           className="inline-flex h-9 items-center rounded-lg bg-linear-to-b from-(--primary-top) to-primary px-4 text-sm font-semibold text-primary-foreground shadow-(--shadow-primary) transition-colors outline-none hover:from-(--primary-hover) hover:to-(--primary-hover) focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          Войти
+          {m.signIn}
         </Link>
       </div>
     </header>

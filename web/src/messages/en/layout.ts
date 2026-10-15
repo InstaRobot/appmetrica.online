@@ -4,4 +4,9 @@ export const layout = {
     label: "Language",
     switchTo: "Switch to {language}",
   },
+  publicHeader: {
+    home: "appmetrica.online — home",
+    docs: "Documentation",
+    signIn: "Sign in",
+  },
 };
