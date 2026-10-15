@@ -12,7 +12,7 @@ export function Logo() {
         <span className="h-2.5 w-[3px] rounded-[1px] bg-white" />
         <span className="h-3.5 w-[3px] rounded-[1px] bg-white" />
       </span>
-      <span className="hidden text-lg font-bold text-foreground min-[400px]:inline">
+      <span className="text-lg font-bold text-foreground max-[399px]:hidden">
         appmetrica<span className="text-fg-muted">.online</span>
       </span>
     </span>

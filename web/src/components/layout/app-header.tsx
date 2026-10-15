@@ -24,7 +24,9 @@ import { Logo } from "./logo";
 import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "./theme-toggle";
 
-// Полная навигация — с lg (1024 px): на планшете она не помещается, там бургер, как на телефоне.
+// Полная навигация — с lg (1024 px): на планшете она не помещается, там бургер, как на телефоне. Скрытие —
+// только `max-*:hidden`, без базового `hidden`: в документации второй набор утилит Fumadocs (docs.css)
+// объявляет .hidden позже наших `lg:*` и перебил бы их.
 // AppSwitcher (Radix Popover) и меню пользователя (Radix DropdownMenu) — отдельные чанки: их HTML
 // приходит с сервера, а код догружается сразу после первой загрузки страницы (бюджет initial JS
 // NFR-006, T-044). Заглушки того же размера видны только при монтировании на клиенте.
@@ -71,7 +73,7 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
         >
           <AppSwitcher apps={apps} currentAppId={current?.appId} currentTab={current?.tab} />
         </Suspense>
-        <nav aria-label={m.nav} className="ml-auto hidden lg:block">
+        <nav aria-label={m.nav} className="ml-auto max-lg:hidden">
           <ul className="flex items-center gap-1">
             {nav.map(({ href, label, icon: Icon }) => {
               const isActive = within(href, pathname);
@@ -96,16 +98,16 @@ export function AppHeader({ demo = false }: { demo?: boolean }) {
         <MobileNav
           variant="panel"
           demo={demo}
-          className="ml-auto md:inline-flex lg:hidden"
+          className="ml-auto lg:hidden"
           items={nav.map(({ href, label }) => ({
             href,
             label: m[label],
             active: within(href, pathname),
           }))}
         />
-        <LanguageSwitcher className="hidden lg:inline-flex" />
-        <ThemeToggle className="hidden lg:inline-flex" />
-        <div className="hidden lg:contents">
+        <LanguageSwitcher className="max-lg:hidden" />
+        <ThemeToggle className="max-lg:hidden" />
+        <div className="contents max-lg:hidden">
           <Suspense
             fallback={
               <span

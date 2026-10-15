@@ -22,12 +22,12 @@ export function PublicHeader({ className }: { className?: string }) {
       <div className="ml-auto flex items-center gap-2">
         <Link
           href={publicHref(locale, "/docs")}
-          className="hidden h-9 items-center md:inline-flex rounded-lg px-3 text-sm font-semibold text-fg-muted transition-colors outline-none hover:bg-subtle hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="inline-flex h-9 items-center rounded-lg max-md:hidden px-3 text-sm font-semibold text-fg-muted transition-colors outline-none hover:bg-subtle hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           {m.docs}
         </Link>
-        <LanguageSwitcher className="hidden md:inline-flex" />
-        <ThemeToggle className="hidden border border-(--border-strong) bg-card md:inline-flex" />
+        <LanguageSwitcher className="max-md:hidden" />
+        <ThemeToggle className="border border-(--border-strong) bg-card max-md:hidden" />
         <Link
           href="/login"
           className="inline-flex h-9 items-center rounded-lg bg-linear-to-b from-(--primary-top) to-primary px-4 text-sm font-semibold text-primary-foreground shadow-(--shadow-primary) transition-colors outline-none hover:from-(--primary-hover) hover:to-(--primary-hover) focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -36,6 +36,7 @@ export function PublicHeader({ className }: { className?: string }) {
         </Link>
         <MobileNav
           variant="public"
+          className="md:hidden"
           items={[{ href: publicHref(locale, "/docs"), label: m.docs }]}
         />
       </div>

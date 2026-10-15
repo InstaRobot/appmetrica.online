@@ -21,7 +21,8 @@ const MobileNavPanel = lazy(() =>
   import("./mobile-nav-panel").then((m) => ({ default: m.MobileNavPanel })),
 );
 
-// Кнопка ☰ шапки на телефоне (< md): разделы, язык, тема и выход — в боковой панели.
+// Кнопка ☰ шапки на узком экране: разделы, язык, тема и выход — в боковой панели. С какой ширины её
+// прятать, решает шапка (md:hidden у публичной, lg:hidden у дашборда).
 export function MobileNav({ className, ...props }: MobileNavProps & { className?: string }) {
   const m = useMessages().layout.mobileNav;
   const [open, setOpen] = useState(false);
@@ -36,7 +37,7 @@ export function MobileNav({ className, ...props }: MobileNavProps & { className?
         aria-label={m.open}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={cn("size-11 md:hidden", className)}
+        className={cn("size-11", className)}
         onClick={() => {
           setLoaded(true);
           setOpen(true);
