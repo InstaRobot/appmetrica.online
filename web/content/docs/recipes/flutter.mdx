@@ -109,7 +109,7 @@ final appPlatform = _detectPlatform();
   if (Platform.isMacOS) return (name: 'macos', writeKey: 'pk_…'); // macOS platform key
   if (Platform.isWindows) return (name: 'windows', writeKey: 'pk_…'); // Windows platform key
   if (Platform.isLinux) return (name: 'linux', writeKey: 'pk_…'); // Linux platform key
-  throw UnsupportedError('appmetrica: платформа ${Platform.operatingSystem} не поддерживается');
+  throw UnsupportedError('appmetrica: platform ${Platform.operatingSystem} is not supported');
 }
 
 class EventQueue {
