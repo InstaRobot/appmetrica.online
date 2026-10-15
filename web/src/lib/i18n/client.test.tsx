@@ -34,8 +34,9 @@ describe("MessagesProvider", () => {
 
 describe("test render helpers", () => {
   it("render wraps components in the Russian dictionary by default", () => {
-    render(<Probe />);
-    expect(screen.getByText("ru|Сохранить|12 480|true")).toBeInTheDocument();
+    const { container } = render(<Probe />);
+    // textContent, а не getByText: матчер нормализует U+00A0 в DOM, но не в строке ожидания.
+    expect(container.textContent).toBe("ru|Сохранить|12\u00a0480|true");
   });
 
   it("renderWithLocale switches the dictionary", () => {

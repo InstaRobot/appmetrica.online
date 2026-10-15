@@ -1,9 +1,19 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // render/renderHook с русским словарём по умолчанию (src/test/rtl.tsx); сам модуль берёт «/pure».
+    alias: [
+      {
+        find: /^@testing-library\/react$/,
+        replacement: fileURLToPath(new URL("./src/test/rtl.tsx", import.meta.url)),
+      },
+    ],
+  },
   test: {
     environment: "jsdom",
     globals: true,
