@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import type { IntegrationHealth, IntegrationReason } from "@/lib/api/gen/model";
 import { formatInt, formatTime } from "@/lib/format";
+import { useMessages } from "@/lib/i18n/client";
 import { rejectionCode } from "@/lib/rejection-codes";
 
 type RejectionReasonsTableProps = { reasons: IntegrationHealth["reasons"]; timezone: string };
@@ -52,6 +53,7 @@ function ExamplePayload({ reason }: { reason: IntegrationReason }) {
 // Причины отказов за 24 ч (14-ux-ui-spec.md S-10): код, описание с подсказкой из lib/rejection-codes.ts,
 // количество, время последнего отказа и пример payload.
 export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTableProps) {
+  const codes = useMessages().integration.rejectionCodes;
   if (reasons.length === 0) {
     return <p className="text-body-md text-positive">Отказов за 24 часа нет ✓</p>;
   }
@@ -70,7 +72,7 @@ export function RejectionReasonsTable({ reasons, timezone }: RejectionReasonsTab
       </TableHeader>
       <TableBody>
         {reasons.map((reason) => {
-          const text = rejectionCode(reason.code);
+          const text = rejectionCode(reason.code, codes);
           return (
             <TableRow key={reason.code}>
               <TableCell className="font-mono text-code">{reason.code}</TableCell>

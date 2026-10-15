@@ -1,9 +1,11 @@
 import type { Platform } from "@/lib/api/gen/model";
+import type { Messages } from "@/messages";
 
 // Сниппеты онбординга S-10 (FR-017, 14-ux-ui-spec.md «Сниппеты»). Тексты совпадают с эталоном
 // спецификации (snippets.test.ts) для его платформ: Kotlin — android, JavaScript — web, остальные — ios.
 // Для других платформ в curl меняются только значения context, в Swift, Kotlin, JavaScript и Go —
-// значение platform: секция вкладки «Интеграция» подставляет свою платформу.
+// значение platform: секция вкладки «Интеграция» подставляет свою платформу. Комментарии внутри сниппетов —
+// на языке интерфейса (словарь integration.snippetComments), эталон спецификации — русский.
 
 export const SNIPPET_LANGS = ["curl", "swift", "kotlin", "javascript", "go"] as const;
 export type SnippetLang = (typeof SNIPPET_LANGS)[number];
@@ -17,7 +19,7 @@ export const SNIPPET_LABELS: Record<SnippetLang, string> = {
 };
 
 // Рецепты документации с офлайн-очередью и сессиями (07-project-structure.md, content/docs/recipes).
-export const SNIPPET_RECIPES: Record<SnippetLang, string> = {
+export const SNIPPET_RECIPES: Record<SnippetLang, `/docs${string}`> = {
   curl: "/docs/recipes/curl",
   swift: "/docs/recipes/ios-swift",
   kotlin: "/docs/recipes/android-kotlin",
@@ -26,6 +28,7 @@ export const SNIPPET_RECIPES: Record<SnippetLang, string> = {
 };
 
 export type SnippetInput = { ingestUrl: string; writeKey: string; platform: Platform };
+export type SnippetComments = Messages["integration"]["snippetComments"];
 
 const DEFAULT_INGEST_URL = "https://i.appmetrica.online";
 
@@ -70,7 +73,7 @@ const CURL_CONTEXT: Record<Platform, Omit<CurlContext, "platform">> = {
 const swiftPlatform = (platform: Platform) => (platform === "macos" ? "macos" : "ios");
 const goPlatform = (platform: Platform) => (platform === "server" ? "server" : "bot");
 
-function curlSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
+function curlSnippet({ ingestUrl, writeKey, platform }: SnippetInput, c: SnippetComments): string {
   const ctx: CurlContext = { platform, ...CURL_CONTEXT[platform] };
   return `NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 curl -sS -X POST "${ingestUrl}" \\
@@ -99,11 +102,11 @@ curl -sS -X POST "${ingestUrl}" \\
   ]
 }
 JSON
-# Ожидаемый ответ: {"accepted":1,"rejected":[],"warnings":[],"server_time":"…"}
+# ${c.expectedResponse}: {"accepted":1,"rejected":[],"warnings":[],"server_time":"…"}
 `;
 }
 
-function swiftSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
+function swiftSnippet({ ingestUrl, writeKey, platform }: SnippetInput, c: SnippetComments): string {
   return `import Foundation
 import UIKit
 
@@ -164,15 +167,18 @@ enum Analytics {
     }
 }
 
-// Старт сессии при выходе на передний план. InstallID.current — UUID из Keychain
-// (рецепт хранения и офлайн-очередь: /docs/recipes/ios-swift).
+// ${c.swiftSessionStart}
+// ${c.swiftRecipe}
 // let context = await Analytics.currentContext()
 // try await Analytics.send([Event(insertId: UUID(), name: "session_start", timestamp: Date(),
 //     installId: InstallID.current, sessionId: UUID(), userId: nil, durationMs: nil)], context: context)
 `;
 }
 
-function kotlinSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
+function kotlinSnippet(
+  { ingestUrl, writeKey, platform }: SnippetInput,
+  c: SnippetComments,
+): string {
   return `import android.content.Context
 import android.os.Build
 import org.json.JSONArray
@@ -187,7 +193,7 @@ object Analytics {
     private const val ENDPOINT = "${ingestUrl}"
     private const val WRITE_KEY = "${writeKey}"
 
-    // Вызывать из фонового потока (Dispatchers.IO). Возвращает HTTP-код ответа.
+    // ${c.kotlinThread}
     fun send(events: JSONArray, context: JSONObject): Int {
         val body = JSONObject()
             .put("sent_at", Instant.now().toString())
@@ -293,7 +299,7 @@ document.addEventListener("visibilitychange", () => {
 `;
 }
 
-function goSnippet({ ingestUrl, writeKey, platform }: SnippetInput): string {
+function goSnippet({ ingestUrl, writeKey, platform }: SnippetInput, c: SnippetComments): string {
   return `package main
 
 import (
@@ -330,13 +336,13 @@ func main() {
 			"app_version": "1.0.0",
 			"device_type": "server",
 			"environment": "development",
-			"ip":          "none", // для s2s: передайте IP пользователя или "none"
+			"ip":          "none", // ${c.goIp}
 		},
 		"events": []map[string]any{{
 			"insert_id":  newUUID(),
 			"name":       "session_start",
 			"timestamp":  now,
-			"install_id": newUUID(), // для бота — стабильный UUID на пользователя чата
+			"install_id": newUUID(), // ${c.goInstallId}
 			"session_id": newUUID(),
 		}},
 	}
@@ -360,7 +366,7 @@ func main() {
 `;
 }
 
-const BUILDERS: Record<SnippetLang, (input: SnippetInput) => string> = {
+const BUILDERS: Record<SnippetLang, (input: SnippetInput, c: SnippetComments) => string> = {
   curl: curlSnippet,
   swift: swiftSnippet,
   kotlin: kotlinSnippet,
@@ -368,6 +374,10 @@ const BUILDERS: Record<SnippetLang, (input: SnippetInput) => string> = {
   go: goSnippet,
 };
 
-export function buildSnippet(lang: SnippetLang, input: SnippetInput): string {
-  return BUILDERS[lang](input);
+export function buildSnippet(
+  lang: SnippetLang,
+  input: SnippetInput,
+  comments: SnippetComments,
+): string {
+  return BUILDERS[lang](input, comments);
 }

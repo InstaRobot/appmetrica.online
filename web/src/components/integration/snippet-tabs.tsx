@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CodeBlock, type CodeBlockLang } from "@/components/common/code-block";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Platform } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 import {
   buildSnippet,
   defaultSnippetLang,
@@ -40,6 +41,7 @@ const isSnippetLang = (value: string): value is SnippetLang =>
 // в которые подставлены write-ключ и эндпоинт ingest.
 export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: SnippetTabsProps) {
   const [lang, setLang] = useState<SnippetLang>(defaultLang ?? defaultSnippetLang(platform));
+  const comments = useMessages().integration.snippetComments;
 
   return (
     <Tabs value={lang} onValueChange={(value) => isSnippetLang(value) && setLang(value)}>
@@ -53,7 +55,7 @@ export function SnippetTabs({ ingestUrl, writeKey, platform, defaultLang }: Snip
       {SNIPPET_LANGS.map((l) => (
         <TabsContent key={l} value={l}>
           <CodeBlock
-            code={buildSnippet(l, { ingestUrl, writeKey, platform })}
+            code={buildSnippet(l, { ingestUrl, writeKey, platform }, comments)}
             lang={CODE_LANG[l]}
             ariaLabel={`Пример кода на ${SNIPPET_LABELS[l]}`}
           />
