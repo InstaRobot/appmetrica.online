@@ -9,6 +9,8 @@ export const portfolio: typeof en = {
     pick: "Выбрать дату: {date}",
   },
   noEvents: "За {date} событий нет. Проверьте вкладку «Интеграция» у приложений.",
+  noEventsYet: "За {date} событий нет, а сегодня они уже есть.",
+  showToday: "Показать сегодня",
   empty: {
     title: "Пока нет приложений",
     description:
@@ -32,8 +34,8 @@ export const portfolio: typeof en = {
       todayHint: "Неполный день: данные с 00:00 по TZ приложения",
       dau: "DAU {date}",
       delta: "Δ к {date}",
-      new: "Новые",
-      sessions: "Сессии",
+      new: "Новые {date}",
+      sessions: "Сессии {date}",
       sparkline: "30 дней",
     },
     sort: {

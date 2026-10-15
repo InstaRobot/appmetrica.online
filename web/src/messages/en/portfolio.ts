@@ -8,6 +8,8 @@ export const portfolio = {
     pick: "Pick a date: {date}",
   },
   noEvents: "No events on {date}. Check the Integration tab of your apps.",
+  noEventsYet: "No events on {date}, but they are already coming in today.",
+  showToday: "Show today",
   empty: {
     title: "No apps yet",
     description: "Add your first app to get a key and ready-made snippets for sending events.",
@@ -30,8 +32,8 @@ export const portfolio = {
       todayHint: "Partial day: data since 00:00 in the app's time zone",
       dau: "DAU {date}",
       delta: "Δ vs {date}",
-      new: "New",
-      sessions: "Sessions",
+      new: "New {date}",
+      sessions: "Sessions {date}",
       sparkline: "30 days",
     },
     // Тренд 30 дней для скринридеров: средняя первой недели против последней.

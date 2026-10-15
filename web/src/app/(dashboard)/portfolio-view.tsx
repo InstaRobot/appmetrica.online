@@ -44,7 +44,7 @@ import { useGetPortfolio } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import { type App, Environment, Unit } from "@/lib/api/gen/model";
 import { useFormat, useMessages } from "@/lib/i18n/client";
 import { fmt } from "@/lib/i18n/format-message";
-import { addDays, isIsoDate, yesterdayIn } from "@/lib/period";
+import { addDays, isIsoDate, todayIn, yesterdayIn } from "@/lib/period";
 
 // URL-состояние S-03: ?date=YYYY-MM-DD (по умолчанию — вчера по settings.owner_timezone, решает сервер),
 // ?env=, скрытый ?unit=installs и ?sort=-active_date (минус — по убыванию).
@@ -224,12 +224,15 @@ export function PortfolioView() {
       ? apps.data.data.items.filter((app) => app.status === "archived")
       : [];
 
-  const maxDate = yesterdayIn(ownerTimezone);
-  const current = date ?? report?.date ?? maxDate;
+  // По умолчанию — вчера, последний полный день; сегодняшний неполный день можно выбрать.
+  const today = todayIn(ownerTimezone);
+  const current = date ?? report?.date ?? yesterdayIn(ownerTimezone);
   const noEvents =
     report !== undefined &&
     report.rows.length > 0 &&
     report.rows.every((r) => r.active_date === 0 && r.new_date === 0 && r.sessions_date === 0);
+  // Пустая дата при событиях сегодня — не сбой интеграции: отчёт просто смотрит на другой день.
+  const eventsToday = noEvents && current !== today && report.rows.some((r) => r.active_today > 0);
 
   return (
     <>
@@ -241,7 +244,7 @@ export function PortfolioView() {
             <EnvironmentSwitch value={env} onChange={(next) => void setState({ env: next })} />
             <DateStepper
               value={current}
-              max={maxDate}
+              max={today}
               onChange={(next) => void setState({ date: next })}
             />
             <Button asChild className="max-md:w-full">
@@ -258,7 +261,20 @@ export function PortfolioView() {
         <Alert className="mb-4">
           <Info aria-hidden="true" />
           <AlertDescription>
-            {fmt(m.noEvents, { date: f.formatDate(report.date) })}
+            {eventsToday ? (
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {fmt(m.noEventsYet, { date: f.formatDate(report.date) })}
+                <Button
+                  variant="link"
+                  className="h-auto p-0"
+                  onClick={() => void setState({ date: today })}
+                >
+                  {m.showToday}
+                </Button>
+              </span>
+            ) : (
+              fmt(m.noEvents, { date: f.formatDate(report.date) })
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
