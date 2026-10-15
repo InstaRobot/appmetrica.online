@@ -42,6 +42,10 @@ function localePrefix(pathname: string): { locale: Locale; rest: string } | null
   return null;
 }
 
+// Next прогоняет переписанный запрос через proxy повторно: метка в заголовке запроса не даёт правилу
+// «/en… → без префикса» сработать на собственный rewrite и зациклить редирект.
+const REWRITE_MARK = "x-am-locale-rewrite";
+
 function saveLocale(res: NextResponse, locale: Locale): NextResponse {
   res.cookies.set(LOCALE_COOKIE, locale, {
     path: "/",
@@ -56,6 +60,7 @@ function saveLocale(res: NextResponse, locale: Locale): NextResponse {
 // из cookie, при первом визите — язык браузера: русский уходит на /ru…, английский отдаётся как есть.
 function routeLocale(request: NextRequest): NextResponse | null {
   const { pathname, search } = request.nextUrl;
+  if (request.headers.get(REWRITE_MARK) === "1") return NextResponse.next();
   const prefixed = localePrefix(pathname);
   if (prefixed && isLocalizedPublic(prefixed.rest)) {
     if (prefixed.locale === "ru") return saveLocale(NextResponse.next(), "ru");
@@ -70,9 +75,10 @@ function routeLocale(request: NextRequest): NextResponse | null {
     acceptLanguage: request.headers.get("accept-language"),
   });
   const target = `/${locale}${pathname === "/" ? "" : pathname}${search}`;
-  return locale === "ru"
-    ? NextResponse.redirect(new URL(target, request.url), 307)
-    : NextResponse.rewrite(new URL(target, request.url));
+  if (locale === "ru") return NextResponse.redirect(new URL(target, request.url), 307);
+  const headers = new Headers(request.headers);
+  headers.set(REWRITE_MARK, "1");
+  return NextResponse.rewrite(new URL(target, request.url), { request: { headers } });
 }
 
 export function proxy(request: NextRequest): NextResponse {
