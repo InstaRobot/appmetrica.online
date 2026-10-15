@@ -3,10 +3,10 @@ info:
   title: appmetrica.online Ingestion API
   version: 1.1.0
   description: |
-    Приём системных событий приложений без SDK.
-    Аутентификация: публичный write-ключ приложения `pk_…` в заголовке `X-App-Key`
-    или в поле тела `app_key` (для navigator.sendBeacon). Ключ в query string не принимается.
-    Ответ 200 отдаётся только после подтверждённой записи в хранилище.
+    Accepts system events from apps without an SDK.
+    Authentication: the app's public write key `pk_…` in the `X-App-Key` header
+    or in the `app_key` body field (for navigator.sendBeacon). Keys in the query string are rejected.
+    A 200 response is returned only after the write to storage is confirmed.
 servers:
   - url: https://i.appmetrica.online
     description: Production
@@ -14,19 +14,19 @@ servers:
     description: Local development
 tags:
   - name: Ingestion
-    description: Приём батчей событий
+    description: Event batch ingestion
   - name: Health
-    description: Liveness и readiness
+    description: Liveness and readiness
 paths:
   /v1/events:
     options:
       tags: [Ingestion]
       operationId: preflightEvents
-      summary: CORS preflight для браузерных клиентов
+      summary: CORS preflight for browser clients
       security: []
       responses:
         '204':
-          description: Preflight принят
+          description: Preflight accepted
           headers:
             Access-Control-Allow-Origin: { $ref: '#/components/headers/AccessControlAllowOrigin' }
             Access-Control-Allow-Methods:
@@ -38,11 +38,11 @@ paths:
     post:
       tags: [Ingestion]
       operationId: ingestEvents
-      summary: Принять батч событий (1..500)
+      summary: Ingest a batch of events (1..500)
       description: |
-        Валидирует, обогащает (гео, контекст по умолчанию) и записывает события.
-        Невалидные события не валят батч: они перечисляются в `rejected`.
-        Батч целиком отклоняется только при ошибках уровня батча (400/401/403/413/415/429/503).
+        Validates, enriches (geo, default context) and writes the events.
+        Invalid events do not fail the batch: they are listed in `rejected`.
+        The whole batch is rejected only on batch-level errors (400/401/403/413/415/429/503).
       security:
         - appKeyHeader: []
         - {}
@@ -61,7 +61,7 @@ paths:
               web_beacon: { $ref: '#/components/examples/WebBeaconBatch' }
       responses:
         '200':
-          description: Батч обработан (возможен частичный успех)
+          description: Batch processed (may be a partial success)
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
             Access-Control-Allow-Origin: { $ref: '#/components/headers/AccessControlAllowOrigin' }
@@ -72,7 +72,7 @@ paths:
                 all_accepted: { $ref: '#/components/examples/ResultAllAccepted' }
                 partial: { $ref: '#/components/examples/ResultPartial' }
         '400':
-          description: Невалидный батч
+          description: Invalid batch
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -83,7 +83,7 @@ paths:
                 invalid_batch: { $ref: '#/components/examples/ErrInvalidBatch' }
                 unsupported_content_encoding: { $ref: '#/components/examples/ErrUnsupportedEncoding' }
         '401':
-          description: Ключ отсутствует, не найден или отозван
+          description: Key is missing, unknown or revoked
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -93,7 +93,7 @@ paths:
                 missing_app_key: { $ref: '#/components/examples/ErrMissingKey' }
                 invalid_app_key: { $ref: '#/components/examples/ErrInvalidKey' }
         '403':
-          description: Приложение в архиве
+          description: App is archived
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -102,7 +102,7 @@ paths:
               examples:
                 app_archived: { $ref: '#/components/examples/ErrAppArchived' }
         '413':
-          description: Тело больше 1 048 576 байт после распаковки
+          description: Body exceeds 1,048,576 bytes after decompression
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -111,7 +111,7 @@ paths:
               examples:
                 payload_too_large: { $ref: '#/components/examples/ErrPayloadTooLarge' }
         '415':
-          description: Content-Type не application/json и не text/plain
+          description: Content-Type is neither application/json nor text/plain
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -120,7 +120,7 @@ paths:
               examples:
                 unsupported_media_type: { $ref: '#/components/examples/ErrUnsupportedMediaType' }
         '429':
-          description: Превышен лимит событий приложения
+          description: App event rate limit exceeded
           headers:
             Retry-After: { $ref: '#/components/headers/RetryAfter' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
@@ -130,7 +130,7 @@ paths:
               examples:
                 app_rate_limited: { $ref: '#/components/examples/ErrAppRateLimited' }
         '500':
-          description: Внутренняя ошибка
+          description: Internal error
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -139,7 +139,7 @@ paths:
               examples:
                 internal_error: { $ref: '#/components/examples/ErrInternal' }
         '503':
-          description: Хранилище недоступно, повторить весь батч
+          description: Storage unavailable; retry the whole batch
           headers:
             Retry-After: { $ref: '#/components/headers/RetryAfter' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
@@ -152,11 +152,11 @@ paths:
     get:
       tags: [Health]
       operationId: ingestHealth
-      summary: Liveness (без проверки зависимостей)
+      summary: Liveness (dependencies are not checked)
       security: []
       responses:
         '200':
-          description: Процесс жив
+          description: Process is alive
           content:
             application/json:
               schema: { $ref: '#/components/schemas/HealthStatus' }
@@ -164,16 +164,16 @@ paths:
     get:
       tags: [Health]
       operationId: ingestReady
-      summary: Readiness (ClickHouse, Postgres, кэш ключей загружен)
+      summary: Readiness (ClickHouse, Postgres, key cache loaded)
       security: []
       responses:
         '200':
-          description: Готов принимать события
+          description: Ready to accept events
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReadyStatus' }
         '503':
-          description: Не готов
+          description: Not ready
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReadyStatus' }
@@ -183,7 +183,7 @@ components:
       type: apiKey
       in: header
       name: X-App-Key
-      description: Публичный write-ключ приложения `pk_` + 32 символа base62. Альтернатива — поле тела `app_key`.
+      description: Public app write key, `pk_` followed by 32 base62 characters. Alternatively, pass it in the `app_key` body field.
   parameters:
     ContentEncoding:
       name: Content-Encoding
@@ -192,10 +192,10 @@ components:
       schema: { type: string, enum: [gzip, identity] }
   headers:
     RetryAfter:
-      description: Через сколько секунд повторить запрос
+      description: Seconds to wait before retrying the request
       schema: { type: integer, minimum: 1 }
     XRequestId:
-      description: ULID запроса, совпадает с error.request_id и логами
+      description: Request ULID; matches error.request_id and the server logs
       schema: { type: string }
     AccessControlAllowOrigin:
       schema: { type: string, enum: ['*'] }
@@ -216,9 +216,9 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Контекст устройства. Поле события `context` перекрывает поле батча `context` поле за полем.
-        Отсутствующий `platform` берётся из платформы ключа, затем из единственной платформы приложения;
-        иначе `other` и предупреждение `platform_missing`. Отсутствующий `environment` = production.
+        Device context. The event's `context` overrides the batch `context` field by field.
+        A missing `platform` is taken from the key's platform, then from the app's only platform;
+        otherwise it is `other` with a `platform_missing` warning. A missing `environment` means production.
       properties:
         platform: { $ref: '#/components/schemas/Platform' }
         os_name: { type: string, maxLength: 32, example: iOS }
@@ -233,8 +233,8 @@ components:
           type: string
           maxLength: 45
           description: |
-            Только для server-to-server источников: IPv4/IPv6 пользователя для гео или строка "none",
-            отключающая гео. Используется для lookup и не сохраняется.
+            Server-to-server sources only: the user's IPv4/IPv6 address for geo lookup, or the string "none"
+            to disable geo. Used for the lookup and never stored.
           example: none
     Event:
       type: object
@@ -244,31 +244,31 @@ components:
         insert_id:
           type: string
           format: uuid
-          description: Уникальный ID события для дедупликации повторов
+          description: Unique event ID used to deduplicate retries
         name: { $ref: '#/components/schemas/EventName' }
         timestamp:
           type: string
           format: date-time
-          description: Время события по часам устройства, RFC 3339 с offset
+          description: Event time by the device clock, RFC 3339 with offset
         install_id:
           type: string
           format: uuid
-          description: Стабильный ID установки, не nil-UUID
+          description: Stable install ID; must not be the nil UUID
         session_id:
           type: string
           format: uuid
-          description: Общий для session_start и session_end одной сессии
+          description: Shared by session_start and session_end of the same session
         user_id:
           type: string
           minLength: 1
           maxLength: 128
-          description: Непрозрачный ID пользователя из бэкенда приложения. Email, телефоны и строки с символом U+0000 отклоняются.
+          description: Opaque user ID from the app's backend. Emails, phone numbers and strings containing U+0000 are rejected.
         duration_ms:
           type: integer
           format: int64
           minimum: 0
           maximum: 86400000
-          description: Обязателен для session_end; время на переднем плане
+          description: Required for session_end; time spent in the foreground
         context: { $ref: '#/components/schemas/EventContext' }
     EventBatch:
       type: object
@@ -278,11 +278,11 @@ components:
         app_key:
           type: string
           pattern: '^pk_[A-Za-z0-9]{32}$'
-          description: Альтернатива заголовку X-App-Key (для sendBeacon)
+          description: Alternative to the X-App-Key header (for sendBeacon)
         sent_at:
           type: string
           format: date-time
-          description: Момент отправки HTTP-запроса по часам устройства; используется для коррекции времени
+          description: When the HTTP request was sent, by the device clock; used to correct clock skew
         context: { $ref: '#/components/schemas/EventContext' }
         events:
           type: array
@@ -317,7 +317,7 @@ components:
         message: { type: string }
         retryable:
           type: boolean
-          description: true только для install_rate_limited
+          description: true only for install_rate_limited
     IngestWarning:
       type: object
       required: [index, code, message]
@@ -367,7 +367,7 @@ components:
           example: { clickhouse: ok, postgres: ok, key_cache: ok }
   examples:
     IosSessionBatch:
-      summary: iOS — начало и конец сессии залогиненного пользователя
+      summary: 'iOS: session start and end for a signed-in user'
       value:
         sent_at: '2026-10-13T09:15:02.120Z'
         context:
@@ -395,7 +395,7 @@ components:
             user_id: a3f9c2d1-77b4-4e0a-9c1e-2b5d8f6e1a90
             duration_ms: 183986
     WebBeaconBatch:
-      summary: Web — sendBeacon (text/plain), ключ в теле
+      summary: 'Web: sendBeacon (text/plain) with the key in the body'
       value:
         app_key: pk_7Hq2x9AbLm3Nc8Rt5Vw1Yz4Kd6Fg0Jp2
         sent_at: '2026-10-13T09:20:00.500+03:00'
@@ -418,41 +418,41 @@ components:
         warnings: []
         server_time: '2026-10-13T09:15:02.318Z'
     ResultPartial:
-      summary: По одному примеру на каждый RejectionCode и WarningCode
+      summary: One example of each RejectionCode and WarningCode
       value:
         accepted: 1
         rejected:
-          - { index: 1, insert_id: null, code: missing_field, field: 'events[1].insert_id', message: 'Поле insert_id обязательно.', retryable: false }
-          - { index: 2, insert_id: 0199d6c1-0000-7000-8000-000000000002, code: invalid_field, field: 'events[2].install_id', message: 'install_id должен быть UUID и не nil-UUID.', retryable: false }
-          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'Допустимые имена: session_start, session_end.', retryable: false }
-          - { index: 4, insert_id: 0199d6c1-0000-7000-8000-000000000004, code: event_too_old, field: 'events[4].timestamp', message: 'Событие старше 7 дней после коррекции часов.', retryable: false }
-          - { index: 5, insert_id: 0199d6c1-0000-7000-8000-000000000005, code: user_id_looks_like_pii, field: 'events[5].user_id', message: 'user_id похож на email или телефон. Передавайте непрозрачный ID.', retryable: false }
-          - { index: 6, insert_id: 0199d6c1-0000-7000-8000-000000000006, code: duration_required, field: 'events[6].duration_ms', message: 'Для session_end обязательно поле duration_ms (0..86400000).', retryable: false }
-          - { index: 7, insert_id: 0199d6c1-0000-7000-8000-000000000007, code: install_rate_limited, field: 'events[7].install_id', message: 'Слишком много событий с этого устройства. Повторите позже.', retryable: true }
+          - { index: 1, insert_id: null, code: missing_field, field: 'events[1].insert_id', message: 'Field insert_id is required.', retryable: false }
+          - { index: 2, insert_id: 0199d6c1-0000-7000-8000-000000000002, code: invalid_field, field: 'events[2].install_id', message: 'install_id must be a UUID other than the nil UUID.', retryable: false }
+          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'Allowed names: session_start, session_end.', retryable: false }
+          - { index: 4, insert_id: 0199d6c1-0000-7000-8000-000000000004, code: event_too_old, field: 'events[4].timestamp', message: 'Event is older than 7 days after clock correction.', retryable: false }
+          - { index: 5, insert_id: 0199d6c1-0000-7000-8000-000000000005, code: user_id_looks_like_pii, field: 'events[5].user_id', message: 'user_id looks like an email or a phone number. Send an opaque ID.', retryable: false }
+          - { index: 6, insert_id: 0199d6c1-0000-7000-8000-000000000006, code: duration_required, field: 'events[6].duration_ms', message: 'session_end requires duration_ms (0..86400000).', retryable: false }
+          - { index: 7, insert_id: 0199d6c1-0000-7000-8000-000000000007, code: install_rate_limited, field: 'events[7].install_id', message: 'Too many events from this device. Retry later.', retryable: true }
         warnings:
-          - { index: 0, code: timestamp_in_future_clamped, message: 'Время события в будущем больше чем на 10 минут; заменено временем приёма.' }
-          - { index: 8, code: duplicate_insert_id_in_batch, message: 'insert_id повторяется в батче; событие пропущено.' }
-          - { index: 0, code: geo_ip_invalid, message: 'context.ip не является IP-адресом; гео не определено.' }
+          - { index: 0, code: timestamp_in_future_clamped, message: 'Event time is more than 10 minutes in the future; replaced with the receive time.' }
+          - { index: 8, code: duplicate_insert_id_in_batch, message: 'insert_id is repeated within the batch; the event was skipped.' }
+          - { index: 0, code: geo_ip_invalid, message: 'context.ip is not an IP address; geo was not resolved.' }
         server_time: '2026-10-13T09:15:02.318Z'
     ErrInvalidJson:
-      value: { error: { code: invalid_json, message: 'Тело запроса не является корректным JSON.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0B } }
+      value: { error: { code: invalid_json, message: 'Request body is not valid JSON.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0B } }
     ErrInvalidBatch:
-      value: { error: { code: invalid_batch, message: 'events: от 1 до 500 событий.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0C, details: { field: events, issue: max_items } } }
+      value: { error: { code: invalid_batch, message: 'events: 1 to 500 events.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0C, details: { field: events, issue: max_items } } }
     ErrUnsupportedEncoding:
-      value: { error: { code: unsupported_content_encoding, message: 'Поддерживается только Content-Encoding: gzip.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0D } }
+      value: { error: { code: unsupported_content_encoding, message: 'Only Content-Encoding: gzip is supported.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0D } }
     ErrMissingKey:
-      value: { error: { code: missing_app_key, message: 'Передайте ключ в заголовке X-App-Key или в поле app_key.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0E } }
+      value: { error: { code: missing_app_key, message: 'Pass the key in the X-App-Key header or the app_key field.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0E } }
     ErrInvalidKey:
-      value: { error: { code: invalid_app_key, message: 'Ключ не найден или отозван.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0F } }
+      value: { error: { code: invalid_app_key, message: 'Key not found or revoked.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0F } }
     ErrAppArchived:
-      value: { error: { code: app_archived, message: 'Приложение в архиве, приём событий остановлен.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0G } }
+      value: { error: { code: app_archived, message: 'App is archived; event ingestion is stopped.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0G } }
     ErrPayloadTooLarge:
-      value: { error: { code: payload_too_large, message: 'Тело после распаковки больше 1 048 576 байт. Разбейте батч.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0H } }
+      value: { error: { code: payload_too_large, message: 'Decompressed body exceeds 1,048,576 bytes. Split the batch.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0H } }
     ErrUnsupportedMediaType:
-      value: { error: { code: unsupported_media_type, message: 'Content-Type должен быть application/json или text/plain.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0J } }
+      value: { error: { code: unsupported_media_type, message: 'Content-Type must be application/json or text/plain.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0J } }
     ErrAppRateLimited:
-      value: { error: { code: app_rate_limited, message: 'Превышен лимит 2000 событий/с для приложения.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0K } }
+      value: { error: { code: app_rate_limited, message: 'App rate limit of 2000 events/s exceeded.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0K } }
     ErrInternal:
-      value: { error: { code: internal_error, message: 'Внутренняя ошибка. Повторите батч позже.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0M } }
+      value: { error: { code: internal_error, message: 'Internal error. Retry the batch later.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0M } }
     ErrStorageUnavailable:
-      value: { error: { code: storage_unavailable, message: 'Хранилище временно недоступно. Повторите весь батч.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0N } }
+      value: { error: { code: storage_unavailable, message: 'Storage is temporarily unavailable. Retry the whole batch.', request_id: 01JA8Z3K7Q2M9V4T6R1X5N8C0N } }
