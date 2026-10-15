@@ -36,7 +36,7 @@ func openStore(t *testing.T, migrate bool) *pgstore.Store {
 
 var (
 	wantTables = []string{
-		"alert_states", "api_keys", "app_merges", "apps", "auth_sessions", "closed_days", "deletion_requests", "job_runs",
+		"alert_states", "api_keys", "app_merges", "apps", "auth_sessions", "closed_days", "closed_days_reopen", "deletion_requests", "job_runs",
 		"owner", "passkey_setup_tokens", "passkeys", "settings", "webauthn_ceremonies", "write_keys",
 	}
 	wantEnums = []string{
@@ -96,7 +96,7 @@ func TestPostgresMigrations_UpDownUp(t *testing.T) {
 
 	v, err = p.GetDBVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), v)
+	require.Equal(t, int64(3), v)
 
 	// Повторный Up на актуальной схеме — no-op.
 	res, err := p.Up(ctx)
@@ -590,6 +590,66 @@ func TestReopenClosedDays(t *testing.T) {
 	last, err = q.GetLastClosedDay(ctx, other.ID)
 	require.NoError(t, err)
 	require.Equal(t, day(31).Time, last.Time, "другие приложения не затронуты")
+}
+
+// Заявки на переоткрытие дней (смена часового пояса, удаление данных человека): повторная заявка сдвигает
+// from_day к раннему дню, применение удаляет closed_days с from_day и саму заявку одной командой. Приложение с
+// незавершённым удалением человека или установки ждёт: иначе close_day закрыл бы дни заново до удаления данных.
+func TestReopenRequests(t *testing.T) {
+	ctx := t.Context()
+	store := openStore(t, true)
+	q := store.Queries()
+	app := createApp(t, store, "A")
+	waiting := createApp(t, store, "B")
+	day := func(d int) pgtype.Date {
+		return pgtype.Date{Time: time.Date(2026, 8, d, 0, 0, 0, 0, time.UTC), Valid: true}
+	}
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	for _, d := range []int{10, 20, 31} {
+		for _, id := range []uuid.UUID{app.ID, waiting.ID} {
+			require.NoError(t, q.MarkDayClosed(ctx, sqlc.MarkDayClosedParams{AppID: id, Day: day(d), Now: now}))
+		}
+	}
+	for _, r := range []sqlc.RequestReopenClosedDaysParams{
+		{AppID: app.ID, FromDay: day(25), Now: now},
+		{AppID: app.ID, FromDay: day(15), Now: now},
+		{AppID: app.ID, FromDay: day(28), Now: now},
+		{AppID: waiting.ID, FromDay: day(1), Now: now},
+	} {
+		require.NoError(t, q.RequestReopenClosedDays(ctx, r))
+	}
+	_, err := store.Pool().Exec(ctx, `INSERT INTO deletion_requests (app_id, subject_type, subject_value, source, status)
+		VALUES ($1, 'user', 'u1', 'api', 'running'), ($2, 'user', 'u2', 'api', 'done')`, waiting.ID, app.ID)
+	require.NoError(t, err)
+
+	applied, err := q.ApplyReopenRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []sqlc.ApplyReopenRequestsRow{{AppID: app.ID, FromDay: day(15), Days: 2}}, applied)
+	last, err := q.GetLastClosedDay(ctx, app.ID)
+	require.NoError(t, err)
+	require.Equal(t, day(10).Time, last.Time)
+	last, err = q.GetLastClosedDay(ctx, waiting.ID)
+	require.NoError(t, err)
+	require.Equal(t, day(31).Time, last.Time, "заявка ждёт конца удаления")
+
+	again, err := q.ApplyReopenRequests(ctx)
+	require.NoError(t, err)
+	require.Empty(t, again, "применённая заявка удалена, ожидающая — нет")
+
+	_, err = store.Pool().Exec(ctx, `UPDATE deletion_requests SET status = 'done' WHERE app_id = $1`, waiting.ID)
+	require.NoError(t, err)
+	applied, err = q.ApplyReopenRequests(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []sqlc.ApplyReopenRequestsRow{{AppID: waiting.ID, FromDay: day(1), Days: 3}}, applied)
+}
+
+func TestMigration00003Down(t *testing.T) {
+	ctx := t.Context()
+	db := testutil.NewPostgresAt(t, 3)
+
+	require.NoError(t, testutil.MigrateTo(ctx, db, 2))
+
+	require.Equal(t, []string{""}, queryStrings(t, db, `SELECT coalesce(to_regclass('closed_days_reopen')::text, '')`))
 }
 
 func TestAppMergeLifecycle(t *testing.T) {
