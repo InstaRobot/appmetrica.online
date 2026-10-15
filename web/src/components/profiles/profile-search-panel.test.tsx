@@ -91,6 +91,23 @@ describe("ProfileSearchPanel", () => {
     expect(nav.push).not.toHaveBeenCalled();
   });
 
+  it("shows matches as labelled cards on phones", async () => {
+    mockSearch(() => [profileSummary(), profileSummary({ person_key: `i:${INSTALL}` })]);
+    renderPanel("?q=42");
+
+    const table = await screen.findByRole("table", { name: "Результаты" });
+    expect(table).toHaveAttribute("role", "table");
+    const cells = within(within(table).getAllByRole("row")[1] as HTMLElement).getAllByRole("cell");
+    expect(cells.map((c) => c.getAttribute("data-label"))).toEqual([
+      null,
+      "user_id",
+      "Устройств",
+      "Первый визит",
+      "Последний",
+    ]);
+    expect(within(cells[0] as HTMLElement).getByRole("link")).toHaveClass("max-md:min-h-11");
+  });
+
   it("strips the prefix and keeps matches of its type", async () => {
     const queries = mockSearch(() => [
       profileSummary({ person_key: `u:${INSTALL}`, user_id: INSTALL, matched_by: "user_id" }),

@@ -54,6 +54,26 @@ describe("DeletionsTab", () => {
     expect(rows[1]).toHaveTextContent("0192…00ff");
   });
 
+  it("turns requests into labelled cards on phones", async () => {
+    mockRequests([deletionRequest({ app_id: NOTES.id, error: "clickhouse: timeout" })]);
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);
+
+    const table = await screen.findByRole("table", { name: "Запросы на удаление" });
+    expect(table).toHaveAttribute("role", "table");
+    const cells = within(within(table).getAllByRole("row")[1] as HTMLElement).getAllByRole("cell");
+    expect(cells.map((c) => c.getAttribute("data-label"))).toEqual([
+      null,
+      "Тип",
+      "Значение",
+      "Источник",
+      "Статус",
+      "Создан",
+      "Завершён",
+      "Ошибка",
+    ]);
+    expect(cells[7]).toHaveClass("max-md:col-span-full");
+  });
+
   it("says when there were no requests", async () => {
     mockRequests([]);
     renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);

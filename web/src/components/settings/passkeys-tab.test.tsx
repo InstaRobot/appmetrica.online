@@ -90,6 +90,23 @@ describe("PasskeysTab", () => {
     expect(rows[1]).toHaveTextContent("—");
   });
 
+  it("turns passkeys into cards with large actions on phones", async () => {
+    mockPasskeys([MAC]);
+    renderWithClient(<PasskeysTab timezone="Europe/Moscow" />);
+
+    const table = await screen.findByRole("table", { name: "Passkeys" });
+    expect(table).toHaveAttribute("role", "table");
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.getAttribute("data-label")),
+    ).toEqual([null, "Создан", "Последний вход", "Синхронизируется", null]);
+    for (const name of ["Переименовать MacBook Pro", "Удалить MacBook Pro"]) {
+      expect(within(row).getByRole("button", { name })).toHaveClass("max-md:h-11", "max-md:flex-1");
+    }
+  });
+
   it("adds a passkey through the browser ceremony", async () => {
     vi.mocked(startRegistration).mockResolvedValue(attestation);
     const calls = mockPasskeys([MAC]);

@@ -84,6 +84,44 @@ describe("ProfilePanel", () => {
     expect(screen.queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
   });
 
+  it("shows installs and sessions as labelled cards on phones", async () => {
+    mockApi(() =>
+      HttpResponse.json(
+        makeProfile({ installs: [profileInstall()], sessions: [profileSession()] }),
+      ),
+    );
+    renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+
+    const installs = await screen.findByRole("table", { name: "Устройства" });
+    expect(installs).toHaveAttribute("role", "table");
+    const installCells = within(
+      within(installs).getAllByRole("row")[1] as HTMLElement,
+    ).getAllByRole("cell");
+    expect(installCells.map((c) => c.getAttribute("data-label"))).toEqual([
+      "Install ID",
+      "Платформа",
+      "Устройство",
+      "ОС",
+      "Версия",
+      "Гео",
+      "Первый",
+      "Последний",
+    ]);
+
+    const sessions = screen.getByRole("table", { name: "Сессии" });
+    expect(sessions).toHaveAttribute("role", "table");
+    const sessionCells = within(
+      within(sessions).getAllByRole("row")[1] as HTMLElement,
+    ).getAllByRole("cell");
+    expect(sessionCells.map((c) => c.getAttribute("data-label"))).toEqual([
+      "Начало",
+      "Длительность",
+      "Версия",
+      "Платформа",
+      "Install",
+    ]);
+  });
+
   it("loads more sessions by before cursor", async () => {
     const befores: (string | null)[] = [];
     mockApi(({ request }) => {
@@ -104,6 +142,8 @@ describe("ProfilePanel", () => {
     renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
 
     const more = await screen.findByRole("button", { name: "Показать ещё" });
+    // На телефоне — во всю ширину списка карточек и не ниже 44 px.
+    expect(more).toHaveClass("max-md:h-11", "max-md:self-stretch");
     await userEvent.setup().click(more);
 
     const sessions = screen.getByRole("table", { name: "Сессии" });

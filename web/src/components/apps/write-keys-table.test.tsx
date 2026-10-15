@@ -89,6 +89,29 @@ describe("WriteKeysTable", () => {
     expect(within(rows[1] as HTMLElement).queryByRole("button", { name: /Отозвать/ })).toBeNull();
   });
 
+  it("turns keys into cards with actions at the bottom on phones", async () => {
+    mockKeys([ACTIVE, REVOKED]);
+    renderWithClient(
+      <WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="Europe/Moscow" />,
+    );
+
+    const table = await screen.findByRole("table", { name: "Write-ключи" });
+    expect(table).toHaveAttribute("role", "table");
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.getAttribute("data-label")),
+    ).toEqual([null, "Метка", "Платформа", "Создан", "Использован", null]);
+    expect(within(row).getByRole("button", { name: "Отозвать ключ pk_7Hq2…Ab0" })).toHaveClass(
+      "max-md:h-11",
+      "max-md:w-full",
+    );
+    expect(within(row).getByRole("button", { name: "Копировать ключ pk_7Hq2…Ab0" })).toHaveClass(
+      "max-md:size-11",
+    );
+  });
+
   it("is the #write-keys target of the integration tab", async () => {
     mockKeys([ACTIVE]);
     renderWithClient(

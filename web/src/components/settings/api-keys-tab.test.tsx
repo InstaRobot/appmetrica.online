@@ -58,6 +58,24 @@ describe("ApiKeysTab", () => {
     expect(rows[1]).toHaveTextContent("read, delete");
   });
 
+  it("turns keys into cards with the revoke action at the bottom on phones", async () => {
+    mockKeys([READER]);
+    renderWithClient(<ApiKeysTab timezone="Europe/Moscow" />);
+
+    const table = await screen.findByRole("table", { name: "API-ключи" });
+    expect(table).toHaveAttribute("role", "table");
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.getAttribute("data-label")),
+    ).toEqual([null, "Метка", "Права", "Приложение", "Создан", "Использован", null]);
+    expect(within(row).getByRole("button", { name: /^Отозвать ключ/ })).toHaveClass(
+      "max-md:h-11",
+      "max-md:w-full",
+    );
+  });
+
   it("shows the secret once and only the prefix afterwards", async () => {
     const calls = mockKeys([]);
     renderWithClient(<ApiKeysTab timezone="Europe/Moscow" />);
