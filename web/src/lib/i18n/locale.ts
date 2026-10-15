@@ -3,6 +3,12 @@ export const LOCALES = ["en", "ru"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
 
+// Самоназвания языков для переключателя: не переводятся, каждый язык назван по-своему.
+export const LANGUAGE_NAMES: Record<Locale, { name: string; short: string }> = {
+  en: { name: "English", short: "EN" },
+  ru: { name: "Русский", short: "RU" },
+};
+
 // Cookie выбранного языка: ставит переключатель и заход на /ru…, живёт год.
 export const LOCALE_COOKIE = "am_lang";
 export const LOCALE_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
