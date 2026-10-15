@@ -1,14 +1,10 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Breakdown, IntegrationHealth, Platform, WriteKey } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { IntegrationPanel } from "./integration-panel";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -18,17 +14,6 @@ const APP_ID = "0192aaaa-0000-7000-8000-000000000010";
 // 2026-10-13 14:32:05 по Москве.
 const NOW = new Date("2026-10-13T11:32:05Z");
 const KEY = "pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0";
-
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 
 function health(overrides: Partial<IntegrationHealth> = {}): IntegrationHealth {
   return {
@@ -349,7 +334,7 @@ describe("IntegrationOnboarding in English", () => {
       keys: [writeKey({ platform: "ios" })],
       health: (n) => health(n < 1 ? {} : { first_event_at: "2026-10-13T11:32:05Z" }),
     });
-    renderInEnglish(<IntegrationPanel appId={APP_ID} />);
+    renderWithClient(<IntegrationPanel appId={APP_ID} />, { locale: "en" });
 
     const status = await screen.findByRole("status", { name: "First event" });
     expect(status).toHaveTextContent("Waiting for the first event… Checking every 3 seconds.");

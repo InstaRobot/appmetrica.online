@@ -1,29 +1,14 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { mockTimezones } from "@/test/timezones";
 import { AppSettingsForm, hasClosedDays } from "./app-settings-form";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000043";
-
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -321,7 +306,7 @@ describe("AppSettingsForm in English", () => {
 
   it("edits the general settings in English", async () => {
     const bodies = mockUpdate();
-    renderInEnglish(<AppSettingsForm app={OLD_APP} />);
+    renderWithClient(<AppSettingsForm app={OLD_APP} />, { locale: "en" });
 
     const card = within(screen.getByRole("form", { name: "General" }));
     const name = card.getByRole("textbox", { name: /Name/ });
@@ -342,7 +327,7 @@ describe("AppSettingsForm in English", () => {
   });
 
   it("warns about closed days in English", async () => {
-    renderInEnglish(<AppSettingsForm app={OLD_APP} />);
+    renderWithClient(<AppSettingsForm app={OLD_APP} />, { locale: "en" });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("combobox", { name: /Time zone/ }));
@@ -354,7 +339,9 @@ describe("AppSettingsForm in English", () => {
 
   it("edits the platforms in English", async () => {
     const bodies = mockUpdate();
-    renderInEnglish(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />);
+    renderWithClient(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />, {
+      locale: "en",
+    });
 
     const section = within(screen.getByRole("region", { name: "Platforms" }));
     expect(

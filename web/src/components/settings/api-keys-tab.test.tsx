@@ -1,15 +1,11 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ApiKey } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { apiKey, appSummary, errorBody } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { ApiKeysTab } from "./api-keys-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -170,12 +166,6 @@ describe("ApiKeysTab", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
-}
-
 describe("ApiKeysTab in English", () => {
   it("lists keys with English headers and dates", async () => {
     mockKeys([
@@ -188,7 +178,7 @@ describe("ApiKeysTab in English", () => {
         last_used_at: "2026-10-12T09:30:00Z",
       }),
     ]);
-    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+    renderWithClient(<ApiKeysTab timezone="Europe/Moscow" />, { locale: "en" });
 
     const table = await screen.findByRole("table", { name: "API keys" });
     expect(
@@ -207,7 +197,7 @@ describe("ApiKeysTab in English", () => {
 
   it("creates a key and shows the secret in English", async () => {
     mockKeys([]);
-    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+    renderWithClient(<ApiKeysTab timezone="Europe/Moscow" />, { locale: "en" });
     const user = userEvent.setup();
 
     expect(await screen.findByRole("heading", { name: "No API keys yet" })).toBeInTheDocument();
@@ -239,7 +229,7 @@ describe("ApiKeysTab in English", () => {
 
   it("revokes a key in English", async () => {
     mockKeys([READER]);
-    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+    renderWithClient(<ApiKeysTab timezone="Europe/Moscow" />, { locale: "en" });
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Revoke key sk_a8Kd2xQ1…" }));

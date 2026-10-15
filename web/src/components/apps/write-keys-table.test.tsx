@@ -1,29 +1,15 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Platform, WriteKey } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, writeKey } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { WriteKeysTable } from "./write-keys-table";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000044";
 
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 const PLATFORMS: Platform[] = ["ios", "web"];
 const ACTIVE = writeKey({
   id: "0192bbbb-0000-7000-8000-000000000001",
@@ -246,7 +232,9 @@ describe("WriteKeysTable", () => {
 describe("WriteKeysTable in English", () => {
   it("lists keys in English", async () => {
     mockKeys([ACTIVE, { ...REVOKED, platform: null }]);
-    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />, {
+      locale: "en",
+    });
 
     const table = await screen.findByRole("table", { name: "Write keys" });
     const rows = within(table).getAllByRole("row");
@@ -264,14 +252,18 @@ describe("WriteKeysTable in English", () => {
 
   it("says when there are no keys", async () => {
     mockKeys([]);
-    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />, {
+      locale: "en",
+    });
 
     expect(await screen.findByText("No keys yet — create the first one.")).toBeInTheDocument();
   });
 
   it("creates and revokes a key in English", async () => {
     const calls = mockKeys([ACTIVE]);
-    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+    renderWithClient(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />, {
+      locale: "en",
+    });
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Create key" }));

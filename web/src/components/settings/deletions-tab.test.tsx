@@ -1,14 +1,10 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import type { DeletionRequest } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { appSummary, deletionRequest, errorBody } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { DeletionsTab } from "./deletions-tab";
 
 const NOTES = appSummary({ id: "0192aaaa-0000-7000-8000-000000000047", name: "Notes iOS" });
@@ -76,12 +72,6 @@ describe("DeletionsTab", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
-}
-
 describe("DeletionsTab in English", () => {
   it("lists requests with English headers, types, sources and statuses", async () => {
     mockRequests([
@@ -100,7 +90,7 @@ describe("DeletionsTab in English", () => {
         status: "pending",
       }),
     ]);
-    renderEnglish(<DeletionsTab timezone="Europe/Moscow" />);
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />, { locale: "en" });
 
     expect(await screen.findByRole("heading", { name: "Deletions" })).toBeInTheDocument();
     const table = await screen.findByRole("table", { name: "Deletion requests" });
@@ -120,7 +110,7 @@ describe("DeletionsTab in English", () => {
 
   it("says in English when there were no requests", async () => {
     mockRequests([]);
-    renderEnglish(<DeletionsTab timezone="Europe/Moscow" />);
+    renderWithClient(<DeletionsTab timezone="Europe/Moscow" />, { locale: "en" });
     expect(await screen.findByText("There have been no deletion requests")).toBeInTheDocument();
   });
 });

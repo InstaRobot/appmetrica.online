@@ -1,15 +1,11 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Settings, TelegramTestResult } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, settings as makeSettings } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { TelegramTab } from "./telegram-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -176,16 +172,10 @@ describe("TelegramTab", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
-}
-
 describe("TelegramTab in English", () => {
   it("labels the form, validates and saves in English", async () => {
     const patches = mockSettings(makeSettings());
-    renderEnglish(<TelegramTab />);
+    renderWithClient(<TelegramTab />, { locale: "en" });
     const user = userEvent.setup();
 
     expect(await screen.findByRole("heading", { name: "Telegram" })).toBeInTheDocument();
@@ -221,7 +211,7 @@ describe("TelegramTab in English", () => {
     mockSettings(makeSettings(), () =>
       HttpResponse.json({ sent: false, error: "chat not found" } satisfies TelegramTestResult),
     );
-    renderEnglish(<TelegramTab />);
+    renderWithClient(<TelegramTab />, { locale: "en" });
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Send test message" }));
     const alert = await screen.findByRole("alert");
@@ -231,7 +221,7 @@ describe("TelegramTab in English", () => {
 
   it("toasts an accepted test message in English", async () => {
     mockSettings(makeSettings());
-    renderEnglish(<TelegramTab />);
+    renderWithClient(<TelegramTab />, { locale: "en" });
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Send test message" }));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Message sent"));

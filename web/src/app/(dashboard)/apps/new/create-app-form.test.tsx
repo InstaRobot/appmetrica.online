@@ -1,11 +1,8 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateAppBody } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
@@ -19,17 +16,6 @@ vi.mock("next/navigation", () => ({
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
-
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 
 const created = makeApp({ id: "0192bbbb-0000-7000-8000-000000000001", name: "Notes iOS" });
 
@@ -278,7 +264,7 @@ describe("CreateAppForm in English", () => {
   it("labels the form and validates it in English", async () => {
     const bodies = mockCreate();
     const user = userEvent.setup();
-    renderInEnglish(<CreateAppForm defaultTimezone="" />);
+    renderWithClient(<CreateAppForm defaultTimezone="" />, { locale: "en" });
 
     const group = screen.getByRole("group", { name: /Platforms/ });
     expect(group).toHaveAccessibleDescription(
@@ -299,7 +285,7 @@ describe("CreateAppForm in English", () => {
 
   it("limits the name in English", async () => {
     const user = userEvent.setup();
-    renderInEnglish(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+    renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />, { locale: "en" });
 
     expect(screen.getByRole("combobox", { name: /Time zone/ })).toHaveAccessibleDescription(
       "Day boundaries in reports.",
@@ -323,7 +309,7 @@ describe("CreateAppForm in English", () => {
       ),
     );
     const user = userEvent.setup();
-    renderInEnglish(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+    renderWithClient(<CreateAppForm defaultTimezone="Europe/Moscow" />, { locale: "en" });
 
     await user.type(screen.getByRole("textbox", { name: /Name/ }), "Notes iOS");
     await choosePlatform(user, "iOS");
@@ -343,7 +329,7 @@ describe("New app page in English", () => {
   });
 
   it("shows a skeleton while the settings load", () => {
-    renderInEnglish(<NewAppForm />);
+    renderWithClient(<NewAppForm />, { locale: "en" });
     expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument();
   });
 });

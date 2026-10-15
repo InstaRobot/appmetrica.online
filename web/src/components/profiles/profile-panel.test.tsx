@@ -1,10 +1,7 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { type RenderOptions, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { makeQueryClient } from "@/lib/query-client";
 import {
   errorBody,
   app as makeApp,
@@ -14,7 +11,6 @@ import {
 } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { ProfilePanel } from "./profile-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000022";
@@ -161,16 +157,6 @@ describe("ProfilePanel", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement, options: RenderOptions = {}) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
-    "en",
-    options,
-  );
-}
-
 describe("ProfilePanel in English", () => {
   it("shows the profile, installs and sessions in English", async () => {
     mockApi(() =>
@@ -189,7 +175,7 @@ describe("ProfilePanel in English", () => {
         }),
       ),
     );
-    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+    renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />, { locale: "en" });
 
     expect(await screen.findByRole("heading", { name: "u:42" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to search" })).toHaveAttribute(
@@ -229,14 +215,14 @@ describe("ProfilePanel in English", () => {
 
   it("says in English that a person has no sessions", async () => {
     mockApi(() => HttpResponse.json(makeProfile({ sessions: [] })));
-    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A42" />);
+    renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A42" />, { locale: "en" });
 
     expect(await screen.findByText("No sessions")).toBeInTheDocument();
   });
 
   it("shows not found in English", async () => {
     mockApi(() => HttpResponse.json(errorBody("profile_not_found"), { status: 404 }));
-    renderEnglish(<ProfilePanel appId={APP_ID} personKey="u%3A404" />);
+    renderWithClient(<ProfilePanel appId={APP_ID} personKey="u%3A404" />, { locale: "en" });
 
     expect(await screen.findByRole("heading", { name: "Profile not found" })).toBeInTheDocument();
     expect(

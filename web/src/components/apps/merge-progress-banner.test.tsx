@@ -1,32 +1,17 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useListWriteKeys } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import type { AppMerge } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { MergeProgressBanner } from "./merge-progress-banner";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000027";
 const MERGE_ID = "0192bbbb-0000-7000-8000-000000000027";
-
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -221,7 +206,7 @@ describe("MergeProgressBanner in English", () => {
       if (n === 1) return [merge({ status: "failed", step: "copy", error: null })];
       return [merge({ status: "pending", step: "copy", copied_events: 500, total_events: 1000 })];
     });
-    renderInEnglish(<MergeProgressBanner appId={APP_ID} />);
+    renderWithClient(<MergeProgressBanner appId={APP_ID} />, { locale: "en" });
 
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Merging with “Notes Android”: waiting for event intake to reload the keys (up to 17 min)",
@@ -246,7 +231,7 @@ describe("MergeProgressBanner in English", () => {
     mockMerges(() => [
       merge({ status: "running", step: "copy", copied_events: 0, total_events: 1 }),
     ]);
-    renderInEnglish(<MergeProgressBanner appId={APP_ID} />);
+    renderWithClient(<MergeProgressBanner appId={APP_ID} />, { locale: "en" });
 
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Merging with “Notes Android”: moved 0 of 1 event",

@@ -1,28 +1,14 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeQueryClient } from "@/lib/query-client";
 import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { AppDangerZone } from "./app-danger-zone";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000045";
 
-// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
-function renderInEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(ui, "en", {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 const ACTIVE = makeApp({ id: APP_ID, name: "Notes iOS", status: "active" });
 const ARCHIVED = makeApp({
   id: APP_ID,
@@ -195,7 +181,7 @@ describe("AppDangerZone", () => {
 describe("AppDangerZone in English", () => {
   it("archives the app in English", async () => {
     const calls = mockActions();
-    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+    renderWithClient(<AppDangerZone app={ACTIVE} />, { locale: "en" });
 
     expect(screen.getByText("Danger zone")).toBeInTheDocument();
     expect(screen.getByText("Merge with another app")).toBeInTheDocument();
@@ -216,7 +202,7 @@ describe("AppDangerZone in English", () => {
 
   it("restores an archived app in English", async () => {
     const calls = mockActions();
-    renderInEnglish(<AppDangerZone app={ARCHIVED} />);
+    renderWithClient(<AppDangerZone app={ARCHIVED} />, { locale: "en" });
 
     expect(
       screen.getByText(
@@ -231,7 +217,7 @@ describe("AppDangerZone in English", () => {
 
   it("deletes the app in English", async () => {
     const calls = mockActions();
-    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+    renderWithClient(<AppDangerZone app={ACTIVE} />, { locale: "en" });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Delete permanently" }));
@@ -254,7 +240,7 @@ describe("AppDangerZone in English", () => {
         }),
       ),
     );
-    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+    renderWithClient(<AppDangerZone app={ACTIVE} />, { locale: "en" });
 
     expect(
       await screen.findByText("A merge is in progress — wait for it to finish"),

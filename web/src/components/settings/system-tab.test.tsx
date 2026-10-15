@@ -1,14 +1,10 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import type { SystemStatus } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, systemStatus } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { SystemTab } from "./system-tab";
 
 const NOW = new Date("2026-10-13T12:00:00Z");
@@ -88,16 +84,10 @@ describe("SystemTab", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
-}
-
 describe("SystemTab in English", () => {
   it("describes healthy components, alerts and jobs in English", async () => {
     mockStatus(systemStatus());
-    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+    renderWithClient(<SystemTab timezone="Europe/Moscow" now={NOW} />, { locale: "en" });
 
     expect(await screen.findByRole("heading", { name: "System" })).toBeInTheDocument();
     const ch = await screen.findByRole("group", { name: "ClickHouse" });
@@ -133,7 +123,7 @@ describe("SystemTab in English", () => {
         jobs: [],
       }),
     );
-    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+    renderWithClient(<SystemTab timezone="Europe/Moscow" now={NOW} />, { locale: "en" });
 
     const ch = await screen.findByRole("group", { name: "ClickHouse" });
     expect(ch).toHaveTextContent("Unavailable");
@@ -159,7 +149,7 @@ describe("SystemTab in English", () => {
         ],
       }),
     );
-    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+    renderWithClient(<SystemTab timezone="Europe/Moscow" now={NOW} />, { locale: "en" });
 
     expect(await screen.findByText("Firing since 14:05")).toBeInTheDocument();
   });

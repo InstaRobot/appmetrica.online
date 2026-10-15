@@ -1,16 +1,12 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { type RenderOptions, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
-import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProfileSummary } from "@/lib/api/gen/model";
-import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp, profileSummary } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { renderWithLocale } from "@/test/rtl";
 import { ProfileSearchPanel } from "./profile-search-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000023";
@@ -146,24 +142,15 @@ describe("ProfileSearchPanel", () => {
   });
 });
 
-function renderEnglish(ui: ReactElement, options: RenderOptions = {}) {
-  const client = makeQueryClient();
-  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
-  return renderWithLocale(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
-    "en",
-    options,
-  );
-}
-
 describe("ProfileSearchPanel in English", () => {
   it("lists results with English headers and dates", async () => {
     mockSearch(() => [
       profileSummary({ installs_count: 1234 }),
       profileSummary({ person_key: `i:${INSTALL}`, user_id: null, matched_by: "install_id" }),
     ]);
-    renderEnglish(<ProfileSearchPanel appId={APP_ID} />, {
+    renderWithClient(<ProfileSearchPanel appId={APP_ID} />, {
       wrapper: withNuqsTestingAdapter({ searchParams: "?q=42" }),
+      locale: "en",
     });
 
     expect(screen.getByRole("heading", { name: "Profiles" })).toBeInTheDocument();
@@ -182,8 +169,9 @@ describe("ProfileSearchPanel in English", () => {
 
   it("explains an empty result in English", async () => {
     mockSearch(() => []);
-    renderEnglish(<ProfileSearchPanel appId={APP_ID} />, {
+    renderWithClient(<ProfileSearchPanel appId={APP_ID} />, {
       wrapper: withNuqsTestingAdapter({ searchParams: "?q=nobody" }),
+      locale: "en",
     });
 
     expect(await screen.findByRole("heading", { name: "Nothing found" })).toBeInTheDocument();
