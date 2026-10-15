@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  createFormatters,
+import { createFormatters } from "./format";
+
+const NBSP = " ";
+
+const {
   formatBucket,
   formatClock,
   formatDate,
@@ -16,9 +19,7 @@ import {
   formatWeekdayDate,
   formatWeekRange,
   shortId,
-} from "./format";
-
-const NBSP = " ";
+} = createFormatters("ru");
 
 describe("format", () => {
   it("formats numbers, percents and durations in ru-RU", () => {

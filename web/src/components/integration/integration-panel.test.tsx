@@ -5,7 +5,10 @@ import { HttpResponse, http } from "msw";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IntegrationHealth } from "@/lib/api/gen/model";
-import { createFormatters, formatDateTime } from "@/lib/format";
+import { createFormatters } from "@/lib/format";
+
+const { formatDateTime } = createFormatters("ru");
+
 import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
