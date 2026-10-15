@@ -4,11 +4,13 @@ import { CircleAlert, CircleCheck, Loader2, TimerOff } from "lucide-react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { richText } from "@/components/common/rich-text";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/fetcher";
+import { useMessages } from "@/lib/i18n/client";
 import {
   isSetupLinkExpired,
   passkeyErrorMessage,
@@ -16,7 +18,7 @@ import {
   validateDeviceName,
 } from "@/lib/webauthn";
 import { PasskeyUnsupported, usePasskeySupport } from "./passkey-button";
-import { PasskeyLinkCommand } from "./passkey-link-command";
+import { PASSKEY_LINK_COMMAND, PasskeyLinkCommand } from "./passkey-link-command";
 
 // Страница портфеля S-03 появляется в T-037; до этого typedRoutes не знает маршрут "/".
 const PORTFOLIO = "/portfolio" as Route;
@@ -28,6 +30,7 @@ type SetupPasskeyFormProps = { token: string; defaultName: string };
 
 // S-02: регистрация passkey по одноразовой ссылке. Успех ставит cookie сессии и ведёт в портфель.
 export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) {
+  const m = useMessages().auth;
   const router = useRouter();
   const supported = usePasskeySupport();
   const [name, setName] = useState(defaultName);
@@ -46,7 +49,7 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = validateDeviceName(name);
+    const invalid = validateDeviceName(name, m.deviceName);
     setNameError(invalid);
     if (invalid) {
       inputRef.current?.focus();
@@ -60,11 +63,11 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
       if (isSetupLinkExpired(err)) {
         setStatus("expired");
       } else if (err instanceof ApiError && err.code === "invalid_request" && hasNameField(err)) {
-        setNameError("Введите название устройства");
+        setNameError(m.deviceName.required);
         setStatus("idle");
         inputRef.current?.focus();
       } else {
-        setError(passkeyErrorMessage(err, "setup"));
+        setError(passkeyErrorMessage(err, "setup", m.passkeyErrors));
         setStatus("error");
       }
     }
@@ -74,10 +77,11 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
     return (
       <div role="status" className="flex flex-col items-center gap-3 text-center">
         <TimerOff aria-hidden="true" className="size-10 text-fg-subtle" />
-        <h2 className="text-heading-3">Ссылка устарела или уже использована</h2>
+        <h2 className="text-heading-3">{m.setup.expiredTitle}</h2>
         <p className="text-body-md text-muted-foreground">
-          Получите новую: выполните на сервере{" "}
-          <code className="text-code">appmetrica admin passkey-link</code>.
+          {richText(m.setup.expiredHint, {
+            command: <code className="text-code">{PASSKEY_LINK_COMMAND}</code>,
+          })}
         </p>
         <PasskeyLinkCommand />
       </div>
@@ -89,7 +93,7 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
     <form noValidate onSubmit={submit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor={inputId}>
-          Название устройства <span aria-hidden="true">*</span>
+          {m.setup.deviceName} <span aria-hidden="true">*</span>
         </Label>
         <Input
           ref={inputRef}
@@ -113,10 +117,10 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
         {status === "submitting" ? (
           <>
             <Loader2 aria-hidden="true" className="animate-spin" />
-            Создаём passkey…
+            {m.setup.submitting}
           </>
         ) : (
-          "Создать passkey"
+          m.setup.submit
         )}
       </Button>
       {!supported && <PasskeyUnsupported />}
@@ -126,7 +130,7 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
           className="flex items-center gap-2 rounded-lg border border-(--color-success-500) bg-(--color-success-50) px-3 py-2 text-body-sm text-positive"
         >
           <CircleCheck aria-hidden="true" className="size-4" />
-          Passkey создан. Переходим в дашборд…
+          {m.setup.success}
         </div>
       )}
       {status === "error" && (

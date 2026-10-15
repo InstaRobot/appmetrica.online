@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useMessages } from "@/lib/i18n/client";
 import { safeNext } from "@/lib/safe-next";
 import {
   cancelPasskeyCeremony,
@@ -26,16 +27,17 @@ export function usePasskeySupport(): boolean {
 }
 
 export function PasskeyUnsupported() {
+  const m = useMessages().auth.passkey;
   return (
     <p className="text-body-sm text-muted-foreground">
-      <span>Браузер не поддерживает passkey</span>.{" "}
+      <span>{m.unsupported}</span>.{" "}
       <a
         href={PASSKEY_HELP_URL}
         target="_blank"
         rel="noreferrer noopener"
         className="text-fg-link underline"
       >
-        Где работают passkey
+        {m.help}
       </a>
     </p>
   );
@@ -48,6 +50,7 @@ type PasskeyButtonProps = {
 
 // S-01: вход по passkey кнопкой и через автозаполнение (conditional UI).
 export function PasskeyButton({ next, onError }: PasskeyButtonProps) {
+  const m = useMessages().auth;
   const router = useRouter();
   const supported = usePasskeySupport();
   const target = safeNext(next) as Route;
@@ -88,7 +91,7 @@ export function PasskeyButton({ next, onError }: PasskeyButtonProps) {
       await loginWithPasskey({ autofill: false });
       router.replace(target);
     } catch (err) {
-      const message = passkeyErrorMessage(err, "login");
+      const message = passkeyErrorMessage(err, "login", m.passkeyErrors);
       setError(message);
       setWaiting(false);
       onError?.(message);
@@ -117,12 +120,12 @@ export function PasskeyButton({ next, onError }: PasskeyButtonProps) {
         {waiting ? (
           <>
             <Loader2 aria-hidden="true" className="animate-spin" />
-            Ожидаем подтверждение…
+            {m.passkey.waiting}
           </>
         ) : (
           <>
             <KeyRound aria-hidden="true" />
-            Войти с passkey
+            {m.passkey.signIn}
           </>
         )}
       </Button>
