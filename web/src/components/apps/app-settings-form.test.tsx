@@ -1,14 +1,29 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { mockTimezones } from "@/test/timezones";
 import { AppSettingsForm, hasClosedDays } from "./app-settings-form";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000043";
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -298,5 +313,60 @@ describe("hasClosedDays", () => {
     ["not a date", false],
   ])("created_at %s → %s", (createdAt, expected) => {
     expect(hasClosedDays(createdAt, now)).toBe(expected);
+  });
+});
+
+describe("AppSettingsForm in English", () => {
+  beforeEach(mockTimezones);
+
+  it("edits the general settings in English", async () => {
+    const bodies = mockUpdate();
+    renderInEnglish(<AppSettingsForm app={OLD_APP} />);
+
+    const card = within(screen.getByRole("form", { name: "General" }));
+    const name = card.getByRole("textbox", { name: /Name/ });
+    expect(card.getByRole("combobox", { name: /Time zone/ })).toHaveAccessibleDescription(
+      "Changes day boundaries in reports; closed days aren't recalculated.",
+    );
+    const user = userEvent.setup();
+    await user.clear(name);
+    await user.type(name, "   ");
+    await user.click(card.getByRole("button", { name: "Save" }));
+    expect(name).toHaveAccessibleDescription("Enter a name");
+
+    await user.clear(name);
+    await user.type(name, "Notes 2");
+    await user.click(card.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(bodies).toEqual([{ name: "Notes 2" }]));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Settings saved"));
+  });
+
+  it("warns about closed days in English", async () => {
+    renderInEnglish(<AppSettingsForm app={OLD_APP} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox", { name: /Time zone/ }));
+    await user.click(await screen.findByRole("option", { name: /Asia\/Tokyo/ }));
+    expect(screen.getByRole("status", { name: "Time zone change" })).toHaveTextContent(
+      "Closed days aren't recalculated: days older than 8 days have already been counted in the Europe/Moscow time zone. The new time zone applies to the remaining days.",
+    );
+  });
+
+  it("edits the platforms in English", async () => {
+    const bodies = mockUpdate();
+    renderInEnglish(<AppSettingsForm app={{ ...OLD_APP, platforms: ["ios"] }} />);
+
+    const section = within(screen.getByRole("region", { name: "Platforms" }));
+    expect(
+      section.getByText("Removing a platform doesn't delete its data: events and keys are kept."),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(await section.findByRole("button", { name: "iOS" }));
+    expect(section.getByText("Keep at least one platform")).toBeInTheDocument();
+
+    await user.click(section.getByRole("button", { name: "Android" }));
+    await user.click(section.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(bodies).toEqual([{ platforms: ["android"] }]));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Platforms saved"));
   });
 });

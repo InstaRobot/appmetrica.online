@@ -1,14 +1,29 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Platform, WriteKey } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, writeKey } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { WriteKeysTable } from "./write-keys-table";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000044";
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 const PLATFORMS: Platform[] = ["ios", "web"];
 const ACTIVE = writeKey({
   id: "0192bbbb-0000-7000-8000-000000000001",
@@ -225,5 +240,69 @@ describe("WriteKeysTable", () => {
     );
 
     expect(await screen.findByText("Ключей нет — создайте первый.")).toBeInTheDocument();
+  });
+});
+
+describe("WriteKeysTable in English", () => {
+  it("lists keys in English", async () => {
+    mockKeys([ACTIVE, { ...REVOKED, platform: null }]);
+    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+
+    const table = await screen.findByRole("table", { name: "Write keys" });
+    const rows = within(table).getAllByRole("row");
+    expect(
+      within(rows[0] as HTMLElement)
+        .getAllByRole("columnheader")
+        .map((c) => c.textContent),
+    ).toEqual(["Key", "Label", "Platform", "Created", "Last used", "Actions"]);
+    expect(
+      within(rows[1] as HTMLElement).getByRole("button", { name: "Copy key pk_7Hq2…Ab0" }),
+    ).toBeInTheDocument();
+    expect(rows[2]).toHaveTextContent("Revoked");
+    expect(rows[2]).toHaveTextContent("Any platform");
+  });
+
+  it("says when there are no keys", async () => {
+    mockKeys([]);
+    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+
+    expect(await screen.findByText("No keys yet — create the first one.")).toBeInTheDocument();
+  });
+
+  it("creates and revokes a key in English", async () => {
+    const calls = mockKeys([ACTIVE]);
+    renderInEnglish(<WriteKeysTable appId={APP_ID} platforms={PLATFORMS} timezone="UTC" />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Create key" }));
+    const dialog = screen.getByRole("dialog", { name: "New write key" });
+    expect(dialog).toHaveTextContent("A key for sending events to ingest.");
+    const label = within(dialog).getByRole("textbox", { name: "Label" });
+    expect(label).toHaveAttribute("placeholder", "For example, iOS 2.x");
+    expect(within(dialog).getByRole("combobox", { name: "Platform" })).toHaveAccessibleDescription(
+      "Used for events without context.platform.",
+    );
+    await user.type(label, "x".repeat(65));
+    await user.tab();
+    expect(label).toHaveAccessibleDescription("64 characters max");
+    await user.clear(label);
+    await user.type(label, "Web 1.x");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(calls.created).toEqual([{ label: "Web 1.x" }]));
+    expect(await within(dialog).findByRole("textbox", { name: "write key" })).toHaveValue(
+      "pk_NewKCCCCCCCCCCCCCCCCCCCCCCCCC9zz",
+    );
+    expect(dialog).toHaveTextContent(
+      "The key is public: you can embed it in the app. Old keys keep working until you revoke them.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+
+    await user.click(await screen.findByRole("button", { name: "Revoke key pk_7Hq2…Ab0" }));
+    const confirm = screen.getByRole("alertdialog", { name: "Revoke key pk_7Hq2…Ab0?" });
+    expect(confirm).toHaveTextContent("401 invalid_app_key");
+    await user.click(within(confirm).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(calls.revoked).toEqual([ACTIVE.id]));
+    expect(toasts.success).toHaveBeenCalledWith("Key revoked");
   });
 });

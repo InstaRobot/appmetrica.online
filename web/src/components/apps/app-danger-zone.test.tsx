@@ -1,13 +1,28 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeQueryClient } from "@/lib/query-client";
 import { appMerge, errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { AppDangerZone } from "./app-danger-zone";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000045";
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 const ACTIVE = makeApp({ id: APP_ID, name: "Notes iOS", status: "active" });
 const ARCHIVED = makeApp({
   id: APP_ID,
@@ -174,5 +189,76 @@ describe("AppDangerZone", () => {
 
     expect(screen.getByRole("button", { name: "Объединить…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Вернуть из архива" })).toBeEnabled();
+  });
+});
+
+describe("AppDangerZone in English", () => {
+  it("archives the app in English", async () => {
+    const calls = mockActions();
+    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+
+    expect(screen.getByText("Danger zone")).toBeInTheDocument();
+    expect(screen.getByText("Merge with another app")).toBeInTheDocument();
+    expect(
+      screen.getByText("Archive — event intake stops (403 app_archived), data is kept."),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Archive “Notes iOS”?" });
+    expect(dialog).toHaveTextContent(
+      "Ingest will start rejecting this app's events with code 403 app_archived.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Archive" }));
+
+    await waitFor(() => expect(calls).toEqual(["archive"]));
+    expect(toasts.success).toHaveBeenCalledWith("App archived");
+  });
+
+  it("restores an archived app in English", async () => {
+    const calls = mockActions();
+    renderInEnglish(<AppDangerZone app={ARCHIVED} />);
+
+    expect(
+      screen.getByText(
+        "The app is archived: events are rejected, data is kept. Restore it to accept events again.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Restore from archive" }));
+
+    await waitFor(() => expect(calls).toEqual(["unarchive"]));
+    expect(toasts.success).toHaveBeenCalledWith("App restored from archive");
+  });
+
+  it("deletes the app in English", async () => {
+    const calls = mockActions();
+    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete permanently" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete “Notes iOS” permanently?" });
+    expect(dialog).toHaveTextContent(
+      "All of the app's events, keys and settings will be deleted in the background. This can't be undone.",
+    );
+    await user.type(within(dialog).getByRole("textbox"), "Notes iOS");
+    await user.click(within(dialog).getByRole("button", { name: "Delete permanently" }));
+
+    await waitFor(() => expect(calls).toEqual(["delete:Notes iOS"]));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Deletion started"));
+  });
+
+  it("explains that a merge is in progress in English", async () => {
+    server.use(
+      http.get(`*/admin/v1/apps/${APP_ID}/merges`, () =>
+        HttpResponse.json({
+          items: [appMerge({ target_app_id: APP_ID, status: "running", step: "copy" })],
+        }),
+      ),
+    );
+    renderInEnglish(<AppDangerZone app={ACTIVE} />);
+
+    expect(
+      await screen.findByText("A merge is in progress — wait for it to finish"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merge…" })).toBeDisabled();
   });
 });

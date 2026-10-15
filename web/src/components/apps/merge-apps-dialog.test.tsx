@@ -1,15 +1,30 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { makeQueryClient } from "@/lib/query-client";
 import { appMerge, appSummary, errorBody, app as makeApp, mergePreview } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { MergeAppsDialog } from "./merge-apps-dialog";
 
 const TARGET_ID = "0192aaaa-0000-7000-8000-000000000017";
 const SOURCE_ID = "0192aaaa-0000-7000-8000-000000000018";
 const ARCHIVED_ID = "0192aaaa-0000-7000-8000-000000000019";
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const TARGET = makeApp({ id: TARGET_ID, name: "Notes iOS", timezone: "Europe/Moscow" });
 const SOURCE = makeApp({
@@ -255,5 +270,75 @@ describe("MergeAppsDialog", () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(calls.create).toEqual([]);
+  });
+});
+
+describe("MergeAppsDialog in English", () => {
+  it("merges after confirming the source name in English", async () => {
+    const calls = mockApi({
+      preview: () =>
+        HttpResponse.json(
+          mergePreview({
+            source: appSummary({ id: SOURCE_ID, name: "Notes Android", platforms: ["android"] }),
+            timezone_differs: true,
+            source_timezone: "Asia/Tokyo",
+          }),
+        ),
+    });
+    renderInEnglish(<MergeAppsDialog target={TARGET} open onOpenChange={vi.fn()} />);
+    const user = userEvent.setup();
+
+    const dialog = screen.getByRole("dialog", { name: "Merge apps" });
+    expect(dialog).toHaveTextContent("Data from the selected app will move to “Notes iOS”.");
+    await user.click(await screen.findByRole("combobox", { name: "Source app" }));
+    expect(screen.getByPlaceholderText("Find an app…")).toBeInTheDocument();
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Notes Android",
+      "Old Gamearchived",
+    ]);
+    await user.click(screen.getByRole("option", { name: /Notes Android/ }));
+
+    const preview = await within(dialog).findByRole("region", { name: "What will move" });
+    await waitFor(() => expect(preview).toHaveTextContent("Events1,204,331"));
+    expect(preview).toHaveTextContent("Write keys2");
+    expect(preview).toHaveTextContent(
+      "The time zone stays “Europe/Moscow”: the source's days (Asia/Tokyo) will be recalculated.",
+    );
+    expect(preview).toHaveTextContent(
+      "The source's keys keep working — no need to update released app versions.",
+    );
+
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Type the source app's name to confirm" }),
+      "Notes Android",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Merge" }));
+
+    await waitFor(() =>
+      expect(calls.create).toEqual([{ source_app_id: SOURCE_ID, confirm_name: "Notes Android" }]),
+    );
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Merge started"));
+  });
+
+  it("explains a pending deletion request in English", async () => {
+    mockApi({ create: () => HttpResponse.json(errorBody("deletion_pending"), { status: 409 }) });
+    renderInEnglish(<MergeAppsDialog target={TARGET} open onOpenChange={vi.fn()} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("combobox", { name: "Source app" }));
+    await user.click(await screen.findByRole("option", { name: /Notes Android/ }));
+    await screen.findByRole("region", { name: "What will move" });
+    await user.type(
+      screen.getByRole("textbox", { name: "Type the source app's name to confirm" }),
+      "Notes Android",
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Merge" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+
+    expect(
+      await screen.findByText(
+        "One of the apps has a pending deletion request — wait for it to complete",
+      ),
+    ).toBeInTheDocument();
   });
 });
