@@ -33,7 +33,6 @@ export type SegmentDims = {
   readonly city: ChildWeights;
   readonly locale: ChildWeights;
 };
-export type SegmentDim = keyof SegmentDims;
 
 export const DIM_PARENT: Readonly<Partial<Record<BreakdownDimension, ParentDim>>> = {
   os_version: "os_name",

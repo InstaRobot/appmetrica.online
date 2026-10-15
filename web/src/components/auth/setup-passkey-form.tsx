@@ -102,7 +102,6 @@ export function SetupPasskeyForm({ token, defaultName }: SetupPasskeyFormProps) 
           required
           autoComplete="off"
           // Телефон: поле 44 px и шрифт 16 px — iOS не увеличивает страницу при фокусе.
-          className="h-11 text-lg md:h-8 md:text-sm"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={busy}

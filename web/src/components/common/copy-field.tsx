@@ -30,7 +30,7 @@ export function CopyField({ value, label, mono = true, masked = false }: CopyFie
         aria-label={label}
         onFocus={(e) => e.currentTarget.select()}
         // Телефон: поле и кнопка — цели нажатия 44 px, с md — прежние размеры.
-        className={cn("h-11 bg-subtle shadow-inner md:h-8", mono && "font-mono text-code")}
+        className={cn("bg-subtle shadow-inner", mono && "font-mono text-code")}
       />
       <Button
         type="button"

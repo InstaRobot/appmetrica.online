@@ -58,7 +58,3 @@ export const DEMO_APPS: readonly App[] = [
     archived_at: "2026-06-30T15:20:00.000Z",
   },
 ];
-
-export function findDemoApp(id: string): App | undefined {
-  return DEMO_APPS.find((app) => app.id === id);
-}
