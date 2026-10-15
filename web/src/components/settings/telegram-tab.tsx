@@ -22,18 +22,14 @@ import {
 } from "@/lib/api/gen/endpoints/admin-settings/admin-settings";
 import type { Settings, UpdateSettingsBody } from "@/lib/api/gen/model";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 import { TabHeader } from "./tab-header";
 
 // F-5 (lib/forms/schemas.ts): chat_id — пусто или число, время дайджеста с шагом 15 минут.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.telegramSchema);
-
-const messages = {
-  telegram_chat_id: "Chat ID — число (для групп с минусом)",
-  owner_timezone: "Выберите часовой пояс",
-  digest_time: "Время с шагом 15 минут",
-};
 
 type FormData = zod.output<Awaited<ReturnType<typeof schema>>>;
 
@@ -56,6 +52,8 @@ function changes(saved: Settings, data: FormData): UpdateSettingsBody {
 }
 
 function TelegramForm({ settings }: { settings: Settings }) {
+  const m = useMessages();
+  const t = m.settings.telegram;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const [testError, setTestError] = useState<string | null>(null);
@@ -67,12 +65,16 @@ function TelegramForm({ settings }: { settings: Settings }) {
       digest_time: settings.digest_time,
       alerts_enabled: settings.alerts_enabled,
     },
-    messages,
+    messages: {
+      telegram_chat_id: t.errors.chatId,
+      owner_timezone: t.errors.timezone,
+      digest_time: t.errors.digestTime,
+    },
     onSubmit: async (data) => {
       try {
         const res = await updateSettings(changes(settings, data));
         if (res.status !== 200) return;
-        toast.success("Настройки сохранены");
+        toast.success(t.saved);
         queryClient.setQueryData(getGetSettingsQueryKey(), res);
       } catch (error) {
         if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
@@ -86,13 +88,11 @@ function TelegramForm({ settings }: { settings: Settings }) {
     onSuccess: (res) => {
       if (res.status !== 200) return;
       if (res.data.sent) {
-        toast.success("Сообщение отправлено");
+        toast.success(t.testSent);
         return;
       }
       const reason = res.data.error ? `: ${res.data.error}` : "";
-      setTestError(
-        `Telegram не принял сообщение${reason} — проверьте Chat ID и что бот добавлен в чат.`,
-      );
+      setTestError(fmt(t.testRejected, { reason }));
     },
     onError: (error) => toast.error(uiError(error).message),
   });
@@ -109,7 +109,7 @@ function TelegramForm({ settings }: { settings: Settings }) {
     <form noValidate onSubmit={form.handleSubmit} className="flex max-w-[720px] flex-col gap-5">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={chat.id}>Chat ID</Label>
+          <Label htmlFor={chat.id}>{t.chatId}</Label>
           <Input
             {...chat}
             inputMode="numeric"
@@ -127,13 +127,12 @@ function TelegramForm({ settings }: { settings: Settings }) {
             />
           ) : (
             <p id="chat-hint" className="text-caption text-fg-muted">
-              Напишите боту /start и узнайте chat_id через @userinfobot. Токен бота задаётся на
-              сервере переменной TELEGRAM_BOT_TOKEN.
+              {t.chatHint}
             </p>
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={timezone.id}>Часовой пояс владельца</Label>
+          <Label htmlFor={timezone.id}>{t.timezone}</Label>
           <TimezoneSelect
             id={timezone.id}
             ref={timezone.ref}
@@ -155,10 +154,10 @@ function TelegramForm({ settings }: { settings: Settings }) {
             disabled={!hasChat}
             onCheckedChange={(checked) => form.setValue("digest_enabled", checked)}
           />
-          <Label htmlFor="digest_enabled">Ежедневный дайджест</Label>
+          <Label htmlFor="digest_enabled">{t.digest}</Label>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={time.id}>Время дайджеста</Label>
+          <Label htmlFor={time.id}>{t.digestTime}</Label>
           <Input
             {...time}
             type="time"
@@ -176,7 +175,7 @@ function TelegramForm({ settings }: { settings: Settings }) {
             checked={form.values.alerts_enabled}
             onCheckedChange={(checked) => form.setValue("alerts_enabled", checked)}
           />
-          <Label htmlFor="alerts_enabled">Системные алерты</Label>
+          <Label htmlFor="alerts_enabled">{t.alerts}</Label>
         </div>
       </div>
 
@@ -194,10 +193,10 @@ function TelegramForm({ settings }: { settings: Settings }) {
           disabled={!settings.telegram_chat_id || test.isPending}
           onClick={() => test.mutate()}
         >
-          {test.isPending ? "Отправляем…" : "Отправить тестовое сообщение"}
+          {test.isPending ? t.sending : t.sendTest}
         </Button>
         <Button type="submit" disabled={!dirty || form.submitting}>
-          {form.submitting ? "Сохраняем…" : "Сохранить"}
+          {form.submitting ? t.saving : m.common.save}
         </Button>
       </div>
     </form>
@@ -207,19 +206,20 @@ function TelegramForm({ settings }: { settings: Settings }) {
 // Вкладка «Telegram» S-12 (FR-025): chat_id, часовой пояс владельца, дайджест и алерты. Тестовое сообщение
 // уходит в сохранённый chat_id; отказ Telegram показывается в форме, а не toast.
 export function TelegramTab() {
+  const m = useMessages();
   const query = useGetSettings();
   const settings = query.data?.status === 200 ? query.data.data : undefined;
 
   return (
     <section aria-labelledby="telegram-title" className="flex flex-col gap-4">
-      <TabHeader id="telegram-title" title="Telegram" />
+      <TabHeader id="telegram-title" title={m.settings.telegram.title} />
       {query.isError && !settings ? (
         <ErrorState
           error={query.error as unknown as ApiError}
           onRetry={() => void query.refetch()}
         />
       ) : !settings ? (
-        <Skeleton role="status" aria-label="Загрузка…" className="h-48 max-w-[720px]" />
+        <Skeleton role="status" aria-label={m.common.loading} className="h-48 max-w-[720px]" />
       ) : (
         <TelegramForm settings={settings} />
       )}

@@ -14,21 +14,14 @@ import {
 import type { ApiError } from "@/lib/api/fetcher";
 import { useListDeletionRequests } from "@/lib/api/gen/endpoints/admin-system/admin-system";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
-import type { DeletionSource, DeletionSubjectType } from "@/lib/api/gen/model";
-import { formatDateTime, shortId } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
 import { TabHeader } from "./tab-header";
-
-const SUBJECT: Record<DeletionSubjectType, string> = {
-  install: "Устройство",
-  user: "Пользователь",
-  app: "Приложение",
-};
-
-const SOURCE: Record<DeletionSource, string> = { api: "API", dashboard: "Дашборд" };
 
 // Вкладка «Удаления» S-12 (FR-019): журнал запросов на удаление по всем приложениям. Удалённое приложение
 // уже не в списке — вместо названия сокращённый app_id.
 export function DeletionsTab({ timezone }: { timezone: string }) {
+  const t = useMessages().settings.deletions;
+  const { formatDateTime, shortId } = useFormat();
   const query = useListDeletionRequests();
   const appsQuery = useListApps({ include_archived: true });
   const apps = appsQuery.data?.status === 200 ? appsQuery.data.data.items : [];
@@ -37,7 +30,7 @@ export function DeletionsTab({ timezone }: { timezone: string }) {
 
   return (
     <section aria-labelledby="deletions-title" className="flex flex-col gap-4">
-      <TabHeader id="deletions-title" title="Удаления" />
+      <TabHeader id="deletions-title" title={t.title} />
       {query.isError && !requests ? (
         <ErrorState
           error={query.error as unknown as ApiError}
@@ -47,35 +40,35 @@ export function DeletionsTab({ timezone }: { timezone: string }) {
         <TableSkeleton rows={3} />
       ) : (
         <Table>
-          <caption className="sr-only">Запросы на удаление</caption>
+          <caption className="sr-only">{t.caption}</caption>
           <TableHeader>
             <TableRow>
-              <TableHead>Приложение</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Значение</TableHead>
-              <TableHead>Источник</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Создан</TableHead>
-              <TableHead>Завершён</TableHead>
-              <TableHead>Ошибка</TableHead>
+              <TableHead>{t.columns.app}</TableHead>
+              <TableHead>{t.columns.type}</TableHead>
+              <TableHead>{t.columns.value}</TableHead>
+              <TableHead>{t.columns.source}</TableHead>
+              <TableHead>{t.columns.status}</TableHead>
+              <TableHead>{t.columns.created}</TableHead>
+              <TableHead>{t.columns.completed}</TableHead>
+              <TableHead>{t.columns.error}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {requests.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-6 text-center text-fg-muted">
-                  Запросов на удаление не было
+                  {t.empty}
                 </TableCell>
               </TableRow>
             ) : (
               requests.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{appName(r.app_id)}</TableCell>
-                  <TableCell>{SUBJECT[r.subject_type]}</TableCell>
+                  <TableCell>{t.subject[r.subject_type]}</TableCell>
                   <TableCell className="font-mono" title={r.subject_value}>
                     {shortId(r.subject_value)}
                   </TableCell>
-                  <TableCell>{SOURCE[r.source]}</TableCell>
+                  <TableCell>{t.source[r.source]}</TableCell>
                   <TableCell>
                     <DeletionStatusBadge status={r.status} />
                   </TableCell>

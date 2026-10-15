@@ -43,7 +43,8 @@ import {
   useListPasskeys,
 } from "@/lib/api/gen/endpoints/admin-passkeys/admin-passkeys";
 import type { Passkey } from "@/lib/api/gen/model";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 import { passkeyErrorMessage, registerAdditionalPasskey, validateDeviceName } from "@/lib/webauthn";
@@ -59,6 +60,7 @@ type NameFormProps = {
 
 // F-6: название устройства 1–64 символа после trim; ошибка запроса остаётся в диалоге.
 function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: NameFormProps) {
+  const m = useMessages();
   const id = useId();
   const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
@@ -80,11 +82,11 @@ function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: N
   return (
     <form noValidate onSubmit={submit} className="grid gap-4">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={id}>Название устройства</Label>
+        <Label htmlFor={id}>{m.settings.passkeys.deviceName}</Label>
         <Input
           id={id}
           autoComplete="off"
-          placeholder="Например, iPhone"
+          placeholder={m.settings.passkeys.deviceNamePlaceholder}
           value={name}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
@@ -95,7 +97,7 @@ function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: N
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">
-            Отмена
+            {m.common.cancel}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={pending}>
@@ -109,12 +111,14 @@ function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: N
 type DeleteDialogProps = { passkey: Passkey | null; onClose: () => void };
 
 function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
+  const m = useMessages();
+  const t = m.settings.passkeys;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const remove = useMutation({
     mutationFn: (id: string) => deletePasskey(id),
     onSuccess: () => {
-      toast.success("Passkey удалён");
+      toast.success(t.removed);
       onClose();
       void queryClient.invalidateQueries({ queryKey: getListPasskeysQueryKey() });
     },
@@ -131,10 +135,8 @@ function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Удалить passkey «{passkey?.name}»?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Войти с этого устройства или ключа больше не получится.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{fmt(t.removeTitle, { name: passkey?.name ?? "" })}</AlertDialogTitle>
+          <AlertDialogDescription>{t.removeDescription}</AlertDialogDescription>
         </AlertDialogHeader>
         {remove.isError ? (
           <p role="alert" className="text-body-sm text-destructive">
@@ -142,13 +144,13 @@ function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
           </p>
         ) : null}
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{m.common.cancel}</AlertDialogCancel>
           <Button
             variant="destructive"
             disabled={remove.isPending}
             onClick={() => passkey && remove.mutate(passkey.id)}
           >
-            {remove.isPending ? "Удаляем…" : "Удалить"}
+            {remove.isPending ? t.removing : t.remove}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -159,6 +161,9 @@ function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
 // Вкладка «Passkeys» S-12 (FR-008): несколько passkey владельца, добавление, переименование и удаление.
 // Последний passkey удалить нельзя (409 last_passkey) — текст ошибки остаётся в диалоге.
 export function PasskeysTab({ timezone }: { timezone: string }) {
+  const m = useMessages();
+  const t = m.settings.passkeys;
+  const f = useFormat();
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const query = useListPasskeys();
@@ -175,7 +180,7 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
     } catch (error) {
       return passkeyErrorMessage(error, "setup");
     }
-    toast.success("Passkey добавлен");
+    toast.success(t.added);
     setAdding(false);
     await refresh();
     return null;
@@ -197,11 +202,11 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
     <section aria-labelledby="passkeys-title" className="flex flex-col gap-4">
       <TabHeader
         id="passkeys-title"
-        title="Passkeys"
+        title={t.title}
         action={
           <Button size="sm" onClick={() => setAdding(true)}>
             <Plus aria-hidden="true" />
-            Добавить passkey
+            {t.add}
           </Button>
         }
       />
@@ -214,15 +219,15 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
         <TableSkeleton rows={2} />
       ) : (
         <Table>
-          <caption className="sr-only">Passkeys</caption>
+          <caption className="sr-only">{t.title}</caption>
           <TableHeader>
             <TableRow>
-              <TableHead>Название</TableHead>
-              <TableHead>Создан</TableHead>
-              <TableHead>Последний вход</TableHead>
-              <TableHead>Синхронизируется</TableHead>
+              <TableHead>{t.columns.name}</TableHead>
+              <TableHead>{t.columns.created}</TableHead>
+              <TableHead>{t.columns.lastUsed}</TableHead>
+              <TableHead>{t.columns.synced}</TableHead>
               <TableHead>
-                <span className="sr-only">Действия</span>
+                <span className="sr-only">{m.settings.actions}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -230,28 +235,28 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
             {passkeys.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell>{formatDate(p.created_at, timezone)}</TableCell>
+                <TableCell>{f.formatDate(p.created_at, timezone)}</TableCell>
                 <TableCell>
-                  {p.last_used_at ? formatDateTime(p.last_used_at, timezone) : "—"}
+                  {p.last_used_at ? f.formatDateTime(p.last_used_at, timezone) : "—"}
                 </TableCell>
-                <TableCell>{p.backup_state ? "да" : "нет"}</TableCell>
+                <TableCell>{p.backup_state ? t.yes : t.no}</TableCell>
                 <TableCell className="text-right">
                   <span className="inline-flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label={`Переименовать ${p.name}`}
+                      aria-label={fmt(t.renameItem, { name: p.name })}
                       onClick={() => setRenaming(p)}
                     >
-                      Переименовать
+                      {t.rename}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label={`Удалить ${p.name}`}
+                      aria-label={fmt(t.removeItem, { name: p.name })}
                       onClick={() => setDeleting(p)}
                     >
-                      Удалить
+                      {t.remove}
                     </Button>
                   </span>
                 </TableCell>
@@ -264,15 +269,13 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Новый passkey</DialogTitle>
-            <DialogDescription>
-              Браузер предложит создать passkey на этом устройстве, в телефоне или на ключе.
-            </DialogDescription>
+            <DialogTitle>{t.addTitle}</DialogTitle>
+            <DialogDescription>{t.addDescription}</DialogDescription>
           </DialogHeader>
           <PasskeyNameForm
             initialName=""
-            submitLabel="Создать passkey"
-            pendingLabel="Ждём подтверждения…"
+            submitLabel={t.create}
+            pendingLabel={t.waiting}
             onSubmit={add}
           />
         </DialogContent>
@@ -281,14 +284,14 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
       <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Переименовать passkey</DialogTitle>
-            <DialogDescription>Название видно только в этом списке.</DialogDescription>
+            <DialogTitle>{t.renameTitle}</DialogTitle>
+            <DialogDescription>{t.renameDescription}</DialogDescription>
           </DialogHeader>
           {renaming ? (
             <PasskeyNameForm
               initialName={renaming.name}
-              submitLabel="Сохранить"
-              pendingLabel="Сохраняем…"
+              submitLabel={m.common.save}
+              pendingLabel={t.saving}
               onSubmit={rename}
             />
           ) : null}

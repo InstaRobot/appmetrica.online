@@ -2,9 +2,11 @@
 
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { lazy, Suspense } from "react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetSettings } from "@/lib/api/gen/endpoints/admin-settings/admin-settings";
+import { useMessages } from "@/lib/i18n/client";
 
 // Radix Tabs монтирует только активную вкладку, поэтому код вкладки (формы, диалоги, WebAuthn) грузится
 // отдельным чанком при первом открытии — в initial JS страницы его нет (бюджет NFR-006, T-044).
@@ -25,8 +27,9 @@ const DeletionsTab = lazy(() =>
 );
 
 function TabSkeleton() {
+  const m = useMessages();
   return (
-    <div role="status" aria-label="Загрузка…" className="flex flex-col gap-4">
+    <div role="status" aria-label={m.common.loading} className="flex flex-col gap-4">
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-40 w-full" />
     </div>
@@ -34,20 +37,26 @@ function TabSkeleton() {
 }
 
 const TABS = [
-  { value: "passkeys", label: "Passkeys" },
-  { value: "api-keys", label: "API-ключи" },
-  { value: "telegram", label: "Telegram" },
-  { value: "system", label: "Система" },
-  { value: "deletions", label: "Удаления" },
+  { value: "passkeys", label: "passkeys" },
+  { value: "api-keys", label: "apiKeys" },
+  { value: "telegram", label: "telegram" },
+  { value: "system", label: "system" },
+  { value: "deletions", label: "deletions" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["value"];
 
 const tabParser = parseAsStringLiteral(TABS.map((t) => t.value)).withDefault("passkeys");
 
+// Заголовок S-12 на языке интерфейса: страница — серверный компонент, словарь — в MessagesProvider.
+export function SettingsHeader() {
+  return <PageHeader title={useMessages().settings.title} />;
+}
+
 // S-12 `/settings`: вкладки синхронизированы с `?tab=` (неизвестное значение — Passkeys). Стрелки, Home и
 // End переключают вкладки (Radix Tabs, автоматическая активация). Даты — в часовом поясе владельца.
 export function SettingsView() {
+  const m = useMessages().settings;
   const [tab, setTab] = useQueryState("tab", tabParser);
   const settings = useGetSettings();
   const timezone =
@@ -57,10 +66,10 @@ export function SettingsView() {
 
   return (
     <Tabs value={tab} onValueChange={(value) => void setTab(value as Tab)} className="gap-6">
-      <TabsList aria-label="Разделы настроек">
+      <TabsList aria-label={m.tabsLabel}>
         {TABS.map((t) => (
           <TabsTrigger key={t.value} value={t.value}>
-            {t.label}
+            {m.tabs[t.label]}
           </TabsTrigger>
         ))}
       </TabsList>

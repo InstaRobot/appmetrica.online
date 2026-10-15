@@ -55,8 +55,9 @@ import {
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { type ApiKey, ApiKeyScope, type AppSummary } from "@/lib/api/gen/model";
-import { formatDate, formatDateTime, shortId } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 import { TabHeader } from "./tab-header";
@@ -67,14 +68,10 @@ const SCOPES = Object.values(ApiKeyScope);
 // F-4 (14-ux-ui-spec.md §7.1): метка 1–64 после trim, хотя бы одно право; «Все приложения» — без app_id.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.apiKeySchema);
 
-const messages = {
-  label: { too_small: "Введите метку", too_big: "Не длиннее 64 символов" },
-  scopes: "Выберите хотя бы одно право",
-};
-
 const keyLabel = (key: ApiKey) => `${key.key_prefix}…`;
 
 function useAppNames(): { apps: AppSummary[]; nameOf: (id: string) => string } {
+  const { shortId } = useFormat();
   const query = useListApps({ include_archived: true });
   const apps = query.data?.status === 200 ? query.data.data.items : [];
   return {
@@ -90,11 +87,16 @@ function CreateApiKeyForm({
   apps: AppSummary[];
   onSecret: (s: string) => void;
 }) {
+  const m = useMessages();
+  const t = m.settings.apiKeys.form;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const form = useZodForm(schema, {
     defaultValues: { label: "", scopes: [ApiKeyScope.read], app_id: ALL_APPS },
-    messages,
+    messages: {
+      label: { too_small: t.labelRequired, too_big: t.labelTooLong },
+      scopes: t.scopesRequired,
+    },
     onSubmit: async ({ label, scopes, app_id }) => {
       try {
         const res = await createApiKey({
@@ -128,13 +130,13 @@ function CreateApiKeyForm({
     <form noValidate onSubmit={form.handleSubmit} className="grid gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={label.id}>
-          Метка <Required />
+          {t.label} <Required />
         </Label>
         <Input
           {...label}
           autoComplete="off"
           aria-required="true"
-          placeholder="Например, Telegram-отчёт"
+          placeholder={t.labelPlaceholder}
           value={form.values.label}
           onChange={(e) => form.setValue("label", e.target.value)}
           onBlur={() => form.blur("label")}
@@ -148,7 +150,7 @@ function CreateApiKeyForm({
         aria-describedby={scopes["aria-describedby"]}
       >
         <legend className="mb-1.5 text-label-md">
-          Права <Required />
+          {t.scopes} <Required />
         </legend>
         <div className="flex gap-4">
           {SCOPES.map((scope, i) => (
@@ -168,13 +170,13 @@ function CreateApiKeyForm({
       </fieldset>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={app.id}>Приложение</Label>
+        <Label htmlFor={app.id}>{t.app}</Label>
         <Select value={form.values.app_id} onValueChange={(v) => form.setValue("app_id", v)}>
           <SelectTrigger id={app.id} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_APPS}>Все приложения</SelectItem>
+            <SelectItem value={ALL_APPS}>{t.allApps}</SelectItem>
             {apps.map((a) => (
               <SelectItem key={a.id} value={a.id}>
                 {a.name}
@@ -187,11 +189,11 @@ function CreateApiKeyForm({
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">
-            Отмена
+            {m.common.cancel}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={form.submitting}>
-          {form.submitting ? "Создаём…" : "Создать"}
+          {form.submitting ? t.submitting : t.submit}
         </Button>
       </DialogFooter>
     </form>
@@ -209,6 +211,7 @@ function CreateApiKeyDialog({
   onOpenChange: (open: boolean) => void;
   apps: AppSummary[];
 }) {
+  const t = useMessages().settings.apiKeys;
   const [secret, setSecret] = useState<string | null>(null);
   const close = () => {
     setSecret(null);
@@ -226,22 +229,18 @@ function CreateApiKeyDialog({
         onInteractOutside={keepWhileSecret}
       >
         <DialogHeader>
-          <DialogTitle>Новый API-ключ</DialogTitle>
-          <DialogDescription>
-            Ключ для Read API: заголовок Authorization: Bearer &lt;секрет&gt;.
-          </DialogDescription>
+          <DialogTitle>{t.createTitle}</DialogTitle>
+          <DialogDescription>{t.createDescription}</DialogDescription>
         </DialogHeader>
         {secret ? (
           <>
-            <CopyField value={secret} label="секрет" />
+            <CopyField value={secret} label={t.secret} />
             <Alert className="border-warning/40 text-warning">
               <TriangleAlert aria-hidden="true" />
-              <AlertDescription className="text-warning">
-                Секрет показывается один раз. Сохраните его сейчас — восстановить нельзя.
-              </AlertDescription>
+              <AlertDescription className="text-warning">{t.secretWarning}</AlertDescription>
             </Alert>
             <DialogFooter>
-              <Button onClick={close}>Я сохранил ключ</Button>
+              <Button onClick={close}>{t.secretSaved}</Button>
             </DialogFooter>
           </>
         ) : (
@@ -253,12 +252,14 @@ function CreateApiKeyDialog({
 }
 
 function RevokeApiKeyDialog({ apiKey, onClose }: { apiKey: ApiKey | null; onClose: () => void }) {
+  const m = useMessages();
+  const t = m.settings.apiKeys;
   const uiError = useUiError();
   const queryClient = useQueryClient();
   const revoke = useMutation({
     mutationFn: (id: string) => revokeApiKey(id),
     onSuccess: () => {
-      toast.success("Ключ отозван");
+      toast.success(t.revokedToast);
       onClose();
       void queryClient.invalidateQueries({ queryKey: getListApiKeysQueryKey() });
     },
@@ -269,19 +270,19 @@ function RevokeApiKeyDialog({ apiKey, onClose }: { apiKey: ApiKey | null; onClos
     <AlertDialog open={apiKey !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Отозвать ключ {apiKey ? keyLabel(apiKey) : ""}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Запросы к Read API с этим ключом сразу начнут получать 401.
-          </AlertDialogDescription>
+          <AlertDialogTitle>
+            {fmt(t.revokeTitle, { key: apiKey ? keyLabel(apiKey) : "" })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>{t.revokeDescription}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Отмена</AlertDialogCancel>
+          <AlertDialogCancel>{m.common.cancel}</AlertDialogCancel>
           <Button
             variant="destructive"
             disabled={revoke.isPending}
             onClick={() => apiKey && revoke.mutate(apiKey.id)}
           >
-            {revoke.isPending ? "Отзываем…" : "Отозвать"}
+            {revoke.isPending ? t.revoking : t.revoke}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -292,6 +293,9 @@ function RevokeApiKeyDialog({ apiKey, onClose }: { apiKey: ApiKey | null; onClos
 // Вкладка «API-ключи» S-12 (FR-011): ключи `sk_` для Read API. В таблице только key_prefix — секрет
 // бэкенд не хранит и показывает один раз при создании.
 export function ApiKeysTab({ timezone }: { timezone: string }) {
+  const m = useMessages();
+  const t = m.settings.apiKeys;
+  const f = useFormat();
   const query = useListApiKeys();
   const { apps, nameOf } = useAppNames();
   const [creating, setCreating] = useState(false);
@@ -302,12 +306,12 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
     <section aria-labelledby="api-keys-title" className="flex flex-col gap-4">
       <TabHeader
         id="api-keys-title"
-        title="API-ключи"
+        title={t.title}
         action={
           keys && keys.length > 0 ? (
             <Button size="sm" onClick={() => setCreating(true)}>
               <Plus aria-hidden="true" />
-              Создать ключ
+              {t.create}
             </Button>
           ) : null
         }
@@ -322,23 +326,23 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
       ) : keys.length === 0 ? (
         <EmptyState
           icon={KeySquare}
-          title="API-ключей нет"
-          description="Ключ нужен для скриптов и интеграций с Read API."
-          action={{ label: "Создать ключ", onClick: () => setCreating(true) }}
+          title={t.emptyTitle}
+          description={t.emptyDescription}
+          action={{ label: t.create, onClick: () => setCreating(true) }}
         />
       ) : (
         <Table>
-          <caption className="sr-only">API-ключи</caption>
+          <caption className="sr-only">{t.title}</caption>
           <TableHeader>
             <TableRow>
-              <TableHead>Ключ</TableHead>
-              <TableHead>Метка</TableHead>
-              <TableHead>Права</TableHead>
-              <TableHead>Приложение</TableHead>
-              <TableHead>Создан</TableHead>
-              <TableHead>Использован</TableHead>
+              <TableHead>{t.columns.key}</TableHead>
+              <TableHead>{t.columns.label}</TableHead>
+              <TableHead>{t.columns.scopes}</TableHead>
+              <TableHead>{t.columns.app}</TableHead>
+              <TableHead>{t.columns.created}</TableHead>
+              <TableHead>{t.columns.used}</TableHead>
               <TableHead>
-                <span className="sr-only">Действия</span>
+                <span className="sr-only">{m.settings.actions}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -348,25 +352,25 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
                 <TableCell>
                   <span className="flex items-center gap-2">
                     <span className="font-mono text-code">{keyLabel(key)}</span>
-                    {key.revoked_at ? <Badge variant="secondary">Отозван</Badge> : null}
+                    {key.revoked_at ? <Badge variant="secondary">{t.revoked}</Badge> : null}
                   </span>
                 </TableCell>
                 <TableCell>{key.label}</TableCell>
                 <TableCell className="font-mono">{key.scopes.join(", ")}</TableCell>
-                <TableCell>{key.app_id ? nameOf(key.app_id) : "Все"}</TableCell>
-                <TableCell>{formatDate(key.created_at, timezone)}</TableCell>
+                <TableCell>{key.app_id ? nameOf(key.app_id) : t.allAppsShort}</TableCell>
+                <TableCell>{f.formatDate(key.created_at, timezone)}</TableCell>
                 <TableCell>
-                  {key.last_used_at ? formatDateTime(key.last_used_at, timezone) : "—"}
+                  {key.last_used_at ? f.formatDateTime(key.last_used_at, timezone) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   {key.revoked_at ? null : (
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label={`Отозвать ключ ${keyLabel(key)}`}
+                      aria-label={fmt(t.revokeItem, { key: keyLabel(key) })}
                       onClick={() => setRevoking(key)}
                     >
-                      Отозвать
+                      {t.revoke}
                     </Button>
                   )}
                 </TableCell>

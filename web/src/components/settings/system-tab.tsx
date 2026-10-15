@@ -16,7 +16,8 @@ import {
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetSystemStatus } from "@/lib/api/gen/endpoints/admin-system/admin-system";
 import type { SystemStatus } from "@/lib/api/gen/model";
-import { formatDateTime, formatInt, formatTime } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { cn } from "@/lib/utils";
 import { TabHeader } from "./tab-header";
 
@@ -24,13 +25,14 @@ const LOW_DISK_PCT = 20;
 const BACKUP_STALE_MS = 26 * 60 * 60 * 1000;
 
 function Health({ ok }: { ok: boolean }) {
+  const t = useMessages().settings.system;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
         aria-hidden="true"
         className={cn("size-2 rounded-full", ok ? "bg-success-500" : "bg-danger-500")}
       />
-      {ok ? "OK" : "Недоступен"}
+      {ok ? t.ok : t.unavailable}
     </span>
   );
 }
@@ -62,6 +64,8 @@ function Components({
   timezone: string;
   now: Date;
 }) {
+  const t = useMessages().settings.system;
+  const f = useFormat();
   const { clickhouse, postgres, backup } = status;
   const lowDisk = clickhouse.disk_free_pct !== null && clickhouse.disk_free_pct < LOW_DISK_PCT;
   const backupAt = backup.last_backup_at ? Date.parse(backup.last_backup_at) : Number.NaN;
@@ -76,49 +80,51 @@ function Components({
           <span className={cn("inline-flex items-center gap-1", lowDisk && "text-negative")}>
             <span aria-hidden="true">·</span>
             {lowDisk ? <TriangleAlert aria-hidden="true" className="size-4" /> : null}
-            свободно {Math.round(clickhouse.disk_free_pct)}&nbsp;%
+            {fmt(t.diskFree, { value: f.formatShare(Math.round(clickhouse.disk_free_pct) / 100) })}
           </span>
         ) : null}
         {clickhouse.events_rows !== null ? (
-          <span>· событий {formatInt(clickhouse.events_rows)}</span>
+          <span>{fmt(t.events, { count: f.formatInt(clickhouse.events_rows) })}</span>
         ) : null}
       </StatusLine>
       <StatusLine label="Postgres">
         <span className="font-medium">Postgres</span>
         <Health ok={postgres.ok} />
       </StatusLine>
-      <StatusLine label="Бэкап">
-        <span className="font-medium">Бэкап:</span>
+      <StatusLine label={t.backup}>
+        <span className="font-medium">{t.backupLabel}</span>
         {backup.last_backup_at ? (
           <span>
-            {formatDateTime(backup.last_backup_at, timezone)}
+            {f.formatDateTime(backup.last_backup_at, timezone)}
             {backup.last_backup_name ? ` (${backup.last_backup_name})` : ""}
           </span>
         ) : (
-          <span>нет данных</span>
+          <span>{t.noData}</span>
         )}
-        {backupStale ? <StaleWarning>Бэкап старше 26 часов</StaleWarning> : null}
+        {backupStale ? <StaleWarning>{t.backupStale}</StaleWarning> : null}
       </StatusLine>
     </div>
   );
 }
 
 function AlertsTable({ status, timezone }: { status: SystemStatus; timezone: string }) {
+  const t = useMessages().settings.system;
+  const f = useFormat();
   return (
     <Table>
-      <caption className="sr-only">Алерты</caption>
+      <caption className="sr-only">{t.alertsCaption}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Алерт</TableHead>
-          <TableHead>Состояние</TableHead>
-          <TableHead>Значение</TableHead>
+          <TableHead>{t.alertColumns.alert}</TableHead>
+          <TableHead>{t.alertColumns.state}</TableHead>
+          <TableHead>{t.alertColumns.value}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {status.alerts.length === 0 ? (
           <TableRow>
             <TableCell colSpan={3} className="text-fg-muted">
-              Алерты ещё не проверялись
+              {t.alertsEmpty}
             </TableCell>
           </TableRow>
         ) : (
@@ -129,11 +135,11 @@ function AlertsTable({ status, timezone }: { status: SystemStatus; timezone: str
                 {alert.firing ? (
                   <Badge className="bg-destructive/10 text-destructive">
                     {alert.first_fired_at
-                      ? `Сработал с ${formatTime(alert.first_fired_at, timezone)}`
-                      : "Сработал"}
+                      ? fmt(t.firingSince, { time: f.formatTime(alert.first_fired_at, timezone) })
+                      : t.firing}
                   </Badge>
                 ) : (
-                  <Badge className="bg-success-50 text-positive">Норма</Badge>
+                  <Badge className="bg-success-50 text-positive">{t.normal}</Badge>
                 )}
               </TableCell>
               <TableCell className="font-mono">{alert.last_value || "—"}</TableCell>
@@ -146,28 +152,30 @@ function AlertsTable({ status, timezone }: { status: SystemStatus; timezone: str
 }
 
 function JobsTable({ status, timezone }: { status: SystemStatus; timezone: string }) {
+  const t = useMessages().settings.system;
+  const f = useFormat();
   return (
     <Table>
-      <caption className="sr-only">Задачи</caption>
+      <caption className="sr-only">{t.jobsCaption}</caption>
       <TableHeader>
         <TableRow>
-          <TableHead>Задача</TableHead>
-          <TableHead>Последний запуск</TableHead>
-          <TableHead>Статус</TableHead>
+          <TableHead>{t.jobColumns.job}</TableHead>
+          <TableHead>{t.jobColumns.lastRun}</TableHead>
+          <TableHead>{t.jobColumns.status}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {status.jobs.length === 0 ? (
           <TableRow>
             <TableCell colSpan={3} className="text-fg-muted">
-              Запусков ещё не было
+              {t.jobsEmpty}
             </TableCell>
           </TableRow>
         ) : (
           status.jobs.map((run) => (
             <TableRow key={run.id}>
               <TableCell className="font-mono">{run.job}</TableCell>
-              <TableCell>{formatDateTime(run.started_at, timezone)}</TableCell>
+              <TableCell>{f.formatDateTime(run.started_at, timezone)}</TableCell>
               <TableCell className={cn("font-mono", run.status === "failed" && "text-negative")}>
                 {run.status}
               </TableCell>
@@ -184,6 +192,7 @@ type SystemTabProps = { timezone: string; now?: Date };
 // Вкладка «Система» S-12 (FR-020): ClickHouse, Postgres, последний бэкап, алерты и последние запуски job.
 // Обновляется раз в 30 с на месте, без skeleton (keepPreviousData).
 export function SystemTab({ timezone, now = new Date() }: SystemTabProps) {
+  const m = useMessages();
   const query = useGetSystemStatus({
     query: { refetchInterval: 30_000, placeholderData: keepPreviousData },
   });
@@ -191,7 +200,7 @@ export function SystemTab({ timezone, now = new Date() }: SystemTabProps) {
 
   return (
     <section aria-labelledby="system-title" className="flex flex-col gap-4">
-      <TabHeader id="system-title" title="Система" />
+      <TabHeader id="system-title" title={m.settings.system.title} />
       {query.isError && !status ? (
         <ErrorState
           error={query.error as unknown as ApiError}
