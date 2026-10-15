@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { expectNoA11yViolations } from "./helpers/a11y";
 
 // Языки RU/EN: английский — в корне, русский — /ru; выбор живёт в cookie am_lang год; панель берёт язык из
 // cookie без префикса в адресе.
@@ -15,6 +16,7 @@ test.describe("guest with an English browser", () => {
     await page.goto("/");
     await expect(page).toHaveURL("/");
     expect(await lang(page)).toBe("en");
+    await expectNoA11yViolations(page);
 
     await page.getByRole("button", { name: "Switch to Русский" }).first().click();
     await expect(page).toHaveURL("/ru");
@@ -55,6 +57,7 @@ test.describe("guest with a Russian browser", () => {
     await firstGuide.click();
     await expect(page).toHaveURL(/^http:\/\/[^/]+\/ru\/docs\//);
     expect(await lang(page)).toBe("ru");
+    await expectNoA11yViolations(page);
   });
 });
 
