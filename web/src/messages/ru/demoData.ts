@@ -1,3 +1,56 @@
 import type { demoData as en } from "../en/demoData";
 
-export const demoData: typeof en = {};
+export const demoData: typeof en = {
+  errors: {
+    readOnly: "Демо-режим: изменения недоступны",
+    notFound: "Не найдено",
+    appNotFound: "Приложение не найдено.",
+    profileNotFound: "Профиль не найден.",
+    oneOf: "{name}: допустимо {allowed}.",
+    integer: "{name}: целое от {min} до {max}.",
+    boolean: "{name}: допустимо true или false.",
+    required: "Параметр {name} обязателен.",
+    isoDate: "{name}: ожидается дата YYYY-MM-DD.",
+    platform: "platform: неизвестная платформа.",
+    maxLength: "{name}: не длиннее {max} символов.",
+    country: "country: код страны ISO 3166-1 alpha-2 из двух заглавных латинских букв.",
+    fromAfterTo: "from не может быть позже to.",
+    rangeTooLarge: "Диапазон не может превышать {max} дней (запрошено {days}).",
+    hourRangeTooLarge:
+      "Диапазон для granularity=hour не может превышать {max} дней (запрошено {days}).",
+    uuid: "{name}: ожидается UUID.",
+    searchLength: "q: от 1 до 128 символов.",
+    personKey: "person_key: ожидается u:<user_id> или i:<install_id>.",
+    before: "before: ожидается дата-время RFC 3339.",
+    mergeSelf: "Нельзя объединить приложение с самим собой.",
+  },
+  writeKeyLabels: {
+    ios: "iOS",
+    android: "Android",
+    web: "Веб",
+    macos: "macOS",
+    windows: "Windows",
+    linux: "Linux",
+    bot: "Бот",
+    server: "Бэкенд",
+    other: "Другое",
+  },
+  leakedWriteKey: "Старая сборка (утёк в лог)",
+  apiKeyLabels: {
+    reconcile: "Сверка с AppMetrica",
+    gdpr: "Удаление данных по запросу",
+    cron: "Старый cron-отчёт",
+  },
+  deletionTimeout: "ClickHouse: timeout после 5 попыток",
+  rejections: {
+    duration_required: "Для session_end обязательно поле duration_ms (0..86400000).",
+    event_too_old: "Событие старше 7 дней после коррекции часов.",
+    invalid_field: "timestamp должен быть в формате RFC 3339 с offset.",
+    missing_field: "Поле session_id обязательно.",
+    install_rate_limited: "Слишком много событий с этого устройства. Повторите позже.",
+    user_id_looks_like_pii: "user_id похож на email или телефон. Передавайте непрозрачный ID.",
+    unknown_event_name: "Допустимые имена: session_start, session_end.",
+    app_archived: "Приложение в архиве, приём событий остановлен.",
+    app_version_not_string: "context.app_version должен быть строкой.",
+  },
+};

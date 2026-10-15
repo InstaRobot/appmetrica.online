@@ -12,6 +12,7 @@ import type {
   TimeSeriesMetric,
   Unit,
 } from "@/lib/api/gen/model";
+import { fmt } from "@/lib/i18n/format-message";
 import { isIsoDate, MAX_HOUR_RANGE_DAYS, MAX_RANGE_DAYS, rangeDays } from "@/lib/period";
 import {
   AUTH_STATE,
@@ -37,6 +38,7 @@ import {
   rollingActive,
   timeseries,
 } from "./reports";
+import { type DemoTexts, demoLocale, demoTextsFor } from "./texts";
 
 const REQUEST_ID = "demo";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,14 +76,19 @@ const DIMENSIONS: readonly BreakdownDimension[] = [
   "locale",
 ];
 
+type ErrorText = keyof DemoTexts["errors"];
+type TextVars = Record<string, string | number>;
+
+// Ошибка демо-API: текст — ключ demoData.errors, переводится на язык интерфейса при ответе (texts.ts).
 class DemoError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    message: string,
+    readonly text: ErrorText,
+    readonly vars: TextVars = {},
     readonly details?: Record<string, unknown>,
   ) {
-    super(message);
+    super(text);
   }
 }
 
@@ -92,12 +99,12 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function errorResponse(e: DemoError): Response {
+function errorResponse(e: DemoError, texts: DemoTexts): Response {
   return json(
     {
       error: {
         code: e.code,
-        message: e.message,
+        message: fmt(texts.errors[e.text], e.vars),
         request_id: REQUEST_ID,
         ...(e.details ? { details: e.details } : {}),
       },
@@ -106,8 +113,8 @@ function errorResponse(e: DemoError): Response {
   );
 }
 
-const invalid = (field: string, message: string) =>
-  new DemoError(400, "invalid_request", message, { field });
+const invalid = (field: string, text: ErrorText, vars: TextVars = {}) =>
+  new DemoError(400, "invalid_request", text, vars, { field });
 
 // --- параметры запроса ---
 
@@ -117,7 +124,7 @@ function oneOf<T extends string>(q: Query, name: string, allowed: readonly T[], 
   const raw = q.get(name);
   if (raw === null) return fallback;
   const found = allowed.find((v) => v === raw);
-  if (!found) throw invalid(name, `${name}: допустимо ${allowed.join(", ")}.`);
+  if (!found) throw invalid(name, "oneOf", { name, allowed: allowed.join(", ") });
   return found;
 }
 
@@ -126,7 +133,7 @@ function integer(q: Query, name: string, min: number, max: number, fallback: num
   if (raw === null) return fallback;
   const n = Number(raw);
   if (!/^-?\d+$/.test(raw) || n < min || n > max) {
-    throw invalid(name, `${name}: целое от ${min} до ${max}.`);
+    throw invalid(name, "integer", { name, min, max });
   }
   return n;
 }
@@ -135,35 +142,32 @@ function bool(q: Query, name: string): boolean {
   const raw = q.get(name);
   if (raw === null || raw === "false") return false;
   if (raw === "true") return true;
-  throw invalid(name, `${name}: допустимо true или false.`);
+  throw invalid(name, "boolean", { name });
 }
 
 function date(q: Query, name: string): string {
   const raw = q.get(name);
-  if (raw === null || raw === "") throw invalid(name, `Параметр ${name} обязателен.`);
-  if (!isIsoDate(raw)) throw invalid(name, `${name}: ожидается дата YYYY-MM-DD.`);
+  if (raw === null || raw === "") throw invalid(name, "required", { name });
+  if (!isIsoDate(raw)) throw invalid(name, "isoDate", { name });
   return raw;
 }
 
 function filters(q: Query): Filters {
   const platform = q.getAll("platform");
   if (platform.some((p) => !PLATFORMS.some((v) => v === p))) {
-    throw invalid("platform", "platform: неизвестная платформа.");
+    throw invalid("platform", "platform");
   }
   const appVersion = q.getAll("app_version");
   if (appVersion.some((v) => [...v].length > 64)) {
-    throw invalid("app_version", "app_version: не длиннее 64 символов.");
+    throw invalid("app_version", "maxLength", { name: "app_version", max: 64 });
   }
   const osName = q.getAll("os_name");
   if (osName.some((v) => [...v].length > 32)) {
-    throw invalid("os_name", "os_name: не длиннее 32 символов.");
+    throw invalid("os_name", "maxLength", { name: "os_name", max: 32 });
   }
   const country = q.getAll("country");
   if (country.some((v) => !COUNTRY.test(v))) {
-    throw invalid(
-      "country",
-      "country: код страны ISO 3166-1 alpha-2 из двух заглавных латинских букв.",
-    );
+    throw invalid("country", "country");
   }
   const out: Record<FilterDim, readonly string[]> = {
     platform,
@@ -180,13 +184,14 @@ type Period = { from: string; to: string };
 function period(q: Query, granularity: Granularity = "day"): Period {
   const from = date(q, "from");
   const to = date(q, "to");
-  if (from > to) throw invalid("from", "from не может быть позже to.");
+  if (from > to) throw invalid("from", "fromAfterTo");
   const days = rangeDays(from, to);
   if (days > MAX_RANGE_DAYS) {
     throw new DemoError(
       400,
       "range_too_large",
-      `Диапазон не может превышать ${MAX_RANGE_DAYS} дней (запрошено ${days}).`,
+      "rangeTooLarge",
+      { max: MAX_RANGE_DAYS, days },
       { field: "to", max_days: MAX_RANGE_DAYS },
     );
   }
@@ -194,7 +199,8 @@ function period(q: Query, granularity: Granularity = "day"): Period {
     throw new DemoError(
       400,
       "range_too_large",
-      `Диапазон для granularity=hour не может превышать ${MAX_HOUR_RANGE_DAYS} дней (запрошено ${days}).`,
+      "hourRangeTooLarge",
+      { max: MAX_HOUR_RANGE_DAYS, days },
       { field: "to", max_days: MAX_HOUR_RANGE_DAYS },
     );
   }
@@ -212,15 +218,15 @@ function compareOf(q: Query): boolean {
 }
 
 function requireApp(id: string | undefined): DemoApp {
-  if (!id || !UUID.test(id)) throw invalid("app_id", "app_id: ожидается UUID.");
+  if (!id || !UUID.test(id)) throw invalid("app_id", "uuid", { name: "app_id" });
   const app = demoApp(id.toLowerCase());
-  if (!app) throw new DemoError(404, "app_not_found", "Приложение не найдено.");
+  if (!app) throw new DemoError(404, "app_not_found", "appNotFound");
   return app;
 }
 
 // --- маршруты ---
 
-type Ctx = { params: Record<string, string>; query: Query; now: number };
+type Ctx = { params: Record<string, string>; query: Query; now: number; texts: DemoTexts };
 type Route = { pattern: string[]; handle: (ctx: Ctx) => Response };
 
 function route(path: string, handle: (ctx: Ctx) => Response): Route {
@@ -242,7 +248,7 @@ const ROUTES: readonly Route[] = [
     const unit = oneOf(query, "unit", UNITS, "persons");
     const env = oneOf(query, "environment", ENVIRONMENTS, "production");
     const raw = query.get("date");
-    if (raw !== null && !isIsoDate(raw)) throw invalid("date", "date: ожидается дата YYYY-MM-DD.");
+    if (raw !== null && !isIsoDate(raw)) throw invalid("date", "isoDate", { name: "date" });
     const includeArchived = bool(query, "include_archived");
     return json(portfolio(now, { date: raw, env, unit, includeArchived }));
   }),
@@ -271,8 +277,9 @@ const ROUTES: readonly Route[] = [
     const app = requireApp(params.app_id);
     const scope = reportScope(app, query, now);
     const { from, to } = period(query);
-    if (query.get("dimension") === null)
-      throw invalid("dimension", "Параметр dimension обязателен.");
+    if (query.get("dimension") === null) {
+      throw invalid("dimension", "required", { name: "dimension" });
+    }
     const dimension = oneOf(query, "dimension", DIMENSIONS, "platform");
     const metric = oneOf(query, "metric", BREAKDOWN_METRICS, "active");
     const limit = integer(query, "limit", 1, 200, 50);
@@ -296,65 +303,65 @@ const ROUTES: readonly Route[] = [
   route("/v1/apps/:app_id/profiles", ({ params, query, now }) => {
     const app = requireApp(params.app_id);
     const q = query.get("q") ?? "";
-    if (q.length < 1 || [...q].length > 128) throw invalid("q", "q: от 1 до 128 символов.");
+    if (q.length < 1 || [...q].length > 128) throw invalid("q", "searchLength");
     return json(searchProfiles(app, q, now));
   }),
   route("/v1/apps/:app_id/profiles/:person_key", ({ params, query, now }) => {
     const app = requireApp(params.app_id);
     const key = params.person_key ?? "";
     if (!PERSON_KEY.test(key)) {
-      throw invalid("person_key", "person_key: ожидается u:<user_id> или i:<install_id>.");
+      throw invalid("person_key", "personKey");
     }
     const limit = integer(query, "sessions_limit", 1, 500, 100);
     const rawBefore = query.get("before");
     const before = rawBefore === null ? null : Date.parse(rawBefore);
     if (before !== null && (Number.isNaN(before) || !/T/.test(rawBefore ?? ""))) {
-      throw invalid("before", "before: ожидается дата-время RFC 3339.");
+      throw invalid("before", "before");
     }
     const profile = getProfile(app, key, { limit, before }, now);
-    if (!profile) throw new DemoError(404, "profile_not_found", "Профиль не найден.");
+    if (!profile) throw new DemoError(404, "profile_not_found", "profileNotFound");
     return json(profile);
   }),
-  route("/v1/apps/:app_id/integration/health", ({ params, query, now }) => {
+  route("/v1/apps/:app_id/integration/health", ({ params, query, now, texts }) => {
     const app = requireApp(params.app_id);
-    return json(integrationHealth(app, integer(query, "hours", 1, 168, 24), now));
+    return json(integrationHealth(app, integer(query, "hours", 1, 168, 24), now, texts));
   }),
-  route("/v1/apps/:app_id/deletion-requests/:request_id", ({ params, now }) => {
+  route("/v1/apps/:app_id/deletion-requests/:request_id", ({ params, now, texts }) => {
     const app = requireApp(params.app_id);
-    const found = deletionRequests(now, app.app.id).items.find(
+    const found = deletionRequests(now, app.app.id, texts).items.find(
       (r) => r.id === params.request_id?.toLowerCase(),
     );
-    if (!found) throw new DemoError(404, "not_found", "Не найдено");
+    if (!found) throw new DemoError(404, "not_found", "notFound");
     return json(found);
   }),
   route("/admin/v1/auth/state", () => json(AUTH_STATE)),
   route("/admin/v1/passkeys", ({ now }) => json(passkeys(now))),
-  route("/admin/v1/apps/:app_id/write-keys", ({ params, now }) =>
-    json(writeKeys(requireApp(params.app_id).app.id, now)),
+  route("/admin/v1/apps/:app_id/write-keys", ({ params, now, texts }) =>
+    json(writeKeys(requireApp(params.app_id).app.id, now, texts)),
   ),
-  route("/admin/v1/apps/:app_id/merge-preview", ({ params, query, now }) => {
+  route("/admin/v1/apps/:app_id/merge-preview", ({ params, query, now, texts }) => {
     const target = requireApp(params.app_id);
     const sourceId = query.get("source_app_id");
     if (sourceId === null || !UUID.test(sourceId)) {
-      throw invalid("source_app_id", "source_app_id: ожидается UUID.");
+      throw invalid("source_app_id", "uuid", { name: "source_app_id" });
     }
     const source = requireApp(sourceId);
     if (source.app.id === target.app.id) {
-      throw invalid("source_app_id", "Нельзя объединить приложение с самим собой.");
+      throw invalid("source_app_id", "mergeSelf");
     }
-    return json(mergePreview(target, source, now));
+    return json(mergePreview(target, source, now, texts));
   }),
   route("/admin/v1/apps/:app_id/merges", ({ params }) => {
     requireApp(params.app_id);
     return json({ items: [] });
   }),
-  route("/admin/v1/api-keys", ({ now }) => json(apiKeys(now))),
+  route("/admin/v1/api-keys", ({ now, texts }) => json(apiKeys(now, texts))),
   route("/admin/v1/settings", () => json(SETTINGS)),
   route("/admin/v1/system/status", ({ now }) => json(systemStatus(now))),
-  route("/admin/v1/deletion-requests", ({ query, now }) => {
+  route("/admin/v1/deletion-requests", ({ query, now, texts }) => {
     const appId = query.get("app_id");
-    if (appId !== null && !UUID.test(appId)) throw invalid("app_id", "app_id: ожидается UUID.");
-    return json(deletionRequests(now, appId?.toLowerCase() ?? null));
+    if (appId !== null && !UUID.test(appId)) throw invalid("app_id", "uuid", { name: "app_id" });
+    return json(deletionRequests(now, appId?.toLowerCase() ?? null, texts));
   }),
 ];
 
@@ -382,7 +389,7 @@ function decodeSegment(segment: string): string {
 }
 
 // demoFetch — ответ демо-API на запрос orval-клиента. url — путь API с query (`/v1/apps/<id>/…?from=…`),
-// now — «сейчас» датасета (по умолчанию текущее время).
+// now — «сейчас» датасета (по умолчанию текущее время). Тексты ответа — на языке интерфейса (texts.ts).
 export async function demoFetch(
   url: string,
   init?: RequestInit,
@@ -390,6 +397,7 @@ export async function demoFetch(
 ): Promise<Response> {
   // Как fetch: отменённый запрос (смена фильтров, размонтирование) отклоняется AbortError.
   init?.signal?.throwIfAborted();
+  const texts = demoTextsFor(await demoLocale());
   const method = (init?.method ?? "GET").toUpperCase();
   const parsed = new URL(url, "http://demo.invalid");
   const segments = parsed.pathname.split("/").filter(Boolean).map(decodeSegment);
@@ -399,18 +407,18 @@ export async function demoFetch(
     if (method === "POST" && segments.join("/") === "admin/v1/auth/logout") {
       return new Response(null, { status: 204 });
     }
-    return errorResponse(new DemoError(403, "demo_read_only", "Демо-режим: изменения недоступны"));
+    return errorResponse(new DemoError(403, "demo_read_only", "readOnly"), texts);
   }
 
   for (const r of ROUTES) {
     const params = match(r.pattern, segments);
     if (!params) continue;
     try {
-      return r.handle({ params, query: parsed.searchParams, now: now.getTime() });
+      return r.handle({ params, query: parsed.searchParams, now: now.getTime(), texts });
     } catch (e) {
-      if (e instanceof DemoError) return errorResponse(e);
+      if (e instanceof DemoError) return errorResponse(e, texts);
       throw e;
     }
   }
-  return errorResponse(new DemoError(404, "not_found", "Не найдено"));
+  return errorResponse(new DemoError(404, "not_found", "notFound"), texts);
 }

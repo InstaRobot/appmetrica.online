@@ -23,6 +23,7 @@ import {
 } from "./model";
 import { appPersons, POOL_SIZE } from "./profiles";
 import { jitter, rand, roundRandom, seeded, splitTotal, uuidFrom } from "./random";
+import type { DemoTexts } from "./texts";
 import { formatZoned, HOUR_MS, isoUtc, localTime, MINUTE_MS } from "./time";
 
 const REALTIME_MINUTES = 30;
@@ -133,18 +134,13 @@ export function realtime(
 
 // --- здоровье интеграции ---
 
-const REJECTION_MESSAGES: Readonly<Record<string, string>> = {
-  duration_required: "Для session_end обязательно поле duration_ms (0..86400000).",
-  event_too_old: "Событие старше 7 дней после коррекции часов.",
-  invalid_field: "timestamp должен быть в формате RFC 3339 с offset.",
-  missing_field: "Поле session_id обязательно.",
-  install_rate_limited: "Слишком много событий с этого устройства. Повторите позже.",
-  user_id_looks_like_pii: "user_id похож на email или телефон. Передавайте непрозрачный ID.",
-  unknown_event_name: "Допустимые имена: session_start, session_end.",
-  app_archived: "Приложение в архиве, приём событий остановлен.",
-};
-
-const APP_VERSION_NOT_STRING = "context.app_version должен быть строкой.";
+// rejectionMessage — пример сообщения отказа на языке интерфейса (demoData.rejections); всплеск с версией —
+// релиз, который шлёт context.app_version числом.
+function rejectionMessage(texts: DemoTexts, code: string, numericVersion: boolean): string {
+  const messages = texts.rejections;
+  if (numericVersion) return messages.app_version_not_string;
+  return Object.hasOwn(messages, code) ? messages[code as keyof typeof messages] : "";
+}
 
 // examplePayload — payload_sample отказа в каноничном виде ingest: без IP, user_id-PII уже заменён.
 // burst с версией — релиз, который шлёт context.app_version числом.
@@ -197,7 +193,12 @@ function examplePayload(
   return JSON.stringify(event);
 }
 
-export function integrationHealth(demo: DemoApp, hours: number, now: number): IntegrationHealth {
+export function integrationHealth(
+  demo: DemoApp,
+  hours: number,
+  now: number,
+  texts: DemoTexts,
+): IntegrationHealth {
   const id = demo.app.id;
   const tz = demo.app.timezone;
   const prod = makeScope(demo, now);
@@ -274,8 +275,7 @@ export function integrationHealth(demo: DemoApp, hours: number, now: number): In
         count: own + fromBursts,
         last_seen: isoUtc(lastSeen),
         example_payload: examplePayload(demo, code, lastSeen, oldest, burst),
-        example_message:
-          burst?.version !== undefined ? APP_VERSION_NOT_STRING : (REJECTION_MESSAGES[code] ?? ""),
+        example_message: rejectionMessage(texts, code, burst?.version !== undefined),
       };
     })
     .filter((r) => r.count > 0)

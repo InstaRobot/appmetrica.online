@@ -10,7 +10,6 @@ import type {
   JobRun,
   MergePreview,
   PasskeyList,
-  Platform,
   ReadyStatus,
   Settings,
   SystemStatus,
@@ -20,6 +19,7 @@ import type {
 import { DEMO_APP_IDS, DEMO_APPS, DEMO_OWNER_TIMEZONE } from "./apps";
 import { type DemoApp, dayStats, demoApp, makeScope, segmentOf } from "./model";
 import { alnumFrom, uuidFrom } from "./random";
+import type { DemoTexts } from "./texts";
 import { DAY_MS, eachDay, HOUR_MS, isoUtc, localTime, MINUTE_MS, zonedMidnight } from "./time";
 
 export const AUTH_STATE: AuthState = { authenticated: true, setup_required: false };
@@ -79,7 +79,12 @@ function demoWriteKey(appId: string, n: number): string {
 
 // mergePreview — предпросмотр слияния source в target: события — начало и конец каждой сессии источника
 // за всю его историю (оба окружения), ключи — активные ключи источника.
-export function mergePreview(target: DemoApp, source: DemoApp, now: number): MergePreview {
+export function mergePreview(
+  target: DemoApp,
+  source: DemoApp,
+  now: number,
+  texts: DemoTexts,
+): MergePreview {
   let events = 0;
   let firstDay: string | null = null;
   let lastDay: string | null = null;
@@ -99,29 +104,17 @@ export function mergePreview(target: DemoApp, source: DemoApp, now: number): Mer
     events,
     first_day: firstDay,
     last_day: lastDay,
-    write_keys: writeKeys(id, now).items.filter((k) => k.revoked_at === null).length,
+    write_keys: writeKeys(id, now, texts).items.filter((k) => k.revoked_at === null).length,
     timezone_differs: timezone !== target.app.timezone,
     target_timezone: target.app.timezone,
     source_timezone: timezone,
   };
 }
 
-// Подписи ключей, как при создании приложения (PLATFORM_LABELS в components/common/platform-icon.tsx).
-const KEY_LABELS: Readonly<Record<Platform, string>> = {
-  ios: "iOS",
-  android: "Android",
-  web: "Веб",
-  macos: "macOS",
-  windows: "Windows",
-  linux: "Linux",
-  bot: "Бот",
-  server: "Бэкенд",
-  other: "Другое",
-};
-
 // writeKeys — ключ на каждую платформу приложения; ключ платформы, добавленной позже, создан за два дня
-// до её запуска. У мобильных приложений есть и отозванный ключ без платформы.
-export function writeKeys(appId: string, now: number): WriteKeyList {
+// до её запуска. У мобильных приложений есть и отозванный ключ без платформы. Метки — как при создании
+// приложения на языке интерфейса (demoData.writeKeyLabels).
+export function writeKeys(appId: string, now: number, texts: DemoTexts): WriteKeyList {
   const demo = demoApp(appId);
   if (!demo) return { items: [] };
   const { app } = demo;
@@ -135,7 +128,7 @@ export function writeKeys(appId: string, now: number): WriteKeyList {
       id: uuidFrom(appId, "write-key", i === 0 ? 1 : platform),
       app_id: appId,
       key: demoWriteKey(appId, i === 0 ? 1 : 3 + i),
-      label: KEY_LABELS[platform],
+      label: texts.writeKeyLabels[platform],
       platform,
       created_at: created,
       revoked_at: null,
@@ -147,7 +140,7 @@ export function writeKeys(appId: string, now: number): WriteKeyList {
       id: uuidFrom(appId, "write-key", 2),
       app_id: appId,
       key: demoWriteKey(appId, 2),
-      label: "Старая сборка (утёк в лог)",
+      label: texts.leakedWriteKey,
       platform: null,
       created_at: app.created_at,
       revoked_at: "2026-02-11T16:20:00.000Z",
@@ -157,13 +150,13 @@ export function writeKeys(appId: string, now: number): WriteKeyList {
   return { items };
 }
 
-export function apiKeys(now: number): ApiKeyList {
+export function apiKeys(now: number, texts: DemoTexts): ApiKeyList {
   return {
     items: [
       {
         id: "0199d5f8-1111-7aaa-8bbb-0c0d0e0f1011",
         key_prefix: "sk_demoR3ad",
-        label: "Сверка с AppMetrica",
+        label: texts.apiKeyLabels.reconcile,
         scopes: ["read"],
         app_id: null,
         created_at: "2025-05-04T10:00:00.000Z",
@@ -173,7 +166,7 @@ export function apiKeys(now: number): ApiKeyList {
       {
         id: "0199d5f8-2222-7bbb-9ccc-1d1e1f202122",
         key_prefix: "sk_demoGdpr",
-        label: "Удаление данных по запросу",
+        label: texts.apiKeyLabels.gdpr,
         scopes: ["read", "delete"],
         app_id: DEMO_APP_IDS.notes,
         created_at: "2025-09-12T14:30:00.000Z",
@@ -183,7 +176,7 @@ export function apiKeys(now: number): ApiKeyList {
       {
         id: "0199d5f8-3333-7ccc-addd-2e2f30313233",
         key_prefix: "sk_demoCron",
-        label: "Старый cron-отчёт",
+        label: texts.apiKeyLabels.cron,
         scopes: ["read"],
         app_id: null,
         created_at: "2025-03-20T09:00:00.000Z",
@@ -252,10 +245,12 @@ export function systemStatus(now: number): SystemStatus {
   };
 }
 
+// timedOut — неудачное удаление: текст ошибки берётся на языке интерфейса (demoData.deletionTimeout).
 const DELETIONS: readonly (Omit<DeletionRequest, "requested_at" | "started_at" | "completed_at"> & {
   ago: number;
   runMs: number | null;
   doneMs: number | null;
+  timedOut?: boolean;
 })[] = [
   {
     id: "0199d6d0-1111-7aaa-8bbb-0c0d0e0f1001",
@@ -312,20 +307,26 @@ const DELETIONS: readonly (Omit<DeletionRequest, "requested_at" | "started_at" |
     subject_value: "site-1187",
     status: "failed",
     source: "api",
-    error: "ClickHouse: timeout после 5 попыток",
+    error: null,
+    timedOut: true,
     ago: 9 * DAY_MS + 2 * HOUR_MS,
     runMs: 44_000,
     doneMs: 4 * HOUR_MS + 12_000,
   },
 ];
 
-export function deletionRequests(now: number, appId: string | null): DeletionRequestList {
+export function deletionRequests(
+  now: number,
+  appId: string | null,
+  texts: DemoTexts,
+): DeletionRequestList {
   const items: DeletionRequest[] = DELETIONS.filter(
     (d) => appId === null || d.app_id === appId,
-  ).map(({ ago, runMs, doneMs, ...d }) => {
+  ).map(({ ago, runMs, doneMs, timedOut, ...d }) => {
     const requested = now - ago;
     return {
       ...d,
+      error: timedOut ? texts.deletionTimeout : d.error,
       requested_at: isoUtc(requested),
       started_at: runMs === null ? null : isoUtc(requested + runMs),
       completed_at: doneMs === null ? null : isoUtc(requested + doneMs),
