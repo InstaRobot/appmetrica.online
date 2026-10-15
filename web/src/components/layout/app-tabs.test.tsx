@@ -54,4 +54,13 @@ describe("AppTabs", () => {
     ).toBe("?platform=android");
     expect(reportQuery(new URLSearchParams("q=u%3A42"))).toBe("");
   });
+
+  it("scrolls the active tab into view: on a phone the tabs scroll sideways", () => {
+    nav.pathname = `/apps/${APP_ID}/integration`;
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    render(<AppTabs appId={APP_ID} />);
+
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(scroll.mock.contexts[0]).toBe(tab("Интеграция"));
+  });
 });
