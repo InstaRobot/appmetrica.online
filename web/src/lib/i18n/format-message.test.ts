@@ -25,7 +25,7 @@ describe("plural", () => {
     expect(plural("ru", ru, 11)).toBe("11 событий");
     expect(plural("ru", ru, 21)).toBe("21 событие");
     expect(plural("ru", ru, 1.5)).toBe("1,5 события");
-    expect(plural("ru", ru, 12345)).toBe("12 345 событий");
+    expect(plural("ru", ru, 12345)).toBe("12\u00a0345 событий"); // разделитель групп — U+00A0, как в lib/format
   });
 
   it("picks the English form and formats the count with en-US grouping", () => {
