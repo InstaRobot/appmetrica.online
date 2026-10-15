@@ -38,20 +38,24 @@ export function HeroPreview({ locale }: { locale: Locale }) {
   return (
     <figure
       aria-label={m.label}
-      className="relative flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)"
+      className="relative flex min-w-0 flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-(--shadow-card) md:p-6"
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <span className="inline-flex h-[22px] min-w-[34px] items-center justify-center rounded-md bg-muted px-2 text-[11px] font-bold text-fg-muted">
           iOS
         </span>
         <span className="font-bold">Notes iOS</span>
         <span className="ml-auto text-caption text-fg-subtle">{m.period}</span>
       </div>
-      <dl className="grid grid-cols-3 gap-3">
+      {/* Телефон: три KPI остаются в ряд, но с меньшими отступами и цифрами — 360 px вмещают «31 022». */}
+      <dl className="grid grid-cols-3 gap-2 md:gap-3">
         {KPIS.map((k) => (
-          <div key={k.label} className="flex flex-col gap-1 rounded-xl bg-subtle p-3.5">
-            <dt className="text-caption font-semibold text-fg-subtle">{m[k.label]}</dt>
-            <dd className="text-[22px] leading-7 font-extrabold tracking-tight tabular-nums">
+          <div
+            key={k.label}
+            className="flex min-w-0 flex-col gap-1 rounded-xl bg-subtle p-2.5 md:p-3.5"
+          >
+            <dt className="truncate text-caption font-semibold text-fg-subtle">{m[k.label]}</dt>
+            <dd className="text-xl leading-6 font-extrabold tracking-tight tabular-nums md:text-[22px] md:leading-7">
               {f.formatInt(k.value)}
             </dd>
             <dd className="text-caption font-semibold text-positive">▲ {f.formatDelta(k.delta)}</dd>
@@ -79,7 +83,7 @@ export function HeroPreview({ locale }: { locale: Locale }) {
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <figcaption className="flex justify-between text-caption text-fg-subtle">
+      <figcaption className="flex justify-between gap-2 text-caption text-fg-subtle">
         <span>{m.from}</span>
         <span>{m.chart}</span>
         <span>{m.to}</span>

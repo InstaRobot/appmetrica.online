@@ -60,11 +60,14 @@ const SNIPPET = `curl -X POST https://i.analytics.example.com/v1/events \\
 
 → 200 {"accepted":1,"rejected":[],"warnings":[]}`;
 
+// Телефон: кнопки героя на всю ширину (h-12 — 48 px, цель нажатия не меньше 44 px), с md — по содержимому.
 const BIG_BUTTON =
-  "inline-flex h-12 items-center gap-2.5 rounded-xl px-5.5 text-[15px] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  "inline-flex h-12 w-full items-center justify-center gap-2.5 rounded-xl px-5.5 text-[15px] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:w-auto";
 const PRIMARY =
   "bg-linear-to-b from-(--primary-top) to-primary text-primary-foreground shadow-(--shadow-primary) hover:from-(--primary-hover) hover:to-(--primary-hover)";
 const OUTLINE = "border border-(--border-strong) bg-card text-foreground hover:bg-subtle";
+const H2 =
+  "text-[26px] leading-[32px] font-extrabold tracking-[-0.03em] md:text-[32px] md:leading-[38px]";
 
 export function LandingPage({ locale }: { locale: Locale }) {
   const m = getMessages(locale).landing;
@@ -72,22 +75,23 @@ export function LandingPage({ locale }: { locale: Locale }) {
     <div className="flex min-h-screen flex-col">
       <PublicHeader className="mx-auto max-w-[1200px]" />
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-18 px-8 pt-12 pb-20">
-        <section className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-center gap-12">
+      {/* Mobile-first: одна колонка на телефоне и планшете, две — с lg; десктопные отступы — с md. */}
+      <main className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-12 px-4 pt-8 pb-12 md:gap-18 md:px-8 md:pt-12 md:pb-20">
+        <section className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-12">
           <div className="flex flex-col gap-6">
-            <span className="inline-flex h-7 items-center gap-2 self-start rounded-full bg-selected px-3 text-xs font-semibold text-fg-link">
+            <span className="inline-flex min-h-7 items-center gap-2 self-start rounded-full bg-selected px-3 py-1 text-xs font-semibold text-fg-link">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-success-500" />
               {m.hero.badge}
             </span>
-            <h1 className="text-[52px] leading-[56px] font-extrabold tracking-[-0.035em] text-balance">
+            <h1 className="text-[36px] leading-[40px] font-extrabold tracking-[-0.035em] text-balance md:text-[44px] md:leading-[48px] lg:text-[52px] lg:leading-[56px]">
               {m.hero.title}
             </h1>
-            <p className="max-w-[520px] text-lg leading-7 text-fg-muted text-pretty">
+            <p className="max-w-[520px] text-base leading-6 text-fg-muted text-pretty md:text-lg md:leading-7">
               {richText(m.hero.lead, {
                 event: <code className="font-mono text-base">session_start</code>,
               })}
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
               <Link href="/login" className={cn(BIG_BUTTON, PRIMARY)}>
                 {m.hero.signIn}
                 <ArrowRight aria-hidden="true" className="size-4" />
@@ -106,7 +110,10 @@ export function LandingPage({ locale }: { locale: Locale }) {
                 GitHub
               </a>
             </div>
-            <ul aria-label={m.facts.label} className="flex flex-wrap gap-8 pt-2">
+            <ul
+              aria-label={m.facts.label}
+              className="grid grid-cols-2 gap-x-6 gap-y-4 pt-2 md:flex md:flex-wrap md:gap-8"
+            >
               {FACTS.map((key) => (
                 <li key={key} className="flex flex-col gap-0.5">
                   <span className="text-2xl font-extrabold tracking-[-0.03em]">
@@ -122,19 +129,16 @@ export function LandingPage({ locale }: { locale: Locale }) {
 
         <section aria-labelledby="landing-features" className="flex flex-col gap-6">
           <div className="flex max-w-[640px] flex-col gap-2">
-            <h2
-              id="landing-features"
-              className="text-[32px] leading-[38px] font-extrabold tracking-[-0.03em]"
-            >
+            <h2 id="landing-features" className={H2}>
               {m.features.title}
             </h2>
             <p className="text-base leading-6 text-fg-muted">{m.features.lead}</p>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {FEATURES.map((f) => (
               <article
                 key={f.key}
-                className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)"
+                className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5 shadow-(--shadow-card) md:p-6"
               >
                 <span
                   aria-hidden="true"
@@ -151,14 +155,11 @@ export function LandingPage({ locale }: { locale: Locale }) {
 
         <section
           aria-labelledby="landing-integration"
-          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-12"
+          className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12"
         >
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
-              <h2
-                id="landing-integration"
-                className="text-[32px] leading-[38px] font-extrabold tracking-[-0.03em]"
-              >
+              <h2 id="landing-integration" className={H2}>
                 {m.integration.title}
               </h2>
               <p className="text-base leading-6 text-fg-muted">{m.integration.lead}</p>
@@ -177,8 +178,13 @@ export function LandingPage({ locale }: { locale: Locale }) {
               ))}
             </ol>
           </div>
+          {/* min-w-0 не даёт длинным строкам распереть колонку: код прокручивается внутри блока. */}
           <figure aria-label={m.integration.snippetLabel} className="min-w-0">
-            <pre className="overflow-x-auto rounded-2xl bg-code-bg p-6 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card)">
+            <pre
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: прокручиваемая область должна быть доступна с клавиатуры
+              tabIndex={0}
+              className="overflow-x-auto rounded-2xl bg-code-bg p-4 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card) outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:p-6"
+            >
               {SNIPPET}
             </pre>
           </figure>
@@ -186,7 +192,7 @@ export function LandingPage({ locale }: { locale: Locale }) {
 
         <section
           aria-labelledby="landing-admin"
-          className="flex items-center justify-between gap-8 rounded-2xl bg-linear-135 from-(--primary-top) to-(--primary-hover) p-8 text-primary-foreground shadow-(--shadow-primary)"
+          className="flex flex-col items-stretch gap-5 rounded-2xl bg-linear-135 from-(--primary-top) to-(--primary-hover) p-6 text-primary-foreground shadow-(--shadow-primary) md:flex-row md:items-center md:justify-between md:gap-8 md:p-8"
         >
           <div className="flex flex-col gap-2">
             <h2 id="landing-admin" className="text-2xl font-extrabold tracking-[-0.02em]">
@@ -196,14 +202,14 @@ export function LandingPage({ locale }: { locale: Locale }) {
           </div>
           <Link
             href="/login"
-            className="inline-flex h-11 shrink-0 items-center rounded-xl bg-white px-5 text-[15px] font-semibold text-[#2d55c7] outline-none hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-white/60"
+            className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-xl bg-white px-5 text-[15px] font-semibold text-[#2d55c7] outline-none hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-white/60 md:w-auto"
           >
             {m.admin.signIn}
           </Link>
         </section>
       </main>
 
-      <footer className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center gap-2 px-8 pb-8 text-caption text-fg-muted">
+      <footer className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center gap-2 px-4 pb-8 text-caption text-fg-muted md:px-8">
         <span>© 2026 appmetrica.online</span>
         <span aria-hidden="true">·</span>
         <span>
