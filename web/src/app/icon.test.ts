@@ -20,7 +20,9 @@ describe("site icons", () => {
     const svg = readFileSync(join(dir, "icon.svg"), "utf8");
 
     expect(svg).toContain('viewBox="0 0 24 24"');
-    const stops = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/gi)].map((m) => m[1]?.toLowerCase());
+    const stops = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/gi)].map((m) =>
+      m[1]?.toLowerCase(),
+    );
     expect(stops).toEqual([token("primary-top"), token("primary-hover")]);
     expect(svg.match(/<rect /g)).toHaveLength(4); // фон и три столбика
   });
