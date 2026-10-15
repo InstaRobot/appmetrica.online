@@ -1,4 +1,5 @@
 import { systemError } from "./system-error";
+import { systemToaster } from "./system-toaster";
 
 // Системные страницы: 404 и ошибки (14-ux-ui-spec.md S-14). Тексты ошибки — в system-error.ts: их
 // импортируют корневые границы ошибок вне MessagesProvider.
@@ -13,4 +14,5 @@ export const system = {
     action: "Go to quick start",
   },
   error: systemError,
+  toaster: systemToaster,
 };

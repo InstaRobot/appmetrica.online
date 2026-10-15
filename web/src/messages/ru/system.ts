@@ -1,5 +1,6 @@
 import type { system as en } from "../en/system";
 import { systemError } from "./system-error";
+import { systemToaster } from "./system-toaster";
 
 export const system: typeof en = {
   notFound: {
@@ -12,4 +13,5 @@ export const system: typeof en = {
     action: "К быстрому старту",
   },
   error: systemError,
+  toaster: systemToaster,
 };
