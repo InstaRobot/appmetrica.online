@@ -32,13 +32,20 @@ async function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <MessagesProvider locale={locale} messages={getMessages(locale)}>
       <HtmlLang locale={locale} />
-      <SkipLink locale={locale} />
-      {demo && <DemoBanner locale={locale} />}
-      <AppHeader demo={demo} />
-      <main id="main" tabIndex={-1} className="mx-auto max-w-[1600px] px-8 pt-6 pb-12 outline-none">
-        {children}
-      </main>
-      <AppFooter locale={locale} />
+      {/* Колонка на всю высоту окна: на короткой странице футер прижат к низу, а не идёт сразу за ней. */}
+      <div className="flex min-h-dvh flex-col">
+        <SkipLink locale={locale} />
+        {demo && <DemoBanner locale={locale} />}
+        <AppHeader demo={demo} />
+        <main
+          id="main"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[1600px] flex-1 px-8 pt-6 pb-12 outline-none"
+        >
+          {children}
+        </main>
+        <AppFooter locale={locale} />
+      </div>
     </MessagesProvider>
   );
 }
