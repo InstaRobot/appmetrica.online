@@ -37,7 +37,7 @@ export const DEMO_APPS: readonly App[] = [
   },
   {
     id: DEMO_APP_IDS.bot,
-    name: "Помощник TG",
+    name: "TG Helper",
     platform: "bot",
     platforms: ["bot"],
     timezone: "Asia/Yekaterinburg",
