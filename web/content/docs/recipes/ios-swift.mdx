@@ -6,7 +6,10 @@ description: URLSession, install_id in the Keychain, an offline queue, and the s
 A recipe for iOS 17+ and Swift 6 with no third-party dependencies. It consists of four files: the
 event model, `install_id` in the Keychain, an offline queue that sends through `URLSession`, and a
 session tracker that hooks into the app lifecycle. On macOS the code is the same, except for
-`platform: "macos"`, the macOS platform key, and `NSApplication` notifications.
+`platform: "macos"`, the macOS platform key, and `NSApplication` notifications. On Apple TV the
+code is the same with the iOS key: `device_type` becomes `tv` and `os_name` becomes `tvOS` on their
+own, and the queue file lives in `Caches`, which the system may clear when space runs low (see
+[TVs, watches and tablets](/docs#device-families)).
 
 Embed the iOS platform key from the **Integration** tab. If your app also ships on other platforms,
 it's one app with several platforms: each has its own key, and a person with the same `user_id` on
@@ -103,13 +106,18 @@ enum Analytics {
         #else
         let environment = "production"
         #endif
+        let deviceType = switch UIDevice.current.userInterfaceIdiom {
+        case .pad: "tablet"
+        case .tv: "tv" // Apple TV: systemName is already "tvOS"
+        default: "phone"
+        }
         return EventContext(
             osName: UIDevice.current.systemName,
             osVersion: UIDevice.current.systemVersion,
             appVersion: info["CFBundleShortVersionString"] as? String ?? "",
             appBuild: info["CFBundleVersion"] as? String ?? "",
             deviceModel: hardwareModel(),
-            deviceType: UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone",
+            deviceType: deviceType,
             locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
             environment: environment
         )
@@ -199,7 +207,12 @@ actor OfflineQueue {
     static let shared = OfflineQueue()
 
     private static let maxAge: TimeInterval = 7 * 24 * 3600
+    // tvOS gives apps no persistent storage besides the Keychain and UserDefaults.
+    #if os(tvOS)
+    private let fileURL = URL.cachesDirectory.appending(path: "appmetrica-queue.json")
+    #else
     private let fileURL = URL.applicationSupportDirectory.appending(path: "appmetrica-queue.json")
+    #endif
     private var events: [Event]
     private var sending = false
     private var stopped = false

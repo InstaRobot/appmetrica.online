@@ -110,6 +110,43 @@ React Native, Kotlin Multiplatform). С таким ключом передава
 Отчёты по умолчанию сводные и считают людей сквозь платформы — см.
 [Люди на нескольких платформах](/docs/concepts/identity#platforms).
 
+### Телевизоры, часы и планшеты [#device-families]
+
+Набор платформ фиксирован: `ios`, `android`, `web`, `macos`, `windows`, `linux`, `bot`, `server` и
+`other`. Любое другое значение, например `tvos`, отклоняется с кодом
+[`invalid_field`](/docs/errors-and-retries#rejections). Устройство без собственной платформы
+отправляет события с платформой своего семейства ОС, своими `device_type` и `os_name` и ключом
+платформы семейства: Apple TV — ключом iOS, Android TV — ключом Android.
+
+| Устройство | `platform` | `device_type` | `os_name` |
+|---|---|---|---|
+| iPhone | `ios` | `phone` | `iOS` |
+| iPad | `ios` | `tablet` | Как сообщает система: `iPadOS` или `iOS` |
+| Apple TV | `ios` | `tv` | `tvOS` |
+| Apple Watch | `ios` | `watch` | `watchOS` |
+| Apple Vision Pro | `ios` | `unknown` | `visionOS` |
+| Android-смартфон | `android` | `phone` | `Android` |
+| Android-планшет | `android` | `tablet` | `Android` |
+| Android TV, Google TV, Fire TV | `android` | `tv` | `Android TV` |
+| Часы на Wear OS | `android` | `watch` | `Wear OS` |
+| Веб-приложение на смарт-ТВ (Tizen, webOS) | `web` | `tv` | `Tizen`, `webOS` |
+| Roku и другие ТВ-платформы | `other` | `tv` | Название ОС, например `Roku OS` |
+
+Отчёты фильтруются по `os_name`, а не по `device_type`, поэтому у телевизоров и часов своё название ОС:
+фильтр `Android TV` открывает отчёты только по телевизорам, а разбивка по типу устройства показывает
+долю каждого типа. На устройствах Apple `UIDevice.current.systemName` уже возвращает `tvOS` или
+`visionOS`. Как определить тип устройства:
+
+- Swift: `UIDevice.current.userInterfaceIdiom`, где `.pad` — планшет, `.tv` — телевизор, как в
+  [рецепте для iOS](/docs/recipes/ios-swift#sending);
+- Kotlin: `resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK`, где
+  `UI_MODE_TYPE_TELEVISION` — телевизор, `UI_MODE_TYPE_WATCH` — часы, как в
+  [рецепте для Android](/docs/recipes/android-kotlin#session-lifecycle);
+- React Native: `DeviceInfo.getDeviceType()` из `react-native-device-info` возвращает `Tv`;
+- Flutter: на Android TV `systemFeatures` у `AndroidDeviceInfo` из `device_info_plus` содержит
+  `android.software.leanback`;
+- веб: user agent браузеров телевизоров содержит `SMART-TV`, `Tizen` или `Web0S`.
+
 ## Что почитать дальше [#next]
 
 - [Где инициализировать метрику](/docs/concepts/initialization) — точки входа и хуки жизненного цикла.

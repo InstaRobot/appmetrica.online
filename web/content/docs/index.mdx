@@ -115,6 +115,43 @@ with a platform that isn't in the app's set is accepted as is.
 By default, reports are aggregated and count people across platforms — see
 [People on multiple platforms](/docs/concepts/identity#platforms).
 
+### TVs, watches and tablets [#device-families]
+
+The set of platforms is fixed: `ios`, `android`, `web`, `macos`, `windows`, `linux`, `bot`, `server`
+and `other`. Any other value, such as `tvos`, is rejected with
+[`invalid_field`](/docs/errors-and-retries#rejections). A device without a platform of its own is sent
+with the platform of its OS family, its own `device_type` and `os_name`, and the key of the family
+platform: the iOS key for Apple TV, the Android key for Android TV.
+
+| Device | `platform` | `device_type` | `os_name` |
+|---|---|---|---|
+| iPhone | `ios` | `phone` | `iOS` |
+| iPad | `ios` | `tablet` | As reported by the system: `iPadOS` or `iOS` |
+| Apple TV | `ios` | `tv` | `tvOS` |
+| Apple Watch | `ios` | `watch` | `watchOS` |
+| Apple Vision Pro | `ios` | `unknown` | `visionOS` |
+| Android phone | `android` | `phone` | `Android` |
+| Android tablet | `android` | `tablet` | `Android` |
+| Android TV, Google TV, Fire TV | `android` | `tv` | `Android TV` |
+| Wear OS watch | `android` | `watch` | `Wear OS` |
+| Web app on a smart TV (Tizen, webOS) | `web` | `tv` | `Tizen`, `webOS` |
+| Roku and other TV platforms | `other` | `tv` | The OS name, for example `Roku OS` |
+
+Reports filter by `os_name`, not by `device_type`, which is why TVs and watches get an OS name of their
+own: the `Android TV` filter opens the reports for TVs only, and the breakdown by device type shows
+each type's share. On Apple devices, `UIDevice.current.systemName` already returns `tvOS` or
+`visionOS`. How to detect the device type:
+
+- Swift: `UIDevice.current.userInterfaceIdiom`, where `.pad` is a tablet and `.tv` is a TV, as in the
+  [iOS recipe](/docs/recipes/ios-swift#sending);
+- Kotlin: `resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK`, where
+  `UI_MODE_TYPE_TELEVISION` is a TV and `UI_MODE_TYPE_WATCH` is a watch, as in the
+  [Android recipe](/docs/recipes/android-kotlin#session-lifecycle);
+- React Native: `DeviceInfo.getDeviceType()` from `react-native-device-info` returns `Tv`;
+- Flutter: on Android TV, `systemFeatures` of `AndroidDeviceInfo` from `device_info_plus` contains
+  `android.software.leanback`;
+- Web: the user agent of TV browsers contains `SMART-TV`, `Tizen` or `Web0S`.
+
 ## What to read next [#next]
 
 - [Where to initialize analytics](/docs/concepts/initialization) — entry points and lifecycle hooks.

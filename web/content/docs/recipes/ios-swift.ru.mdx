@@ -6,7 +6,9 @@ description: URLSession, install_id в Keychain, офлайн-очередь и 
 Рецепт для iOS 17+ и Swift 6 без сторонних зависимостей. Он состоит из четырёх файлов: модель
 событий, `install_id` в Keychain, офлайн-очередь с отправкой через `URLSession` и трекер сессий,
 который подключается к жизненному циклу приложения. Для macOS код тот же, кроме `platform: "macos"`,
-ключа платформы macOS и уведомлений `NSApplication`.
+ключа платформы macOS и уведомлений `NSApplication`. На Apple TV код тот же с ключом iOS: `device_type`
+сам становится `tv`, `os_name` — `tvOS`, а файл очереди лежит в `Caches`, который система может
+очистить при нехватке места (см. [Телевизоры, часы и планшеты](/docs#device-families)).
 
 Вшейте ключ платформы iOS из вкладки «Интеграция». Если приложение выходит и на других платформах, это
 одно приложение с несколькими платформами: у каждой свой ключ, а человек с одним `user_id` на iOS и
@@ -102,13 +104,18 @@ enum Analytics {
         #else
         let environment = "production"
         #endif
+        let deviceType = switch UIDevice.current.userInterfaceIdiom {
+        case .pad: "tablet"
+        case .tv: "tv" // Apple TV: systemName уже "tvOS"
+        default: "phone"
+        }
         return EventContext(
             osName: UIDevice.current.systemName,
             osVersion: UIDevice.current.systemVersion,
             appVersion: info["CFBundleShortVersionString"] as? String ?? "",
             appBuild: info["CFBundleVersion"] as? String ?? "",
             deviceModel: hardwareModel(),
-            deviceType: UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone",
+            deviceType: deviceType,
             locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
             environment: environment
         )
@@ -197,7 +204,12 @@ actor OfflineQueue {
     static let shared = OfflineQueue()
 
     private static let maxAge: TimeInterval = 7 * 24 * 3600
+    // В tvOS у приложения нет постоянного хранилища, кроме Keychain и UserDefaults.
+    #if os(tvOS)
+    private let fileURL = URL.cachesDirectory.appending(path: "appmetrica-queue.json")
+    #else
     private let fileURL = URL.applicationSupportDirectory.appending(path: "appmetrica-queue.json")
+    #endif
     private var events: [Event]
     private var sending = false
     private var stopped = false

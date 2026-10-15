@@ -187,6 +187,7 @@ with the app version in which they happened. Duration is measured with
 
 ```kotlin title="SessionTracker.kt"
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import android.os.SystemClock
 import org.json.JSONObject
@@ -228,16 +229,25 @@ class SessionTracker(private val app: Context, private val queue: EventQueue) {
         queue.enqueue(event)
     }
 
-    private fun context(): JSONObject = JSONObject()
-        .put("platform", "android")
-        .put("os_name", "Android")
-        .put("os_version", Build.VERSION.RELEASE)
-        .put("app_version", BuildConfig.VERSION_NAME)
-        .put("app_build", BuildConfig.VERSION_CODE.toString())
-        .put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
-        .put("device_type", if (app.resources.configuration.smallestScreenWidthDp >= 600) "tablet" else "phone")
-        .put("locale", Locale.getDefault().toLanguageTag())
-        .put("environment", if (BuildConfig.DEBUG) "development" else "production")
+    private fun context(): JSONObject {
+        val config = app.resources.configuration
+        val deviceType = when (config.uiMode and Configuration.UI_MODE_TYPE_MASK) {
+            Configuration.UI_MODE_TYPE_TELEVISION -> "tv"
+            Configuration.UI_MODE_TYPE_WATCH -> "watch"
+            else -> if (config.smallestScreenWidthDp >= 600) "tablet" else "phone"
+        }
+        return JSONObject()
+            .put("platform", "android")
+            // Reports filter by os_name: TVs and watches get an OS name of their own.
+            .put("os_name", when (deviceType) { "tv" -> "Android TV"; "watch" -> "Wear OS"; else -> "Android" })
+            .put("os_version", Build.VERSION.RELEASE)
+            .put("app_version", BuildConfig.VERSION_NAME)
+            .put("app_build", BuildConfig.VERSION_CODE.toString())
+            .put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
+            .put("device_type", deviceType)
+            .put("locale", Locale.getDefault().toLanguageTag())
+            .put("environment", if (BuildConfig.DEBUG) "development" else "production")
+    }
 }
 ```
 
