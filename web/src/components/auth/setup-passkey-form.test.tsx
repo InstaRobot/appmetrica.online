@@ -79,7 +79,8 @@ describe("SetupPasskeyForm", () => {
   it("makes the name field and the submit button 44 px tall on phones", () => {
     render(<SetupPasskeyForm token="tok" defaultName="iPhone" />);
 
-    expect(nameInput()).toHaveClass("h-11", "md:h-8", "text-lg", "md:text-sm");
+    // 44 px и 16 px на телефоне даёт само поле ввода (components/ui/input.tsx).
+    expect(nameInput()).toHaveClass("max-md:h-11", "max-md:text-[16px]");
     expect(screen.getByRole("button", { name: "Создать passkey" })).toHaveClass(
       "w-full",
       "h-11",

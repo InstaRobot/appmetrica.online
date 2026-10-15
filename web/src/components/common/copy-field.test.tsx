@@ -31,7 +31,7 @@ describe("CopyField", () => {
   it("is a 44 px touch target on phones", () => {
     render(<CopyField value="pk_7Hq2x9AbLm3Np4Qr5St6Uv7Wx8Yz9Ab0" label="write-ключ" />);
 
-    expect(screen.getByRole("textbox", { name: "write-ключ" })).toHaveClass("h-11", "md:h-8");
+    expect(screen.getByRole("textbox", { name: "write-ключ" })).toHaveClass("max-md:h-11");
     expect(screen.getByRole("button", { name: "Копировать write-ключ" })).toHaveClass(
       "size-11",
       "md:size-9",
