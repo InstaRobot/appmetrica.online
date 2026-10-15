@@ -1,30 +1,31 @@
 ---
-title: Боты и бэкенды
-description: Telegram-боты и серверные источники — HMAC вместо Telegram ID, сессии на сервере и context.ip.
+title: Bots and backends
+description: Telegram bots and server-side sources — HMAC instead of Telegram IDs, server-side sessions, and context.ip.
 ---
 
-У бота и бэкенда нет экрана и переднего плана, поэтому идентичность, сессии и гео сервер собирает
-сам. Рецепт показывает, как это сделать на Go без сторонних зависимостей. Для других языков логика та
-же.
+A bot or a backend has no screen and no foreground, so your server has to work out identity,
+sessions, and geo on its own. This recipe shows how to do it in Go without third-party dependencies.
+The logic is the same in other languages.
 
-Боту нужна платформа `bot`, бэкенду — `server`. Если бот или бэкенд обслуживает тех же людей, что и
-мобильное приложение, добавьте платформу к этому приложению и отправляйте события её ключом: человек с
-одним `user_id` в боте и в приложении будет посчитан один раз. Самостоятельному боту или сервису
-создайте отдельное приложение. Подробнее — [Платформа события](/docs#platform).
+A bot uses the `bot` platform, a backend uses `server`. If the bot or backend serves the same people
+as a mobile app, add the platform to that app and send events with its key: a person with the same
+`user_id` in the bot and in the app is counted once. For a standalone bot or service, create a
+separate app. Learn more in [Event platform](/docs#platform).
 
-## Идентичность пользователя [#identity]
+## User identity [#identity]
 
-Telegram ID — это чужой, но публичный идентификатор: по нему человека легко найти. В аналитику он
-не должен попадать как есть. Сервер такие строки не отклоняет (чисто цифровые `user_id` разрешены),
-поэтому защита — на стороне бота:
+A Telegram ID is someone else's identifier, and a public one: it makes a person easy to find. It
+shouldn't end up in analytics as is. The server doesn't reject such strings (purely numeric
+`user_id` values are allowed), so protecting them is the bot's job:
 
-- `user_id` = HMAC-SHA256 от Telegram ID с секретом бота, в hex (64 символа). Без секрета по нему
-  нельзя восстановить Telegram ID, а один и тот же человек всегда получает один и тот же `user_id`.
-- `install_id` — стабильный UUID на чат. Удобно выводить его из того же HMAC: тогда не нужно
-  хранить таблицу соответствий.
+- `user_id` = HMAC-SHA256 of the Telegram ID keyed with the bot's secret, in hex (64 characters).
+  Without the secret, the Telegram ID can't be recovered from it, and the same person always gets
+  the same `user_id`.
+- `install_id` — a stable UUID per chat. It's convenient to derive it from the same HMAC: then you
+  don't need to store a mapping table.
 
-Секрет храните как остальные секреты бота, например в переменной `ANALYTICS_HMAC_SECRET`. Если
-поменять секрет, все пользователи станут новыми.
+Store the secret like the bot's other secrets, for example in the `ANALYTICS_HMAC_SECRET` variable.
+If you change the secret, every user becomes a new one.
 
 ```go title="identity.go"
 package main
@@ -38,14 +39,14 @@ import (
 	"strconv"
 )
 
-// UserID — user_id для аналитики: HMAC-SHA256 от Telegram ID пользователя, hex.
+// UserID returns the analytics user_id: the HMAC-SHA256 of the user's Telegram ID, in hex.
 func UserID(secret []byte, telegramUserID int64) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte("user:" + strconv.FormatInt(telegramUserID, 10)))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// InstallID — стабильный install_id чата: первые 16 байт HMAC, оформленные как UUIDv8 (RFC 9562).
+// InstallID returns a stable install_id for the chat: the first 16 HMAC bytes as a UUIDv8 (RFC 9562).
 func InstallID(secret []byte, chatID int64) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte("chat:" + strconv.FormatInt(chatID, 10)))
@@ -62,31 +63,32 @@ func main() {
 }
 ```
 
-В личном чате `chat_id` совпадает с ID пользователя, поэтому у человека одна «установка». В группах
-каждый чат — своя установка, а человек склеивается по `user_id` (см.
-[Идентичность](/docs/concepts/identity)).
+In a private chat, `chat_id` equals the user's ID, so each person has a single "install". In groups,
+every chat is an install of its own, and a person is stitched together by `user_id` (see
+[Identity](/docs/concepts/identity)).
 
-## Сессии на сервере [#server-sessions]
+## Server-side sessions [#server-sessions]
 
-Сессия бота — серия сообщений пользователя без пауз дольше 30 минут:
+A bot session is a series of messages from a user with no gap longer than 30 minutes:
 
-1. Первое сообщение после паузы открывает сессию: `session_start` со временем этого сообщения.
-2. Каждое следующее сообщение продлевает сессию.
-3. Если пользователь молчит 30 минут, сессия закрывается: `session_end` со временем последнего
-   сообщения и `duration_ms` = последнее сообщение − первое.
+1. The first message after a gap opens a session: `session_start` with that message's time.
+2. Every following message extends the session.
+3. If the user stays silent for 30 minutes, the session closes: `session_end` with the time of the
+   last message and `duration_ms` = last message − first message.
 
-`timestamp` — время самого события, а не момент отправки батча. Длительность одиночного сообщения
-равна нулю — это нормально, сессия всё равно попадёт в отчёт.
+`timestamp` is the time of the event itself, not the moment the batch is sent. A session with a
+single message has zero duration — that's fine, the session still makes it into reports.
 
-При остановке бота закройте открытые сессии и отправьте очередь. Иначе `session_end` потеряются, и
-средняя длительность сессий окажется заниженной.
+When the bot shuts down, close the open sessions and flush the queue. Otherwise the `session_end`
+events are lost, and the average session duration comes out too low.
 
-## Очередь и отправка [#queue]
+## Queue and sending [#queue]
 
-Отправлять событие на каждое сообщение расточительно. Очередь копит события и отправляет их батчем
-раз в 5 секунд или при 500 событиях. Если ingest недоступен, батч остаётся в очереди до следующей
-попытки. Полная политика повторов — в [Ошибки и повторы](/docs/errors-and-retries) и в клиенте из
-рецепта [Go](/docs/recipes/go#go-client).
+Sending an event for every message is wasteful. The queue accumulates events and sends them as a
+batch every 5 seconds or as soon as 500 events pile up. If ingest is unavailable, the batch stays in
+the queue until the next attempt. The full retry policy is in
+[Errors and retries](/docs/errors-and-retries) and in the client from the
+[Go](/docs/recipes/go#go-client) recipe.
 
 ```go title="sessions.go"
 package main
@@ -127,13 +129,13 @@ type session struct {
 	start, last           time.Time
 }
 
-// Tracker ведёт сессии пользователей бота и копит события для отправки.
+// Tracker keeps track of the bot users' sessions and accumulates events for sending.
 type Tracker struct {
 	key  string
 	http *http.Client
 
 	mu       sync.Mutex
-	sessions map[string]*session // по install_id
+	sessions map[string]*session // keyed by install_id
 	queue    []Event
 }
 
@@ -141,7 +143,7 @@ func NewTracker(key string) *Tracker {
 	return &Tracker{key: key, http: &http.Client{Timeout: 10 * time.Second}, sessions: map[string]*session{}}
 }
 
-// Touch — сообщение пользователя в момент at.
+// Touch records a user message received at time at.
 func (t *Tracker) Touch(installID, userID string, at time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -162,7 +164,7 @@ func (t *Tracker) Touch(installID, userID string, at time.Time) {
 	s.last = at
 }
 
-// CloseIdle закрывает сессии без сообщений дольше idleTimeout; all — закрыть все (остановка бота).
+// CloseIdle closes sessions idle longer than idleTimeout; all closes every session (bot shutdown).
 func (t *Tracker) CloseIdle(now time.Time, all bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -182,7 +184,7 @@ func (t *Tracker) end(s *session) {
 	delete(t.sessions, s.installID)
 }
 
-// Flush отправляет очередь батчами. При ошибке неотправленные события возвращаются в начало очереди.
+// Flush sends the queue in batches. On error, unsent events go back to the front of the queue.
 func (t *Tracker) Flush(ctx context.Context) error {
 	t.mu.Lock()
 	pending := t.queue
@@ -205,7 +207,7 @@ func (t *Tracker) Flush(ctx context.Context) error {
 func (t *Tracker) send(ctx context.Context, events []Event) error {
 	body, err := json.Marshal(map[string]any{
 		"sent_at": time.Now(),
-		// Бот не знает IP пользователя: "none" отключает гео, иначе страной стал бы адрес сервера бота.
+		// The bot doesn't know the user's IP: "none" disables geo instead of locating the bot's server.
 		"context": map[string]string{"platform": "bot", "app_version": "1.0.0", "ip": "none"},
 		"events":  events,
 	})
@@ -229,7 +231,7 @@ func (t *Tracker) send(ctx context.Context, events []Event) error {
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
 		return fmt.Errorf("ingest: HTTP %d, retry later", resp.StatusCode)
 	default:
-		// 4xx: батч не исправится повтором — логируем и не возвращаем его в очередь.
+		// 4xx: a retry won't fix the batch, so log it and don't put it back in the queue.
 		log.Printf("ingest: HTTP %d, batch dropped", resp.StatusCode)
 		return nil
 	}
@@ -248,7 +250,7 @@ func main() {
 	defer stop()
 	tracker := NewTracker(os.Getenv("AM_PK"))
 
-	// В боте Touch вызывается из обработчика каждого входящего сообщения.
+	// In a real bot, Touch is called from the handler of every incoming message.
 	tracker.Touch("0f8fad5b-d9cb-469f-a165-70867728950e", "", time.Now())
 
 	ticker := time.NewTicker(flushEvery)
@@ -273,29 +275,29 @@ func main() {
 }
 ```
 
-Очередь в примере живёт в памяти: при падении процесса события пропадут. Если это важно, храните
-её в Redis или в таблице базы бота. События старше 7 дней удаляйте до отправки — сервер их всё равно
-отклонит с кодом `event_too_old`.
+The queue in this example lives in memory: if the process crashes, the events are lost. If that
+matters, keep the queue in Redis or in a table in the bot's database. Delete events older than 7 days
+before sending — the server would reject them anyway with the `event_too_old` code.
 
 ## context.ip [#context-ip]
 
-Страна и город определяются по IP-адресу. По умолчанию это адрес, с которого пришёл HTTP-запрос.
-Для мобильных приложений и сайтов это верно, а для серверных источников — нет: запрос приходит с
-адреса вашего сервера.
+Country and city are determined from the IP address. By default, that's the address the HTTP
+request came from. That's correct for mobile apps and websites, but not for server-side sources: the
+request comes from your server's address.
 
-| Источник | Что передавать в `context.ip` |
+| Source | What to pass in `context.ip` |
 |---|---|
-| Приложение, сайт | Ничего: сервер возьмёт адрес клиента |
-| Telegram-бот | `"none"`: Telegram не сообщает IP пользователя |
-| Бэкенд, который знает IP пользователя | IP пользователя из запроса к вашему бэкенду |
-| Cron-задача, внутренний сервис | `"none"` |
+| App, website | Nothing: the server uses the client's address |
+| Telegram bot | `"none"`: Telegram doesn't share the user's IP |
+| Backend that knows the user's IP | The user's IP from the request to your backend |
+| Cron job, internal service | `"none"` |
 
-IP используется только для поиска страны и города и сразу отбрасывается: его нет ни в ClickHouse,
-ни в логах, ни в отклонённых событиях. Невалидный адрес не отклоняет событие: оно принимается с
-предупреждением `geo_ip_invalid` и без гео.
+The IP is used only to look up the country and city and is discarded right away: it isn't stored in
+ClickHouse, in logs, or in rejected events. An invalid address doesn't get the event rejected: the
+event is accepted with the `geo_ip_invalid` warning and without geo.
 
-Если в одном батче события разных пользователей, передавайте IP в `context` каждого события — он
-перекрывает `context` батча поле за полем:
+If a batch contains events from different users, pass the IP in each event's `context` — it
+overrides the batch `context` field by field:
 
 ```go title="backend.go"
 package main
@@ -323,8 +325,8 @@ type Event struct {
 	Context   *EventContext `json:"context,omitempty"`
 }
 
-// userIP — адрес пользователя за вашим балансировщиком: последний адрес X-Forwarded-For, который
-// дописал доверенный прокси. Без прокси — адрес TCP-соединения.
+// userIP returns the user's address behind your load balancer: the last X-Forwarded-For address,
+// the one appended by your trusted proxy. Without a proxy, it's the address of the TCP connection.
 func userIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
@@ -337,7 +339,7 @@ func userIP(r *http.Request) string {
 	return host
 }
 
-// pending читает отправщик батчей — такой же, как Tracker.Flush в sessions.go.
+// pending is read by the batch sender — one like Tracker.Flush in sessions.go.
 var pending = make(chan Event, 1024)
 
 func main() {
@@ -352,12 +354,12 @@ func main() {
 		}
 		select {
 		case pending <- event:
-		default: // очередь переполнена: ответ пользователю не ждёт аналитику
+		default: // the queue is full: the user's response doesn't wait for analytics
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	go func() {
-		for range pending { // здесь работает отправщик батчей
+		for range pending { // the batch sender runs here
 		}
 	}()
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -372,8 +374,8 @@ func newUUID() string {
 }
 ```
 
-## Проверка [#verify]
+## Verification [#verify]
 
-Отправьте одно событие из терминала, как в рецепте [curl](/docs/recipes/curl#single), и
-откройте вкладку «Интеграция» приложения: событие появится в течение нескольких секунд. Ошибки
-отклонённых событий видны там же с кодом причины.
+Send a single event from the terminal, as in the [curl](/docs/recipes/curl#single) recipe, and
+open the app's **Integration** tab: the event shows up within a few seconds. Rejected events are
+listed there too, with their reason codes.

@@ -1,34 +1,34 @@
 ---
-title: Веб (JavaScript)
-description: Сессии сайта через visibilitychange, navigator.sendBeacon с text/plain и ключом в теле, очередь в localStorage.
+title: Web (JavaScript)
+description: Website sessions via visibilitychange, navigator.sendBeacon with text/plain and the key in the body, and a localStorage queue.
 ---
 
-Рецепт для сайтов и веб-приложений на чистом JavaScript без зависимостей. Сессия — время, когда
-вкладка видна пользователю. `session_end` отправляется через `navigator.sendBeacon`: браузер доставит
-его, даже если вкладку закрывают.
+A recipe for websites and web apps in plain JavaScript with no dependencies. A session is the time
+the tab is visible to the user. `session_end` is sent with `navigator.sendBeacon`: the browser
+delivers it even while the tab is being closed.
 
-Куда подключить модуль в SPA и на многостраничном сайте — в разделе
-[Где инициализировать метрику](/docs/concepts/initialization#web).
+Where to plug the module in for an SPA or a multi-page site is covered in
+[Where to initialize analytics](/docs/concepts/initialization#web).
 
-Если у продукта есть и мобильные приложения, добавьте платформу «Веб» к существующему приложению, а не
-создавайте отдельное: тогда человек с одним `user_id` на сайте и в приложении считается один раз.
-В модуль вшейте ключ платформы «Веб» — см. [Платформа события](/docs#platform).
+If your product also has mobile apps, add the **Web** platform to the existing app instead of
+creating a separate one: then a person with the same `user_id` on the website and in the app is
+counted once. Embed the **Web** platform key in the module — see [Event platform](/docs#platform).
 
-## Почему text/plain и app_key в теле [#beacon]
+## Why text/plain and app_key in the body [#beacon]
 
-`sendBeacon` не умеет задавать заголовки, поэтому ключ передаётся в поле тела `app_key`, а не в
-`X-App-Key`. Тело — тот же JSON, но с `Content-Type: text/plain`: такой запрос браузер считает
-«простым» и отправляет без CORS-preflight. Ingest принимает `text/plain` наравне с
-`application/json`. Если переданы и заголовок, и `app_key`, они должны совпадать — иначе
-`400 invalid_batch`.
+`sendBeacon` can't set headers, so the key goes in the `app_key` body field instead of
+`X-App-Key`. The body is the same JSON, but sent with `Content-Type: text/plain`: the browser treats
+such a request as "simple" and sends it without a CORS preflight. Ingest accepts `text/plain` on par
+with `application/json`. If both the header and `app_key` are present, they must match — otherwise
+you get `400 invalid_batch`.
 
-Ключ в query string сервер не принимает: адреса запросов попадают в логи прокси.
+The server doesn't accept the key in the query string: request URLs end up in proxy logs.
 
-## Модуль analytics.js [#module]
+## The analytics.js module [#module]
 
 ```js title="analytics.js"
 const ENDPOINT = "https://i.analytics.example.com/v1/events";
-const WRITE_KEY = "pk_…"; // ключ платформы «Веб» на вкладке «Интеграция»
+const WRITE_KEY = "pk_…"; // Web platform key from the Integration tab
 const QUEUE_KEY = "am_queue";
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 const MAX_BATCH = 500;
@@ -48,7 +48,7 @@ function installId() {
 function context() {
   return {
     platform: "web",
-    app_version: "1.0.0", // версия сайта: номер релиза или git sha
+    app_version: "1.0.0", // site version: a release number or git sha
     device_type: matchMedia("(pointer: coarse)").matches ? "phone" : "desktop",
     locale: navigator.language,
     environment: location.hostname === "localhost" ? "development" : "production",
@@ -68,7 +68,7 @@ function newEvent(name, extra = {}) {
   };
 }
 
-// sent_at — момент отправки: по нему сервер исправляет неверные часы компьютера.
+// sent_at is the moment of sending: the server uses it to correct a wrong computer clock.
 function body(events) {
   return JSON.stringify({ app_key: WRITE_KEY, sent_at: new Date().toISOString(), events });
 }
@@ -89,7 +89,7 @@ function enqueue(event) {
   saveQueue([...loadQueue(), event]);
 }
 
-// Отправляет очередь через fetch. Из очереди удаляется только то, что сервер обработал.
+// Sends the queue via fetch. Only what the server has processed is removed from the queue.
 export async function flush() {
   const minTime = Date.now() - MAX_AGE_MS;
   const queue = loadQueue().filter((e) => Date.parse(e.timestamp) >= minTime);
@@ -109,12 +109,12 @@ export async function flush() {
       const retry = new Set(result.rejected.filter((r) => r.retryable).map((r) => r.insert_id));
       done = batch.filter((e) => !retry.has(e.insert_id));
     } else if ([400, 413, 415].includes(res.status)) {
-      done = batch; // повтор не поможет: ошибка в коде клиента
+      done = batch; // retrying won't help: the bug is in the client code
     } else {
-      return; // 401, 403, 429, 5xx — оставить в очереди до следующей попытки
+      return; // 401, 403, 429, 5xx: keep in the queue until the next attempt
     }
   } catch {
-    return; // сеть недоступна
+    return; // network unavailable
   }
   const sent = new Set(done.map((e) => e.insert_id));
   saveQueue(loadQueue().filter((e) => !sent.has(e.insert_id)));
@@ -133,13 +133,13 @@ function sessionEnd() {
     duration_ms: Math.min(Math.round(performance.now() - session.startedAt), 86_400_000),
   });
   session = null;
-  // Браузер ставит beacon в свою очередь и доставит его после закрытия вкладки.
+  // The browser queues the beacon itself and delivers it after the tab closes.
   const queued = navigator.sendBeacon(ENDPOINT, new Blob([body([event])], { type: "text/plain" }));
-  if (!queued) enqueue(event); // beacon не принят (лимит 64 КБ) — уйдёт при следующем визите
+  if (!queued) enqueue(event); // beacon refused (64 KB limit): it goes out on the next visit
 }
 
 export function setUserId(id) {
-  userId = id; // ID аккаунта из вашего бэкенда, null после выхода; не email
+  userId = id; // account ID from your backend, null after sign-out; not an email
 }
 
 export function start() {
@@ -153,18 +153,18 @@ export function start() {
 }
 ```
 
-Ответ на beacon странице недоступен, поэтому повторить отклонённый `session_end` нельзя. Это
-приемлемо: потерянный `session_end` не теряет сессию, а только не попадает в среднюю длительность
-(см. [Сессии](/docs/concepts/sessions#metrics)).
+The page can't see the beacon's response, so a rejected `session_end` can't be retried. That's
+acceptable: a lost `session_end` doesn't lose the session, it's only left out of the average duration
+(see [Sessions](/docs/concepts/sessions#metrics)).
 
-## Подключение [#setup]
+## Setup [#setup]
 
 ```html tab="HTML" title="index.html"
 <script type="module">
   import { start, setUserId } from "/analytics.js";
 
   start();
-  // После входа: setUserId(account.id); после выхода: setUserId(null).
+  // After sign-in: setUserId(account.id); after sign-out: setUserId(null).
 </script>
 ```
 
@@ -173,8 +173,8 @@ export function start() {
 
 import { useEffect } from "react";
 
-// Подключите <Analytics /> в корневом layout. Модуль грузится после гидратации и не входит в
-// начальный бандл.
+// Render <Analytics /> in the root layout. The module loads after hydration and stays out of the
+// initial bundle.
 export function Analytics({ userId }: { userId: string | null }) {
   useEffect(() => {
     import("./analytics.js").then(({ start }) => start());
@@ -188,20 +188,21 @@ export function Analytics({ userId }: { userId: string | null }) {
 }
 ```
 
-В SPA переходы между страницами не создают новых сессий: сессия длится, пока вкладка видна.
+In an SPA, navigating between pages doesn't create new sessions: a session lasts as long as the tab
+is visible.
 
-## Особенности веба [#caveats]
+## Web caveats [#caveats]
 
-- **Каждая вкладка — своя сессия.** Две открытые вкладки дают две сессии одного человека: активные
-  пользователи от этого не меняются, число сессий растёт.
-- **`install_id` живёт в `localStorage`.** Очистка данных сайта, режим инкогнито и другой браузер —
-  новая установка. Вход по `user_id` склеивает такие установки в одного человека.
-- **Блокировщики рекламы** могут резать запросы к аналитике. Если это важно, проксируйте ingest
-  через свой домен — например, `/a/v1/events` на `https://i.analytics.example.com/v1/events`.
-- **Страна и город** определяются по IP браузера, сам IP не сохраняется.
+- **Each tab is its own session.** Two open tabs produce two sessions for the same person: active
+  users stay the same, but the session count grows.
+- **`install_id` lives in `localStorage`.** Clearing site data, incognito mode, or a different
+  browser means a new install. Signing in with a `user_id` stitches such installs into one person.
+- **Ad blockers** may block analytics requests. If that matters, proxy ingest through your own
+  domain — for example, `/a/v1/events` to `https://i.analytics.example.com/v1/events`.
+- **Country and city** are determined from the browser's IP; the IP itself isn't stored.
 
-## Проверка [#verify]
+## Verification [#verify]
 
-Откройте сайт на `localhost` (события уйдут с `environment: "development"`), переключите вкладку и
-вернитесь. На вкладке «Интеграция» появятся `session_start` и `session_end`. В DevTools на вкладке
-Network beacon виден как запрос типа `ping`.
+Open the site on `localhost` (events go out with `environment: "development"`), switch to another
+tab, and come back. `session_start` and `session_end` appear on the **Integration** tab. In
+DevTools, the Network tab shows the beacon as a request of type `ping`.
