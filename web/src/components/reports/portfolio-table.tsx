@@ -15,15 +15,11 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PortfolioRow } from "@/lib/api/gen/model";
-import {
-  formatDate,
-  formatDateShort,
-  formatInt,
-  formatPercent,
-  formatWeekdayDate,
-} from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { addDays } from "@/lib/period";
 import { cn } from "@/lib/utils";
+import type { Messages } from "@/messages";
 import { Delta } from "./delta";
 import { PlatformShareBar } from "./platform-share-bar";
 import { Sparkline } from "./sparkline";
@@ -84,13 +80,15 @@ export function sortPortfolioRows(rows: PortfolioRow[], sort: PortfolioSort): Po
 }
 
 // Тренд 30 дней для скринридеров: средняя первой недели против последней, порог ±5 %.
-export function trendLabel(values: number[]): string {
+export function trendLabel(
+  values: number[],
+  trend: Messages["portfolio"]["table"]["trend"],
+): string {
   const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
   const first = avg(values.slice(0, 7));
   const last = avg(values.slice(-7));
   const change = first === 0 ? (last === 0 ? 0 : 1) : (last - first) / first;
-  const word = change > 0.05 ? "рост" : change < -0.05 ? "падение" : "без изменений";
-  return `Тренд за 30 дней: ${word}`;
+  return change > 0.05 ? trend.up : change < -0.05 ? trend.down : trend.flat;
 }
 
 type Column = {
@@ -143,28 +141,31 @@ function SortButton({
 
 // PortfolioTable (14-ux-ui-spec.md S-03, §16.4): все приложения за дату, сортировка на клиенте.
 export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: PortfolioTableProps) {
+  const m = useMessages().portfolio.table;
+  const f = useFormat();
   const columns: Column[] = [
-    { key: "name", label: "Приложение" },
-    { key: "platforms", label: "Платформы" },
+    { key: "name", label: m.columns.name },
+    { key: "platforms", label: m.columns.platforms },
+    { key: "active_today", label: m.columns.today, hint: m.columns.todayHint },
+    { key: "active_date", label: fmt(m.columns.dau, { date: f.formatDateShort(date) }) },
     {
-      key: "active_today",
-      label: "Сегодня",
-      hint: "Неполный день: данные с 00:00 по TZ приложения",
+      key: "active_delta_pct",
+      label: fmt(m.columns.delta, { date: f.formatWeekdayDate(addDays(date, -7)) }),
     },
-    { key: "active_date", label: `DAU ${formatDateShort(date)}` },
-    { key: "active_delta_pct", label: `Δ к ${formatWeekdayDate(addDays(date, -7))}` },
-    { key: "new_date", label: "Новые" },
-    { key: "sessions_date", label: "Сессии" },
+    { key: "new_date", label: m.columns.new },
+    { key: "sessions_date", label: m.columns.sessions },
     { key: "retention_d1", label: "D1" },
     { key: "retention_d7", label: "D7" },
-    { key: "sparkline", label: "30 дней" },
+    { key: "sparkline", label: m.columns.sparkline },
   ];
   const sorted = sortPortfolioRows(rows, sort);
 
   return (
     <TooltipProvider>
       <Table>
-        <TableCaption className="sr-only">Портфель приложений за {formatDate(date)}</TableCaption>
+        <TableCaption className="sr-only">
+          {fmt(m.caption, { date: f.formatDate(date) })}
+        </TableCaption>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {columns.map((column) => (
@@ -216,30 +217,33 @@ export function PortfolioTable({ rows, date, sort, onSortChange, onOpenApp }: Po
                 <PlatformShareBar items={row.platforms} total={row.active_date} />
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums text-fg-muted">
-                {formatInt(row.active_today)}
+                {f.formatInt(row.active_today)}
               </TableCell>
               <TableCell className="px-3 text-right font-medium tabular-nums">
-                {formatInt(row.active_date)}
+                {f.formatInt(row.active_date)}
               </TableCell>
               <TableCell className="px-3 text-right">
                 <Delta value={row.active_delta_pct} />
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums">
-                {formatInt(row.new_date)}
+                {f.formatInt(row.new_date)}
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums">
-                {formatInt(row.sessions_date)}
+                {f.formatInt(row.sessions_date)}
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums">
-                {formatPercent(row.retention_d1)}
+                {f.formatPercent(row.retention_d1)}
               </TableCell>
               <TableCell className="px-3 text-right tabular-nums">
-                {formatPercent(row.retention_d7)}
+                {f.formatPercent(row.retention_d7)}
               </TableCell>
               <TableCell className="px-3 text-right">
                 <Sparkline
                   values={row.sparkline.map((p) => p.active)}
-                  trendLabel={trendLabel(row.sparkline.map((p) => p.active))}
+                  trendLabel={trendLabel(
+                    row.sparkline.map((p) => p.active),
+                    m.trend,
+                  )}
                 />
               </TableCell>
             </TableRow>

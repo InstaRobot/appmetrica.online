@@ -42,7 +42,8 @@ import { useGetSettings } from "@/lib/api/gen/endpoints/admin-settings/admin-set
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetPortfolio } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import { type App, Environment, Unit } from "@/lib/api/gen/model";
-import { formatDate } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { addDays, isIsoDate, yesterdayIn } from "@/lib/period";
 
 // URL-состояние S-03: ?date=YYYY-MM-DD (по умолчанию — вчера по settings.owner_timezone, решает сервер),
@@ -84,21 +85,22 @@ type DateStepperProps = { value: string; max: string; onChange: (date: string) =
 
 // ◀ дата ▶ (S-03): ±1 день, вперёд не дальше вчера; клик по дате — календарь.
 function DateStepper({ value, max, onChange }: DateStepperProps) {
+  const m = useMessages().portfolio.date;
   const [open, setOpen] = useState(false);
-  const label = formatDate(value);
+  const label = useFormat().formatDate(value);
   return (
     <div className="flex items-center gap-1">
       <Button
         variant="outline"
         size="icon"
-        aria-label="Предыдущий день"
+        aria-label={m.previous}
         onClick={() => onChange(addDays(value, -1))}
       >
         <ChevronLeft aria-hidden="true" />
       </Button>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" aria-label={`Выбрать дату: ${label}`} className="min-w-36">
+          <Button variant="outline" aria-label={fmt(m.pick, { date: label })} className="min-w-36">
             <CalendarDays aria-hidden="true" />
             {label}
           </Button>
@@ -120,7 +122,7 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
       <Button
         variant="outline"
         size="icon"
-        aria-label="Следующий день"
+        aria-label={m.next}
         disabled={value >= max}
         onClick={() => onChange(addDays(value, 1))}
       >
@@ -131,27 +133,29 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
 }
 
 function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
+  const m = useMessages().portfolio.archive;
+  const f = useFormat();
   const headingId = useId();
   return (
     <section className="mt-6 flex flex-col gap-3">
       <h2 id={headingId} className="text-heading-3">
-        Архив
+        {m.title}
       </h2>
       <Card className="py-0">
         <Table aria-labelledby={headingId}>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead scope="col" className="px-3">
-                Название
+                {m.name}
               </TableHead>
               <TableHead scope="col" className="px-3">
-                Платформы
+                {m.platforms}
               </TableHead>
               <TableHead scope="col" className="px-3">
-                Дата архивации
+                {m.archivedAt}
               </TableHead>
               <TableHead scope="col" className="px-3">
-                <span className="sr-only">Действия</span>
+                <span className="sr-only">{m.actions}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -168,11 +172,11 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
                   {app.platforms.map(platformLabel).join(", ")}
                 </TableCell>
                 <TableCell className="px-3">
-                  {app.archived_at ? formatDate(app.archived_at, timeZone) : "—"}
+                  {app.archived_at ? f.formatDate(app.archived_at, timeZone) : "—"}
                 </TableCell>
                 <TableCell className="px-3 text-right">
                   <Link href={`/apps/${app.id}` as Route} className="text-fg-link hover:underline">
-                    Открыть
+                    {m.open}
                   </Link>
                 </TableCell>
               </TableRow>
@@ -186,6 +190,8 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
 
 // S-03 Портфель (FR-012): таблица всех активных приложений за дату и четыре состояния экрана.
 export function PortfolioView() {
+  const m = useMessages().portfolio;
+  const f = useFormat();
   const router = useRouter();
   const [{ date, env, unit, sort }, setState] = useQueryStates(searchParams);
   const [showArchived, setShowArchived] = useState(false);
@@ -219,7 +225,7 @@ export function PortfolioView() {
   return (
     <>
       <PageHeader
-        title="Портфель"
+        title={m.title}
         adornment={<UnitBadge unit={unit} />}
         actions={
           <>
@@ -232,7 +238,7 @@ export function PortfolioView() {
             <Button asChild>
               <Link href="/apps/new">
                 <Plus aria-hidden="true" />
-                Добавить приложение
+                {m.addApp}
               </Link>
             </Button>
           </>
@@ -243,7 +249,7 @@ export function PortfolioView() {
         <Alert className="mb-4">
           <Info aria-hidden="true" />
           <AlertDescription>
-            За {formatDate(report.date)} событий нет. Проверьте вкладку «Интеграция» у приложений.
+            {fmt(m.noEvents, { date: f.formatDate(report.date) })}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -252,9 +258,9 @@ export function PortfolioView() {
         <Card>
           <EmptyState
             icon={LayoutGrid}
-            title="Пока нет приложений"
-            description="Добавьте первое приложение — получите ключ и готовые сниппеты для отправки событий."
-            action={{ label: "Добавить приложение", href: "/apps/new" }}
+            title={m.empty.title}
+            description={m.empty.description}
+            action={{ label: m.addApp, href: "/apps/new" }}
           />
         </Card>
       ) : (
@@ -284,7 +290,7 @@ export function PortfolioView() {
       {archived.length > 0 ? (
         <div className="mt-4 flex items-center gap-2">
           <Switch id={archiveSwitchId} checked={showArchived} onCheckedChange={setShowArchived} />
-          <Label htmlFor={archiveSwitchId}>Показать архивные ({archived.length})</Label>
+          <Label htmlFor={archiveSwitchId}>{fmt(m.showArchived, { count: archived.length })}</Label>
         </div>
       ) : null}
       {showArchived && archived.length > 0 ? (

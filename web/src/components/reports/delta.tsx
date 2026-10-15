@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { formatDelta } from "@/lib/format";
+import { useFormat } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type DeltaProps = {
@@ -10,7 +10,7 @@ type DeltaProps = {
 
 // Дельта к прошлому периоду (14-ux-ui-spec.md §16.5): знак, стрелка и цвет; ноль и «—» нейтральные.
 export function Delta({ value, size = "sm" }: DeltaProps) {
-  const text = formatDelta(value);
+  const text = useFormat().formatDelta(value);
   const sign = text.startsWith("+") ? 1 : text.startsWith("−") ? -1 : 0;
   const Arrow = sign > 0 ? ArrowUp : ArrowDown;
 

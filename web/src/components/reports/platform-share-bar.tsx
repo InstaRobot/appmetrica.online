@@ -3,7 +3,7 @@
 import { platformChartVar, platformLabel } from "@/components/common/platform-icon";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PlatformActive } from "@/lib/api/gen/model";
-import { formatInt, formatShare } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
 
 type PlatformShareBarProps = {
   /** Активные по платформам за день (PortfolioRow.platforms), по убыванию. */
@@ -15,14 +15,16 @@ type PlatformShareBarProps = {
 // Доли платформ в строке портфеля: полоса 96×8, доли — от суммы по платформам,
 // потому что человек на двух платформах учтён в обеих. Tooltip с абсолютами открывается и по фокусу.
 export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
+  const m = useMessages().portfolio.shares;
+  const f = useFormat();
   const sum = items.reduce((s, item) => s + item.active, 0);
   if (sum === 0) return <span className="text-fg-muted">—</span>;
 
   const shares = items.map((item) => ({ ...item, share: item.active / sum }));
   const label = shares
-    .map((s) => `${platformLabel(s.platform)} ${formatShare(s.share)}`)
+    .map((s) => `${platformLabel(s.platform)} ${f.formatShare(s.share)}`)
     .join(", ");
-  const absolutes = items.map((i) => `${platformLabel(i.platform)} ${formatInt(i.active)}`);
+  const absolutes = items.map((i) => `${platformLabel(i.platform)} ${f.formatInt(i.active)}`);
 
   return (
     <TooltipProvider>
@@ -50,7 +52,7 @@ export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
         </TooltipTrigger>
         <TooltipContent>
           {absolutes.join(" · ")}
-          {sum > total ? ". Человек на нескольких платформах учтён в каждой" : null}
+          {sum > total ? `. ${m.overlap}` : null}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
