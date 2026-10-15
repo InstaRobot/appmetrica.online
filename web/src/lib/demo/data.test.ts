@@ -90,7 +90,7 @@ describe("demo apps", () => {
     expect(DEMO_APPS.map((a) => [a.name, a.platforms, a.status])).toEqual([
       ["Notes", ["ios", "android", "web"], "active"],
       ["site.ru", ["web"], "active"],
-      ["Помощник TG", ["bot"], "active"],
+      ["TG Helper", ["bot"], "active"],
       ["Old Game", ["ios"], "archived"],
     ]);
     expect(DEMO_APPS.map((a) => a.id)).toEqual([NOTES, SITE, BOT, OLD]);
@@ -101,7 +101,7 @@ describe("demo apps", () => {
 
   it("lists active apps sorted by name and archived ones on request", async () => {
     const active = await get<AppList>("/v1/apps");
-    expect(active.items.map((a) => a.name)).toEqual(["Notes", "site.ru", "Помощник TG"]);
+    expect(active.items.map((a) => a.name)).toEqual(["Notes", "site.ru", "TG Helper"]);
     const all = await get<AppList>("/v1/apps?include_archived=true");
     expect(all.items).toHaveLength(4);
   });
