@@ -135,14 +135,16 @@ test("docs guides link to recipes and concepts", async ({ page }) => {
 test("old go-and-curl recipe redirects to curl", async ({ page }) => {
   const res = await page.goto("/docs/recipes/go-and-curl");
 
-  const redirect = await res?.request().redirectedFrom()?.response();
-  expect(redirect?.status()).toBe(308);
+  // Первый шаг — постоянный редирект next.config; русский браузер прогона proxy затем ведёт на /ru/docs/….
+  let first = res?.request();
+  while (first?.redirectedFrom()) first = first.redirectedFrom() ?? undefined;
+  expect((await first?.response())?.status()).toBe(308);
   await expect(page).toHaveURL(/\/docs\/recipes\/curl$/);
   await expect(page.getByRole("heading", { level: 1, name: "curl", exact: true })).toBeVisible();
   // Клиент на Go переехал на свою страницу: рецепт curl ссылается на неё.
   await expect(
     page.locator("#nd-page").getByRole("link", { name: "Go", exact: true }).first(),
-  ).toHaveAttribute("href", "/docs/recipes/go");
+  ).toHaveAttribute("href", "/ru/docs/recipes/go");
   await expectNoA11yViolations(page);
 });
 
@@ -172,7 +174,7 @@ test("unknown docs page shows not found", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Страница не найдена" })).toBeVisible();
   await expect(page.getByRole("link", { name: "К быстрому старту" })).toHaveAttribute(
     "href",
-    "/docs",
+    "/ru/docs",
   );
   await expectNoA11yViolations(page);
 });

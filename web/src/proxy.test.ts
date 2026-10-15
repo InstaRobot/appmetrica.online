@@ -1,6 +1,8 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { config, proxy } from "./proxy";
+import { APP_SEGMENTS, config, proxy } from "./proxy";
 
 function request(path: string, cookie?: string, acceptLanguage?: string) {
   const headers = new Headers();
@@ -170,5 +172,34 @@ describe("proxy language routing", () => {
   it("does not treat lookalike prefixes as languages", () => {
     expect(proxy(request("/russia")).status).toBe(307);
     expect(proxy(request("/english")).status).toBe(307);
+  });
+});
+
+describe("proxy unknown addresses", () => {
+  it("sends an unknown address of a signed-in owner to a real 404", () => {
+    // Иначе первый сегмент попадает в app/[lang] как язык, и страница «не найдена» отдаётся со статусом 200.
+    const res = proxy(request("/no-such-page", "am_session=x"));
+    expect(rewrittenTo(res)).toBe("/en/no-such-page");
+    expect(res.headers.get("x-middleware-request-x-am-locale-rewrite")).toBe("1");
+  });
+
+  it("keeps known app sections and anonymous visitors as they are", () => {
+    expect(passesThrough(proxy(request("/portfolio", "am_session=x")))).toBe(true);
+    expect(passesThrough(proxy(request("/apps/x/retention", "am_session=x")))).toBe(true);
+    expect(proxy(request("/no-such-page")).status).toBe(307);
+  });
+
+  it("knows every top-level section of the app directory", () => {
+    const app = join(import.meta.dirname, "app");
+    const segments = readdirSync(app, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name !== "[lang]")
+      .flatMap((d) =>
+        d.name.startsWith("(")
+          ? readdirSync(join(app, d.name), { withFileTypes: true })
+              .filter((c) => c.isDirectory())
+              .map((c) => c.name)
+          : [d.name],
+      );
+    expect([...APP_SEGMENTS].sort()).toEqual([...new Set(segments)].sort());
   });
 });

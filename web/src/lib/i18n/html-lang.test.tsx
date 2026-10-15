@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HtmlLang } from "./html-lang";
 import { langInitScript } from "./lang-script";
 
@@ -24,9 +24,14 @@ describe("langInitScript", () => {
     expect(runAt("/docs/recipes/curl", "am_lang=ru")).toBe("en");
   });
 
-  it("takes the language of the panel from the saved choice", () => {
+  it("takes the language of the panel from the saved choice, then from the browser", () => {
     expect(runAt("/portfolio", "am_lang=ru")).toBe("ru");
+    const languages = vi.spyOn(navigator, "languages", "get");
+    languages.mockReturnValue(["en-US", "ru"]);
     expect(runAt("/apps/x/retention")).toBe("en");
+    languages.mockReturnValue(["ru-RU", "en"]);
+    expect(runAt("/no-such-page")).toBe("ru");
+    expect(runAt("/portfolio", "am_lang=en")).toBe("en");
   });
 });
 
