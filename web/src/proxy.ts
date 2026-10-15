@@ -51,6 +51,7 @@ export const APP_SEGMENTS = [
   "apps",
   "demo",
   "docs",
+  "llms-full.txt",
   "login",
   "portfolio",
   "settings",

@@ -3,6 +3,8 @@ import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 // Документация API (S-13): MDX-гайды в content/docs, страницы API reference генерирует fumadocs-openapi.
 export const docs = defineDocs({
   dir: "content/docs",
+  // Обработанный Markdown страниц для /llms-full.txt (page.data.getText("processed")).
+  docs: { postprocess: { includeProcessedMarkdown: true } },
 });
 
 // Подсветка кода — github-light-default, как у CodeBlock дашборда: красный github-light (#d73a49)
