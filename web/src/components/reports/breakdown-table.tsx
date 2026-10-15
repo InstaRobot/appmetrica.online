@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Breakdown } from "@/lib/api/gen/model";
-import { formatInt, formatPercent } from "@/lib/format";
-import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
+import { useMetricDefinitions } from "@/lib/metric-definitions";
 import {
   type BreakdownDim,
   type BreakdownMetricKey,
@@ -41,20 +42,18 @@ type BreakdownTableProps = {
   error?: React.ReactNode;
 };
 
-// Порядок вкладок — 14-ux-ui-spec.md S-05.
-export const BREAKDOWN_LABELS: Record<BreakdownDim, string> = {
-  app_version: "Версия приложения",
-  os_name: "ОС",
-  os_version: "Версия ОС",
-  device_model: "Устройство",
-  device_type: "Тип устройства",
-  country: "Страна",
-  city: "Город",
-  locale: "Язык",
-  platform: "Платформа",
-};
-
-const DIMENSIONS = Object.keys(BREAKDOWN_LABELS) as BreakdownDim[];
+// Порядок вкладок — 14-ux-ui-spec.md S-05; подписи — словарь reports.dimensions.
+const DIMENSIONS: readonly BreakdownDim[] = [
+  "app_version",
+  "os_name",
+  "os_version",
+  "device_model",
+  "device_type",
+  "country",
+  "city",
+  "locale",
+  "platform",
+];
 const METRICS: BreakdownMetricKey[] = ["active", "new", "sessions"];
 
 const isFilterable = (d: BreakdownDim): d is FilterDimension =>
@@ -71,8 +70,13 @@ export function BreakdownTable({
   loading = false,
   error,
 }: BreakdownTableProps) {
+  const messages = useMessages();
+  const m = messages.reports.breakdown;
+  const labels = messages.reports.dimensions;
+  const metrics = useMetricDefinitions();
+  const f = useFormat();
   const metricLabelId = useId();
-  const label = BREAKDOWN_LABELS[dimension];
+  const label = labels[dimension];
   const clickable = onRowClick !== undefined && isFilterable(dimension);
   const rows = data?.rows ?? [];
 
@@ -82,22 +86,20 @@ export function BreakdownTable({
   } else if (loading && !data) {
     body = <TableSkeleton rows={6} />;
   } else if (data && rows.length === 0) {
-    body = (
-      <p className="py-6 text-center text-body-md text-fg-muted">Нет данных за выбранный период</p>
-    );
+    body = <p className="py-6 text-center text-body-md text-fg-muted">{messages.reports.noData}</p>;
   } else if (data) {
     body = (
-      <Table aria-label={`Разбивка: ${label}`}>
+      <Table aria-label={fmt(m.table, { dimension: label })}>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead scope="col" className="px-3">
-              Значение
+              {m.value}
             </TableHead>
             <TableHead scope="col" className="px-3 text-right">
-              {METRIC_DEFINITIONS[metric].label}
+              {metrics[metric].label}
             </TableHead>
             <TableHead scope="col" className="w-2/5 px-3">
-              Доля
+              {m.share}
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -106,11 +108,11 @@ export function BreakdownTable({
             <TableRow key={row.value}>
               <TableCell className="px-3">
                 {row.value === "" ? (
-                  <span className="text-fg-muted">Не определено</span>
+                  <span className="text-fg-muted">{m.notSet}</span>
                 ) : clickable ? (
                   <button
                     type="button"
-                    aria-label={`Фильтр: ${label} ${row.value}`}
+                    aria-label={fmt(m.filterBy, { dimension: label, value: row.value })}
                     onClick={() => onRowClick(row.value)}
                     className="rounded-sm text-fg-link hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
@@ -120,7 +122,9 @@ export function BreakdownTable({
                   row.value
                 )}
               </TableCell>
-              <TableCell className="px-3 text-right tabular-nums">{formatInt(row.count)}</TableCell>
+              <TableCell className="px-3 text-right tabular-nums">
+                {f.formatInt(row.count)}
+              </TableCell>
               <TableCell className="px-3">
                 <span className="flex items-center gap-2">
                   <span
@@ -132,7 +136,7 @@ export function BreakdownTable({
                       style={{ width: `${Math.min(row.share, 1) * 100}%` }}
                     />
                   </span>
-                  <span className="w-14 text-right tabular-nums">{formatPercent(row.share)}</span>
+                  <span className="w-14 text-right tabular-nums">{f.formatPercent(row.share)}</span>
                 </span>
               </TableCell>
             </TableRow>
@@ -150,7 +154,7 @@ export function BreakdownTable({
           variant="outline"
           size="sm"
           spacing={0}
-          aria-label="Измерение"
+          aria-label={m.dimension}
           value={dimension}
           onValueChange={(next) => {
             const d = DIMENSIONS.find((x) => x === next);
@@ -160,28 +164,28 @@ export function BreakdownTable({
         >
           {DIMENSIONS.map((d) => (
             <ToggleGroupItem key={d} value={d} className="px-3">
-              {BREAKDOWN_LABELS[d]}
+              {labels[d]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
         <div className="flex items-center gap-2">
           <span id={metricLabelId} className="text-label-md text-fg-muted">
-            Метрика
+            {m.metric}
           </span>
           <Select
             value={metric}
             onValueChange={(next) => {
-              const m = METRICS.find((x) => x === next);
-              if (m) onMetricChange(m);
+              const key = METRICS.find((x) => x === next);
+              if (key) onMetricChange(key);
             }}
           >
             <SelectTrigger size="sm" aria-labelledby={metricLabelId}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {METRICS.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {METRIC_DEFINITIONS[m].label}
+              {METRICS.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {metrics[key].label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -190,10 +194,7 @@ export function BreakdownTable({
       </div>
       {body}
       {metric === "active" && rows.length > 0 && !error ? (
-        <p className="text-caption text-fg-muted">
-          Сумма долей может превышать 100 %: человек мог пользоваться несколькими значениями за
-          период.
-        </p>
+        <p className="text-caption text-fg-muted">{m.sharesNote}</p>
       ) : null}
     </div>
   );

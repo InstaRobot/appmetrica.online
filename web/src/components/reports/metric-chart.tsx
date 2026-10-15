@@ -6,14 +6,10 @@ import { platformChartVar } from "@/components/common/platform-icon";
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import type { TimeSeriesPoint } from "@/lib/api/gen/model";
-import {
-  formatBucket,
-  formatDateRange,
-  formatDelta,
-  formatDuration,
-  formatInt,
-} from "@/lib/format";
-import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
+import type { Formatters } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
+import { useMetricDefinitions } from "@/lib/metric-definitions";
 import { type Granularity, todayIn } from "@/lib/period";
 import type { ChartMetric } from "@/lib/url-state";
 
@@ -37,20 +33,6 @@ type MetricChartProps = {
   height?: number;
 };
 
-const TITLES: Record<ChartMetric, string> = {
-  active: "График активных пользователей",
-  new: "График новых пользователей",
-  sessions: "График сессий",
-  avg_duration_ms: "График средней длительности сессии",
-};
-
-const BY: Record<Granularity, string> = {
-  hour: "по часам",
-  day: "по дням",
-  week: "по неделям",
-  month: "по месяцам",
-};
-
 // Значения серий лежат под ключами s0…sN: значение events.platform может совпасть с полями точки.
 type Datum = { ts: string; label: string; compare: number | null } & Record<
   `s${number}`,
@@ -59,22 +41,26 @@ type Datum = { ts: string; label: string; compare: number | null } & Record<
 
 type SeriesLine = { dataKey: `s${number}`; label: string; color: string };
 
-export const formatMetric = (metric: ChartMetric, value: number | null | undefined): string =>
-  metric === "avg_duration_ms" ? formatDuration(value) : formatInt(value);
+export const formatMetric = (
+  f: Formatters,
+  metric: ChartMetric,
+  value: number | null | undefined,
+): string => (metric === "avg_duration_ms" ? f.formatDuration(value) : f.formatInt(value));
 
 // Календарный день начала корзины в TZ приложения.
 const dayOf = (ts: string, timezone: string) => todayIn(timezone, new Date(ts));
 
-export function seriesRange(timestamps: string[], timezone: string): string {
+export function seriesRange(f: Formatters, timestamps: string[], timezone: string): string {
   const first = timestamps[0];
   const last = timestamps.at(-1);
-  return first && last ? formatDateRange(dayOf(first, timezone), dayOf(last, timezone)) : "";
+  return first && last ? f.formatDateRange(dayOf(first, timezone), dayOf(last, timezone)) : "";
 }
 
 type TableToggleProps = { shown: boolean; onToggle: () => void };
 
 // «Показать таблицей» (14-ux-ui-spec.md S-05, Accessibility): точки графика таблицей для скринридеров.
 export function TableToggle({ shown, onToggle }: TableToggleProps) {
+  const m = useMessages().reports.chart;
   return (
     <Button
       variant="link"
@@ -83,7 +69,7 @@ export function TableToggle({ shown, onToggle }: TableToggleProps) {
       aria-expanded={shown}
       onClick={onToggle}
     >
-      {shown ? "Скрыть таблицу" : "Показать таблицей"}
+      {shown ? m.hideTable : m.showTable}
     </Button>
   );
 }
@@ -98,6 +84,8 @@ type TipProps = {
 };
 
 function ChartTip({ active, payload, metric, compare, lines }: TipProps) {
+  const m = useMessages().reports.chart;
+  const f = useFormat();
   const d = payload?.[0]?.payload;
   if (!active || !d) return null;
   if (lines) {
@@ -109,7 +97,7 @@ function ChartTip({ active, payload, metric, compare, lines }: TipProps) {
             <Swatch color={l.color} />
             {l.label}
             <span className="ml-auto pl-3 font-medium tabular-nums">
-              {formatMetric(metric, d[l.dataKey])}
+              {formatMetric(f, metric, d[l.dataKey])}
             </span>
           </span>
         ))}
@@ -124,11 +112,11 @@ function ChartTip({ active, payload, metric, compare, lines }: TipProps) {
   return (
     <div className="flex flex-col gap-1 rounded-md border border-border bg-popover px-3 py-2 text-body-sm shadow-md">
       <span className="text-fg-muted">{d.label}</span>
-      <span className="font-medium tabular-nums">{formatMetric(metric, value)}</span>
+      <span className="font-medium tabular-nums">{formatMetric(f, metric, value)}</span>
       {compare ? (
         <span className="text-fg-muted tabular-nums">
-          Предыдущий период: {formatMetric(metric, d.compare)}
-          {delta !== null ? ` (${formatDelta(delta)})` : ""}
+          {fmt(m.previousValue, { value: formatMetric(f, metric, d.compare) })}
+          {delta !== null ? ` (${f.formatDelta(delta)})` : ""}
         </span>
       ) : null}
     </div>
@@ -146,12 +134,17 @@ function Swatch({ color }: { color: string }) {
 }
 
 // Точки серий по корзинам: ряды API покрывают одну сетку периода, корзина отсутствующей точки — null.
-function chartData(series: MetricChartSeries[], granularity: Granularity, timezone: string) {
+function chartData(
+  f: Formatters,
+  series: MetricChartSeries[],
+  granularity: Granularity,
+  timezone: string,
+) {
   const rows = new Map<string, Datum>();
   const row = (ts: string): Datum => {
     const existing = rows.get(ts);
     if (existing) return existing;
-    const d: Datum = { ts, label: formatBucket(ts, granularity, timezone), compare: null };
+    const d: Datum = { ts, label: f.formatBucket(ts, granularity, timezone), compare: null };
     series.forEach((_, i) => {
       d[`s${i}`] = null;
     });
@@ -191,22 +184,28 @@ export function MetricChart({
   timezone,
   height = 360,
 }: MetricChartProps) {
+  const m = useMessages().reports.chart;
+  const metrics = useMetricDefinitions();
+  const f = useFormat();
   const [showTable, setShowTable] = useState(false);
   const split = series.some((s) => s.key !== "total");
   const compare = !split && series[0]?.compare !== undefined;
-  const data = chartData(series, granularity, timezone);
+  const data = chartData(f, series, granularity, timezone);
   const lines: SeriesLine[] = series.map((s, i) => ({
     dataKey: `s${i}`,
-    label: split ? s.label : METRIC_DEFINITIONS[metric].label,
+    label: split ? s.label : metrics[metric].label,
     color: split ? platformChartVar(s.key) : "var(--chart-1)",
   }));
 
   const maxes = lines.map((l) => seriesMax(data, l.dataKey));
   const max = (i: number) => {
     const d = maxes[i];
-    return d ? `максимум ${formatMetric(metric, d[`s${i}`])} ${d.label}` : "нет событий";
+    return d
+      ? fmt(m.peak, { value: formatMetric(f, metric, d[`s${i}`]), bucket: d.label })
+      : m.noEventsShort;
   };
   const range = seriesRange(
+    f,
     data.map((d) => d.ts),
     timezone,
   );
@@ -214,7 +213,7 @@ export function MetricChart({
   const summary =
     split && hasEvents ? lines.map((l, i) => `${l.label}: ${max(i)}`).join(", ") : max(0);
   const description = [
-    `${TITLES[metric]} ${BY[granularity]}${split ? " по платформам" : ""}`,
+    fmt(split ? m.headingSplit : m.heading, { title: m.titles[metric], by: m.by[granularity] }),
     range,
     summary,
   ]
@@ -222,7 +221,7 @@ export function MetricChart({
     .join(", ");
 
   const config: ChartConfig = {
-    compare: { label: "Предыдущий период", color: "var(--chart-compare)" },
+    compare: { label: m.previousPeriod, color: "var(--chart-compare)" },
   };
   for (const l of lines) config[l.dataKey] = { label: l.label, color: l.color };
 
@@ -230,7 +229,7 @@ export function MetricChart({
     <figure className="flex flex-col gap-2">
       {split ? (
         <ul
-          aria-label="Легенда графика"
+          aria-label={m.legend}
           className="flex flex-wrap gap-x-4 gap-y-1 text-body-sm text-fg-muted"
         >
           {lines.map((l) => (
@@ -254,7 +253,7 @@ export function MetricChart({
               width="auto"
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => formatMetric(metric, v)}
+              tickFormatter={(v: number) => formatMetric(f, metric, v)}
             />
             <Tooltip
               content={<ChartTip metric={metric} compare={compare} {...(split ? { lines } : {})} />}
@@ -299,9 +298,7 @@ export function MetricChart({
         </ChartContainer>
       </div>
       {hasEvents ? null : (
-        <figcaption className="text-body-sm text-fg-muted">
-          Нет событий за выбранный период
-        </figcaption>
+        <figcaption className="text-body-sm text-fg-muted">{m.noEvents}</figcaption>
       )}
       <TableToggle shown={showTable} onToggle={() => setShowTable((s) => !s)} />
       {showTable ? (
@@ -310,7 +307,7 @@ export function MetricChart({
           <thead>
             <tr className="border-b border-border text-left text-fg-muted">
               <th scope="col" className="py-2 font-medium">
-                Период
+                {m.period}
               </th>
               {lines.map((l) => (
                 <th key={l.dataKey} scope="col" className="py-2 text-right font-medium">
@@ -319,7 +316,7 @@ export function MetricChart({
               ))}
               {compare ? (
                 <th scope="col" className="py-2 text-right font-medium">
-                  Предыдущий период
+                  {m.previousPeriod}
                 </th>
               ) : null}
             </tr>
@@ -332,12 +329,12 @@ export function MetricChart({
                 </th>
                 {lines.map((l) => (
                   <td key={l.dataKey} className="py-1.5 text-right tabular-nums">
-                    {formatMetric(metric, d[l.dataKey])}
+                    {formatMetric(f, metric, d[l.dataKey])}
                   </td>
                 ))}
                 {compare ? (
                   <td className="py-1.5 text-right tabular-nums">
-                    {formatMetric(metric, d.compare)}
+                    {formatMetric(f, metric, d.compare)}
                   </td>
                 ) : null}
               </tr>

@@ -2,6 +2,7 @@
 
 import { type ComponentProps, lazy, Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMessages } from "@/lib/i18n/client";
 
 // Графики Recharts (с d3, redux и immer ≈ 150 KB gz) загружаются отдельным чанком после первой
 // загрузки страницы: в initial JS они не укладываются в бюджет 250 KB gz (NFR-006, T-044).
@@ -12,7 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 const TABLE_TOGGLE_HEIGHT = 40;
 
 function ChartSkeleton({ height }: { height: number }) {
-  return <Skeleton role="status" aria-label="Загрузка графика…" style={{ height }} />;
+  const m = useMessages().reports.chart;
+  return <Skeleton role="status" aria-label={m.loading} style={{ height }} />;
 }
 
 const LazyMetricChart = lazy(() =>

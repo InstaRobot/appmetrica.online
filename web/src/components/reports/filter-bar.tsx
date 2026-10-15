@@ -14,7 +14,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/common/lazy-popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatInt } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { FILTER_DIMENSIONS, type FilterDimension, type Filters } from "@/lib/url-state";
 
 type FilterOption = { value: string; count: number };
@@ -29,13 +30,6 @@ type FilterBarProps = {
   /** Открытие списка: значения загружаются только тогда, когда они нужны. */
   onOpenChange?: (open: boolean) => void;
   loading?: boolean;
-};
-
-export const FILTER_LABELS: Record<FilterDimension, string> = {
-  platform: "Платформа",
-  app_version: "Версия приложения",
-  os_name: "ОС",
-  country: "Страна",
 };
 
 // toggleFilter добавляет значение в фильтр или убирает его; пустой фильтр удаляется.
@@ -56,6 +50,10 @@ export function FilterBar({
   onOpenChange,
   loading = false,
 }: FilterBarProps) {
+  const messages = useMessages().reports;
+  const m = messages.filters;
+  const labels = messages.dimensions;
+  const f = useFormat();
   const [open, setOpen] = useState(false);
   const active = dims.filter((dim) => (value[dim]?.length ?? 0) > 0);
   const kept = Object.fromEntries(
@@ -70,7 +68,7 @@ export function FilterBar({
   const trigger = (
     <Button variant="outline" size="sm">
       <Plus aria-hidden="true" />
-      Фильтр
+      {m.add}
     </Button>
   );
 
@@ -82,19 +80,19 @@ export function FilterBar({
           <PopoverContent align="start" className="w-72 p-0">
             <Suspense fallback={<CommandSkeleton />}>
               <Command>
-                <CommandInput placeholder="Найти значение…" aria-label="Найти значение" />
+                <CommandInput placeholder={m.searchPlaceholder} aria-label={m.search} />
                 <CommandList>
                   {loading ? (
-                    <p className="px-3 py-4 text-body-sm text-fg-muted">Загружаем значения…</p>
+                    <p className="px-3 py-4 text-body-sm text-fg-muted">{m.loading}</p>
                   ) : (
-                    <CommandEmpty>Ничего не найдено</CommandEmpty>
+                    <CommandEmpty>{m.empty}</CommandEmpty>
                   )}
                   {dims.map((dim) => {
                     // Пустое значение («Не определено») фильтром не задаётся: у страны его нет в контракте.
                     const items = (options[dim] ?? []).filter((o) => o.value !== "");
                     if (items.length === 0) return null;
                     return (
-                      <CommandGroup key={dim} heading={FILTER_LABELS[dim]}>
+                      <CommandGroup key={dim} heading={labels[dim]}>
                         {items.map((o) => {
                           const selected: string[] = value[dim] ?? [];
                           const checked = selected.includes(o.value);
@@ -102,7 +100,7 @@ export function FilterBar({
                             <CommandItem
                               key={o.value}
                               value={`${dim}:${o.value}`}
-                              keywords={[o.value, FILTER_LABELS[dim]]}
+                              keywords={[o.value, labels[dim]]}
                               data-checked={checked ? "true" : "false"}
                               onSelect={() => {
                                 onChange(toggleFilter(value, dim, o.value));
@@ -111,7 +109,7 @@ export function FilterBar({
                             >
                               {o.value}
                               <span className="ml-auto text-fg-muted tabular-nums">
-                                {formatInt(o.count)}
+                                {f.formatInt(o.count)}
                               </span>
                             </CommandItem>
                           );
@@ -128,12 +126,12 @@ export function FilterBar({
       {active.map((dim) => (
         <Badge key={dim} variant="secondary" className="h-7 gap-1 pr-1 text-label-sm">
           <span>
-            {FILTER_LABELS[dim]}: {value[dim]?.join(", ")}
+            {labels[dim]}: {value[dim]?.join(", ")}
           </span>
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={`Убрать фильтр «${FILTER_LABELS[dim]}»`}
+            aria-label={fmt(m.remove, { dimension: labels[dim] })}
             onClick={() => {
               const { [dim]: _, ...rest } = value;
               onChange(rest);
@@ -145,7 +143,7 @@ export function FilterBar({
       ))}
       {active.length > 0 ? (
         <Button variant="link" size="sm" onClick={() => onChange(kept)}>
-          Сбросить фильтры
+          {m.reset}
         </Button>
       ) : null}
     </div>

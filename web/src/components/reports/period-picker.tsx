@@ -7,7 +7,8 @@ import { LazyCalendar } from "@/components/common/lazy-calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/common/lazy-popover";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatDateRange } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import {
   addDays,
   MAX_RANGE_DAYS,
@@ -31,15 +32,9 @@ type PeriodPickerProps = {
 
 type Preset = Exclude<PeriodPreset, "custom">;
 
-const PRESETS: { value: Preset; label: string }[] = [
-  { value: "today", label: "Сегодня" },
-  { value: "yesterday", label: "Вчера" },
-  { value: "7d", label: "7 дней" },
-  { value: "30d", label: "30 дней" },
-  { value: "90d", label: "90 дней" },
-];
+const PRESETS: readonly Preset[] = ["today", "yesterday", "7d", "30d", "90d"];
 
-const isPreset = (value: string): value is Preset => PRESETS.some((p) => p.value === value);
+const isPreset = (value: string): value is Preset => PRESETS.some((p) => p === value);
 
 // Местная полночь для react-day-picker ↔ YYYY-MM-DD: календарь работает с датами без зоны.
 function toPickerDate(date: string): Date {
@@ -61,17 +56,19 @@ export function PeriodPicker({
   error,
   presets,
 }: PeriodPickerProps) {
+  const m = useMessages().reports.period;
+  const f = useFormat();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>();
   const today = todayIn(timezone);
   const custom = value.preset === "custom";
-  const range = formatDateRange(value.from, value.to);
+  const range = f.formatDateRange(value.from, value.to);
 
   const trigger = (
     <Button
       variant={custom ? "secondary" : "outline"}
       size="sm"
-      aria-label={custom ? `Выбрать даты: ${range}` : "Выбрать даты"}
+      aria-label={custom ? fmt(m.picked, { range }) : m.pick}
     >
       <CalendarDays aria-hidden="true" />
       {custom ? range : null}
@@ -93,16 +90,16 @@ export function PeriodPicker({
           variant="segmented"
           size="sm"
           spacing={0.5}
-          aria-label="Период"
+          aria-label={m.label}
           value={custom ? "" : value.preset}
           onValueChange={(next) => {
             // Повторный клик по выбранному пресету даёт "" — период всегда выбран.
             if (isPreset(next) && next !== value.preset) onChange(presetPeriod(next, today));
           }}
         >
-          {PRESETS.filter((p) => !presets || presets.includes(p.value)).map((p) => (
-            <ToggleGroupItem key={p.value} value={p.value} className="px-3">
-              {p.label}
+          {PRESETS.filter((p) => !presets || presets.includes(p)).map((p) => (
+            <ToggleGroupItem key={p} value={p} className="px-3">
+              {m.presets[p]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -131,7 +128,7 @@ export function PeriodPicker({
               />
               <div className="flex items-center justify-end gap-2 border-t border-border p-3">
                 <Button size="sm" disabled={!draft?.from} onClick={apply}>
-                  Применить
+                  {m.apply}
                 </Button>
               </div>
             </PopoverContent>

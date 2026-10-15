@@ -12,7 +12,7 @@ import { AudienceKpis } from "@/components/reports/audience-kpis";
 import { CompareToggle } from "@/components/reports/compare-toggle";
 import { EnvironmentSwitch } from "@/components/reports/environment-switch";
 import { FilterBar } from "@/components/reports/filter-bar";
-import { GRANULARITY_LABELS, GranularitySelect } from "@/components/reports/granularity-select";
+import { GranularitySelect } from "@/components/reports/granularity-select";
 import { MetricChart, RollingActiveChart } from "@/components/reports/lazy-charts";
 import type { MetricChartSeries } from "@/components/reports/metric-chart";
 import { PeriodPicker } from "@/components/reports/period-picker";
@@ -43,7 +43,8 @@ import {
 } from "@/lib/api/gen/model";
 import { audienceCurl } from "@/lib/copy-as-curl";
 import { useMessages } from "@/lib/i18n/client";
-import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
+import { fmt } from "@/lib/i18n/format-message";
+import { useMetricDefinitions } from "@/lib/metric-definitions";
 import {
   addDays,
   allowedGranularities,
@@ -81,11 +82,9 @@ const apiError = (q: { error: unknown }) => q.error as ApiError | null;
 
 const isRangeError = (q: { error: unknown }) => apiError(q)?.code === "range_too_large";
 
-const COMPARE_IN_SPLIT = "Сравнение недоступно в режиме по платформам";
-
 // Серии графика: итог с рядом предыдущего периода или линия на каждую платформу из splits. Без splits (нет
 // событий за период) — итоговый ряд, чтобы график показал период и «Нет событий».
-function chartSeries(data: TimeSeries, split: boolean): MetricChartSeries[] {
+function chartSeries(data: TimeSeries, split: boolean, totalLabel: string): MetricChartSeries[] {
   if (split && data.splits && data.splits.length > 0) {
     return data.splits.map((s) => ({
       key: s.platform,
@@ -96,7 +95,7 @@ function chartSeries(data: TimeSeries, split: boolean): MetricChartSeries[] {
   return [
     {
       key: "total",
-      label: "Итог",
+      label: totalLabel,
       points: data.points,
       ...(data.compare_points ? { compare: data.compare_points } : {}),
     },
@@ -118,7 +117,10 @@ export function AudienceView() {
 }
 
 function AudienceReport({ app }: { app: App }) {
-  const errorTexts = useMessages().errors.codes;
+  const messages = useMessages();
+  const errorTexts = messages.errors.codes;
+  const m = messages.reports;
+  const metrics = useMetricDefinitions();
   const today = todayIn(app.timezone);
   const { state, update } = useAudienceState(app.timezone, today);
   const params = reportParams(state);
@@ -188,7 +190,9 @@ function AudienceReport({ app }: { app: App }) {
 
   const changePeriod = (next: PeriodValue) => {
     const g = coerceGranularity(state.granularity, allowedGranularities(next));
-    if (g !== state.granularity) toast.info(`Детализация изменена на «${GRANULARITY_LABELS[g]}»`);
+    if (g !== state.granularity) {
+      toast.info(fmt(m.granularity.changed, { granularity: m.granularity.options[g] }));
+    }
     void update({ ...periodSearch(next), ...(g !== state.granularity ? { g } : {}) });
   };
   const changeFilters = (filters: Filters) => void update(filtersSearch(filters));
@@ -211,7 +215,7 @@ function AudienceReport({ app }: { app: App }) {
   };
   const copyRequest = async () => {
     await navigator.clipboard.writeText(audienceCurl(app.id, state));
-    toast.success("Запрос скопирован", { duration: 1500 });
+    toast.success(m.audience.requestCopied, { duration: 1500 });
   };
 
   return (
@@ -233,7 +237,7 @@ function AudienceReport({ app }: { app: App }) {
             <CompareToggle
               checked={state.compare}
               onCheckedChange={(compare) => void update({ compare })}
-              {...(split ? { disabledReason: COMPARE_IN_SPLIT } : {})}
+              {...(split ? { disabledReason: m.compare.unavailableInSplit } : {})}
             />
           </div>
           <Button
@@ -243,7 +247,7 @@ function AudienceReport({ app }: { app: App }) {
             onClick={() => void copyRequest()}
           >
             <Copy aria-hidden="true" />
-            Скопировать как запрос к Read API
+            {m.audience.copyRequest}
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -266,9 +270,7 @@ function AudienceReport({ app }: { app: App }) {
           </div>
         </div>
         {state.period.to >= addDays(today, 1 - OPEN_DAYS) ? (
-          <p className="text-caption text-fg-muted">
-            Данные за последние 8 дней могут дополниться событиями из офлайн-очередей (окно 7 дней).
-          </p>
+          <p className="text-caption text-fg-muted">{m.audience.lateData}</p>
         ) : null}
       </div>
 
@@ -276,9 +278,12 @@ function AudienceReport({ app }: { app: App }) {
         <Card>
           <EmptyState
             icon={PlugZap}
-            title="Событий ещё нет"
-            description="Отправьте первое событие — сниппеты на вкладке «Интеграция»."
-            action={{ label: "Открыть интеграцию", href: `/apps/${app.id}/integration` as Route }}
+            title={m.audience.noEvents.title}
+            description={m.audience.noEvents.description}
+            action={{
+              label: m.audience.noEvents.action,
+              href: `/apps/${app.id}/integration` as Route,
+            }}
           />
         </Card>
       ) : (
@@ -299,16 +304,16 @@ function AudienceReport({ app }: { app: App }) {
                 variant="outline"
                 size="sm"
                 spacing={0}
-                aria-label="Метрика графика"
+                aria-label={m.audience.chartMetric}
                 value={state.metric}
                 onValueChange={(next) => {
-                  const metric = METRICS.find((m) => m === next);
+                  const metric = METRICS.find((x) => x === next);
                   if (metric) void update({ metric });
                 }}
               >
-                {METRICS.map((m) => (
-                  <ToggleGroupItem key={m} value={m} className="px-3">
-                    {METRIC_DEFINITIONS[m].label}
+                {METRICS.map((metric) => (
+                  <ToggleGroupItem key={metric} value={metric} className="px-3">
+                    {metrics[metric].label}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
@@ -318,17 +323,17 @@ function AudienceReport({ app }: { app: App }) {
                   variant="outline"
                   size="sm"
                   spacing={0}
-                  aria-label="Режим графика"
+                  aria-label={m.audience.chartMode}
                   value={split ? "platform" : "total"}
                   onValueChange={(next) => {
                     if (next) void update({ split: next === "platform" ? "platform" : null });
                   }}
                 >
                   <ToggleGroupItem value="total" className="px-3">
-                    Итог
+                    {m.chart.total}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="platform" className="px-3">
-                    По платформам
+                    {m.audience.byPlatform}
                   </ToggleGroupItem>
                 </ToggleGroup>
               ) : null}
@@ -336,13 +341,17 @@ function AudienceReport({ app }: { app: App }) {
             {cardError(chart) ??
               (chartData ? (
                 <MetricChart
-                  series={chartSeries(chartData, split)}
+                  series={chartSeries(chartData, split, m.chart.total)}
                   granularity={state.granularity}
                   metric={state.metric}
                   timezone={app.timezone}
                 />
               ) : chart.isPending ? (
-                <Skeleton role="status" aria-label="Загрузка…" className="h-90 w-full" />
+                <Skeleton
+                  role="status"
+                  aria-label={messages.common.loading}
+                  className="h-90 w-full"
+                />
               ) : null)}
           </Card>
 
@@ -352,12 +361,16 @@ function AudienceReport({ app }: { app: App }) {
               (rollingData ? (
                 <RollingActiveChart data={rollingData} />
               ) : rolling.isPending ? (
-                <Skeleton role="status" aria-label="Загрузка…" className="h-70 w-full" />
+                <Skeleton
+                  role="status"
+                  aria-label={messages.common.loading}
+                  className="h-70 w-full"
+                />
               ) : null)}
           </Card>
 
           <Card className="gap-4 px-6">
-            <h2 className="text-heading-3">Разбивка</h2>
+            <h2 className="text-heading-3">{m.breakdown.title}</h2>
             <Suspense fallback={<TableSkeleton rows={6} />}>
               <BreakdownTable
                 dimension={state.dim}

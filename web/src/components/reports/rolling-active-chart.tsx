@@ -11,7 +11,8 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import type { RollingActive } from "@/lib/api/gen/model";
-import { formatDate, formatDateRange, formatDateShort, formatInt } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { TableToggle } from "./metric-chart";
 
 type RollingActiveChartProps = { data: RollingActive; height?: number };
@@ -26,17 +27,25 @@ const config = {
 
 // DAU / WAU / MAU (14-ux-ui-spec.md §16.6): для каждого дня — активные за день, 7 и 30 дней по этот день.
 export function RollingActiveChart({ data, height = 280 }: RollingActiveChartProps) {
+  const messages = useMessages().reports;
+  const m = messages.rolling;
+  const f = useFormat();
   const [showTable, setShowTable] = useState(false);
   const points = data.points;
   const first = points[0];
   const last = points.at(-1);
 
   if (!first || !last) {
-    return <p className="text-body-sm text-fg-muted">Нет данных за выбранный период</p>;
+    return <p className="text-body-sm text-fg-muted">{messages.noData}</p>;
   }
 
-  const description = `График DAU, WAU и MAU, ${formatDateRange(first.day, last.day)}, последний день: DAU ${formatInt(last.dau)}, WAU ${formatInt(last.wau)}, MAU ${formatInt(last.mau)}`;
-  const rows = points.map((p) => ({ ...p, label: formatDateShort(p.day) }));
+  const description = fmt(m.description, {
+    range: f.formatDateRange(first.day, last.day),
+    dau: f.formatInt(last.dau),
+    wau: f.formatInt(last.wau),
+    mau: f.formatInt(last.mau),
+  });
+  const rows = points.map((p) => ({ ...p, label: f.formatDateShort(p.day) }));
 
   return (
     <figure className="flex flex-col gap-2">
@@ -53,7 +62,7 @@ export function RollingActiveChart({ data, height = 280 }: RollingActiveChartPro
               width="auto"
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => formatInt(v)}
+              tickFormatter={(v: number) => f.formatInt(v)}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
@@ -78,7 +87,7 @@ export function RollingActiveChart({ data, height = 280 }: RollingActiveChartPro
           <thead>
             <tr className="border-b border-border text-left text-fg-muted">
               <th scope="col" className="py-2 font-medium">
-                День
+                {m.day}
               </th>
               {SERIES.map((key) => (
                 <th key={key} scope="col" className="py-2 text-right font-medium">
@@ -91,11 +100,11 @@ export function RollingActiveChart({ data, height = 280 }: RollingActiveChartPro
             {points.map((p) => (
               <tr key={p.day} className="border-b border-border last:border-0">
                 <th scope="row" className="py-1.5 text-left font-normal">
-                  {formatDate(p.day)}
+                  {f.formatDate(p.day)}
                 </th>
                 {SERIES.map((key) => (
                   <td key={key} className="py-1.5 text-right tabular-nums">
-                    {formatInt(p[key])}
+                    {f.formatInt(p[key])}
                   </td>
                 ))}
               </tr>

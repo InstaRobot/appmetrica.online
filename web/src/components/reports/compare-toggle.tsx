@@ -4,6 +4,7 @@ import { useId } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useMessages } from "@/lib/i18n/client";
 
 type CompareToggleProps = {
   checked: boolean;
@@ -16,18 +17,14 @@ type CompareToggleProps = {
 // Недоступное сравнение — aria-disabled, а не disabled: переключатель остаётся в порядке фокуса, чтобы
 // подсказку с причиной открывали и мышь, и клавиатура.
 export function CompareToggle({ checked, onCheckedChange, disabledReason }: CompareToggleProps) {
+  const m = useMessages().reports.compare;
   const id = useId();
   const reasonId = useId();
   if (!disabledReason) {
     return (
       <div className="flex items-center gap-2">
-        <Switch
-          id={id}
-          checked={checked}
-          onCheckedChange={onCheckedChange}
-          aria-label="Сравнить с предыдущим периодом"
-        />
-        <Label htmlFor={id}>Сравнить</Label>
+        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} aria-label={m.switch} />
+        <Label htmlFor={id}>{m.label}</Label>
       </div>
     );
   }
@@ -42,14 +39,14 @@ export function CompareToggle({ checked, onCheckedChange, disabledReason }: Comp
               aria-disabled="true"
               aria-describedby={reasonId}
               className="cursor-not-allowed opacity-50"
-              aria-label="Сравнить с предыдущим периодом"
+              aria-label={m.switch}
             />
           </TooltipTrigger>
           <TooltipContent>{disabledReason}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <Label htmlFor={id} className="opacity-50">
-        Сравнить
+        {m.label}
       </Label>
       <span id={reasonId} className="sr-only">
         {disabledReason}

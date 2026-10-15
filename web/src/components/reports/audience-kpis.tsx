@@ -1,8 +1,9 @@
 "use client";
 
 import type { AudienceSummary, TimeSeriesPoint } from "@/lib/api/gen/model";
-import { formatDuration } from "@/lib/format";
-import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
+import { useMetricDefinitions } from "@/lib/metric-definitions";
 import type { ChartMetric } from "@/lib/url-state";
 import { KpiCard } from "./kpi-card";
 
@@ -33,8 +34,11 @@ export function AudienceKpis({
   loading = false,
   error,
 }: AudienceKpisProps) {
+  const m = useMessages().reports.kpi;
+  const metrics = useMetricDefinitions();
+  const f = useFormat();
   return (
-    <section aria-label="Ключевые метрики">
+    <section aria-label={m.section}>
       {error ? (
         error
       ) : (
@@ -42,14 +46,14 @@ export function AudienceKpis({
           {METRICS.map(({ key, format }) => (
             <KpiCard
               key={key}
-              label={METRIC_DEFINITIONS[key].label}
-              definition={METRIC_DEFINITIONS[key].definition}
+              label={metrics[key].label}
+              definition={metrics[key].definition}
               value={summary ? summary[key] : null}
               format={format}
               deltaPct={summary?.compare ? summary.compare.delta_pct[key] : undefined}
               secondary={
                 key === "avg_duration_ms" && summary?.median_duration_ms != null
-                  ? `медиана ${formatDuration(summary.median_duration_ms)}`
+                  ? fmt(m.median, { duration: f.formatDuration(summary.median_duration_ms) })
                   : undefined
               }
               sparkline={sparklines?.[key]}

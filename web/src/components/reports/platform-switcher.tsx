@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { PLATFORM_LABELS } from "@/components/common/platform-icon";
 import { toggleVariants } from "@/components/ui/toggle";
 import { Platform } from "@/lib/api/gen/model";
+import { useMessages } from "@/lib/i18n/client";
 
 const PLATFORMS = Object.values(Platform);
 
@@ -39,6 +40,7 @@ export function PlatformSwitcher({
   value,
   onChange,
 }: PlatformSwitcherProps) {
+  const m = useMessages().reports.platform;
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const platforms = platformOptions(appPlatforms, observed, value);
   if (platforms.length < 2) return null;
@@ -70,7 +72,7 @@ export function PlatformSwitcher({
   return (
     <div
       role="radiogroup"
-      aria-label="Платформа"
+      aria-label={m.label}
       onKeyDown={onKeyDown}
       className="flex w-fit items-center gap-0.5 rounded-[9px] bg-muted p-0.5"
     >
@@ -92,7 +94,7 @@ export function PlatformSwitcher({
             onClick={() => select(i)}
             className={cn(toggleVariants({ variant: "segmented", size: "sm" }), "px-3")}
           >
-            {option ? PLATFORM_LABELS[option] : "Все"}
+            {option ? PLATFORM_LABELS[option] : m.all}
           </button>
         );
       })}
