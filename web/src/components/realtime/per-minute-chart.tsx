@@ -8,27 +8,34 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import type { RealtimeMinute } from "@/lib/api/gen/model";
-import { formatInt, formatTime } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 
 type PerMinuteChartProps = { points: RealtimeMinute[]; timezone: string; height?: number };
-
-const config = {
-  sessions_started: { label: "Старты сессий", color: "var(--chart-1)" },
-} satisfies ChartConfig;
 
 // Старты сессий по минутам за 30 минут (14-ux-ui-spec.md §16.10). Опрос раз в 5 с перерисовывает
 // столбики на месте, без анимации (§12.2).
 export function PerMinuteChart({ points, timezone, height = 200 }: PerMinuteChartProps) {
+  const m = useMessages().realtime.chart;
+  const f = useFormat();
   const first = points[0];
   const last = points.at(-1);
 
   if (!first || !last) {
-    return <p className="text-body-sm text-fg-muted">Нет данных за последние 30 минут</p>;
+    return <p className="text-body-sm text-fg-muted">{m.noData}</p>;
   }
 
+  const config = {
+    sessions_started: { label: m.series, color: "var(--chart-1)" },
+  } satisfies ChartConfig;
   const total = points.reduce((sum, p) => sum + p.sessions_started, 0);
-  const description = `Старты сессий по минутам, ${formatTime(first.minute, timezone)}–${formatTime(last.minute, timezone)}: всего ${formatInt(total)}, в последнюю минуту ${formatInt(last.sessions_started)}`;
-  const rows = points.map((p) => ({ ...p, label: formatTime(p.minute, timezone) }));
+  const description = fmt(m.description, {
+    from: f.formatTime(first.minute, timezone),
+    to: f.formatTime(last.minute, timezone),
+    total: f.formatInt(total),
+    last: f.formatInt(last.sessions_started),
+  });
+  const rows = points.map((p) => ({ ...p, label: f.formatTime(p.minute, timezone) }));
 
   return (
     <div role="img" aria-label={description} style={{ height }}>
@@ -51,7 +58,7 @@ export function PerMinuteChart({ points, timezone, height = 200 }: PerMinuteChar
             tickLine={false}
             axisLine={false}
             allowDecimals={false}
-            tickFormatter={(v: number) => formatInt(v)}
+            tickFormatter={(v: number) => f.formatInt(v)}
           />
           <ChartTooltip content={<ChartTooltipContent />} />
           <Bar

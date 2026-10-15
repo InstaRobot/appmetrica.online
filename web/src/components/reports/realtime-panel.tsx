@@ -16,7 +16,8 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetRealtime } from "@/lib/api/gen/endpoints/realtime/realtime";
 import type { App } from "@/lib/api/gen/model";
-import { formatClock } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { todayIn } from "@/lib/period";
 import { useRealtimeState } from "@/lib/url-state";
 import { EnvironmentSwitch } from "./environment-switch";
@@ -36,6 +37,8 @@ export function RealtimePanel({ appId }: RealtimePanelProps) {
 }
 
 function RealtimeReport({ app }: { app: App }) {
+  const m = useMessages().realtime;
+  const f = useFormat();
   const { platform, env, setPlatform, setEnv } = useRealtimeState();
   const [paused, setPaused] = useState(false);
   // Платформы для переключателя — наблюдаемые сегодня (TZ приложения).
@@ -94,7 +97,7 @@ function RealtimeReport({ app }: { app: App }) {
             stale={stale}
           />
           <Card className="gap-4 px-6">
-            <h2 className="text-heading-3">Старты сессий по минутам</h2>
+            <h2 className="text-heading-3">{m.chart.title}</h2>
             <PerMinuteChart points={data.per_minute} timezone={app.timezone} />
           </Card>
         </div>
@@ -102,18 +105,17 @@ function RealtimeReport({ app }: { app: App }) {
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
             <AlertDescription>
-              Не удаётся обновить данные. Показаны данные на{" "}
-              {formatClock(data.generated_at, app.timezone)}.
+              {fmt(m.stale, { time: f.formatClock(data.generated_at, app.timezone) })}
             </AlertDescription>
           </Alert>
         ) : null}
         <Card className="gap-4 px-6">
-          <h2 className="text-heading-3">Последние события</h2>
+          <h2 className="text-heading-3">{m.feed.title}</h2>
           {data.recent_events.length === 0 ? (
             <EmptyState
               icon={Radio}
-              title="За последние 30 минут событий нет"
-              description="Отправьте тестовое событие из сниппета на вкладке «Интеграция» — оно появится здесь в течение 10 секунд."
+              title={m.feed.empty.title}
+              description={m.feed.empty.description}
             />
           ) : (
             <EventFeed events={data.recent_events} timezone={app.timezone} appId={app.id} />
@@ -140,7 +142,7 @@ function RealtimeReport({ app }: { app: App }) {
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" aria-pressed={paused} onClick={togglePause}>
           {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
-          {paused ? "Продолжить" : "Пауза"}
+          {paused ? m.resume : m.pause}
         </Button>
         <PlatformSwitcher
           appPlatforms={app.platforms}

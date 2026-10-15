@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { formatClock, formatInt } from "@/lib/format";
+import { useFormat, useMessages } from "@/lib/i18n/client";
+import { fmt } from "@/lib/i18n/format-message";
 import { cn } from "@/lib/utils";
 
 type RealtimeCounterProps = {
@@ -34,6 +35,8 @@ export function RealtimeCounter({
   paused,
   stale = false,
 }: RealtimeCounterProps) {
+  const m = useMessages().realtime.counter;
+  const f = useFormat();
   const labelId = useId();
   const latest = useRef(value);
   const [announced, setAnnounced] = useState(value);
@@ -51,16 +54,16 @@ export function RealtimeCounter({
   const state = paused ? "paused" : stale ? "stale" : "live";
   const status =
     state === "paused"
-      ? "на паузе"
+      ? m.paused
       : state === "stale"
-        ? "нет связи"
-        : `обновлено ${formatClock(updatedAt, timezone)}`;
+        ? m.offline
+        : fmt(m.updated, { time: f.formatClock(updatedAt, timezone) });
 
   return (
     <Card role="region" aria-labelledby={labelId} className="gap-1 px-6">
       <div className="flex items-center justify-between gap-2">
         <h2 id={labelId} className="text-label-sm text-fg-muted uppercase">
-          Активны сейчас
+          {m.title}
         </h2>
         <span className="flex items-center gap-1.5 text-caption text-fg-muted">
           <span aria-hidden data-live={state} className={cn("size-2 rounded-full", DOT[state])} />
@@ -68,11 +71,11 @@ export function RealtimeCounter({
         </span>
       </div>
       <p data-value={value} className="mt-2 text-kpi-xl">
-        {formatInt(value)}
+        {f.formatInt(value)}
       </p>
-      <p className="text-body-sm text-fg-muted">за последние 30 мин</p>
+      <p className="text-body-sm text-fg-muted">{m.window}</p>
       <p aria-live="polite" className="sr-only">
-        Активны сейчас: {formatInt(announced)}
+        {fmt(m.announce, { count: f.formatInt(announced) })}
       </p>
     </Card>
   );
