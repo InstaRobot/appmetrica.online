@@ -42,7 +42,8 @@ export async function saveOwnerSession(baseURL: string): Promise<void> {
   await resetAuth();
   const browser = await chromium.launch();
   try {
-    const context = await browser.newContext({ baseURL });
+    // Тот же язык, что у спецификаций (locale в playwright.config.ts): страница входа отвечает на языке браузера.
+    const context = await browser.newContext({ baseURL, locale: "ru-RU" });
     const page = await context.newPage();
     await addVirtualAuthenticator(page);
     await registerPasskey(page, "E2E");
