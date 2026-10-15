@@ -58,11 +58,9 @@ const STEPS = [
   "Статус «Ждём первое событие» сменится на «Получено», и приложение появится в портфеле.",
 ] as const;
 
-// Адрес ingest — из сборки (NEXT_PUBLIC_INGEST_URL, у self-hosted установки свой домен); читается
-// внутри функции, а не на уровне модуля (CONTRIBUTING.md §8).
-const DEFAULT_INGEST_URL = "https://i.appmetrica.online";
-
-const snippet = (ingestUrl: string) => `curl -X POST ${ingestUrl}/v1/events \\
+// Пример на лендинге — с условным доменом (analytics.example.com, как в README), а не с адресом этой
+// установки: лендинг показывает формат запроса, свой адрес ingest владелец видит во вкладке «Интеграция».
+const SNIPPET = `curl -X POST https://i.analytics.example.com/v1/events \\
   -H "Content-Type: application/json" \\
   -H "X-App-Key: $AM_PK" \\
   -d '{
@@ -202,7 +200,7 @@ export function LandingPage() {
           </div>
           <figure aria-label="Пример запроса на приём событий" className="min-w-0">
             <pre className="overflow-x-auto rounded-2xl bg-code-bg p-6 font-mono text-[13px] leading-5 text-code-fg shadow-(--shadow-card)">
-              {snippet(process.env.NEXT_PUBLIC_INGEST_URL || DEFAULT_INGEST_URL)}
+              {SNIPPET}
             </pre>
           </figure>
         </section>
