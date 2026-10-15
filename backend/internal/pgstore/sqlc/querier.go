@@ -30,6 +30,10 @@ type Querier interface {
 	AppendDeletedAppToJobRun(ctx context.Context, arg AppendDeletedAppToJobRunParams) error
 	// Копия слияния в details.merged_apps цикла — до удаления строки apps источника (app_merges.source_app_id обнулится).
 	AppendMergedAppToJobRun(ctx context.Context, arg AppendMergedAppToJobRunParams) error
+	// Одной командой удаляет заявки приложений без незавершённых удалений человека или установки и их closed_days
+	// с from_day: close_day закроет эти дни заново. Приложение с идущим удалением ждёт, чтобы дни не закрылись заново
+	// раньше, чем исчезнут данные. Строки — применённые заявки и число переоткрытых дней.
+	ApplyReopenRequests(ctx context.Context) ([]ApplyReopenRequestsRow, error)
 	ArchiveApp(ctx context.Context, arg ArchiveAppParams) (App, error)
 	// Старейшее слияние в очереди. Запросы идут вне транзакции, поэтому строка не блокируется: запуски job
 	// app_merge разделяет advisory lock worker-а (worker.MergeJob), а не блокировка строки.
@@ -127,6 +131,8 @@ type Querier interface {
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (RenamePasskeyRow, error)
 	// Шаг reclose: close_day закроет эти дни заново с данными источника.
 	ReopenClosedDays(ctx context.Context, arg ReopenClosedDaysParams) (int64, error)
+	// Заявка: close_day закроет заново дни приложения с from_day; повторная заявка сдвигает from_day к раннему дню.
+	RequestReopenClosedDays(ctx context.Context, arg RequestReopenClosedDaysParams) error
 	// Зависший running (worker упал посреди удаления) возвращается в очередь; с исчерпанными попытками — failed:
 	// следующий claim нарушил бы CHECK attempts ≤ 5.
 	RequeueStuckDeletionRequests(ctx context.Context, staleBefore time.Time) (int64, error)

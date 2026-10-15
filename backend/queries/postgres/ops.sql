@@ -80,6 +80,33 @@ SELECT coalesce(max(day), DATE '1970-01-01')::date AS day FROM closed_days WHERE
 -- Шаг reclose: close_day закроет эти дни заново с данными источника.
 DELETE FROM closed_days WHERE app_id = sqlc.arg(app_id) AND day >= sqlc.arg(from_day);
 
+-- name: RequestReopenClosedDays :exec
+-- Заявка: close_day закроет заново дни приложения с from_day; повторная заявка сдвигает from_day к раннему дню.
+INSERT INTO closed_days_reopen (app_id, from_day, requested_at)
+VALUES (sqlc.arg(app_id), sqlc.arg(from_day), sqlc.arg(now))
+ON CONFLICT (app_id) DO UPDATE
+SET from_day = LEAST(closed_days_reopen.from_day, EXCLUDED.from_day), requested_at = EXCLUDED.requested_at;
+
+-- name: ApplyReopenRequests :many
+-- Одной командой удаляет заявки приложений без незавершённых удалений человека или установки и их closed_days
+-- с from_day: close_day закроет эти дни заново. Приложение с идущим удалением ждёт, чтобы дни не закрылись заново
+-- раньше, чем исчезнут данные. Строки — применённые заявки и число переоткрытых дней.
+WITH taken AS (
+    DELETE FROM closed_days_reopen r
+    WHERE NOT EXISTS (
+        SELECT 1 FROM deletion_requests d
+        WHERE d.app_id = r.app_id AND d.subject_type IN ('install', 'user') AND d.status IN ('pending', 'running')
+    )
+    RETURNING r.app_id, r.from_day
+), reopened AS (
+    DELETE FROM closed_days c USING taken t
+    WHERE c.app_id = t.app_id AND c.day >= t.from_day
+    RETURNING c.app_id
+)
+SELECT t.app_id, t.from_day, (SELECT count(*) FROM reopened o WHERE o.app_id = t.app_id)::bigint AS days
+FROM taken t
+ORDER BY t.app_id;
+
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM auth_sessions
 WHERE expires_at < sqlc.arg(now)::timestamptz

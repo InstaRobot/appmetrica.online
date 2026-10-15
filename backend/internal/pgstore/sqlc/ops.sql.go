@@ -48,6 +48,53 @@ func (q *Queries) AppendMergedAppToJobRun(ctx context.Context, arg AppendMergedA
 	return err
 }
 
+const applyReopenRequests = `-- name: ApplyReopenRequests :many
+WITH taken AS (
+    DELETE FROM closed_days_reopen r
+    WHERE NOT EXISTS (
+        SELECT 1 FROM deletion_requests d
+        WHERE d.app_id = r.app_id AND d.subject_type IN ('install', 'user') AND d.status IN ('pending', 'running')
+    )
+    RETURNING r.app_id, r.from_day
+), reopened AS (
+    DELETE FROM closed_days c USING taken t
+    WHERE c.app_id = t.app_id AND c.day >= t.from_day
+    RETURNING c.app_id
+)
+SELECT t.app_id, t.from_day, (SELECT count(*) FROM reopened o WHERE o.app_id = t.app_id)::bigint AS days
+FROM taken t
+ORDER BY t.app_id
+`
+
+type ApplyReopenRequestsRow struct {
+	AppID   uuid.UUID
+	FromDay pgtype.Date
+	Days    int64
+}
+
+// Одной командой удаляет заявки приложений без незавершённых удалений человека или установки и их closed_days
+// с from_day: close_day закроет эти дни заново. Приложение с идущим удалением ждёт, чтобы дни не закрылись заново
+// раньше, чем исчезнут данные. Строки — применённые заявки и число переоткрытых дней.
+func (q *Queries) ApplyReopenRequests(ctx context.Context) ([]ApplyReopenRequestsRow, error) {
+	rows, err := q.db.Query(ctx, applyReopenRequests)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplyReopenRequestsRow{}
+	for rows.Next() {
+		var i ApplyReopenRequestsRow
+		if err := rows.Scan(&i.AppID, &i.FromDay, &i.Days); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteExpiredCeremonies = `-- name: DeleteExpiredCeremonies :execrows
 DELETE FROM webauthn_ceremonies WHERE expires_at < $1::timestamptz
 `
@@ -328,6 +375,25 @@ func (q *Queries) ReopenClosedDays(ctx context.Context, arg ReopenClosedDaysPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const requestReopenClosedDays = `-- name: RequestReopenClosedDays :exec
+INSERT INTO closed_days_reopen (app_id, from_day, requested_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (app_id) DO UPDATE
+SET from_day = LEAST(closed_days_reopen.from_day, EXCLUDED.from_day), requested_at = EXCLUDED.requested_at
+`
+
+type RequestReopenClosedDaysParams struct {
+	AppID   uuid.UUID
+	FromDay pgtype.Date
+	Now     time.Time
+}
+
+// Заявка: close_day закроет заново дни приложения с from_day; повторная заявка сдвигает from_day к раннему дню.
+func (q *Queries) RequestReopenClosedDays(ctx context.Context, arg RequestReopenClosedDaysParams) error {
+	_, err := q.db.Exec(ctx, requestReopenClosedDays, arg.AppID, arg.FromDay, arg.Now)
+	return err
 }
 
 const startJobRun = `-- name: StartJobRun :one

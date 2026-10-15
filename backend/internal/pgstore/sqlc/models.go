@@ -727,6 +727,12 @@ type ClosedDay struct {
 	ClosedAt time.Time
 }
 
+type ClosedDaysReopen struct {
+	AppID       uuid.UUID
+	FromDay     pgtype.Date
+	RequestedAt time.Time
+}
+
 type DeletionRequest struct {
 	ID           uuid.UUID
 	AppID        uuid.UUID
