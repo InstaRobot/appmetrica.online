@@ -109,7 +109,7 @@ function SearchResults({ appId, timezone, searchable, items, error, onRetry }: S
   }
 
   return (
-    <Table>
+    <Table stackOnMobile>
       <caption className="sr-only">{t.caption}</caption>
       <TableHeader>
         <TableRow>
@@ -128,20 +128,27 @@ function SearchResults({ appId, timezone, searchable, items, error, onRetry }: S
                 href={profileHref(appId, p.person_key)}
                 aria-label={fmt(t.profileLink, { key: p.person_key })}
                 title={p.person_key}
-                className="text-fg-link hover:underline"
+                // На телефоне ссылка — заголовок карточки высотой не меньше 44 px.
+                className="text-fg-link hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
               >
                 {p.person_key.slice(0, 2)}
                 {shortId(p.person_key.slice(2))}
               </Link>
             </TableCell>
-            <TableCell className="font-mono text-code" title={p.user_id ?? undefined}>
+            <TableCell
+              label={t.columns.userId}
+              className="font-mono text-code"
+              title={p.user_id ?? undefined}
+            >
               {p.user_id === null ? "—" : shortId(p.user_id)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">{formatInt(p.installs_count)}</TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell label={t.columns.installs} className="text-right tabular-nums">
+              {formatInt(p.installs_count)}
+            </TableCell>
+            <TableCell label={t.columns.firstSeen} className="text-right tabular-nums">
               {formatDate(p.first_seen, timezone)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell label={t.columns.lastSeen} className="text-right tabular-nums">
               {formatDate(p.last_seen, timezone)}
             </TableCell>
           </TableRow>

@@ -39,7 +39,7 @@ export function DeletionsTab({ timezone }: { timezone: string }) {
       ) : !requests ? (
         <TableSkeleton rows={3} />
       ) : (
-        <Table>
+        <Table stackOnMobile>
           <caption className="sr-only">{t.caption}</caption>
           <TableHeader>
             <TableRow>
@@ -63,20 +63,27 @@ export function DeletionsTab({ timezone }: { timezone: string }) {
             ) : (
               requests.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell>{appName(r.app_id)}</TableCell>
-                  <TableCell>{t.subject[r.subject_type]}</TableCell>
-                  <TableCell className="font-mono" title={r.subject_value}>
+                  <TableCell className="max-md:font-medium">{appName(r.app_id)}</TableCell>
+                  <TableCell label={t.columns.type}>{t.subject[r.subject_type]}</TableCell>
+                  <TableCell label={t.columns.value} className="font-mono" title={r.subject_value}>
                     {shortId(r.subject_value)}
                   </TableCell>
-                  <TableCell>{t.source[r.source]}</TableCell>
-                  <TableCell>
+                  <TableCell label={t.columns.source}>{t.source[r.source]}</TableCell>
+                  <TableCell label={t.columns.status}>
                     <DeletionStatusBadge status={r.status} />
                   </TableCell>
-                  <TableCell>{formatDateTime(r.requested_at, timezone)}</TableCell>
-                  <TableCell>
+                  <TableCell label={t.columns.created}>
+                    {formatDateTime(r.requested_at, timezone)}
+                  </TableCell>
+                  <TableCell label={t.columns.completed}>
                     {r.completed_at ? formatDateTime(r.completed_at, timezone) : "—"}
                   </TableCell>
-                  <TableCell className="max-w-64 truncate" title={r.error ?? undefined}>
+                  {/* В карточке текст ошибки целиком, на всю ширину; в таблице — обрезан. */}
+                  <TableCell
+                    label={t.columns.error}
+                    className="max-w-64 truncate max-md:col-span-full max-md:max-w-none"
+                    title={r.error ?? undefined}
+                  >
                     {r.error ?? "—"}
                   </TableCell>
                 </TableRow>

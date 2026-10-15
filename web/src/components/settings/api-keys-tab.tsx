@@ -331,7 +331,7 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
           action={{ label: t.create, onClick: () => setCreating(true) }}
         />
       ) : (
-        <Table>
+        <Table stackOnMobile>
           <caption className="sr-only">{t.title}</caption>
           <TableHeader>
             <TableRow>
@@ -355,11 +355,17 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
                     {key.revoked_at ? <Badge variant="secondary">{t.revoked}</Badge> : null}
                   </span>
                 </TableCell>
-                <TableCell>{key.label}</TableCell>
-                <TableCell className="font-mono">{key.scopes.join(", ")}</TableCell>
-                <TableCell>{key.app_id ? nameOf(key.app_id) : t.allAppsShort}</TableCell>
-                <TableCell>{f.formatDate(key.created_at, timezone)}</TableCell>
-                <TableCell>
+                <TableCell label={t.columns.label}>{key.label}</TableCell>
+                <TableCell label={t.columns.scopes} className="font-mono">
+                  {key.scopes.join(", ")}
+                </TableCell>
+                <TableCell label={t.columns.app}>
+                  {key.app_id ? nameOf(key.app_id) : t.allAppsShort}
+                </TableCell>
+                <TableCell label={t.columns.created}>
+                  {f.formatDate(key.created_at, timezone)}
+                </TableCell>
+                <TableCell label={t.columns.used}>
                   {key.last_used_at ? f.formatDateTime(key.last_used_at, timezone) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
@@ -367,6 +373,7 @@ export function ApiKeysTab({ timezone }: { timezone: string }) {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="max-md:h-11 max-md:w-full"
                       aria-label={fmt(t.revokeItem, { key: keyLabel(key) })}
                       onClick={() => setRevoking(key)}
                     >

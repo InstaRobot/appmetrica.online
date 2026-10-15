@@ -31,7 +31,7 @@ export function InstallsTable({ installs, timezone }: InstallsTableProps) {
   const t = useMessages().profiles.installs;
   const { formatDateShort, shortId } = useFormat();
   return (
-    <Table>
+    <Table stackOnMobile>
       <caption className="sr-only">{t.caption}</caption>
       <TableHeader>
         <TableRow>
@@ -48,23 +48,29 @@ export function InstallsTable({ installs, timezone }: InstallsTableProps) {
       <TableBody>
         {installs.map((i) => (
           <TableRow key={i.install_id}>
-            <TableCell className="font-mono text-code" title={i.install_id}>
+            <TableCell
+              label={t.columns.installId}
+              className="font-mono text-code"
+              title={i.install_id}
+            >
               {shortId(i.install_id)}
             </TableCell>
-            <TableCell>
+            <TableCell label={t.columns.platform}>
               <span className="inline-flex items-center gap-1.5">
                 <PlatformIcon platform={i.platform} className="size-4" />
                 {platformLabel(i.platform)}
               </span>
             </TableCell>
-            <TableCell>{i.device_model || DASH}</TableCell>
-            <TableCell>{os(i)}</TableCell>
-            <TableCell className="font-mono text-code">{i.app_version || DASH}</TableCell>
-            <TableCell>{place(i)}</TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell label={t.columns.device}>{i.device_model || DASH}</TableCell>
+            <TableCell label={t.columns.os}>{os(i)}</TableCell>
+            <TableCell label={t.columns.version} className="font-mono text-code">
+              {i.app_version || DASH}
+            </TableCell>
+            <TableCell label={t.columns.geo}>{place(i)}</TableCell>
+            <TableCell label={t.columns.firstSeen} className="text-right tabular-nums">
               {formatDateShort(i.first_seen, timezone)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell label={t.columns.lastSeen} className="text-right tabular-nums">
               {formatDateShort(i.last_seen, timezone)}
             </TableCell>
           </TableRow>

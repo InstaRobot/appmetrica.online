@@ -38,7 +38,7 @@ export function SessionsTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <Table>
+      <Table stackOnMobile>
         <caption className="sr-only">{t.caption}</caption>
         <TableHeader>
           <TableRow>
@@ -51,20 +51,27 @@ export function SessionsTable({
         </TableHeader>
         <TableBody>
           {sessions.map((s) => (
-            <TableRow key={s.session_id}>
-              <TableCell className="tabular-nums">
+            // Карточка сессии в две строки: начало и длительность, затем версия, платформа, установка.
+            <TableRow key={s.session_id} className="max-md:grid-cols-3">
+              <TableCell label={t.columns.start} className="tabular-nums max-md:col-span-2">
                 {formatDateTime(s.started_at, timezone)}
               </TableCell>
-              <TableCell className="tabular-nums">
+              <TableCell label={t.columns.duration} className="tabular-nums">
                 {s.ended_at === null ? (
                   <span className="text-fg-muted">{t.noEnd}</span>
                 ) : (
                   formatDuration(s.duration_ms)
                 )}
               </TableCell>
-              <TableCell className="font-mono text-code">{s.app_version || "—"}</TableCell>
-              <TableCell>{platformLabel(s.platform)}</TableCell>
-              <TableCell className="font-mono text-code" title={s.install_id}>
+              <TableCell label={t.columns.version} className="font-mono text-code">
+                {s.app_version || "—"}
+              </TableCell>
+              <TableCell label={t.columns.platform}>{platformLabel(s.platform)}</TableCell>
+              <TableCell
+                label={t.columns.install}
+                className="font-mono text-code"
+                title={s.install_id}
+              >
                 {shortId(s.install_id)}
               </TableCell>
             </TableRow>
@@ -74,7 +81,7 @@ export function SessionsTable({
       {hasMore ? (
         <Button
           variant="outline"
-          className="self-center"
+          className="self-center max-md:h-11 max-md:self-stretch"
           disabled={loadingMore}
           aria-busy={loadingMore || undefined}
           onClick={onLoadMore}

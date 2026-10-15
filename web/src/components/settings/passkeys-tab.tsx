@@ -218,7 +218,7 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
       ) : !passkeys ? (
         <TableSkeleton rows={2} />
       ) : (
-        <Table>
+        <Table stackOnMobile>
           <caption className="sr-only">{t.title}</caption>
           <TableHeader>
             <TableRow>
@@ -235,16 +235,19 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
             {passkeys.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell>{f.formatDate(p.created_at, timezone)}</TableCell>
-                <TableCell>
+                <TableCell label={t.columns.created}>
+                  {f.formatDate(p.created_at, timezone)}
+                </TableCell>
+                <TableCell label={t.columns.lastUsed}>
                   {p.last_used_at ? f.formatDateTime(p.last_used_at, timezone) : "—"}
                 </TableCell>
-                <TableCell>{p.backup_state ? t.yes : t.no}</TableCell>
+                <TableCell label={t.columns.synced}>{p.backup_state ? t.yes : t.no}</TableCell>
                 <TableCell className="text-right">
-                  <span className="inline-flex gap-2">
+                  <span className="inline-flex gap-2 max-md:flex">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="max-md:h-11 max-md:flex-1"
                       aria-label={fmt(t.renameItem, { name: p.name })}
                       onClick={() => setRenaming(p)}
                     >
@@ -253,6 +256,7 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="max-md:h-11 max-md:flex-1"
                       aria-label={fmt(t.removeItem, { name: p.name })}
                       onClick={() => setDeleting(p)}
                     >

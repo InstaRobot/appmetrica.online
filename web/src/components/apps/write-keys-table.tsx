@@ -260,6 +260,7 @@ function WriteKeyRows({
               <Button
                 variant="ghost"
                 size="icon-xs"
+                className="max-md:size-11"
                 aria-label={fmt(t.copyKey, { key: short })}
                 onClick={() => void copy(key.key)}
               >
@@ -268,10 +269,12 @@ function WriteKeyRows({
             )}
           </span>
         </TableCell>
-        <TableCell>{key.label || "—"}</TableCell>
-        <TableCell>{key.platform ? platformLabels[key.platform] : t.anyPlatform}</TableCell>
-        <TableCell>{f.formatDate(key.created_at, timezone)}</TableCell>
-        <TableCell>
+        <TableCell label={t.columns.label}>{key.label || "—"}</TableCell>
+        <TableCell label={t.columns.platform}>
+          {key.platform ? platformLabels[key.platform] : t.anyPlatform}
+        </TableCell>
+        <TableCell label={t.columns.created}>{f.formatDate(key.created_at, timezone)}</TableCell>
+        <TableCell label={t.columns.used}>
           {key.last_used_at ? f.formatDateTime(key.last_used_at, timezone) : "—"}
         </TableCell>
         <TableCell className="text-right">
@@ -279,6 +282,7 @@ function WriteKeyRows({
             <Button
               variant="outline"
               size="sm"
+              className="max-md:h-11 max-md:w-full"
               aria-label={fmt(t.revokeKey, { key: short })}
               onClick={() => onRevoke(key)}
             >
@@ -323,7 +327,7 @@ export function WriteKeysTable({ appId, platforms, timezone }: WriteKeysTablePro
           ) : !keys ? (
             <TableSkeleton rows={2} />
           ) : (
-            <Table>
+            <Table stackOnMobile>
               <caption className="sr-only">{t.title}</caption>
               <TableHeader>
                 <TableRow>
