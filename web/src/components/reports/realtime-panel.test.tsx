@@ -1,13 +1,15 @@
-import { focusManager } from "@tanstack/react-query";
+import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Breakdown, Platform, Realtime, RecentEvent } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { RealtimePanel } from "./realtime-panel";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000007";
@@ -319,5 +321,65 @@ describe("RealtimePanel", () => {
     act(() => focusManager.setFocused(true));
     await poll();
     await waitFor(() => expect(requests.length).toBeGreaterThan(1));
+  });
+});
+
+function renderPanelInEnglish() {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(
+    <QueryClientProvider client={client}>
+      <RealtimePanel appId={APP_ID} />
+    </QueryClientProvider>,
+    "en",
+    { wrapper: withNuqsTestingAdapter({ searchParams: "", hasMemory: true }) },
+  );
+}
+
+describe("RealtimePanel in English", () => {
+  it("labels the counter, chart, feed and pause in English", async () => {
+    mockApi();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPanelInEnglish();
+
+    const region = await screen.findByRole("region", { name: "Active now" });
+    expect(within(region).getByText("1,284")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Session starts per minute" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: /^Session starts per minute, 14:03–14:32/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent events" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Recent events" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(region).getByText("paused")).toBeInTheDocument();
+  });
+
+  it("shows the empty feed in English", async () => {
+    mockApi({ respond: (n) => realtime(n, { recent_events: [] }) });
+    renderPanelInEnglish();
+
+    expect(await screen.findByText("No events in the last 30 minutes")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Send a test event from a snippet on the Integration tab — it will show up here within 10 seconds.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("warns in English after three failed polls in a row", async () => {
+    mockApi({
+      respond: (n) => (n >= 1 && n <= 3 ? { status: 500, code: "internal" } : realtime(n)),
+    });
+    renderPanelInEnglish();
+    await screen.findByRole("region", { name: "Active now" });
+
+    await poll();
+    await poll();
+    await poll();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Can't refresh the data. Showing data as of 14:32:05.",
+    );
   });
 });

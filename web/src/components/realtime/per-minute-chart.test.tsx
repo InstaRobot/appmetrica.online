@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { RealtimeMinute } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { PerMinuteChart } from "./per-minute-chart";
 
 const points = (values: number[]): RealtimeMinute[] =>
@@ -30,5 +31,21 @@ describe("PerMinuteChart", () => {
     render(<PerMinuteChart points={[]} timezone="Europe/Moscow" />);
     expect(screen.getByText("Нет данных за последние 30 минут")).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+});
+
+describe("PerMinuteChart in English", () => {
+  it("describes session starts in English", () => {
+    const values = Array.from({ length: 30 }, (_, i) => (i === 29 ? 1207 : 1));
+    renderWithLocale(<PerMinuteChart points={points(values)} timezone="Europe/Moscow" />, "en");
+
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "Session starts per minute, 14:03–14:32: 1,236 total, 1,207 in the last minute",
+    );
+  });
+
+  it("says when there are no points in English", () => {
+    renderWithLocale(<PerMinuteChart points={[]} timezone="Europe/Moscow" />, "en");
+    expect(screen.getByText("No data for the last 30 minutes")).toBeInTheDocument();
   });
 });

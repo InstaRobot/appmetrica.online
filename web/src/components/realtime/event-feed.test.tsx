@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RecentEvent } from "@/lib/api/gen/model";
+import { renderWithLocale } from "@/test/rtl";
 import { EventFeed } from "./event-feed";
 
 const APP_ID = "0192aaaa-0000-7000-8000-000000000007";
@@ -148,5 +149,32 @@ describe("EventFeed", () => {
     expect(bodyRows()).toHaveLength(2);
     expect(feed().querySelectorAll("tr[data-new]")).toHaveLength(0);
     expect(feed().querySelector(".animate-row-highlight")).toBeNull();
+  });
+});
+
+describe("EventFeed in English", () => {
+  it("names the columns and the profile links in English", () => {
+    renderWithLocale(
+      <EventFeed
+        appId={APP_ID}
+        timezone="Europe/Moscow"
+        events={[event(1, { country: "DE", city: "Berlin", person_key: "u:42" })]}
+      />,
+      "en",
+    );
+
+    const table = screen.getByRole("table", { name: "Recent events" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Time", "Event", "Platform", "Version", "Country / city", "Install", "Person"]);
+    expect(
+      within(table).getByRole("link", {
+        name: "Install 5d8e0000-0000-4000-8000-000000000001",
+      }),
+    ).toBeInTheDocument();
+    expect(within(table).getByRole("link", { name: "Profile u:42" })).toBeInTheDocument();
+    expect(within(table).getByText("14:32:01")).toBeInTheDocument();
   });
 });
