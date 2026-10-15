@@ -13,7 +13,7 @@ import { errorBody, app as makeApp, portfolioRow } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
 import { renderWithLocale } from "@/test/rtl";
-import { type PortfolioSort, PortfolioTable } from "./portfolio-table";
+import { type PortfolioSort, PortfolioTable, sortPortfolioRows } from "./portfolio-table";
 
 // Testing Library сводит пробельные символы текста узла (и U+00A0) к обычному пробелу.
 const NBSP = " ";
@@ -618,5 +618,22 @@ describe("PortfolioView in English", () => {
     ).toEqual(["Name", "Platforms", "Archived on", "Actions"]);
     expect(within(archive).getByText(/^Sep\s20, 2026$/)).toBeInTheDocument();
     expect(within(archive).getByRole("link", { name: "Open" })).toBeInTheDocument();
+  });
+});
+
+describe("sortPortfolioRows", () => {
+  const latin = portfolioRow({ app: makeApp({ id: "a1", name: "Notes" }) });
+  const cyrillic = portfolioRow({ app: makeApp({ id: "a2", name: "Заметки" }) });
+  const byName = { key: "name", desc: false } as const;
+
+  it("sorts names by the rules of the interface language", () => {
+    expect(sortPortfolioRows([latin, cyrillic], byName, "ru").map((r) => r.app.name)).toEqual([
+      "Заметки",
+      "Notes",
+    ]);
+    expect(sortPortfolioRows([cyrillic, latin], byName, "en").map((r) => r.app.name)).toEqual([
+      "Notes",
+      "Заметки",
+    ]);
   });
 });
