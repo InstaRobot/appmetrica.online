@@ -55,10 +55,10 @@ import {
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { type ApiKey, ApiKeyScope, type AppSummary } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime, shortId } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 import { TabHeader } from "./tab-header";
 
 const ALL_APPS = "all";
@@ -90,6 +90,7 @@ function CreateApiKeyForm({
   apps: AppSummary[];
   onSecret: (s: string) => void;
 }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const form = useZodForm(schema, {
     defaultValues: { label: "", scopes: [ApiKeyScope.read], app_id: ALL_APPS },
@@ -105,7 +106,7 @@ function CreateApiKeyForm({
         onSecret(res.data.secret);
         void queryClient.invalidateQueries({ queryKey: getListApiKeysQueryKey() });
       } catch (error) {
-        if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
+        if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
     },
   });
@@ -252,6 +253,7 @@ function CreateApiKeyDialog({
 }
 
 function RevokeApiKeyDialog({ apiKey, onClose }: { apiKey: ApiKey | null; onClose: () => void }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const revoke = useMutation({
     mutationFn: (id: string) => revokeApiKey(id),
@@ -260,7 +262,7 @@ function RevokeApiKeyDialog({ apiKey, onClose }: { apiKey: ApiKey | null; onClos
       onClose();
       void queryClient.invalidateQueries({ queryKey: getListApiKeysQueryKey() });
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   return (

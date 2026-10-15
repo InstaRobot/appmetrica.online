@@ -11,12 +11,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logout } from "@/lib/api/gen/endpoints/admin-auth/admin-auth";
-import { toUiError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 // Меню «⋯» шапки (14-ux-ui-spec.md §6.1): выход из дашборда; в демо-режиме — выход из демо
 // (полная навигация на /demo/exit: route handler снимает cookie и уводит на лендинг).
 export function UserMenu({ demo = false }: { demo?: boolean }) {
+  const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
   const signOut = useMutation({
@@ -25,7 +26,7 @@ export function UserMenu({ demo = false }: { demo?: boolean }) {
       queryClient.clear();
       router.replace("/login");
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   return (

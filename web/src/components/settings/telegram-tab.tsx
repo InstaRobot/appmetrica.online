@@ -21,9 +21,9 @@ import {
   useGetSettings,
 } from "@/lib/api/gen/endpoints/admin-settings/admin-settings";
 import type { Settings, UpdateSettingsBody } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 import { TabHeader } from "./tab-header";
 
 // F-5 (lib/forms/schemas.ts): chat_id — пусто или число, время дайджеста с шагом 15 минут.
@@ -56,6 +56,7 @@ function changes(saved: Settings, data: FormData): UpdateSettingsBody {
 }
 
 function TelegramForm({ settings }: { settings: Settings }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const [testError, setTestError] = useState<string | null>(null);
   const form = useZodForm(schema, {
@@ -74,7 +75,7 @@ function TelegramForm({ settings }: { settings: Settings }) {
         toast.success("Настройки сохранены");
         queryClient.setQueryData(getGetSettingsQueryKey(), res);
       } catch (error) {
-        if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
+        if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
     },
   });
@@ -93,7 +94,7 @@ function TelegramForm({ settings }: { settings: Settings }) {
         `Telegram не принял сообщение${reason} — проверьте Chat ID и что бот добавлен в чат.`,
       );
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   const chat = form.field("telegram_chat_id");

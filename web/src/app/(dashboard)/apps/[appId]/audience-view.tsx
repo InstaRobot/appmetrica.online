@@ -42,7 +42,7 @@ import {
   type TimeSeriesPoint,
 } from "@/lib/api/gen/model";
 import { audienceCurl } from "@/lib/copy-as-curl";
-import { API_ERRORS } from "@/lib/errors";
+import { useMessages } from "@/lib/i18n/client";
 import { METRIC_DEFINITIONS } from "@/lib/metric-definitions";
 import {
   addDays,
@@ -118,6 +118,7 @@ export function AudienceView() {
 }
 
 function AudienceReport({ app }: { app: App }) {
+  const errorTexts = useMessages().errors.codes;
   const today = todayIn(app.timezone);
   const { state, update } = useAudienceState(app.timezone, today);
   const params = reportParams(state);
@@ -179,7 +180,7 @@ function AudienceReport({ app }: { app: App }) {
   });
 
   const rangeError = [summary, chart, rolling, breakdown].some(isRangeError)
-    ? API_ERRORS.range_too_large
+    ? errorTexts.range_too_large
     : undefined;
   const chartData = chart.data?.status === 200 ? chart.data.data : undefined;
   const rollingData = rolling.data?.status === 200 ? rolling.data.data : undefined;

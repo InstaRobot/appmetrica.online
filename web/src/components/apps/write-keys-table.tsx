@@ -55,10 +55,10 @@ import {
 } from "@/lib/api/gen/endpoints/admin-keys/admin-keys";
 import { Platform, type WriteKey } from "@/lib/api/gen/model";
 import { copyText } from "@/lib/clipboard";
-import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 // pk_7Hq2…Ab0: начало и конец ключа для таблицы и диалога отзыва (14-ux-ui-spec.md S-11).
 export function shortKey(key: string): string {
@@ -78,6 +78,7 @@ function platformOptions(appPlatforms: Platform[]): Platform[] {
 }
 
 function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Platform[] }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const [created, setCreated] = useState<WriteKey | null>(null);
   const form = useZodForm(schema, {
@@ -90,7 +91,7 @@ function CreateWriteKeyForm({ appId, platforms }: { appId: string; platforms: Pl
         setCreated(res.data);
         void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
       } catch (error) {
-        if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
+        if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
     },
   });
@@ -187,6 +188,7 @@ type RevokeDialogProps = {
 };
 
 function RevokeWriteKeyDialog({ appId, writeKey, onClose }: RevokeDialogProps) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const revoke = useMutation({
     mutationFn: (keyId: string) => revokeWriteKey(appId, keyId),
@@ -195,7 +197,7 @@ function RevokeWriteKeyDialog({ appId, writeKey, onClose }: RevokeDialogProps) {
       onClose();
       void queryClient.invalidateQueries({ queryKey: getListWriteKeysQueryKey(appId) });
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   return (

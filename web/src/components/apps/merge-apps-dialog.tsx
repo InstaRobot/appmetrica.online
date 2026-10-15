@@ -36,9 +36,10 @@ import {
 import { getListAppsQueryKey, useListApps } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App, MergePreview } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
+import type { UiError } from "@/lib/errors";
 import { formatDate, formatInt } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 export interface MergeAppsDialogProps {
   /** Цель слияния — текущее приложение. */
@@ -59,6 +60,7 @@ export function MergeAppsDialog({ target, open, onOpenChange }: MergeAppsDialogP
 }
 
 function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const [source, setSource] = useState<App | null>(null);
   const [confirm, setConfirm] = useState("");
@@ -98,7 +100,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
       void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
       onDone();
     } catch (err) {
-      const ui = toUiError(err);
+      const ui = uiError(err);
       if (ui.code === "confirm_name_mismatch") setError({ field: true, message: ui.message });
       else if (ui.code === "deletion_pending") {
         setError({
@@ -150,7 +152,7 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
             ) : preview.isError ? (
               <Alert variant="destructive">
                 <CircleAlert aria-hidden="true" />
-                <AlertDescription>{previewErrorText(preview.error)}</AlertDescription>
+                <AlertDescription>{previewErrorText(preview.error, uiError)}</AlertDescription>
                 <AlertAction>
                   <Button
                     type="button"
@@ -219,8 +221,8 @@ function MergeForm({ target, onDone }: { target: App; onDone: () => void }) {
   );
 }
 
-function previewErrorText(error: unknown): string {
-  const ui = toUiError(error);
+function previewErrorText(error: unknown, uiError: (error: unknown) => UiError): string {
+  const ui = uiError(error);
   return ui.code === "storage_unavailable" ? "Хранилище данных временно недоступно." : ui.message;
 }
 

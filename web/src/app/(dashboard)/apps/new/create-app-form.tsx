@@ -17,9 +17,9 @@ import { useGetSettings } from "@/lib/api/gen/endpoints/admin-settings/admin-set
 import { getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { CreateAppBody as CreateAppRequest } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 // F-1 (14-ux-ui-spec.md §7.1): правила — из контракта, плюс trim названия и проверка IANA-зоны.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.createAppSchema);
@@ -33,6 +33,7 @@ const messages = {
 // S-04: создание приложения (FR-009) с одной или несколькими платформами.
 // Сервер создаёт ключ записи на каждую платформу; после 201 — экран интеграции со сниппетами.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {
+  const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
   const create = useMutation({ mutationFn: (body: CreateAppRequest) => createApp(body) });
@@ -50,7 +51,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
         void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
         router.push(`/apps/${res.data.app.id}/integration` as Route);
       } catch (error) {
-        if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
+        if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
     },
   });

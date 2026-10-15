@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
-import { toUiError } from "@/lib/errors";
+import { useUiError } from "@/lib/use-ui-error";
 
 type ApiErrorLike = { code: string; message: string; request_id?: string; status?: number };
 type ErrorStateProps = {
@@ -35,7 +35,8 @@ function RequestId({ id }: { id: string }) {
 // Ошибка загрузки (14-ux-ui-spec.md §8.3, §16.3). Сырой текст ошибки не показывается — только текст
 // из lib/errors.ts и request_id для поиска в логах.
 export function ErrorState({ error, onRetry, correlationId, variant = "inline" }: ErrorStateProps) {
-  const ui = toUiError(error);
+  const uiError = useUiError();
+  const ui = uiError(error);
   const requestId = correlationId ?? ui.requestId;
 
   if (variant === "full-page") {

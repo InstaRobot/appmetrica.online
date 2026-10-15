@@ -4,6 +4,10 @@ import type { Locale } from "./locale";
 // русскому («3 события», «11 событий»), английскому хватает one и other.
 export type Plural = { one: string; few?: string; many?: string; other: string };
 
+// Плюрал в словаре объявляется через pluralForms: тип поля — Plural, иначе TypeScript выведет из
+// английского { one, other }, и русские few и many не пройдут проверку лишних свойств.
+export const pluralForms = (forms: Plural): Plural => forms;
+
 type Vars = Record<string, string | number>;
 
 const PLACEHOLDER = /\{(\w+)\}/g;

@@ -15,9 +15,9 @@ import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App, Platform, UpdateAppBody } from "@/lib/api/gen/model";
 import { isDemoInBrowser } from "@/lib/demo-mode";
-import { toUiError } from "@/lib/errors";
 import { useZodForm } from "@/lib/forms/use-zod-form";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 // Job close_day закрывает день D−8 (02-tech-spec.md FR-022): у приложения старше 8 суток есть закрытые дни.
 const CLOSED_DAY_LAG_MS = 8 * 24 * 60 * 60 * 1000;
@@ -66,6 +66,7 @@ function useSavedApp(app: App) {
 // «Основное»: название и часовой пояс. Отправляются только изменённые поля; смена пояса предупреждает,
 // что уже закрытые дни остаются в прежнем поясе.
 function AppBasicsCard({ app }: { app: App }) {
+  const uiError = useUiError();
   const { save } = useSavedApp(app);
 
   const form = useZodForm(schema, {
@@ -80,7 +81,7 @@ function AppBasicsCard({ app }: { app: App }) {
       try {
         if (await save(body)) toast.success("Настройки сохранены");
       } catch (error) {
-        if (!form.applyServerErrors(error)) toast.error(toUiError(error).message);
+        if (!form.applyServerErrors(error)) toast.error(uiError(error).message);
       }
     },
   });
@@ -193,6 +194,7 @@ function samePlatforms(a: Platform[], b: Platform[]): boolean {
 // «Платформы» (#platforms): набор платформ приложения, PATCH { platforms }. Пустой набор не сохраняется;
 // в демо мутации недоступны, поэтому чипы и кнопка выключены.
 function AppPlatformsCard({ app }: { app: App }) {
+  const uiError = useUiError();
   const { save, pending } = useSavedApp(app);
   const demo = useDemo();
   const [platforms, setPlatforms] = useState<Platform[]>(app.platforms);
@@ -204,7 +206,7 @@ function AppPlatformsCard({ app }: { app: App }) {
     try {
       if (await save({ platforms })) toast.success("Платформы сохранены");
     } catch (error) {
-      toast.error(toUiError(error).message);
+      toast.error(uiError(error).message);
     }
   };
 

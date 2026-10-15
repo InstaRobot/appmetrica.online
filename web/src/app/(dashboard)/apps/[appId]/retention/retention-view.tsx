@@ -20,7 +20,7 @@ import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useGetRetention } from "@/lib/api/gen/endpoints/retention/retention";
 import type { App } from "@/lib/api/gen/model";
-import { API_ERRORS } from "@/lib/errors";
+import { useMessages } from "@/lib/i18n/client";
 import { todayIn } from "@/lib/period";
 import {
   COHORT_GRANULARITIES,
@@ -43,6 +43,7 @@ export function RetentionView() {
 }
 
 function RetentionReport({ app }: { app: App }) {
+  const errorTexts = useMessages().errors.codes;
   const today = todayIn(app.timezone);
   const { state, update } = useRetentionState(app.timezone, today);
   const retention = useGetRetention(app.id, retentionParams(state), {
@@ -54,7 +55,7 @@ function RetentionReport({ app }: { app: App }) {
 
   // apiFetch бросает ApiError; тип ошибки orval описывает тело ответа, а не исключение.
   const error = retention.isError ? (retention.error as unknown as ApiError | null) : null;
-  const rangeError = error?.code === "range_too_large" ? API_ERRORS.range_too_large : undefined;
+  const rangeError = error?.code === "range_too_large" ? errorTexts.range_too_large : undefined;
   const matrix = retention.data?.status === 200 ? retention.data.data : undefined;
 
   let content: React.ReactNode = null;

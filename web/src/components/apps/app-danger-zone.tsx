@@ -21,8 +21,8 @@ import { archiveApp, deleteApp, unarchiveApp } from "@/lib/api/gen/endpoints/adm
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { App } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 import { useActiveMerge } from "./merge-progress-banner";
 
 // Диалог слияния — отдельный чанк: нужен только после клика «Объединить…» (бюджет initial JS).
@@ -34,6 +34,7 @@ const MergeAppsDialog = lazy(() =>
 // удаление навсегда вводом точного названия. Удаление выполняет worker, экран сразу уходит в портфель.
 // Слияние другого приложения в это; пока оно не завершено, опасные действия недоступны.
 export function AppDangerZone({ app }: { app: App }) {
+  const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
@@ -55,7 +56,7 @@ export function AppDangerZone({ app }: { app: App }) {
       void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(app.id) });
       refreshLists();
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   const unarchive = useMutation({
@@ -65,7 +66,7 @@ export function AppDangerZone({ app }: { app: App }) {
       void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(app.id) });
       refreshLists();
     },
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   const remove = useMutation({ mutationFn: () => deleteApp(app.id, { confirm_name: app.name }) });
@@ -184,7 +185,7 @@ export function AppDangerZone({ app }: { app: App }) {
         confirmText={app.name}
         confirmLabel="Удалить навсегда"
         pending={remove.isPending}
-        {...(remove.isError ? { serverError: toUiError(remove.error).message } : {})}
+        {...(remove.isError ? { serverError: uiError(remove.error).message } : {})}
         onConfirm={confirmDelete}
       />
     </Card>

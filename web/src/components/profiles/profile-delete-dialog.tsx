@@ -4,9 +4,9 @@ import { useMutation } from "@tanstack/react-query";
 import { ConfirmDeleteDialog } from "@/components/feedback/confirm-delete-dialog";
 import { createDeletionRequest } from "@/lib/api/gen/endpoints/deletion/deletion";
 import type { DeletionRequest } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { deletionSubject, formatPersonKey, type PersonKey } from "@/lib/person-key";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 type ProfileDeleteDialogProps = {
   appId: string;
@@ -28,6 +28,7 @@ export function ProfileDeleteDialog({
   onOpenChange,
   onCreated,
 }: ProfileDeleteDialogProps) {
+  const uiError = useUiError();
   const create = useMutation({
     mutationFn: () => createDeletionRequest(appId, deletionSubject(personKey)),
   });
@@ -63,7 +64,7 @@ export function ProfileDeleteDialog({
       confirmText="УДАЛИТЬ"
       confirmLabel="Удалить данные"
       pending={create.isPending}
-      {...(create.isError ? { serverError: toUiError(create.error).message } : {})}
+      {...(create.isError ? { serverError: uiError(create.error).message } : {})}
       onConfirm={confirm}
     />
   );

@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import type * as zod from "zod";
 import { ApiError } from "@/lib/api/fetcher";
 import { messageFor } from "@/lib/errors";
+import { useMessages } from "@/lib/i18n/client";
 
 // Хук форм дашборда (14-ux-ui-spec.md §7.1) вместо react-hook-form: правила — Zod-схемы orval из
 // contracts/openapi/api.yaml, тексты ошибок — по полю и коду issue Zod. Ошибка поля показывается на blur,
@@ -41,6 +42,7 @@ export function useZodForm<S extends zod.ZodObject>(
 ) {
   const [values, setValues] = useState(options.defaultValues);
   const [errors, setErrors] = useState<FormErrors<S>>({});
+  const errorTexts = useMessages().errors;
   const [submitting, setSubmitting] = useState(false);
   // Актуальные значения и опции для обработчиков, вызванных до перерисовки (select: onValueChange → blur).
   const valuesRef = useRef(values);
@@ -162,7 +164,7 @@ export function useZodForm<S extends zod.ZodObject>(
       const next: FormErrors<S> = {};
       const field = optionsRef.current.serverErrors?.[error.code];
       if (field) {
-        next[field] = messageFor(error.code);
+        next[field] = messageFor(error.code, errorTexts);
       } else if (error.code === "invalid_request") {
         const reported = error.details?.fields;
         if (reported && typeof reported === "object") {
@@ -178,7 +180,7 @@ export function useZodForm<S extends zod.ZodObject>(
       focusFirst(next);
       return true;
     },
-    [fields, focusFirst],
+    [fields, focusFirst, errorTexts],
   );
 
   const errorId = (name: Field<S>) => `${name}-error`;

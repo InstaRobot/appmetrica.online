@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmt, plural } from "./format-message";
+import { fmt, plural, pluralForms } from "./format-message";
 
 describe("fmt", () => {
   it("substitutes named placeholders and keeps unknown ones", () => {
@@ -38,5 +38,12 @@ describe("plural", () => {
     expect(
       plural("ru", { one: "{count} из {total}", other: "{count} из {total}" }, 5, { total: 9 }),
     ).toBe("5 из 9");
+  });
+});
+
+describe("pluralForms", () => {
+  it("returns the forms as they are, typed as Plural", () => {
+    const forms = pluralForms({ one: "{count} key", other: "{count} keys" });
+    expect(plural("en", forms, 2)).toBe("2 keys");
   });
 });

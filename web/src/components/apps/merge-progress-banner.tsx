@@ -14,9 +14,9 @@ import { getListWriteKeysQueryKey } from "@/lib/api/gen/endpoints/admin-keys/adm
 import { getGetAppQueryKey, getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { AppMerge } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { formatInt } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 
 const POLL_MS = 5000;
 const RUNNING = new Set<AppMerge["status"]>(["pending", "running"]);
@@ -55,6 +55,7 @@ function stepText(merge: AppMerge): string {
 // только слияние прошло этот шаг. Когда отслеживаемое слияние завершилось, перечитываются данные цели
 // (приложение, отчёты, ключи) и списки приложений.
 export function MergeProgressBanner({ appId }: { appId: string }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const merges = useAppMerges(appId);
   const active = merges.find((m) => RUNNING.has(m.status) || m.status === "failed");
@@ -87,7 +88,7 @@ export function MergeProgressBanner({ appId }: { appId: string }) {
     mutationFn: (mergeId: string) => retryAppMerge(appId, mergeId),
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: getListAppMergesQueryKey(appId) }),
-    onError: (error) => toast.error(toUiError(error).message),
+    onError: (error) => toast.error(uiError(error).message),
   });
 
   if (!active) return null;

@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { Unit } from "@/lib/api/gen/model";
-import { API_ERRORS } from "@/lib/errors";
+import { useMessages } from "@/lib/i18n/client";
 import { AppTabs } from "./app-tabs";
 import { PageHeader } from "./page-header";
 
@@ -42,6 +42,7 @@ export function AppShellSkeleton() {
 // и слияния в это приложение.
 // Приложение загружается на клиенте (useGetApp); отчёты вкладок берут его из того же кэша запросов.
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const errorTexts = useMessages().errors.codes;
   const { appId } = useParams<{ appId: string }>();
   const [unit] = useQueryState("unit", unitParser);
   const query = useGetApp(appId);
@@ -56,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Card className="mt-6">
           <EmptyState
             icon={SearchX}
-            title={API_ERRORS.app_not_found}
+            title={errorTexts.app_not_found}
             description="Проверьте адрес или выберите приложение в портфеле."
             action={{ label: "В портфель", href: "/portfolio" }}
           />

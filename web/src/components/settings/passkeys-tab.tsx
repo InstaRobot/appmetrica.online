@@ -43,9 +43,9 @@ import {
   useListPasskeys,
 } from "@/lib/api/gen/endpoints/admin-passkeys/admin-passkeys";
 import type { Passkey } from "@/lib/api/gen/model";
-import { toUiError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { useUiError } from "@/lib/use-ui-error";
 import { passkeyErrorMessage, registerAdditionalPasskey, validateDeviceName } from "@/lib/webauthn";
 import { TabHeader } from "./tab-header";
 
@@ -109,6 +109,7 @@ function PasskeyNameForm({ initialName, submitLabel, pendingLabel, onSubmit }: N
 type DeleteDialogProps = { passkey: Passkey | null; onClose: () => void };
 
 function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const remove = useMutation({
     mutationFn: (id: string) => deletePasskey(id),
@@ -137,7 +138,7 @@ function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
         </AlertDialogHeader>
         {remove.isError ? (
           <p role="alert" className="text-body-sm text-destructive">
-            {toUiError(remove.error).message}
+            {uiError(remove.error).message}
           </p>
         ) : null}
         <AlertDialogFooter>
@@ -158,6 +159,7 @@ function DeletePasskeyDialog({ passkey, onClose }: DeleteDialogProps) {
 // Вкладка «Passkeys» S-12 (FR-008): несколько passkey владельца, добавление, переименование и удаление.
 // Последний passkey удалить нельзя (409 last_passkey) — текст ошибки остаётся в диалоге.
 export function PasskeysTab({ timezone }: { timezone: string }) {
+  const uiError = useUiError();
   const queryClient = useQueryClient();
   const query = useListPasskeys();
   const [adding, setAdding] = useState(false);
@@ -184,7 +186,7 @@ export function PasskeysTab({ timezone }: { timezone: string }) {
     try {
       await renamePasskey(renaming.id, { name });
     } catch (error) {
-      return toUiError(error).message;
+      return uiError(error).message;
     }
     setRenaming(null);
     await refresh();
