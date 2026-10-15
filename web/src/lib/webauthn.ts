@@ -29,20 +29,6 @@ export type PasskeyFlow = "login" | "setup";
 export type DeviceNameErrors = Messages["auth"]["deviceName"];
 export type PasskeyErrorTexts = Messages["auth"]["passkeyErrors"];
 
-// Русские тексты для вызовов без словаря (S-12 «Добавить passkey», пока настройки не переведены);
-// удаляются вместе с русскими обёртками lib/format. Экраны входа передают словарь auth.
-const RU_DEVICE_NAME_ERRORS: DeviceNameErrors = {
-  required: "Введите название устройства",
-  tooLong: "Не длиннее 64 символов",
-};
-const RU_PASSKEY_ERRORS: PasskeyErrorTexts = {
-  login: "Не удалось войти. Подтверждение отменено или ключ не подошёл. Попробуйте ещё раз.",
-  setup: "Не удалось создать passkey. Попробуйте ещё раз.",
-  network: "Нет соединения с сервером. Проверьте подключение.",
-  rateLimited: "Слишком много попыток. Повторите через минуту.",
-  sessionExpired: "Сессия устарела. Обновите страницу.",
-};
-
 export const DEVICE_NAME_MAX = 64;
 
 export function supportsPasskeys(): boolean {
@@ -63,10 +49,7 @@ export function deviceNameFromUserAgent(userAgent: string, fallback: string): st
 }
 
 // F-6: название обязательно, 1–64 символа после trim. null — ошибок нет.
-export function validateDeviceName(
-  name: string,
-  m: DeviceNameErrors = RU_DEVICE_NAME_ERRORS,
-): string | null {
+export function validateDeviceName(name: string, m: DeviceNameErrors): string | null {
   const trimmed = name.trim();
   if (!trimmed) return m.required;
   if ([...trimmed].length > DEVICE_NAME_MAX) return m.tooLong;
@@ -152,11 +135,7 @@ export function isSetupLinkExpired(err: unknown): boolean {
 
 // Текст ошибки под кнопкой (14-ux-ui-spec.md S-01/S-02 и маппинг кодов ошибок). Отмена в системном диалоге
 // (NotAllowedError), 422 webauthn_verification_failed и прочие сбои церемонии — общий текст экрана.
-export function passkeyErrorMessage(
-  err: unknown,
-  flow: PasskeyFlow,
-  m: PasskeyErrorTexts = RU_PASSKEY_ERRORS,
-): string {
+export function passkeyErrorMessage(err: unknown, flow: PasskeyFlow, m: PasskeyErrorTexts): string {
   if (err instanceof ApiError) {
     if (err.code === "network_error") return m.network;
     if (err.status === 429) return m.rateLimited;

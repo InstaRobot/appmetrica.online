@@ -16,7 +16,7 @@ export function MessagesProvider({ locale, messages, children }: I18n & { childr
 
 function useI18n(): I18n {
   const value = useContext(I18nContext);
-  if (!value) throw new Error("useMessages: компонент вне MessagesProvider");
+  if (!value) throw new Error("useMessages: component rendered outside MessagesProvider");
   return value;
 }
 

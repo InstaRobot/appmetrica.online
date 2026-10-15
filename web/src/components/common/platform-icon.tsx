@@ -11,20 +11,6 @@ import { useMessages } from "@/lib/i18n/client";
 
 export type PlatformLabels = Record<Platform, string>;
 
-// Русские подписи для экранов, ещё не переведённых на словарь (common.platforms, usePlatformLabel);
-// удаляются вместе с русскими обёртками lib/format.
-export const PLATFORM_LABELS: PlatformLabels = {
-  ios: "iOS",
-  android: "Android",
-  web: "Веб",
-  macos: "macOS",
-  windows: "Windows",
-  linux: "Linux",
-  bot: "Бот",
-  server: "Бэкенд",
-  other: "Другое",
-};
-
 // Цвет платформы на графиках: один и тот же в легенде, на полосе долей и в tooltip.
 export const PLATFORM_CHART_VAR: Record<Platform, string> = {
   ios: "var(--chart-1)",
@@ -61,11 +47,6 @@ const GLYPHS: Record<Platform, (props: PlatformGlyphProps) => React.JSX.Element>
 // пустое — «—».
 export function platformLabelIn(labels: PlatformLabels, platform: string): string {
   return Object.hasOwn(labels, platform) ? labels[platform as Platform] : platform || "—";
-}
-
-// Русская подпись (PLATFORM_LABELS) для ещё не переведённых экранов.
-export function platformLabel(platform: string): string {
-  return platformLabelIn(PLATFORM_LABELS, platform);
 }
 
 // Подпись платформы на языке интерфейса (словарь common.platforms).

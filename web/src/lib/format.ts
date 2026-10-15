@@ -302,23 +302,3 @@ export function createFormatters(locale: Locale): Formatters {
   }
   return formatters;
 }
-
-// Русские функции модуля — на время перевода экранов: каждый экран переходит на useFormat()/createFormatters.
-export const {
-  formatInt,
-  formatPercent,
-  formatShare,
-  formatRejectionRate,
-  formatDuration,
-  formatDelta,
-  formatDate,
-  formatDateShort,
-  formatWeekdayDate,
-  formatDateRange,
-  formatWeekRange,
-  formatTime,
-  formatClock,
-  formatDateTime,
-  shortId,
-  formatBucket,
-} = createFormatters("ru");

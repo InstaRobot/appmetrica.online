@@ -177,19 +177,6 @@ describe("profile formatting", () => {
 
 describe("formatters by locale", () => {
   const en = createFormatters("en");
-  const ru = createFormatters("ru");
-
-  it("keeps the Russian output of the module-level functions", () => {
-    expect(ru.formatInt(12480)).toBe(formatInt(12480));
-    expect(ru.formatPercent(0.381)).toBe(formatPercent(0.381));
-    expect(ru.formatDuration(252_000)).toBe(formatDuration(252_000));
-    expect(ru.formatDateRange("2026-10-06", "2026-10-12")).toBe(
-      formatDateRange("2026-10-06", "2026-10-12"),
-    );
-    expect(ru.formatBucket("2026-10-12T14:00:00+03:00", "hour", "Europe/Moscow")).toBe(
-      formatBucket("2026-10-12T14:00:00+03:00", "hour", "Europe/Moscow"),
-    );
-  });
 
   it("formats numbers, percents, deltas and durations in en-US", () => {
     expect(en.formatInt(12480)).toBe("12,480");
