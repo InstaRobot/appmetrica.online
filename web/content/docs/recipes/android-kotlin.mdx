@@ -1,25 +1,25 @@
 ---
 title: Android (Kotlin)
-description: HttpURLConnection, install_id в SharedPreferences, офлайн-очередь и сессии через ProcessLifecycleOwner.
+description: HttpURLConnection, install_id in SharedPreferences, an offline queue, and sessions via ProcessLifecycleOwner.
 ---
 
-Рецепт для Android 8.0+ (API 26) на Kotlin. Сеть и JSON — из стандартной библиотеки Android
-(`HttpURLConnection`, `org.json`), жизненный цикл — `androidx.lifecycle:lifecycle-process` или
-`ActivityLifecycleCallbacks` без зависимостей. Код состоит из трёх частей: `install_id`,
-офлайн-очередь с отправкой и трекер сессий.
+A recipe for Android 8.0+ (API 26) in Kotlin. Networking and JSON come from the Android standard
+library (`HttpURLConnection`, `org.json`); the lifecycle comes from
+`androidx.lifecycle:lifecycle-process` or from dependency-free `ActivityLifecycleCallbacks`. The code
+has three parts: `install_id`, an offline queue with sending, and a session tracker.
 
-Почему трекер создаётся в `Application.onCreate`, а не в `Activity.onCreate`, — в разделе
-[Где инициализировать метрику](/docs/concepts/initialization#android).
+Why the tracker is created in `Application.onCreate` rather than in `Activity.onCreate` is explained
+in [Where to initialize analytics](/docs/concepts/initialization#android).
 
-Вшейте ключ платформы Android из вкладки «Интеграция». Если приложение выходит и на iOS, добавьте
-платформу Android к существующему приложению, а не создавайте второе: у каждой платформы свой ключ, а
-человек с одним `user_id` на обеих считается один раз — см. [Платформа события](/docs#platform).
+Embed the Android platform key from the **Integration** tab. If your app also ships on iOS, add the
+Android platform to the existing app instead of creating a second one: each platform has its own key,
+and a person with the same `user_id` on both is counted once — see [Event platform](/docs#platform).
 
 ## install_id [#install-id]
 
-`install_id` создаётся при первом запуске и хранится в `SharedPreferences`. Auto Backup включён по
-умолчанию и сохраняет `SharedPreferences` в Google Drive, поэтому после переустановки с
-восстановлением из бэкапа `install_id` прежний.
+`install_id` is created on first launch and stored in `SharedPreferences`. Auto Backup is on by
+default and saves `SharedPreferences` to Google Drive, so after a reinstall restored from a backup,
+`install_id` stays the same.
 
 ```kotlin title="InstallId.kt"
 import android.content.Context
@@ -43,13 +43,14 @@ object InstallId {
 }
 ```
 
-Если в приложении настроены свои правила бэкапа (`android:fullBackupContent` или
-`android:dataExtractionRules`), включите в них файл `appmetrica.xml` из `sharedpref`.
+If your app defines its own backup rules (`android:fullBackupContent` or
+`android:dataExtractionRules`), include the `appmetrica.xml` file from `sharedpref` in them.
 
-## Офлайн-очередь и отправка [#offline-queue]
+## Offline queue and sending [#offline-queue]
 
-`EventQueue` хранит события в файле в `filesDir` и отправляет их батчами до 500 штук в одном фоновом
-потоке. Действие по каждому ответу — как в [Ошибки и повторы](/docs/errors-and-retries).
+`EventQueue` stores events in a file in `filesDir` and sends them in batches of up to 500 on a single
+background thread. The action for each response follows
+[Errors and retries](/docs/errors-and-retries).
 
 ```kotlin title="EventQueue.kt"
 import android.content.Context
@@ -109,7 +110,7 @@ class EventQueue(context: Context) {
                 429, 503 -> retryLater((response.retryAfterSeconds ?: 5L) * 1_000L)
                 else -> backoff()
             }
-        } catch (e: Exception) { // сеть, таймаут, неожиданный ответ
+        } catch (e: Exception) { // network, timeout, unexpected response
             backoff()
         }
         save()
@@ -143,7 +144,7 @@ class EventQueue(context: Context) {
 
     private fun post(batch: List<JSONObject>): Response {
         val body = JSONObject()
-            .put("sent_at", Instant.now().toString()) // момент этой попытки
+            .put("sent_at", Instant.now().toString()) // the moment of this attempt
             .put("events", JSONArray(batch))
         val conn = URL(ENDPOINT).openConnection() as HttpURLConnection
         try {
@@ -169,20 +170,20 @@ class EventQueue(context: Context) {
 
     companion object {
         private const val ENDPOINT = "https://i.analytics.example.com/v1/events"
-        private const val WRITE_KEY = "pk_…" // ключ платформы Android на вкладке «Интеграция»
+        private const val WRITE_KEY = "pk_…" // Android platform key from the Integration tab
         private const val MAX_BATCH = 500
         private const val MAX_AGE_SECONDS = 7L * 24 * 3600
     }
 }
 ```
 
-`Instant.toString()` даёт RFC 3339 в UTC с `Z` — сервер принимает такое время как есть.
+`Instant.toString()` produces RFC 3339 in UTC with a `Z` — the server accepts that time as is.
 
-## Сессии [#session-lifecycle]
+## Sessions [#session-lifecycle]
 
-`SessionTracker` создаёт события. Каждое событие несёт свой `context`, чтобы события из очереди
-ушли с той версией приложения, в которой они произошли. Длительность считается по
-`SystemClock.elapsedRealtime()` — монотонным часам.
+`SessionTracker` creates the events. Every event carries its own `context`, so queued events go out
+with the app version in which they happened. Duration is measured with
+`SystemClock.elapsedRealtime()` — a monotonic clock.
 
 ```kotlin title="SessionTracker.kt"
 import android.content.Context
@@ -194,7 +195,7 @@ import java.util.Locale
 import java.util.UUID
 
 class SessionTracker(private val app: Context, private val queue: EventQueue) {
-    /** ID аккаунта после входа; null — пользователь не вошёл. Не email и не телефон. */
+    /** Account ID after sign-in; null if the user isn't signed in. Not an email or phone number. */
     @Volatile var userId: String? = null
 
     private var sessionId: String? = null
@@ -240,12 +241,13 @@ class SessionTracker(private val app: Context, private val queue: EventQueue) {
 }
 ```
 
-`BuildConfig` генерирует Android Gradle Plugin; в AGP 8 включите его в модуле приложения:
+`BuildConfig` is generated by the Android Gradle Plugin; in AGP 8, enable it in the app module:
 `android { buildFeatures { buildConfig = true } }`.
 
-Сессия — время, когда видна хотя бы одна активность приложения. `ProcessLifecycleOwner` сообщает
-именно об этом и не дёргается при повороте экрана и переходах между активностями. Если не хотите
-зависимость, тот же счётчик видимых активностей легко собрать на `ActivityLifecycleCallbacks`.
+A session is the time during which at least one of the app's activities is visible.
+`ProcessLifecycleOwner` reports exactly that and doesn't flicker on screen rotation or transitions
+between activities. If you'd rather skip the dependency, the same counter of visible activities is
+easy to build on `ActivityLifecycleCallbacks`.
 
 ```kotlin tab="ProcessLifecycleOwner" title="App.kt"
 import android.app.Application
@@ -265,7 +267,7 @@ class App : Application() {
             override fun onStart(owner: LifecycleOwner) = analytics.start()
             override fun onStop(owner: LifecycleOwner) = analytics.end()
         })
-        queue.flush() // досылает очередь прошлых запусков
+        queue.flush() // sends what's left in the queue from previous launches
     }
 }
 ```
@@ -291,7 +293,7 @@ class App : Application() {
             }
 
             override fun onActivityStopped(activity: Activity) {
-                // Поворот экрана пересоздаёт активность: это не уход в фон.
+                // Screen rotation recreates the activity: that's not going to the background.
                 if (--started == 0 && !activity.isChangingConfigurations) analytics.end()
             }
 
@@ -306,22 +308,22 @@ class App : Application() {
 }
 ```
 
-Не забудьте `android:name=".App"` в `<application>` манифеста и разрешение
-`android.permission.INTERNET`.
+Don't forget `android:name=".App"` in the manifest's `<application>` and the
+`android.permission.INTERNET` permission.
 
-## user_id после входа [#user-id]
+## user_id after sign-in [#user-id]
 
-После входа присвойте `analytics.userId` идентификатор аккаунта из вашего бэкенда, после выхода —
-`null`. Анонимные дни до входа припишутся этому пользователю (см.
-[Идентичность](/docs/concepts/identity)).
+After sign-in, set `analytics.userId` to the account ID from your backend; after sign-out, set it
+to `null`. The anonymous days before sign-in get attributed to this user (see
+[Identity](/docs/concepts/identity)).
 
 ```kotlin
-(application as App).analytics.userId = account.id // не email и не телефон
+(application as App).analytics.userId = account.id // not an email or phone number
 ```
 
-## Проверка [#verify]
+## Verification [#verify]
 
-1. Запустите debug-сборку: события уйдут с `environment: "development"`.
-2. Сверните и откройте приложение.
-3. На вкладке «Интеграция» появятся `session_start` и `session_end`. В отчётах включите окружение
-   development.
+1. Run a debug build: events go out with `environment: "development"`.
+2. Send the app to the background and open it again.
+3. `session_start` and `session_end` appear on the **Integration** tab. In reports, turn on the
+   development environment.

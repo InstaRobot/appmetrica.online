@@ -1,24 +1,25 @@
 ---
 title: iOS (Swift)
-description: URLSession, install_id в Keychain, офлайн-очередь и жизненный цикл сессии для SwiftUI и UIKit.
+description: URLSession, install_id in the Keychain, an offline queue, and the session lifecycle for SwiftUI and UIKit.
 ---
 
-Рецепт для iOS 17+ и Swift 6 без сторонних зависимостей. Он состоит из четырёх файлов: модель
-событий, `install_id` в Keychain, офлайн-очередь с отправкой через `URLSession` и трекер сессий,
-который подключается к жизненному циклу приложения. Для macOS код тот же, кроме `platform: "macos"`,
-ключа платформы macOS и уведомлений `NSApplication`.
+A recipe for iOS 17+ and Swift 6 with no third-party dependencies. It consists of four files: the
+event model, `install_id` in the Keychain, an offline queue that sends through `URLSession`, and a
+session tracker that hooks into the app lifecycle. On macOS the code is the same, except for
+`platform: "macos"`, the macOS platform key, and `NSApplication` notifications.
 
-Вшейте ключ платформы iOS из вкладки «Интеграция». Если приложение выходит и на других платформах, это
-одно приложение с несколькими платформами: у каждой свой ключ, а человек с одним `user_id` на iOS и
-Android считается один раз — см. [Платформа события](/docs#platform).
+Embed the iOS platform key from the **Integration** tab. If your app also ships on other platforms,
+it's one app with several platforms: each has its own key, and a person with the same `user_id` on
+iOS and Android is counted once — see [Event platform](/docs#platform).
 
-Где создать трекер, почему сессию ведёт приложение, а не экран, и почему расширения и виджеты сессий
-не отправляют, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#ios).
+Where to create the tracker, why the app rather than a screen owns the session, and why extensions
+and widgets don't send sessions — see
+[Where to initialize analytics](/docs/concepts/initialization#ios).
 
-## Модель и отправка [#sending]
+## Model and sending [#sending]
 
-Ключи JSON — `snake_case`, время — RFC 3339 с миллисекундами. Каждое событие несёт свой `context`:
-если событие пролежало в очереди до обновления приложения, оно уйдёт со старой версией.
+JSON keys are `snake_case`, and times are RFC 3339 with milliseconds. Every event carries its own
+`context`: if an event sat in the queue until the app was updated, it goes out with the old version.
 
 ```swift title="Analytics.swift"
 import Foundation
@@ -60,7 +61,7 @@ struct IngestResult: Decodable, Sendable {
 
 enum Analytics {
     static let endpoint = URL(string: "https://i.analytics.example.com/v1/events")!
-    static let writeKey = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
+    static let writeKey = "pk_…" // iOS platform key from the Integration tab
 
     struct Response: Sendable {
         let status: Int
@@ -81,7 +82,7 @@ enum Analytics {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(writeKey, forHTTPHeaderField: "X-App-Key")
-        // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+        // sent_at is the moment of this attempt: the server uses it to correct a skewed device clock.
         request.httpBody = try encoder.encode(Batch(sentAt: .now, events: events))
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -128,15 +129,15 @@ extension FormatStyle where Self == Date.ISO8601FormatStyle {
 }
 ```
 
-`deviceModel` — машинное имя вроде `iPhone17,3`, а не имя устройства, которое задал пользователь:
-имя часто содержит имя человека.
+`deviceModel` is a machine name like `iPhone17,3`, not the device name the user set: that name often
+contains the person's own name.
 
-## install_id в Keychain [#install-id]
+## install_id in the Keychain [#install-id]
 
-`install_id` создаётся один раз и хранится в Keychain. В отличие от `UserDefaults`, запись Keychain
-переживает удаление и повторную установку приложения, поэтому переустановка не создаёт нового
-пользователя. `ThisDeviceOnly` не переносит идентификатор на новое устройство из бэкапа: новый
-телефон — новая установка, как в AppMetrica.
+`install_id` is created once and stored in the Keychain. Unlike `UserDefaults`, a Keychain item
+survives deleting and reinstalling the app, so a reinstall doesn't create a new user.
+`ThisDeviceOnly` keeps the identifier from moving to a new device via a backup: a new phone is a new
+install, as in AppMetrica.
 
 ```swift title="InstallID.swift"
 import Foundation
@@ -177,18 +178,19 @@ enum InstallID {
 }
 ```
 
-`AfterFirstUnlock` нужен, чтобы идентификатор читался и при запуске в фоне, пока экран заблокирован.
+`AfterFirstUnlock` lets the identifier be read even when the app launches in the background while
+the screen is locked.
 
-## Офлайн-очередь [#offline-queue]
+## Offline queue [#offline-queue]
 
-`OfflineQueue` хранит события в файле в Application Support и отправляет их батчами до 500 штук.
-Действие по каждому ответу сервера — как в [Ошибки и повторы](/docs/errors-and-retries):
+`OfflineQueue` stores events in a file in Application Support and sends them in batches of up to
+500. The action for each server response follows [Errors and retries](/docs/errors-and-retries):
 
-- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`;
-- `400`, `413`, `415` — удалить батч: повтор не поможет;
-- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
-- `429`, `503` — повторить через `Retry-After`;
-- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с.
+- `200` — remove the sent events, except those rejected with `retryable: true`;
+- `400`, `413`, `415` — drop the batch: retrying won't help;
+- `401`, `403` — stop sending until the next launch: the key was revoked or the app is archived;
+- `429`, `503` — retry after `Retry-After`;
+- anything else and network errors — retry with a delay from 1 s to 300 s.
 
 ```swift title="OfflineQueue.swift"
 import Foundation
@@ -258,14 +260,14 @@ actor OfflineQueue {
 }
 ```
 
-Очередь хранит `timestamp` как есть, поэтому событие, отправленное через три дня, попадёт в отчёт
-того дня, когда оно произошло (см. [Время и офлайн-очередь](/docs/concepts/time-and-offline)).
+The queue keeps `timestamp` as is, so an event sent three days later still lands in the report for
+the day it happened (see [Time and the offline queue](/docs/concepts/time-and-offline)).
 
-## Жизненный цикл сессии [#session-lifecycle]
+## Session lifecycle [#session-lifecycle]
 
-`SessionTracker` открывает сессию при выходе на передний план и закрывает при уходе в фон.
-Длительность считается по `systemUptime` — монотонным часам, которые не меняются, если пользователь
-переводит время.
+`SessionTracker` opens a session when the app comes to the foreground and closes it when the app
+goes to the background. Duration is measured with `systemUptime` — a monotonic clock that doesn't
+change when the user adjusts the device time.
 
 ```swift title="SessionTracker.swift"
 import Foundation
@@ -274,7 +276,7 @@ import Foundation
 final class SessionTracker {
     static let shared = SessionTracker()
 
-    /// ID аккаунта после входа; nil — пользователь не вошёл. Не email и не телефон.
+    /// Account ID after sign-in; nil if the user isn't signed in. Not an email or phone number.
     var userId: String?
 
     private var sessionId: String?
@@ -308,9 +310,9 @@ final class SessionTracker {
 }
 ```
 
-Подключите трекер к приложению. Сессия начинается в состоянии «активно» и заканчивается в «фоне»:
-переход в «неактивно» (шторка уведомлений, системный алерт) сессию не прерывает, а повторный вызов
-`start()` в той же сессии ничего не делает.
+Hook the tracker into the app. A session starts in the "active" state and ends in "background":
+moving to "inactive" (the notification shade, a system alert) doesn't interrupt the session, and
+calling `start()` again within the same session does nothing.
 
 ```swift tab="SwiftUI" title="NotesApp.swift"
 import SwiftUI
@@ -359,30 +361,30 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 ```
 
-В фоне у приложения мало времени: если `session_end` не успеет уйти, он останется в файле очереди и
-отправится при следующем запуске.
+In the background, the app has little time: if `session_end` doesn't get out in time, it stays in
+the queue file and is sent on the next launch.
 
-## user_id после входа [#user-id]
+## user_id after sign-in [#user-id]
 
-После входа присвойте `SessionTracker.shared.userId` идентификатор аккаунта из вашего бэкенда, после
-выхода — `nil`. Анонимные события до входа сервер задним числом припишет этому пользователю (см.
-[Идентичность](/docs/concepts/identity)).
+After sign-in, set `SessionTracker.shared.userId` to the account ID from your backend; after
+sign-out, set it to `nil`. The server retroactively attributes the anonymous events from before
+sign-in to this user (see [Identity](/docs/concepts/identity)).
 
-```swift tab="Вход"
+```swift tab="Sign in"
 func didSignIn(account: Account) {
-    SessionTracker.shared.userId = account.id // "a3f9c2d1-77b4-…", не email
+    SessionTracker.shared.userId = account.id // "a3f9c2d1-77b4-…", not an email
 }
 ```
 
-```swift tab="Выход"
+```swift tab="Sign out"
 func didSignOut() {
     SessionTracker.shared.userId = nil
 }
 ```
 
-## Проверка [#verify]
+## Verification [#verify]
 
-1. Запустите отладочную сборку: `#if DEBUG` отправит события с `environment: "development"`.
-2. Сверните и откройте приложение.
-3. На вкладке «Интеграция» появятся `session_start` и `session_end`, на вкладке «Realtime» — сессия.
-   Чтобы увидеть их в отчётах, включите окружение development.
+1. Run a debug build: `#if DEBUG` sends events with `environment: "development"`.
+2. Send the app to the background and open it again.
+3. `session_start` and `session_end` appear on the **Integration** tab, and the session shows up on
+   the **Realtime** tab. To see them in reports, turn on the development environment.
