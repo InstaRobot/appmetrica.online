@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   ApiKeyList,
   AppList,
@@ -35,6 +35,14 @@ const REJECTION_CODES = [
   "duration_required",
   "install_rate_limited",
 ];
+
+// Демо отвечает на языке страницы (<html lang>, lib/demo/texts.ts); проверки ниже написаны по-русски.
+beforeEach(() => {
+  document.documentElement.lang = "ru";
+});
+afterEach(() => {
+  document.documentElement.lang = "";
+});
 
 async function get<T>(url: string, now: Date = NOW): Promise<T> {
   const res = await demoFetch(url, undefined, now);
@@ -932,5 +940,51 @@ describe("demo admin data", () => {
       const one = await get<{ id: string }>(`/v1/apps/${r.app_id}/deletion-requests/${r.id}`);
       expect(one.id).toBe(r.id);
     }
+  });
+});
+
+describe("demo texts in English", () => {
+  beforeEach(() => {
+    document.documentElement.lang = "en";
+  });
+
+  it("labels keys and failed deletions in English", async () => {
+    const write = await get<WriteKeyList>(`/admin/v1/apps/${NOTES}/write-keys`);
+    expect(write.items.map((k) => k.label)).toEqual([
+      "iOS",
+      "Android",
+      "Web",
+      "Old build (leaked into a log)",
+    ]);
+    const bot = await get<WriteKeyList>(`/admin/v1/apps/${BOT}/write-keys`);
+    expect(bot.items.map((k) => k.label)).toEqual(["Bot"]);
+    const api = await get<ApiKeyList>("/admin/v1/api-keys");
+    expect(api.items.map((k) => k.label)).toEqual([
+      "AppMetrica reconciliation",
+      "On-request data deletion",
+      "Old cron report",
+    ]);
+    const deletions = await get<DeletionRequestList>("/admin/v1/deletion-requests");
+    expect(deletions.items.filter((r) => r.error !== null).map((r) => r.error)).toEqual([
+      "ClickHouse: timeout after 5 attempts",
+    ]);
+    expect(JSON.stringify([write, bot, api, deletions])).not.toMatch(/[А-Яа-яЁё]/);
+  });
+
+  it("explains rejections in English", async () => {
+    for (const id of [NOTES, SITE, BOT, OLD]) {
+      const h = await get<IntegrationHealth>(`/v1/apps/${id}/integration/health?hours=168`);
+      for (const reason of h.reasons) {
+        expect(reason.example_message, reason.code).not.toBe("");
+        expect(reason.example_message, reason.code).not.toMatch(/[А-Яа-яЁё]/);
+      }
+    }
+    const buggy = await get<IntegrationHealth>(
+      `/v1/apps/${NOTES}/integration/health?hours=96`,
+      new Date("2026-09-12T09:00:00Z"),
+    );
+    expect(buggy.reasons.find((r) => r.code === "invalid_field")?.example_message).toBe(
+      "context.app_version must be a string.",
+    );
   });
 });

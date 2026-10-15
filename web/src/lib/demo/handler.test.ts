@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
 import * as endpoints from "@/lib/api/gen/endpoints";
 import * as schemas from "@/lib/api/gen/zod/index.zod";
@@ -27,6 +27,14 @@ const DIMENSIONS = [
 
 const notesProfile = DEMO_PROFILES.find((p) => p.appId === NOTES && p.userId !== null);
 if (!notesProfile) throw new Error("demo profile for Notes is missing");
+
+// Демо отвечает на языке страницы (<html lang>, lib/demo/texts.ts); проверки ниже написаны по-русски.
+beforeEach(() => {
+  document.documentElement.lang = "ru";
+});
+afterEach(() => {
+  document.documentElement.lang = "";
+});
 
 type Case = { url: string; schema: ZodType };
 
@@ -595,5 +603,69 @@ describe("demoFetch read-only and errors", () => {
     expect(error.request_id).toBe("demo");
     expect(error.message).not.toBe("");
     expect(error.details).toEqual(details);
+  });
+});
+
+describe("demoFetch language", () => {
+  async function messageOf(url: string, init?: RequestInit): Promise<string> {
+    const res = await demoFetch(url, init, NOW);
+    return (await errorOf(res)).message;
+  }
+
+  it("answers in English on an English page", async () => {
+    document.documentElement.lang = "en";
+
+    expect(await messageOf("/v1/apps", { method: "POST" })).toBe(
+      "Demo mode: changes are not available",
+    );
+    expect(await messageOf("/v1/unknown")).toBe("Not found");
+    expect(await messageOf(`/v1/apps/${UNKNOWN_APP}`)).toBe("App not found.");
+    expect(await messageOf("/v1/apps/not-a-uuid")).toBe("app_id: expected a UUID.");
+    expect(
+      await messageOf(`/v1/apps/${NOTES}/audience/summary?from=2026-10-12&to=2026-10-06`),
+    ).toBe("from can't be later than to.");
+    expect(await messageOf(`/v1/apps/${NOTES}/audience/rolling-active?to=2026-10-06`)).toBe(
+      "The from parameter is required.",
+    );
+    expect(await messageOf(`/v1/apps/${NOTES}/realtime?environment=staging`)).toBe(
+      "environment: allowed values are production, development.",
+    );
+    expect(await messageOf(`/v1/apps/${NOTES}/integration/health?hours=169`)).toBe(
+      "hours: an integer from 1 to 168.",
+    );
+    expect(
+      await messageOf(`/v1/apps/${NOTES}/audience/summary?from=2025-10-12&to=2026-10-14`),
+    ).toBe("The range can't exceed 366 days (368 requested).");
+    expect(
+      await messageOf(
+        `/v1/apps/${NOTES}/audience/timeseries?from=2026-10-01&to=2026-10-08&granularity=hour`,
+      ),
+    ).toBe("The range for granularity=hour can't exceed 7 days (8 requested).");
+    expect(
+      await messageOf(`/v1/apps/${NOTES}/profiles/${encodeURIComponent("u:nobody-at-all")}`),
+    ).toBe("Profile not found.");
+    expect(await messageOf(endpoints.getGetMergePreviewUrl(NOTES, { source_app_id: NOTES }))).toBe(
+      "You can't merge an app with itself.",
+    );
+  });
+
+  it("answers in Russian on a Russian page", async () => {
+    document.documentElement.lang = "ru";
+
+    expect(
+      await messageOf(`/v1/apps/${NOTES}/audience/summary?from=2026-10-12&to=2026-10-06`),
+    ).toBe("from не может быть позже to.");
+    expect(await messageOf(`/v1/apps/${NOTES}/audience/rolling-active?to=2026-10-06`)).toBe(
+      "Параметр from обязателен.",
+    );
+    expect(await messageOf(`/v1/apps/${NOTES}/integration/health?hours=169`)).toBe(
+      "hours: целое от 1 до 168.",
+    );
+  });
+
+  it("falls back to English when the page has no language", async () => {
+    document.documentElement.lang = "";
+
+    expect(await messageOf("/v1/unknown")).toBe("Not found");
   });
 });
