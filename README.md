@@ -19,6 +19,9 @@ user profiles and a Read API. Users are counted as people, not devices (`install
   not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
   GDPR deletion by API or from the dashboard.
 - **Passkey-only sign-in.** No passwords to leak; the first passkey is registered with a one-time link from the CLI.
+- **English and Russian.** The dashboard, the landing page and the docs speak both languages: English at `/`,
+  Russian at [`/ru`](https://appmetrica.online/ru); the choice is remembered for a year, the first visit follows
+  the browser language.
 - **Light and dark themes**, a public landing page and a read-only [demo mode](https://appmetrica.online/demo) on a synthetic dataset.
 - **Fast on one server.** ClickHouse for events, PostgreSQL for metadata, Go services, Next.js dashboard.
 
