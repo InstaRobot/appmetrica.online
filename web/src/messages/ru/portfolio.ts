@@ -36,6 +36,10 @@ export const portfolio: typeof en = {
       sessions: "Сессии",
       sparkline: "30 дней",
     },
+    sort: {
+      label: "Сортировка",
+      descending: "По убыванию",
+    },
     trend: {
       up: "Тренд за 30 дней: рост",
       down: "Тренд за 30 дней: падение",

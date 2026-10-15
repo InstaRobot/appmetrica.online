@@ -35,6 +35,10 @@ export const portfolio = {
       sparkline: "30 days",
     },
     // Тренд 30 дней для скринридеров: средняя первой недели против последней.
+    sort: {
+      label: "Sort by",
+      descending: "Descending",
+    },
     trend: {
       up: "30-day trend: up",
       down: "30-day trend: down",

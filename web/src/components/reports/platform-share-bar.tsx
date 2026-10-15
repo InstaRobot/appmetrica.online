@@ -12,8 +12,8 @@ type PlatformShareBarProps = {
   total: number;
 };
 
-// Доли платформ в строке портфеля: полоса 96×8, доли — от суммы по платформам,
-// потому что человек на двух платформах учтён в обеих. Tooltip с абсолютами открывается и по фокусу.
+// Доли платформ в строке портфеля: полоса 96×8 (в карточке телефона — на всю ширину), доли — от суммы
+// по платформам, потому что человек на двух платформах учтён в обеих. Tooltip с абсолютами открывается и по фокусу.
 export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
   const platformLabel = usePlatformLabel();
   const m = useMessages().portfolio.shares;
@@ -36,7 +36,7 @@ export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
             aria-label={label}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: фокус открывает tooltip с абсолютами
             tabIndex={0}
-            className="ml-auto flex h-2 w-24 overflow-hidden rounded-full bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex h-2 w-full overflow-hidden rounded-full bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:ml-auto md:w-24"
           >
             {shares.map((s) => (
               <span

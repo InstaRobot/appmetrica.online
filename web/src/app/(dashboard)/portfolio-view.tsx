@@ -89,7 +89,7 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
   const [open, setOpen] = useState(false);
   const label = useFormat().formatDate(value);
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 max-md:w-full">
       <Button
         variant="outline"
         size="icon"
@@ -100,7 +100,11 @@ function DateStepper({ value, max, onChange }: DateStepperProps) {
       </Button>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" aria-label={fmt(m.pick, { date: label })} className="min-w-36">
+          <Button
+            variant="outline"
+            aria-label={fmt(m.pick, { date: label })}
+            className="min-w-36 max-md:flex-1"
+          >
             <CalendarDays aria-hidden="true" />
             {label}
           </Button>
@@ -143,7 +147,7 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
         {m.title}
       </h2>
       <Card className="py-0">
-        <Table aria-labelledby={headingId}>
+        <Table aria-labelledby={headingId} stackOnMobile>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead scope="col" className="px-3">
@@ -160,23 +164,27 @@ function ArchivedApps({ apps, timeZone }: { apps: App[]; timeZone: string }) {
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="max-md:p-3">
             {apps.map((app) => (
               <TableRow key={app.id}>
-                <TableCell className="px-3">
+                <TableCell className="px-3 font-medium md:font-normal">
                   <span className="inline-flex items-center gap-2">
                     <PlatformIcons platforms={app.platforms} className="text-fg-muted" />
                     {app.name}
                   </span>
                 </TableCell>
-                <TableCell className="px-3">
+                <TableCell label={m.platforms} className="px-3">
                   {app.platforms.map(platformLabel).join(", ")}
                 </TableCell>
-                <TableCell className="px-3">
+                <TableCell label={m.archivedAt} className="px-3">
                   {app.archived_at ? f.formatDate(app.archived_at, timeZone) : "—"}
                 </TableCell>
                 <TableCell className="px-3 text-right">
-                  <Link href={`/apps/${app.id}` as Route} className="text-fg-link hover:underline">
+                  {/* На телефоне — кнопка-ссылка внизу карточки: цель нажатия не меньше 44 px. */}
+                  <Link
+                    href={`/apps/${app.id}` as Route}
+                    className="text-fg-link hover:underline max-md:flex max-md:h-11 max-md:items-center max-md:justify-center max-md:rounded-lg max-md:border"
+                  >
                     {m.open}
                   </Link>
                 </TableCell>
@@ -225,26 +233,30 @@ export function PortfolioView() {
 
   return (
     <>
-      <PageHeader
-        title={m.title}
-        adornment={<UnitBadge unit={unit} />}
-        actions={
-          <>
-            <EnvironmentSwitch value={env} onChange={(next) => void setState({ env: next })} />
-            <DateStepper
-              value={current}
-              max={maxDate}
-              onChange={(next) => void setState({ date: next })}
-            />
-            <Button asChild>
-              <Link href="/apps/new">
-                <Plus aria-hidden="true" />
-                {m.addApp}
-              </Link>
-            </Button>
-          </>
-        }
-      />
+      {/* PageHeader (components/layout) держит действия в одну строку справа от заголовка; трём
+          элементам управления портфеля на телефоне там тесно — переносим действия под заголовок. */}
+      <div className="max-md:[&>header]:flex-col max-md:[&>header]:gap-3 max-md:[&>header>div:last-child]:w-full max-md:[&>header>div:last-child]:flex-wrap">
+        <PageHeader
+          title={m.title}
+          adornment={<UnitBadge unit={unit} />}
+          actions={
+            <>
+              <EnvironmentSwitch value={env} onChange={(next) => void setState({ env: next })} />
+              <DateStepper
+                value={current}
+                max={maxDate}
+                onChange={(next) => void setState({ date: next })}
+              />
+              <Button asChild className="max-md:w-full">
+                <Link href="/apps/new">
+                  <Plus aria-hidden="true" />
+                  {m.addApp}
+                </Link>
+              </Button>
+            </>
+          }
+        />
+      </div>
 
       {noEvents ? (
         <Alert className="mb-4">
