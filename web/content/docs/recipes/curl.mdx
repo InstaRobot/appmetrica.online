@@ -1,44 +1,45 @@
 ---
 title: curl
-description: Все запросы из терминала — событие, сессия, батч, user_id, офлайн-досыл, gzip, повторы, разбор ответа через jq, Read API и удаление данных.
+description: Every request from the terminal — an event, a session, a batch, user_id, late offline delivery, gzip, retries, parsing responses with jq, the Read API, and data deletion.
 ---
 
-curl удобен, чтобы проверить ключ, посмотреть ответ сервера глазами и отправлять события из
-shell-скриптов и cron-задач. Клиент для бэкендов и CLI — в рецепте [Go](/docs/recipes/go), серверные
-сессии и Telegram-боты — в рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends).
+curl is handy for checking a key, eyeballing the server's response, and sending events from shell
+scripts and cron jobs. A client for backends and CLIs lives in the [Go](/docs/recipes/go) recipe;
+server-side sessions and Telegram bots are covered in the
+[Bots and backends](/docs/recipes/bots-and-backends) recipe.
 
-Примеры рассчитаны на bash с `curl`, `uuidgen` и `date`. Для разбора ответов нужен `jq`.
+The examples assume bash with `curl`, `uuidgen`, and `date`. Parsing responses requires `jq`.
 
-## Переменные окружения [#env]
+## Environment variables [#env]
 
-Write-ключ `pk_…` показан в дашборде: откройте приложение и перейдите на вкладку «Интеграция». У
-каждой платформы приложения свой ключ. Ключ не секретный — он вшивается в приложение (см.
-[Быстрый старт](/docs#create-app)). Все примеры берут его из переменной `AM_PK` и передают
-`context.platform` явно, поэтому работают с ключом любой платформы (порядок определения платформы —
-[Платформа события](/docs#platform)):
+The `pk_…` write key is shown in the dashboard: open the app and go to the **Integration** tab. Each
+platform of an app has its own key. The key isn't secret — it ships inside the app (see
+[Quick start](/docs#create-app)). All examples read it from the `AM_PK` variable and pass
+`context.platform` explicitly, so they work with any platform's key (for how the platform is
+determined, see [Event platform](/docs#platform)):
 
 ```bash
 export AM_PK="pk_…"
 ```
 
-События принимает ingest по адресу `/v1/events`. В примерах стоит условный домен
-`https://i.analytics.example.com`: замените его на адрес ingest своей установки, он подставлен в
-сниппеты на вкладке «Интеграция».
-Для Read API нужен другой, секретный ключ — см. [Read API](#read-api).
+Events are accepted by ingest at `/v1/events`. The examples use the placeholder domain
+`https://i.analytics.example.com`: replace it with your installation's ingest URL, which is already
+filled in to the snippets on the **Integration** tab.
+The Read API needs a different, secret key — see [Read API](#read-api).
 
-Общие приёмы во всех примерах:
+Techniques shared by all the examples:
 
-- время — `date -u +"%Y-%m-%dT%H:%M:%S.000Z"`: RFC 3339 в UTC с миллисекундами;
-- идентификаторы — `uuidgen | tr A-Z a-z`: uuidgen на macOS печатает UUID в верхнем регистре, а
-  рекомендуемый формат — нижний;
-- `"environment": "development"` — тестовые события не попадают в production-отчёты (см.
-  [Отладка](#development));
-- `"ip": "none"` — не определять страну и город по адресу машины, с которой запущен curl (см.
-  [context.ip](/docs/recipes/bots-and-backends#context-ip)).
+- time — `date -u +"%Y-%m-%dT%H:%M:%S.000Z"`: RFC 3339 in UTC with milliseconds;
+- identifiers — `uuidgen | tr A-Z a-z`: on macOS, uuidgen prints UUIDs in upper case, while lower
+  case is the recommended format;
+- `"environment": "development"` — test events stay out of production reports (see
+  [Debugging](#development));
+- `"ip": "none"` — don't derive the country and city from the address of the machine running curl
+  (see [context.ip](/docs/recipes/bots-and-backends#context-ip)).
 
-## Одно событие [#single]
+## A single event [#single]
 
-Минимальный батч — один `session_start`:
+The smallest possible batch is a single `session_start`:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -62,17 +63,17 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-Ответ `200` приходит только после записи в хранилище:
+The `200` response arrives only after the events are written to storage:
 
 ```json
 { "accepted": 1, "rejected": [], "warnings": [], "server_time": "2026-10-14T09:15:02.318Z" }
 ```
 
-## Полная сессия [#session]
+## A complete session [#session]
 
-`session_start` и `session_end` одной сессии делят `session_id` и `install_id`. У `session_end`
-обязательно поле `duration_ms` — время на переднем плане в миллисекундах, от 0 до 86 400 000. Без
-него событие отклоняется с кодом `duration_required`.
+`session_start` and `session_end` of the same session share `session_id` and `install_id`.
+`session_end` requires a `duration_ms` field — foreground time in milliseconds, from 0 to
+86,400,000. Without it, the event is rejected with the `duration_required` code.
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -113,15 +114,15 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-В приложении `session_end` уходит в момент ухода в фон, а `duration_ms` считается по монотонным часам
-(см. [Сессии](/docs/concepts/sessions#client-rules)).
+In an app, `session_end` is sent the moment the app goes to the background, and `duration_ms` is
+measured with a monotonic clock (see [Sessions](/docs/concepts/sessions#client-rules)).
 
-## Батч из нескольких событий [#batch]
+## A batch of several events [#batch]
 
-В одном запросе — от 1 до 500 событий и не больше 1 МиБ после распаковки: так офлайн-очередь досылает
-накопленное. `context` батча действует на все события, а `context` события перекрывает его поле за
-полем. В примере две сессии одной установки, и вторая случилась уже после обновления приложения до
-1.1.0:
+A single request carries 1 to 500 events and no more than 1 MiB after decompression — this is how an
+offline queue sends what it has accumulated. The batch `context` applies to all events, and an
+event's own `context` overrides it field by field. The example has two sessions from the same
+install, and the second one happened after the app was updated to 1.1.0:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -173,22 +174,22 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-У каждого события свой `insert_id`: по нему сервер отсекает повторы. Если `insert_id` повторяется
-внутри батча, учитывается первое событие, а ответ содержит предупреждение
-`duplicate_insert_id_in_batch`. Невалидное событие не валит батч: остальные будут приняты, а оно
-окажется в `rejected`.
+Each event has its own `insert_id`, which the server uses to drop duplicates. If an `insert_id`
+repeats within a batch, the first event wins and the response includes the
+`duplicate_insert_id_in_batch` warning. An invalid event doesn't fail the batch: the rest are
+accepted, and the invalid one ends up in `rejected`.
 
-## user_id после входа [#user-id]
+## user_id after sign-in [#user-id]
 
-До входа события идут без `user_id`. После входа добавляйте ID аккаунта из своего бэкенда во все
-события, после выхода — снова отправляйте без него. Сессия, начатая анонимно, может закончиться уже с
-`user_id`:
+Before sign-in, events go out without `user_id`. After sign-in, add the account ID from your backend
+to every event; after sign-out, send events without it again. A session that started anonymously can
+end with a `user_id`:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
-USER_ID="acct_8f14e45f" # ID аккаунта в вашем бэкенде, не email и не телефон
+USER_ID="acct_8f14e45f" # account ID from your backend, not an email or phone number
 curl -sS https://i.analytics.example.com/v1/events \
   -H "Content-Type: application/json" \
   -H "X-App-Key: $AM_PK" \
@@ -218,24 +219,25 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-Анонимные события установки сервер задним числом припишет этому пользователю: в отчётах это один
-человек `u:acct_8f14e45f`, а не два (см. [Идентичность](/docs/concepts/identity#persons)). `user_id`,
-похожий на email или телефон, отклоняется с кодом `user_id_looks_like_pii`.
+The server retroactively attributes the install's anonymous events to this user: reports show one
+person, `u:acct_8f14e45f`, not two (see [Identity](/docs/concepts/identity#persons)). A `user_id`
+that looks like an email or phone number is rejected with the `user_id_looks_like_pii` code.
 
-## Офлайн-досыл [#offline]
+## Late delivery from an offline queue [#offline]
 
-У батча два времени, и оба — по часам устройства:
+A batch carries two times, both taken from the device clock:
 
-- `timestamp` события — когда событие произошло;
-- `sent_at` батча — когда отправлен этот HTTP-запрос.
+- the event's `timestamp` — when the event happened;
+- the batch's `sent_at` — when this HTTP request was sent.
 
-Сервер считает время события как `received_at + (timestamp − sent_at)`, где `received_at` — время
-приёма по его часам. Поэтому событие из офлайн-очереди попадает в тот день, когда оно произошло, даже
-если часы устройства спешат или отстают. Пример — сессия двухдневной давности, отправленная сейчас:
+The server computes the event time as `received_at + (timestamp − sent_at)`, where `received_at` is
+the time of receipt by the server's own clock. That's why an event from the offline queue lands on
+the day it actually happened, even if the device clock runs fast or slow. Here's a session from two
+days ago, sent now:
 
 ```bash
 FMT="+%Y-%m-%dT%H:%M:%S.000Z"
-# Двое суток назад: первая команда — для GNU date (Linux), вторая — для BSD date (macOS).
+# Two days ago: the first command is for GNU date (Linux), the second for BSD date (macOS).
 STARTED=$(date -u -d "-2 days" "$FMT" 2>/dev/null || date -u -v-2d "$FMT")
 ENDED=$(date -u -d "-2 days +5 minutes" "$FMT" 2>/dev/null || date -u -v-2d -v+5M "$FMT")
 NOW=$(date -u "$FMT")
@@ -269,35 +271,36 @@ curl -sS https://i.analytics.example.com/v1/events \
 JSON
 ```
 
-Что важно для очереди:
+What matters for the queue:
 
-- `sent_at` — момент этой попытки: выставляйте его заново при каждом повторе, а `timestamp` событий
-  не трогайте;
-- окно досыла — 7 дней включительно. Более старое событие отклоняется с кодом `event_too_old` и
-  `retryable: false`, поэтому удаляйте такие события из очереди до отправки;
-- время больше чем на 10 минут в будущем заменяется временем приёма, а ответ содержит предупреждение
-  `timestamp_in_future_clamped`.
+- `sent_at` is the moment of this particular attempt: set it anew on every retry, and leave the
+  events' `timestamp` alone;
+- the late-delivery window is 7 days, inclusive. Older events are rejected with the `event_too_old`
+  code and `retryable: false`, so remove them from the queue before sending;
+- a time more than 10 minutes in the future is replaced with the time of receipt, and the response
+  includes the `timestamp_in_future_clamped` warning.
 
-Подробнее — в разделе [Время и офлайн-очередь](/docs/concepts/time-and-offline).
+Learn more in [Time and the offline queue](/docs/concepts/time-and-offline).
 
-## Отладка: environment development [#development]
+## Debugging: the development environment [#development]
 
-`context.environment` — `production` (по умолчанию) или `development`. Отчёты показывают production,
-а development включается переключателем «Окружение», поэтому тестовые запросы не портят цифры. Все
-примеры на этой странице отправляют development:
+`context.environment` is `production` (the default) or `development`. Reports show production, and
+development is turned on with the **Environment** switch, so test requests don't skew your numbers.
+All examples on this page send development:
 
 ```json
 "context": { "platform": "server", "environment": "development", "ip": "none" }
 ```
 
-Отправленные события и причины отказов видны на вкладке «Интеграция». Для боевых событий уберите
-`environment` или передайте `"production"`. Как и остальные поля контекста, `environment` можно задать
-в `context` отдельного события.
+Sent events and rejection reasons are visible on the **Integration** tab. For real events, drop
+`environment` or pass `"production"`. Like the other context fields, `environment` can be set in the
+`context` of an individual event.
 
 ## gzip [#gzip]
 
-Большие батчи выгодно сжимать. Из алгоритмов сжатия сервер понимает только `gzip`: другое значение
-`Content-Encoding` вернёт `400 unsupported_content_encoding`. Лимит 1 МиБ считается после распаковки.
+Large batches are worth compressing. The only compression algorithm the server understands is
+`gzip`: any other `Content-Encoding` value returns `400 unsupported_content_encoding`. The 1 MiB limit
+applies after decompression.
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -323,19 +326,19 @@ gzip -c batch.json | curl -sS https://i.analytics.example.com/v1/events \
   --data-binary @-
 ```
 
-## Повторы при 429 и 503 [#retry]
+## Retries on 429 and 503 [#retry]
 
-Батч целиком повторяют в двух случаях:
+The whole batch is retried in two cases:
 
-- `429` (больше 2000 событий в секунду на приложение) и `503` (хранилище не подтвердило запись) —
-  через столько секунд, сколько сервер указал в заголовке `Retry-After`;
-- `500` и ошибки сети — с задержкой 1, 2, 4 … 300 с и разбросом ±20 %.
+- `429` (more than 2,000 events per second per app) and `503` (storage didn't confirm the write) —
+  after as many seconds as the server specified in the `Retry-After` header;
+- `500` and network errors — with a delay of 1, 2, 4 … 300 s and ±20% jitter.
 
-Скрипт генерирует `insert_id` один раз, до цикла: если первый запрос дошёл, а ответ потерялся, повтор
-не создаст дубликат. `sent_at` выставляется заново при каждой попытке.
+The script generates `insert_id` once, before the loop: if the first request got through but the
+response was lost, the retry won't create a duplicate. `sent_at` is set anew on every attempt.
 
 ```bash
-INSERT_ID=$(uuidgen | tr A-Z a-z) # один на все попытки
+INSERT_ID=$(uuidgen | tr A-Z a-z) # one for all attempts
 INSTALL_ID=$(uuidgen | tr A-Z a-z)
 SESSION_ID=$(uuidgen | tr A-Z a-z)
 EVENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -365,45 +368,46 @@ JSON
 
   case "$status" in
     200) break ;;
-    429 | 503) # пауза — из заголовка Retry-After
+    429 | 503) # the pause comes from the Retry-After header
       pause=$(tr -d '\r' < headers.txt | awk -F': *' 'tolower($1) == "retry-after" { print $2 }')
       pause=${pause:-5} ;;
-    4??) break ;; # 400, 401, 403, 413, 415: повтор не поможет
-    *) # 5xx и ошибки сети (000): 1, 2, 4 … 300 с, разброс ±20 %
+    4??) break ;; # 400, 401, 403, 413, 415: retrying won't help
+    *) # 5xx and network errors (000): 1, 2, 4 … 300 s, ±20% jitter
       pause=$(( backoff * (80 + RANDOM % 41) / 100 ))
       pause=$(( pause < 1 ? 1 : pause ))
       backoff=$(( backoff * 2 > 300 ? 300 : backoff * 2 )) ;;
   esac
-  echo "попытка $attempt: HTTP $status, повтор через $pause с" >&2
+  echo "attempt $attempt: HTTP $status, retrying in $pause s" >&2
   sleep "$pause"
 done
 
 if [ "$status" = 200 ]; then
   cat response.json
 else
-  echo "батч не отправлен: HTTP $status" >&2
+  echo "batch not sent: HTTP $status" >&2
   [ -f response.json ] && cat response.json >&2
-  false # ненулевой код выхода для cron и CI
+  false # non-zero exit code for cron and CI
 fi
 ```
 
-Почему остальные `4xx` не повторяются:
+Why the other `4xx` responses aren't retried:
 
-- `400`, `413`, `415` — батч сломан, и тот же запрос получит тот же ответ. Исправьте клиент: поле с
-  ошибкой подскажут `error.code` и `error.details`;
-- `401`, `403` — ключ отозван или приложение в архиве. Повтор не поможет, пока человек не выпустит
-  новый ключ или не вернёт приложение из архива. События при этом не удаляйте;
-- `429` — единственный временный `4xx`: лимит освободится через `Retry-After` секунд.
+- `400`, `413`, `415` — the batch is broken, and the same request will get the same response. Fix
+  the client: `error.code` and `error.details` point to the offending field;
+- `401`, `403` — the key was revoked or the app is archived. Retrying won't help until someone issues
+  a new key or restores the app from the archive. Don't delete the events in the meantime;
+- `429` is the only temporary `4xx`: the limit frees up after `Retry-After` seconds.
 
-События, которые пришли в `rejected` с `retryable: true` (сейчас это только `install_rate_limited`),
-отправьте следующим батчем не раньше чем через 60 с. Полная таблица действий — в разделе
-[Ошибки и повторы](/docs/errors-and-retries#retry-policy).
+Events that come back in `rejected` with `retryable: true` (currently only `install_rate_limited`)
+should go out in the next batch no sooner than 60 s later. The full table of actions is in
+[Errors and retries](/docs/errors-and-retries#retry-policy).
 
-## Разбор ответа через jq [#jq]
+## Parsing the response with jq [#jq]
 
-На `200` сервер возвращает `IngestResult`: `accepted` — число принятых событий, `rejected` —
-отклонённые события с кодом причины, `warnings` — события, принятые с поправкой, `server_time` — время
-сервера. В примере второе событие — `session_end` без `duration_ms`:
+On `200`, the server returns an `IngestResult`: `accepted` is the number of accepted events,
+`rejected` lists rejected events with a reason code, `warnings` lists events accepted with a
+correction, and `server_time` is the server's time. In the example, the second event is a
+`session_end` without `duration_ms`:
 
 ```bash
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -436,25 +440,25 @@ curl -sS https://i.analytics.example.com/v1/events \
 }
 JSON
 
-jq -r '"принято: \(.accepted)"' response.json
-jq -r '.rejected[] | "отклонено events[\(.index)]: \(.code) в \(.field), повторять: \(.retryable)"' response.json
-jq -r '.warnings[] | "предупреждение events[\(.index)]: \(.code)"' response.json
+jq -r '"accepted: \(.accepted)"' response.json
+jq -r '.rejected[] | "rejected events[\(.index)]: \(.code) at \(.field), retryable: \(.retryable)"' response.json
+jq -r '.warnings[] | "warning events[\(.index)]: \(.code)"' response.json
 ```
 
 ```text
-принято: 1
-отклонено events[1]: duration_required в events[1].duration_ms, повторять: false
+accepted: 1
+rejected events[1]: duration_required at events[1].duration_ms, retryable: false
 ```
 
-В скрипте удобно завершаться с ошибкой, если сервер отклонил хотя бы одно событие: `jq -e` возвращает
-ненулевой код, когда выражение ложно.
+In a script, it's convenient to exit with an error if the server rejected at least one event:
+`jq -e` returns a non-zero exit code when the expression is false.
 
 ```bash
 jq -e '.rejected == []' response.json > /dev/null
 ```
 
-Ошибка батча (`4xx`, `5xx`) приходит в другом формате — в конверте `error`. Его `request_id`
-совпадает с заголовком `X-Request-Id`, по нему запрос находится в логах сервера:
+A batch error (`4xx`, `5xx`) comes in a different format — an `error` envelope. Its `request_id`
+matches the `X-Request-Id` header and lets you find the request in the server logs:
 
 ```bash
 jq -r '.error | "\(.code): \(.message) (request_id \(.request_id))"' response.json
@@ -462,15 +466,15 @@ jq -r '.error | "\(.code): \(.message) (request_id \(.request_id))"' response.js
 
 ## Read API [#read-api]
 
-Отчёты читаются тем же curl, но с другим адресом и ключом. Секретный ключ `sk_…` создаётся в
-«Настройки → API-ключи» и показывается один раз; для отчётов нужен scope `read`. В отличие от `pk_…`,
-этот ключ не вшивают в приложение: он открывает отчёты.
+Reports are read with the same curl, just with a different URL and key. The secret `sk_…` key is
+created under **Settings → API keys** and shown only once; reports require the `read` scope. Unlike
+`pk_…`, this key never ships inside an app: it unlocks your reports.
 
 ```bash
 export AM_SK="sk_…"
 ```
 
-### Список приложений [#read-api-apps]
+### List apps [#read-api-apps]
 
 ```bash
 curl -sS https://api.analytics.example.com/v1/apps \
@@ -483,11 +487,11 @@ curl -sS https://api.analytics.example.com/v1/apps \
 0199d5f0-0000-7000-8000-000000000003	android	Europe/Moscow	Notes
 ```
 
-Архивные приложения добавляет параметр `include_archived=true`.
+The `include_archived=true` parameter adds archived apps.
 
-### Отчёт: активные по дням [#read-api-report]
+### Report: daily active users [#read-api-report]
 
-`id` из списка — это `app_id` в адресе отчёта. Ряд активных пользователей по дням за неделю:
+The `id` from the list is the `app_id` in the report URL. Daily active users over a week:
 
 ```bash
 APP_ID="0199d5f0-0000-7000-8000-000000000002"
@@ -511,19 +515,19 @@ curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/timeseri
 2026-10-12	40115
 ```
 
-`ts` — начало корзины со смещением часового пояса приложения, поэтому первые 10 символов — дата
-отчёта. `metric` — `active`, `new`, `sessions` или `avg_duration_ms`; `granularity` — `hour` (период
-до 7 дней), `day`, `week` или `month`. Общие параметры и остальные эндпоинты — в разделе
-[Read API: обзор](/docs/read-api/overview#params).
+`ts` is the start of the bucket with the app's time zone offset, so its first 10 characters are the
+report date. `metric` is `active`, `new`, `sessions`, or `avg_duration_ms`; `granularity` is `hour`
+(for periods of up to 7 days), `day`, `week`, or `month`. Shared parameters and the other endpoints
+are described in [Read API: overview](/docs/read-api/overview#params).
 
-Read API ограничивает частоту: больше 10 запросов в секунду на ключ получают `429 rate_limited` с
-`Retry-After`. Повторяйте такие запросы по той же логике, что и батчи ingest.
+The Read API is rate-limited: beyond 10 requests per second per key, requests get `429 rate_limited`
+with `Retry-After`. Retry them with the same logic as ingest batches.
 
-## Удаление данных пользователя [#deletion]
+## Deleting user data [#deletion]
 
-Запрос на удаление (например, по GDPR) выполняется через Read API ключом со scope `delete`.
-`subject_type` — `user` (по `user_id`: события пользователя и всех привязанных к нему установок) или
-`install` (по `install_id`). Удалить приложение целиком можно только в дашборде.
+A deletion request (for example, under GDPR) goes through the Read API with a key that has the
+`delete` scope. `subject_type` is `user` (by `user_id`: the events of the user and of every install
+linked to them) or `install` (by `install_id`). An entire app can only be deleted in the dashboard.
 
 ```bash
 APP_ID="0199d5f0-0000-7000-8000-000000000002"
@@ -539,13 +543,13 @@ while :; do
   echo "$STATUS"
   case "$STATUS" in
     pending | running) sleep 10 ;;
-    *) break ;; # done, failed или ошибка запроса
+    *) break ;; # done, failed, or a request error
   esac
 done
 ```
 
-Создание отвечает `202` и возвращает запрос со статусом `pending`. Повтор с теми же параметрами, пока
-удаление не завершилось, вернёт тот же запрос:
+Creating a request returns `202` and the request itself with the `pending` status. Repeating the call
+with the same parameters before the deletion finishes returns the same request:
 
 ```json
 {
@@ -562,6 +566,6 @@ done
 }
 ```
 
-Статус читается ключом со scope `read` или `delete`. `done` — данные удалены из всех таблиц, `failed` —
-удаление не удалось после нескольких попыток, причина — в поле `error`. Подробнее — в разделе
-[Приватность и GDPR](/docs/privacy-and-gdpr#deletion).
+The status can be read with a key that has the `read` or `delete` scope. `done` means the data has
+been removed from every table; `failed` means the deletion didn't succeed after several attempts, and
+the reason is in the `error` field. Learn more in [Privacy and GDPR](/docs/privacy-and-gdpr#deletion).

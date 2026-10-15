@@ -1,26 +1,27 @@
 ---
 title: Go
-description: Клиент на Go без зависимостей — отправка батча, повторы через Retry-After и экспоненциальная задержка.
+description: A dependency-free Go client — sending a batch, retries via Retry-After, and exponential backoff.
 ---
 
-Клиент на Go подходит для бэкендов, CLI и cron-задач. Проверить ключ и посмотреть ответ сервера проще
-из терминала — запросы на чистом curl собраны в рецепте [curl](/docs/recipes/curl). Боты и серверные
-сессии разобраны в рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends).
+A Go client fits backends, CLIs, and cron jobs. To check a key or look at the server's response,
+the terminal is quicker — plain curl requests are collected in the [curl](/docs/recipes/curl) recipe.
+Bots and server-side sessions are covered in the [Bots and backends](/docs/recipes/bots-and-backends)
+recipe.
 
-Клиент берёт write-ключ из переменной окружения `AM_PK`. Ключ платформы `server` показан на вкладке
-«Интеграция» приложения; клиент передаёт `context.platform` явно (см.
-[Платформа события](/docs#platform)):
+The client reads the write key from the `AM_PK` environment variable. The `server` platform key is
+shown on the app's **Integration** tab; the client passes `context.platform` explicitly (see
+[Event platform](/docs#platform)):
 
 ```bash
 export AM_PK="pk_…"
 ```
 
-## Клиент с повторами [#go-client]
+## A client with retries [#go-client]
 
-Клиент без сторонних зависимостей. Он отправляет батч и повторяет его по правилам из
-[Ошибки и повторы](/docs/errors-and-retries): `429` и `503` — через `Retry-After`, `5xx` и сетевые
-ошибки — с экспоненциальной задержкой от 1 с до 300 с и разбросом ±20 %. Повтор того же батча
-безопасен: дубликаты отсекаются по `insert_id`.
+The client has no third-party dependencies. It sends a batch and retries it following the rules in
+[Errors and retries](/docs/errors-and-retries): `429` and `503` after `Retry-After`, `5xx` and
+network errors with exponential backoff from 1 s to 300 s and ±20% jitter. Retrying the same batch
+is safe: duplicates are dropped by `insert_id`.
 
 ```go title="main.go"
 package main
@@ -79,7 +80,7 @@ type Result struct {
 	Rejected []Rejection `json:"rejected"`
 }
 
-// errPermanent — батч повторять бессмысленно: ошибка в клиенте, ключе или приложении.
+// errPermanent means retrying the batch is pointless: the client, the key, or the app is at fault.
 var errPermanent = errors.New("permanent ingest error")
 
 type Client struct {
@@ -87,8 +88,8 @@ type Client struct {
 	HTTP *http.Client
 }
 
-// Send отправляет батч и повторяет его, пока сервер не ответит 200 или постоянной ошибкой.
-// sent_at выставляется заново при каждой попытке: по нему сервер поправляет часы клиента.
+// Send sends the batch and retries it until the server responds with 200 or a permanent error.
+// sent_at is set anew on every attempt: the server uses it to correct the client's clock.
 func (c *Client) Send(ctx context.Context, b Batch) (Result, error) {
 	backoff := time.Second
 	for {
@@ -111,7 +112,7 @@ func (c *Client) Send(ctx context.Context, b Batch) (Result, error) {
 	}
 }
 
-// post — одна попытка. retryAfter > 0 — сервер сам назвал паузу (429, 503).
+// post makes a single attempt. retryAfter > 0 means the server named the pause itself (429, 503).
 func (c *Client) post(ctx context.Context, b Batch) (Result, time.Duration, error) {
 	body, err := json.Marshal(b)
 	if err != nil {
@@ -142,7 +143,7 @@ func (c *Client) post(ctx context.Context, b Batch) (Result, time.Duration, erro
 	case resp.StatusCode >= 500:
 		return Result{}, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	default:
-		// 400, 401, 403, 413, 415: повтор не поможет, нужна правка клиента или ключа.
+		// 400, 401, 403, 413, 415: retrying won't help; the client or the key needs fixing.
 		return Result{}, 0, fmt.Errorf("%w: HTTP %d", errPermanent, resp.StatusCode)
 	}
 }
@@ -178,17 +179,17 @@ func main() {
 }
 ```
 
-Запуск:
+Run it:
 
 ```bash
 AM_PK="pk_…" go run main.go
 ```
 
-Что стоит доработать в настоящем сервисе:
+What to improve in a real service:
 
-- события с `retryable: true` в `rejected` (сейчас это только `install_rate_limited`) оставить в
-  очереди и отправить следующим батчем не раньше чем через 60 с;
-- копить события в памяти или на диске и отправлять батчами по таймеру — пример такой очереди есть в
-  рецепте [Боты и бэкенды](/docs/recipes/bots-and-backends#queue);
-- `time.Time` кодируется в RFC 3339 с наносекундами и offset — сервер хранит время с точностью до
-  миллисекунд.
+- keep events that come back in `rejected` with `retryable: true` (currently only
+  `install_rate_limited`) in the queue and send them in the next batch no sooner than 60 s later;
+- accumulate events in memory or on disk and send them in batches on a timer — an example of such a
+  queue is in the [Bots and backends](/docs/recipes/bots-and-backends#queue) recipe;
+- `time.Time` encodes to RFC 3339 with nanoseconds and an offset — the server stores time with
+  millisecond precision.
