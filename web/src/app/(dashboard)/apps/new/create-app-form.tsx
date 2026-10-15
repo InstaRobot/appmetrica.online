@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { FieldError, Required } from "@/components/common/form-field";
 import { PlatformToggleGroup } from "@/components/common/platform-toggle-group";
 import { TimezoneSelect } from "@/components/common/timezone-select";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,21 +19,18 @@ import { getListAppsQueryKey } from "@/lib/api/gen/endpoints/apps/apps";
 import { getGetPortfolioQueryKey } from "@/lib/api/gen/endpoints/portfolio/portfolio";
 import type { CreateAppBody as CreateAppRequest } from "@/lib/api/gen/model";
 import { useZodForm } from "@/lib/forms/use-zod-form";
+import { useMessages } from "@/lib/i18n/client";
 import { toast } from "@/lib/toast";
 import { useUiError } from "@/lib/use-ui-error";
 
 // F-1 (14-ux-ui-spec.md §7.1): правила — из контракта, плюс trim названия и проверка IANA-зоны.
 const schema = () => import("@/lib/forms/schemas").then((m) => m.createAppSchema);
 
-const messages = {
-  name: { too_small: "Введите название", too_big: "Не длиннее 64 символов" },
-  platforms: "Выберите хотя бы одну платформу",
-  timezone: "Выберите часовой пояс",
-};
-
 // S-04: создание приложения (FR-009) с одной или несколькими платформами.
 // Сервер создаёт ключ записи на каждую платформу; после 201 — экран интеграции со сниппетами.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {
+  const m = useMessages();
+  const t = m.apps;
   const uiError = useUiError();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -40,13 +38,17 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
 
   const form = useZodForm(schema, {
     defaultValues: { name: "", platforms: [], timezone: defaultTimezone },
-    messages,
+    messages: {
+      name: { too_small: t.fields.nameRequired, too_big: t.fields.tooLong },
+      platforms: t.fields.platformsRequired,
+      timezone: t.fields.timezoneRequired,
+    },
     serverErrors: { app_name_taken: "name" },
     onSubmit: async (body) => {
       try {
         const res = await create.mutateAsync(body);
         if (res.status !== 201) return;
-        toast.success("Приложение создано");
+        toast.success(t.create.created);
         void queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
         void queryClient.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
         router.push(`/apps/${res.data.app.id}/integration` as Route);
@@ -66,7 +68,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
         <CardContent className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={name.id}>
-              Название <Required />
+              {t.fields.name} <Required />
             </Label>
             <Input
               {...name}
@@ -81,7 +83,7 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
 
           <div className="flex flex-col gap-1.5">
             <Label id="platforms-label">
-              Платформы <Required />
+              {t.fields.platforms} <Required />
             </Label>
             <PlatformToggleGroup
               ref={platforms.ref}
@@ -95,15 +97,14 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
               <FieldError id={form.errorId("platforms")} message={form.errors.platforms} />
             ) : (
               <p id="platforms-hint" className="text-caption text-fg-muted">
-                На каждую платформу создадим ключ записи. Платформы можно добавить позже в
-                настройках.
+                {t.create.platformsHint}
               </p>
             )}
           </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={timezone.id}>
-              Часовой пояс <Required />
+              {t.fields.timezone} <Required />
             </Label>
             <TimezoneSelect
               id={timezone.id}
@@ -119,17 +120,17 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
               <FieldError id={form.errorId("timezone")} message={form.errors.timezone} />
             ) : (
               <p id="timezone-hint" className="text-caption text-fg-muted">
-                Границы суток в отчётах.
+                {t.create.timezoneHint}
               </p>
             )}
           </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" asChild>
-              <Link href="/portfolio">Отмена</Link>
+              <Link href="/portfolio">{m.common.cancel}</Link>
             </Button>
             <Button type="submit" disabled={form.submitting}>
-              {form.submitting ? "Создаём…" : "Создать"}
+              {form.submitting ? t.actions.creating : t.actions.create}
             </Button>
           </div>
         </CardContent>
@@ -138,11 +139,17 @@ export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) 
   );
 }
 
+// Заголовок S-04 на языке интерфейса: словарь есть только у клиентских компонентов под MessagesProvider.
+export function NewAppHeader() {
+  return <PageHeader title={useMessages().apps.create.title} />;
+}
+
 // Часовой пояс по умолчанию — settings.owner_timezone; без настроек — зона браузера.
 export function NewAppForm() {
+  const loading = useMessages().common.loading;
   const settings = useGetSettings();
   if (settings.isPending) {
-    return <Skeleton role="status" aria-label="Загрузка…" className="h-80 max-w-[560px]" />;
+    return <Skeleton role="status" aria-label={loading} className="h-80 max-w-[560px]" />;
   }
   const defaultTimezone =
     settings.data?.status === 200

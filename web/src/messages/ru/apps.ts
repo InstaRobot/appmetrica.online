@@ -14,6 +14,14 @@ export const apps: typeof en = {
     timezone: "Часовой пояс",
     timezoneRequired: "Выберите часовой пояс",
     platforms: "Платформы",
+    platformsRequired: "Выберите хотя бы одну платформу",
+  },
+  create: {
+    title: "Новое приложение",
+    platformsHint:
+      "На каждую платформу создадим ключ записи. Платформы можно добавить позже в настройках.",
+    timezoneHint: "Границы суток в отчётах.",
+    created: "Приложение создано",
   },
   settings: {
     title: "Настройки приложения",

@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/layout/page-header";
-import { NewAppForm } from "./create-app-form";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/messages";
+import { NewAppForm, NewAppHeader } from "./create-app-form";
 
-export const metadata: Metadata = { title: "Новое приложение" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: getMessages(await getRequestLocale()).apps.create.title };
+}
 
 // S-04 `/apps/new`: форма создания приложения шириной 560 px под заголовком.
 export default function NewAppPage() {
   return (
     <>
-      <PageHeader title="Новое приложение" />
+      <NewAppHeader />
       <NewAppForm />
     </>
   );

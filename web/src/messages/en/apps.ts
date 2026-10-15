@@ -15,6 +15,14 @@ export const apps = {
     timezone: "Time zone",
     timezoneRequired: "Choose a time zone",
     platforms: "Platforms",
+    platformsRequired: "Choose at least one platform",
+  },
+  create: {
+    title: "New app",
+    platformsHint:
+      "We'll create a write key for each platform. You can add platforms later in settings.",
+    timezoneHint: "Day boundaries in reports.",
+    created: "App created",
   },
   settings: {
     title: "App settings",
