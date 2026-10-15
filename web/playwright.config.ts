@@ -27,7 +27,14 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
+      testIgnore: /mobile\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+    },
+    // Телефон: Chromium с мобильной эмуляцией (в CI установлен только Chromium), ширина iPhone 13.
+    {
+      name: "chromium-mobile",
+      testMatch: /mobile\.spec\.ts/,
+      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
     },
   ],
   webServer: {
