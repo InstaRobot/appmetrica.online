@@ -88,7 +88,7 @@ test("docs recipe page renders for owner", async ({ page }) => {
   await expectNoA11yViolations(page);
 });
 
-// Гайды связаны между собой: ссылки быстрого старта ведут на существующие страницы, и каждая проходит axe.
+// Гайды связаны между собой: ссылки быстрого старта ведут на существующие страницы.
 test("docs guides link to recipes and concepts", async ({ page }) => {
   await page.goto("/docs");
 
@@ -108,28 +108,32 @@ test("docs guides link to recipes and concepts", async ({ page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Где инициализировать метрику" }),
   ).toBeVisible();
+});
 
-  for (const path of [
-    "/docs/concepts/initialization",
-    "/docs/concepts/identity",
-    "/docs/concepts/sessions",
-    "/docs/concepts/time-and-offline",
-    "/docs/recipes/curl",
-    "/docs/recipes/android-kotlin",
-    "/docs/recipes/react-native",
-    "/docs/recipes/flutter",
-    "/docs/recipes/kotlin-multiplatform",
-    "/docs/recipes/bots-and-backends",
-    "/docs/recipes/go",
-    "/docs/errors-and-retries",
-    "/docs/privacy-and-gdpr",
-    "/docs/read-api/overview",
-  ]) {
-    await page.goto(path);
+// Каждая страница — отдельный тест: axe на длинной странице доков небыстрый, и цикл из 14 страниц в одном
+// тесте выходил за 30 с на раннере CI. Браузер прогона русский — сразу /ru/docs/…, без редиректа proxy.
+for (const path of [
+  "/docs/concepts/initialization",
+  "/docs/concepts/identity",
+  "/docs/concepts/sessions",
+  "/docs/concepts/time-and-offline",
+  "/docs/recipes/curl",
+  "/docs/recipes/android-kotlin",
+  "/docs/recipes/react-native",
+  "/docs/recipes/flutter",
+  "/docs/recipes/kotlin-multiplatform",
+  "/docs/recipes/bots-and-backends",
+  "/docs/recipes/go",
+  "/docs/errors-and-retries",
+  "/docs/privacy-and-gdpr",
+  "/docs/read-api/overview",
+]) {
+  test(`docs page ${path} opens and passes axe`, async ({ page }) => {
+    await page.goto(`/ru${path}`);
     await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Страница не найдена");
     await expectNoA11yViolations(page);
-  }
-});
+  });
+}
 
 // Рецепт «Go и curl» разделён на «curl» и «Go»: старый адрес навсегда ведёт на рецепты curl.
 test("old go-and-curl recipe redirects to curl", async ({ page }) => {
