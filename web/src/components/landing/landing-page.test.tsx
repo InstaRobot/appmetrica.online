@@ -78,13 +78,13 @@ describe("LandingPage", () => {
     render(<LandingPage />);
 
     const snippet = screen.getByLabelText("Пример запроса на приём событий");
-    expect(snippet).toHaveTextContent("https://i.appmetrica.online/v1/events");
+    expect(snippet).toHaveTextContent("https://i.analytics.example.com/v1/events");
     expect(snippet).toHaveTextContent("X-App-Key: $AM_PK");
     expect(snippet.textContent).not.toMatch(/pk_[A-Za-z0-9]{8,}/);
   });
 
-  it("uses the ingest URL of this installation in the snippet", () => {
-    vi.stubEnv("NEXT_PUBLIC_INGEST_URL", "https://i.analytics.example.com");
+  it("keeps the example domain in the snippet whatever the installation's ingest URL", () => {
+    vi.stubEnv("NEXT_PUBLIC_INGEST_URL", "https://i.appmetrica.online");
     render(<LandingPage />);
 
     const snippet = screen.getByLabelText("Пример запроса на приём событий");
