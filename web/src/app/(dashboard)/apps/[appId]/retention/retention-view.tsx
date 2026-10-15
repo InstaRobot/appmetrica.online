@@ -33,8 +33,6 @@ import {
   useRetentionState,
 } from "@/lib/url-state";
 
-const COHORT_LABELS = { day: "по дням", week: "по неделям" } as const;
-
 // S-06 Retention (FR-014). Приложение (TZ) берётся из кэша AppShell.
 export function RetentionView() {
   const { appId } = useParams<{ appId: string }>();
@@ -43,7 +41,9 @@ export function RetentionView() {
 }
 
 function RetentionReport({ app }: { app: App }) {
-  const errorTexts = useMessages().errors.codes;
+  const messages = useMessages();
+  const errorTexts = messages.errors.codes;
+  const m = messages.retention;
   const today = todayIn(app.timezone);
   const { state, update } = useRetentionState(app.timezone, today);
   const retention = useGetRetention(app.id, retentionParams(state), {
@@ -68,22 +68,18 @@ function RetentionReport({ app }: { app: App }) {
   } else if (matrix?.cohorts.every((c) => c.size === 0)) {
     content = (
       <Card>
-        <EmptyState
-          icon={Users}
-          title="Нет новых пользователей в выбранных когортах"
-          description="Retention считается по людям, чья первая сессия пришлась на период."
-        />
+        <EmptyState icon={Users} title={m.empty.title} description={m.empty.description} />
       </Card>
     );
   } else if (matrix) {
     content = (
       <>
         <Card className="gap-4 px-6">
-          <h2 className="text-heading-3">Средняя кривая удержания</h2>
+          <h2 className="text-heading-3">{m.average.title}</h2>
           <RetentionAverageChart average={matrix.average} granularity={state.cohort} />
         </Card>
         <Card className="gap-4 px-6">
-          <h2 className="text-heading-3">Когорты</h2>
+          <h2 className="text-heading-3">{m.cohorts}</h2>
           <RetentionHeatmap matrix={matrix} granularity={state.cohort} unit={state.unit} />
         </Card>
       </>
@@ -100,7 +96,7 @@ function RetentionReport({ app }: { app: App }) {
           variant="outline"
           size="sm"
           spacing={0}
-          aria-label="Когорты"
+          aria-label={m.cohorts}
           value={state.cohort}
           onValueChange={(next) => {
             const cohort = COHORT_GRANULARITIES.find((c) => c === next);
@@ -109,7 +105,7 @@ function RetentionReport({ app }: { app: App }) {
         >
           {COHORT_GRANULARITIES.map((c) => (
             <ToggleGroupItem key={c} value={c} className="px-3">
-              {COHORT_LABELS[c]}
+              {m.cohortOptions[c]}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
