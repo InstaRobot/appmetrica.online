@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { STICKY_FIRST_COL } from "@/components/reports/responsive";
 import type { RecentEvent } from "@/lib/api/gen/model";
 import { renderWithLocale } from "@/test/rtl";
 import { EventFeed } from "./event-feed";
@@ -117,6 +118,26 @@ describe("EventFeed", () => {
     expect(within(second).getAllByRole("cell")[4]).toHaveTextContent(/^RU$/);
   });
 
+  it("scrolls sideways on a phone with the time column pinned", () => {
+    const { container } = render(
+      <EventFeed appId={APP_ID} timezone="Europe/Moscow" events={[event(2), event(1)]} />,
+    );
+
+    // Горизонтальная полоса Radix включает прокрутку области по горизонтали.
+    expect(container.querySelector("[data-slot=scroll-area-viewport]")).toHaveStyle({
+      overflowX: "scroll",
+    });
+    expect(feed()).toHaveClass("whitespace-nowrap");
+    expect(within(feed()).getByRole("columnheader", { name: "Время" })).toHaveClass(
+      STICKY_FIRST_COL,
+    );
+    for (const row of bodyRows()) {
+      const [time, name] = within(row).getAllByRole("cell");
+      expect(time).toHaveClass(STICKY_FIRST_COL);
+      expect(name).not.toHaveClass("sticky");
+    }
+  });
+
   it("highlights only rows that were not in the previous response", () => {
     mockReducedMotion(false);
     const { rerender } = render(
@@ -131,6 +152,10 @@ describe("EventFeed", () => {
     expect(highlighted).toHaveLength(1);
     expect(highlighted[0]).toHaveTextContent("14:32:03");
     expect(highlighted[0]).toHaveClass("animate-row-highlight");
+    // Закреплённая ячейка времени закрывает фон строки и подсвечивается сама.
+    expect(within(highlighted[0] as HTMLElement).getAllByRole("cell")[0]).toHaveClass(
+      "animate-row-highlight",
+    );
 
     // Тот же набор событий новым массивом — подсветки нет.
     rerender(

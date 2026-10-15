@@ -11,6 +11,16 @@ export const TOUCH_BUTTON = "h-11 md:h-8";
 export const STRETCH_GROUP = "w-full md:w-fit";
 export const STRETCH_ITEM = "flex-1 md:flex-none";
 
+// Первая колонка плотной таблицы закреплена: при горизонтальной прокрутке цифры уезжают под неё
+// (закреплённая ячейка позиционирована и рисуется поверх обычных, z-index не нужен).
+export const STICKY_FIRST_COL = "sticky left-0 bg-card";
+// Подсветка строки под курсором (bg-muted/50 у TableRow) на непрозрачном фоне закреплённой ячейки:
+// строке нужен класс group/row. transition-colors — как у строки, чтобы ячейка не опережала её.
+export const STICKY_ROW_HOVER =
+  "transition-colors group-hover/row:bg-[color-mix(in_srgb,var(--color-muted)_50%,var(--color-card))]";
+// Длинное значение в закреплённой колонке на телефоне обрезается, чтобы цифрам оставалось место.
+export const STICKY_VALUE = "block max-w-36 truncate md:max-w-none";
+
 // Высота графика на телефоне — не больше 220 px, с md — заданная. Высота задаётся переменной, а не
 // стилем height: брейкпоинт выбирает CSS, без измерения ширины на JS.
 export const CHART_HEIGHT = "h-[min(var(--chart-h),220px)] md:h-(--chart-h)";

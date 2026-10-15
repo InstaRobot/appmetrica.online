@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Breakdown } from "@/lib/api/gen/model";
 import { renderWithLocale } from "@/test/rtl";
 import { BreakdownTable } from "./breakdown-table";
+import { STICKY_FIRST_COL, STICKY_VALUE } from "./responsive";
 
 const versions: Breakdown = {
   dimension: "app_version",
@@ -113,6 +114,36 @@ describe("BreakdownTable", () => {
     );
     expect(screen.getByText("Moscow")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Фильтр: Город/ })).not.toBeInTheDocument();
+  });
+
+  // jsdom не считает CSS: прокрутка и закреплённая колонка проверяются по классам.
+  it("scrolls inside the card with the value column pinned", () => {
+    render(
+      <BreakdownTable
+        dimension="app_version"
+        onDimensionChange={noop}
+        metric="active"
+        onMetricChange={noop}
+        data={versions}
+        onRowClick={noop}
+      />,
+    );
+    const table = screen.getByRole("table", { name: "Разбивка: Версия приложения" });
+    expect(table.closest("[data-slot=table-container]")).toHaveClass("overflow-x-auto");
+
+    const [header, ...rows] = within(table).getAllByRole("row");
+    expect(within(header as HTMLElement).getAllByRole("columnheader")[0]).toHaveClass(
+      STICKY_FIRST_COL,
+    );
+    for (const row of rows) {
+      const [first, second] = within(row).getAllByRole("cell");
+      expect(first).toHaveClass(STICKY_FIRST_COL);
+      expect(second).not.toHaveClass("sticky");
+    }
+    // Длинное значение на телефоне обрезается, полное — в подсказке.
+    const value = screen.getByRole("button", { name: "Фильтр: Версия приложения 2.1.1" });
+    expect(value).toHaveClass(STICKY_VALUE);
+    expect(value).toHaveAttribute("title", "2.1.1");
   });
 
   it("shows loading and empty states", () => {

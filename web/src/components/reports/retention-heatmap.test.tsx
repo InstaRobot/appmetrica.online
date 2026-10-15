@@ -159,7 +159,7 @@ describe("RetentionHeatmap", () => {
     expect(screen.getByRole("cell", { name: name("38,1 %") })).not.toHaveAttribute("data-selected");
   });
 
-  it("keeps cohort and size columns sticky inside a focusable scroll region", () => {
+  it("keeps the cohort column sticky and the size column sticky from md inside a focusable scroll region", () => {
     render(<RetentionHeatmap matrix={dayMatrix} granularity="day" />);
 
     const region = screen.getByRole("region", {
@@ -167,10 +167,10 @@ describe("RetentionHeatmap", () => {
     });
     expect(region).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("columnheader", { name: "Когорта" })).toHaveClass("sticky", "left-0");
-    expect(screen.getByRole("columnheader", { name: "Размер" })).toHaveClass(
-      "sticky",
-      "left-[132px]",
-    );
+    // На телефоне «Размер» уезжает под «Когорту» вместе с цифрами: закреплена только она.
+    const size = screen.getByRole("columnheader", { name: "Размер" });
+    expect(size).toHaveClass("sticky", "md:left-[132px]");
+    expect(size).not.toHaveClass("left-[132px]");
     expect(screen.getByRole("rowheader", { name: name("9 окт 2026") })).toHaveClass(
       "sticky",
       "left-0",
