@@ -15,7 +15,7 @@ const SHOWN_FOR: Record<Locale, string> = {
 // S-14a: глобальная 404 (14-ux-ui-spec.md §5, Screen S-14).
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-8 text-center">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center md:px-8">
       <FileQuestion aria-hidden="true" className="size-12 text-fg-subtle" />
       {LOCALES.map((locale) => {
         const m = getMessages(locale).system.notFound;
@@ -27,7 +27,8 @@ export default function NotFound() {
           >
             <h1 className="text-heading-1">{m.title}</h1>
             <p className="text-body-md text-muted-foreground">{m.text}</p>
-            <Button asChild>
+            {/* Телефон: цель нажатия 44 px, с md — обычная кнопка 36 px. */}
+            <Button asChild className="h-11 md:h-9">
               <Link href="/portfolio">{m.action}</Link>
             </Button>
           </div>

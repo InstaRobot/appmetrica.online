@@ -14,12 +14,13 @@ export default function DocsNotFound() {
   return (
     <main
       id="nd-page"
-      className="flex flex-col items-center justify-center gap-4 px-8 py-24 text-center [grid-area:main]"
+      className="flex flex-col items-center justify-center gap-4 px-4 py-24 text-center [grid-area:main] md:px-8"
     >
       <FileQuestion aria-hidden="true" className="size-12 text-fg-subtle" />
       <h1 className="text-heading-1">{m.notFound.title}</h1>
       <p className="text-body-md text-muted-foreground">{m.docsNotFound.text}</p>
-      <Button asChild>
+      {/* Телефон: цель нажатия 44 px, с md — обычная кнопка 36 px. */}
+      <Button asChild className="h-11 md:h-9">
         <Link href={publicHref(locale, "/docs")}>{m.docsNotFound.action}</Link>
       </Button>
     </main>

@@ -15,9 +15,11 @@ export function RequestId({ id, texts }: { id: string; texts: ErrorTexts }) {
   return (
     <p className="flex items-center gap-1 text-caption text-fg-muted">
       <span>{fmt(texts.requestId, { id })}</span>
+      {/* Телефон: цель нажатия 44 px, с md — компактная иконка 24 px. */}
       <Button
         variant="ghost"
         size="icon-xs"
+        className="size-11 md:size-6"
         aria-label={texts.copyRequestId}
         onClick={() => void copyText(id, { copied: texts.copied, failed: texts.copyFailed })}
       >
@@ -35,6 +37,7 @@ type FullPageErrorProps = {
 
 // Полностраничная ошибка (14-ux-ui-spec.md S-14b): заголовок в фокусе, повтор и путь в портфель. Тексты
 // приходят пропсом, поэтому компонент работает и вне MessagesProvider — в корневой границе app/error.tsx.
+// Телефон: поля 16 px, кнопки 44 px и переносятся на новую строку, если не помещаются.
 export function FullPageError({ texts, requestId, onRetry }: FullPageErrorProps) {
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -43,15 +46,19 @@ export function FullPageError({ texts, requestId, onRetry }: FullPageErrorProps)
   }, []);
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-8 text-center">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center md:px-8">
       <TriangleAlert aria-hidden="true" className="size-12 text-negative" />
       <h1 ref={heading} tabIndex={-1} className="text-heading-1 outline-none">
         {texts.title}
       </h1>
       <p className="text-body-md text-muted-foreground">{texts.text}</p>
-      <div className="flex gap-2">
-        {onRetry ? <Button onClick={onRetry}>{texts.retry}</Button> : null}
-        <Button variant="outline" asChild>
+      <div className="flex flex-wrap justify-center gap-2">
+        {onRetry ? (
+          <Button className="h-11 md:h-9" onClick={onRetry}>
+            {texts.retry}
+          </Button>
+        ) : null}
+        <Button variant="outline" asChild className="h-11 md:h-9">
           <Link href="/portfolio">{texts.toPortfolio}</Link>
         </Button>
       </div>
