@@ -2,18 +2,14 @@ name: Deploy
 
 # Сборка образов и деплой в Dokploy (Hetzner AX102-1) через Tailscale и Dokploy API (T-024, 12-dev-runbook.md §9).
 # Порядок: api (выполняет миграции при старте) → ingest → worker → web; первая ошибка останавливает выкатку.
-# Запуск:
-#   - автоматически после зелёного CI на main — сборка <sha> и деплой всех сервисов;
+# Запуск только вручную или из geo-refresh.yml: прод appmetrica.online выкатывает Dokploy Compose сам по push
+# в main (README, «Deploying with Dokploy»), этот конвейер — для установок на отдельных приложениях Dokploy.
 #   - gh workflow run deploy.yml -f ref=<sha|ветка>   — собрать образы из ref и выкатить;
 #   - gh workflow run deploy.yml -f tag=<prev-sha>    — откат: выкатить готовые образы без сборки;
 #   - -f services=api,ingest — только часть сервисов (по умолчанию все).
 # Ручные шаги в Dokploy, Tailscale и секреты GitHub — deploy/dokploy/README.md.
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -53,10 +49,6 @@ concurrency:
 jobs:
   plan:
     name: plan (ref/tag → образы и сервисы)
-    # Автодеплой — только зелёный CI по push в main (PR из форка с веткой main тоже приходит как workflow_run).
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:

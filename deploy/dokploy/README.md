@@ -11,7 +11,7 @@
 ## Как устроен деплой
 
 ```
-push в main → CI (ci.yml) зелёный → Deploy (deploy.yml)
+gh workflow run deploy.yml (вручную) или geo-refresh.yml → Deploy (deploy.yml)
   plan    scripts/deploy-plan.sh: ref/tag → образы ghcr.io/<owner>/appmetrica-{backend,web}:<sha>, список сервисов
   build   сборка и push в GHCR (backend с DB-IP City Lite месяца GEO_MONTH внутри образа); при откате пропускается
   deploy  проверка образов в GHCR → tailscale/github-action (tag:ci) → scripts/dokploy-deploy.sh → smoke /health
@@ -82,7 +82,7 @@ Geo DB refresh (`geo-refresh.yml`) запускается 2-го числа ка
 
 1. Settings → Environments → `production`.
    - Deployment branches: только `main`.
-   - Required reviewers не нужны: деплой автоматический после зелёного CI.
+   - Required reviewers не нужны: деплой запускается вручную (`gh workflow run deploy.yml`) или из geo-refresh.
 2. Секреты окружения `production`. Значения не печатаются в логах: GitHub маскирует секреты, а скрипты не выводят ответы Dokploy.
 
    | Секрет | Значение |
