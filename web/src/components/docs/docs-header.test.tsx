@@ -24,6 +24,29 @@ describe("DocsHeader", () => {
     expect(within(header).queryByRole("link", { name: "Портфель" })).not.toBeInTheDocument();
   });
 
+  // Телефон: шапка уезжает при прокрутке (сверху остаётся полоса Fumadocs с поиском и меню), а её слой
+  // ниже выдвижного сайдбара (z-40) и поиска (z-50) Fumadocs — они не прячутся под шапкой.
+  it("scrolls away on phones and stays under the Fumadocs drawer and search", async () => {
+    server.use(getGetAuthStateMockHandler({ authenticated: false, setup_required: false }));
+
+    renderWithClient(await DocsHeader());
+
+    const bar = screen.getByRole("banner").parentElement;
+    expect(bar).toHaveClass("md:sticky", "md:top-0", "z-35");
+    expect(bar).not.toHaveClass("sticky");
+  });
+
+  it("wraps the owner's dashboard header the same way", async () => {
+    server.use(
+      getGetAuthStateMockHandler({ authenticated: true, setup_required: false }),
+      getListAppsMockHandler({ items: [] }),
+    );
+
+    renderWithClient(await DocsHeader());
+
+    expect(screen.getByRole("banner").parentElement).toHaveClass("md:sticky", "z-35");
+  });
+
   it("shows the owner the dashboard header", async () => {
     server.use(
       getGetAuthStateMockHandler({ authenticated: true, setup_required: false }),
