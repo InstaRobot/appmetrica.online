@@ -1,36 +1,38 @@
 ---
 title: Kotlin Multiplatform
-description: Общий модуль на Ktor и kotlinx.serialization, expect/actual для хранилища, сессии из ProcessLifecycleOwner и scenePhase.
+description: A shared module on Ktor and kotlinx.serialization, expect/actual for storage, and sessions from ProcessLifecycleOwner and scenePhase.
 ---
 
-Рецепт для Kotlin Multiplatform с целями Android и iOS на Kotlin 2.3+: с этой версии
-`kotlin.time.Clock` и `Instant` стабильны (в 2.1.20–2.2 им нужен `@OptIn(ExperimentalTime::class)`).
-Очередь, отправка и трекер сессий живут в общем модуле, в `commonMain`: сеть — Ktor 3 client с
-движком OkHttp на Android и Darwin на iOS, JSON — kotlinx.serialization, фоновая работа —
-kotlinx.coroutines, UUID — `kotlin.uuid.Uuid`. Платформенное — ключ, `install_id`, файл очереди и
-контекст устройства — объявлено через `expect`/`actual`. Сессии ведут точки входа приложений:
-`ProcessLifecycleOwner` на Android и `scenePhase` в SwiftUI на iOS.
+A recipe for Kotlin Multiplatform targeting Android and iOS on Kotlin 2.3+: as of this version,
+`kotlin.time.Clock` and `Instant` are stable (in 2.1.20–2.2 they need
+`@OptIn(ExperimentalTime::class)`). The queue, sending, and the session tracker live in the shared
+module, in `commonMain`: networking is the Ktor 3 client with the OkHttp engine on Android and
+Darwin on iOS, JSON is kotlinx.serialization, background work is kotlinx.coroutines, and UUIDs come
+from `kotlin.uuid.Uuid`. The platform-specific parts — the key, `install_id`, the queue file, and
+the device context — are declared with `expect`/`actual`. Sessions are driven by the app entry
+points: `ProcessLifecycleOwner` on Android and `scenePhase` in SwiftUI on iOS.
 
-Где создать трекер на каждой платформе и почему подписка на жизненный цикл остаётся в нативном
-коде, — в разделе [Где инициализировать метрику](/docs/concepts/initialization#kotlin-multiplatform).
+Where to create the tracker on each platform, and why the lifecycle subscription stays in native
+code, is covered in
+[Where to initialize analytics](/docs/concepts/initialization#kotlin-multiplatform).
 
-Приложение на KMP — одно приложение в appmetrica.online с платформами iOS и Android, а не два. У
-каждой платформы свой ключ на вкладке «Интеграция»: ключ и `context.platform` во время выполнения
-подставляет `actual` той платформы, на которой работает код, а общий код о платформе не знает.
-Человек с одним `user_id` на обеих платформах считается один раз, а отчёты делятся по платформам —
-см. [Платформа события](/docs#platform).
+A KMP app is one app in appmetrica.online with iOS and Android platforms, not two apps. Each
+platform has its own key on the Integration tab: the key and `context.platform` are supplied at
+runtime by the `actual` of the platform the code runs on, and the shared code knows nothing about
+the platform. A person with the same `user_id` on both platforms is counted once, and reports are
+split by platform — see [Event platform](/docs#platform).
 
-Зависимости общего модуля — фрагмент `build.gradle.kts`; цели Android и iOS и фреймворк с
-`baseName = "Shared"` — как в шаблоне KMP-проекта. В модуль Android-приложения добавьте
-`androidx.lifecycle:lifecycle-process` для `ProcessLifecycleOwner`.
+The shared module's dependencies are shown as a `build.gradle.kts` fragment; the Android and iOS
+targets and the framework with `baseName = "Shared"` are as in the KMP project template. Add
+`androidx.lifecycle:lifecycle-process` to the Android app module for `ProcessLifecycleOwner`.
 
 ```kotlin title="shared/build.gradle.kts"
 plugins {
-    // …плагины шаблона KMP-проекта
-    kotlin("plugin.serialization") // версия совпадает с версией Kotlin
+    // …plugins from the KMP project template
+    kotlin("plugin.serialization") // same version as Kotlin
 }
 
-// Версии — в gradle.properties: Ktor 3.x, kotlinx-coroutines, kotlinx-serialization.
+// Versions live in gradle.properties: Ktor 3.x, kotlinx-coroutines, kotlinx-serialization.
 val ktorVersion: String by project
 val coroutinesVersion: String by project
 val serializationVersion: String by project
@@ -54,23 +56,24 @@ kotlin {
 
 ## install_id [#install-id]
 
-Общий код объявляет платформенную часть через `expect`, а `androidMain` и `iosMain` дают `actual`.
-Это функции и свойства, а не `expect`-классы: те пока в бете, и без флага `-Xexpect-actual-classes`
-компилятор о них предупреждает. Модель `EventContext` — в следующем разделе.
+The shared code declares the platform-specific part with `expect`, and `androidMain` and `iosMain`
+provide the `actual` declarations. These are functions and properties rather than `expect` classes:
+those are still in beta, and without the `-Xexpect-actual-classes` flag the compiler warns about
+them. The `EventContext` model is in the next section.
 
 ```kotlin title="commonMain/Platform.kt"
 package analytics
 
-/** Ключ платформы на вкладке «Интеграция»: у Android и iOS ключи разные. */
+/** Platform key from the Integration tab: Android and iOS have different keys. */
 internal expect val writeKey: String
 
-/** Контекст устройства и сборки; platform — "android" или "ios". */
+/** Device and build context; platform is "android" or "ios". */
 internal expect fun deviceContext(): EventContext
 
 internal expect fun loadInstallId(): String?
 internal expect fun saveInstallId(id: String)
 
-/** Содержимое файла очереди или null, если файла ещё нет. */
+/** Contents of the queue file, or null if the file doesn't exist yet. */
 internal expect fun readQueue(): String?
 internal expect fun writeQueue(json: String)
 ```
@@ -83,26 +86,27 @@ import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalUuidApi::class)
 internal object InstallId {
-    /** Создаётся при первом запуске и хранится постоянно. */
+    /** Created on first launch and kept permanently. */
     val current: String by lazy {
         loadInstallId() ?: Uuid.random().toString().also(::saveInstallId)
     }
 }
 ```
 
-На Android `install_id` лежит в `SharedPreferences`, а очередь — в `filesDir`, как в
-[Android-рецепте](/docs/recipes/android-kotlin#install-id): Auto Backup сохраняет их, и после
-переустановки с восстановлением из бэкапа `install_id` прежний. Версию и признак debug-сборки
-`actual` берёт у приложения через `PackageManager`, а не из `BuildConfig`: `BuildConfig` общего
-модуля описывает библиотеку, а не приложение.
+On Android, `install_id` lives in `SharedPreferences` and the queue in `filesDir`, as in the
+[Android recipe](/docs/recipes/android-kotlin#install-id): Auto Backup keeps both, so after a
+reinstall restored from a backup, `install_id` stays the same. The `actual` reads the version and
+the debug-build flag from the app via `PackageManager` rather than from `BuildConfig`: the shared
+module's `BuildConfig` describes the library, not the app.
 
-На iOS `install_id` лежит в `NSUserDefaults`, а очередь — в файле в Application Support. Это
-компромисс: `NSUserDefaults` читается из Kotlin одной строкой, но удаление приложения стирает его, и
-переустановка станет новой установкой. В [iOS-рецепте](/docs/recipes/ios-swift#install-id)
-`install_id` хранится в Keychain и переживает переустановку. Если это важно, реализуйте
-`loadInstallId` и `saveInstallId` на Keychain: из Kotlin/Native это `SecItemCopyMatching` и
-`SecItemAdd` через cinterop с ручной сборкой `CFDictionary` — кода заметно больше. Готовую обёртку
-даёт, например, `KeychainSettings` из библиотеки multiplatform-settings.
+On iOS, `install_id` lives in `NSUserDefaults` and the queue in a file in Application Support. This
+is a trade-off: `NSUserDefaults` takes one line to read from Kotlin, but deleting the app wipes it,
+so a reinstall becomes a new install. In the [iOS recipe](/docs/recipes/ios-swift#install-id),
+`install_id` is stored in the Keychain and survives a reinstall. If that matters to you, implement
+`loadInstallId` and `saveInstallId` on top of the Keychain: from Kotlin/Native that means
+`SecItemCopyMatching` and `SecItemAdd` via cinterop with a hand-built `CFDictionary` — noticeably
+more code. A ready-made wrapper exists, for example `KeychainSettings` from the
+multiplatform-settings library.
 
 ```kotlin tab="Android" title="androidMain/Platform.android.kt"
 package analytics
@@ -113,15 +117,15 @@ import android.os.Build
 import java.io.File
 import java.util.Locale
 
-// applicationContext живёт столько же, сколько процесс: утечки нет.
+// applicationContext lives as long as the process, so nothing leaks.
 private lateinit var app: Context
 
-/** Вызовите в Application.onCreate до первого события. */
+/** Call in Application.onCreate before the first event. */
 fun initAnalytics(context: Context) {
     app = context.applicationContext
 }
 
-internal actual val writeKey: String = "pk_…" // ключ платформы Android на вкладке «Интеграция»
+internal actual val writeKey: String = "pk_…" // Android platform key from the Integration tab
 
 private val prefs get() = app.getSharedPreferences("appmetrica", Context.MODE_PRIVATE)
 private val queueFile get() = File(app.filesDir, "appmetrica-queue.json")
@@ -140,7 +144,7 @@ internal actual fun writeQueue(json: String) {
     tmp.renameTo(queueFile)
 }
 
-@Suppress("DEPRECATION") // getPackageInfo(String, Int) и versionCode нужны для API 26–32
+@Suppress("DEPRECATION") // getPackageInfo(String, Int) and versionCode are needed for API 26–32
 internal actual fun deviceContext(): EventContext {
     val info = app.packageManager.getPackageInfo(app.packageName, 0)
     val versionCode =
@@ -179,7 +183,7 @@ import platform.posix.uname
 import platform.posix.utsname
 import kotlin.experimental.ExperimentalNativeApi
 
-internal actual val writeKey: String = "pk_…" // ключ платформы iOS на вкладке «Интеграция»
+internal actual val writeKey: String = "pk_…" // iOS platform key from the Integration tab
 
 private const val INSTALL_ID_KEY = "online.appmetrica.install_id"
 
@@ -200,7 +204,7 @@ private val queuePath: String by lazy {
     "$dir/appmetrica-queue.json"
 }
 
-@Suppress("CAST_NEVER_SUCCEEDS") // NSString и String на iOS — один и тот же объект
+@Suppress("CAST_NEVER_SUCCEEDS") // on iOS, NSString and String are the same object
 internal actual fun readQueue(): String? = NSString.create(
     contentsOfFile = queuePath, encoding = NSUTF8StringEncoding, error = null,
 ) as String?
@@ -225,12 +229,12 @@ internal actual fun deviceContext(): EventContext {
         deviceModel = hardwareModel(),
         deviceType = if (tablet) "tablet" else "phone",
         locale = NSLocale.currentLocale.localeIdentifier.replace('_', '-'),
-        // Debug-фреймворк Kotlin собирается для конфигурации Debug в Xcode.
+        // The debug Kotlin framework is built for the Debug configuration in Xcode.
         environment = if (kotlin.native.Platform.isDebugBinary) "development" else "production",
     )
 }
 
-/** Машинное имя вроде iPhone17,3: имя устройства часто содержит имя человека. */
+/** Machine name like iPhone17,3: the device name often contains the owner's name. */
 private fun hardwareModel(): String = memScoped {
     val info = alloc<utsname>()
     uname(info.ptr)
@@ -238,10 +242,10 @@ private fun hardwareModel(): String = memScoped {
 }
 ```
 
-## Офлайн-очередь и отправка [#offline-queue]
+## Offline queue and sending [#offline-queue]
 
-Модель событий — классы kotlinx.serialization с именами полей в `snake_case`. Каждое событие несёт
-свой `context`, чтобы события из очереди ушли с той версией приложения, в которой они произошли.
+The event model is a set of kotlinx.serialization classes with `snake_case` field names. Each event
+carries its own `context`, so queued events go out with the app version they happened in.
 
 ```kotlin title="commonMain/Event.kt"
 package analytics
@@ -262,12 +266,12 @@ internal data class EventContext(
     val environment: String,
 )
 
-/** user_id и duration_ms со значением null не попадают в JSON: encodeDefaults выключен. */
+/** user_id and duration_ms set to null are left out of the JSON: encodeDefaults is off. */
 @Serializable
 internal data class Event(
     @SerialName("insert_id") val insertId: String,
     val name: String,
-    val timestamp: String, // RFC 3339 в UTC: Clock.System.now().toString()
+    val timestamp: String, // RFC 3339 in UTC: Clock.System.now().toString()
     @SerialName("install_id") val installId: String,
     @SerialName("session_id") val sessionId: String,
     @SerialName("user_id") val userId: String? = null,
@@ -288,18 +292,18 @@ internal class IngestResult(val rejected: List<Rejection> = emptyList()) {
 }
 ```
 
-`EventQueue` хранит события в файле и отправляет их батчами до 500 штук. Очередь меняется только в
-диспетчере `limitedParallelism(1)`: он выполняет код между точками приостановки строго по одному, а
-флаг `sending` не даёт начать вторую отправку, пока первая ждёт ответа. Интерфейс сеть не ждёт:
-`enqueue` возвращается сразу. Действие по каждому ответу — как в
-[Ошибки и повторы](/docs/errors-and-retries):
+`EventQueue` stores events in a file and sends them in batches of up to 500. The queue is modified
+only on the `limitedParallelism(1)` dispatcher: it runs code between suspension points strictly one
+piece at a time, and the `sending` flag keeps a second send from starting while the first one waits
+for a response. The UI never waits on the network: `enqueue` returns immediately. How to handle
+each response follows [Errors and retries](/docs/errors-and-retries):
 
-- `200` — удалить отправленные события, кроме отклонённых с `retryable: true`: их повторить через
-  минуту;
-- `400`, `413`, `415` — удалить батч: повтор не поможет;
-- `401`, `403` — остановить отправку до перезапуска: ключ отозван или приложение в архиве;
-- `429`, `503` — повторить через `Retry-After`;
-- остальное и ошибки сети — повтор с задержкой от 1 с до 300 с и разбросом ±20 %.
+- `200` — remove the sent events, except those rejected with `retryable: true`: retry those in a
+  minute;
+- `400`, `413`, `415` — drop the batch: retrying won't help;
+- `401`, `403` — stop sending until the app restarts: the key was revoked or the app is archived;
+- `429`, `503` — retry after `Retry-After`;
+- anything else and network errors — retry with a backoff from 1 s to 300 s and ±20% jitter.
 
 ```kotlin title="commonMain/EventQueue.kt"
 package analytics
@@ -330,15 +334,15 @@ internal object EventQueue {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listSerializer = ListSerializer(Event.serializer())
-    // Движок — OkHttp или Darwin — Ktor берёт из зависимостей платформы.
+    // Ktor takes the engine — OkHttp or Darwin — from the platform's dependencies.
     private val client = HttpClient { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
 
-    // Читается при первом обращении — уже в фоне, в диспетчере очереди.
+    // Read on first access — already in the background, on the queue's dispatcher.
     private val events: MutableList<Event> by lazy {
         val saved = readQueue() ?: return@lazy mutableListOf()
         runCatching { json.decodeFromString(listSerializer, saved) }.getOrDefault(emptyList())
-            .toMutableList() // повреждённый файл — пустая очередь
+            .toMutableList() // a corrupted file means an empty queue
     }
     private var sending = false
     private var stopped = false
@@ -348,7 +352,7 @@ internal object EventQueue {
     fun enqueue(event: Event) {
         scope.launch {
             events += event
-            save() // сначала на диск: событие переживёт закрытие приложения
+            save() // disk first: the event survives the app being closed
             flushNow()
         }
     }
@@ -367,7 +371,7 @@ internal object EventQueue {
         val batch = events.take(MAX_BATCH)
         val sent = batch.map { it.insertId }.toSet()
         try {
-            // sent_at — момент этой попытки: по нему сервер исправляет сбитые часы устройства.
+            // sent_at is this attempt's time: the server uses it to correct a skewed device clock.
             val body = Batch(sentAt = Clock.System.now().toString(), events = batch)
             val response = client.post(ENDPOINT) {
                 contentType(ContentType.Application.Json)
@@ -384,15 +388,15 @@ internal object EventQueue {
                     backoffMs = 1_000L
                     if (retry.isNotEmpty()) retryLater(60_000L)
                 }
-                400, 413, 415 -> events.removeAll { it.insertId in sent } // повтор не поможет
-                401, 403 -> stopped = true // ключ отозван или приложение в архиве
+                400, 413, 415 -> events.removeAll { it.insertId in sent } // retrying won't help
+                401, 403 -> stopped = true // key revoked or app archived
                 429, 503 -> {
                     val seconds = response.headers["Retry-After"]?.toLongOrNull() ?: 5L
                     retryLater(seconds * 1_000L)
                 }
                 else -> backoff()
             }
-        } catch (e: Exception) { // сеть, таймаут, неожиданный ответ
+        } catch (e: Exception) { // network error, timeout, unexpected response
             backoff()
         } finally {
             sending = false
@@ -417,14 +421,15 @@ internal object EventQueue {
 }
 ```
 
-`Clock.System.now().toString()` даёт RFC 3339 в UTC с `Z` — сервер принимает такое время как есть.
-События старше 7 дней удаляются до отправки: сервер всё равно отклонил бы их с `event_too_old`.
+`Clock.System.now().toString()` produces RFC 3339 in UTC with a `Z` — the server accepts this time
+as is. Events older than 7 days are dropped before sending: the server would reject them with
+`event_too_old` anyway.
 
-## Сессии [#session-lifecycle]
+## Sessions [#session-lifecycle]
 
-`SessionTracker` — общий трекер для обеих платформ. Длительность считается по
-`TimeSource.Monotonic` — монотонным часам, которые не меняются, если пользователь переводит время.
-Повторный `start()` в открытой сессии и `end()` без сессии ничего не делают.
+`SessionTracker` is a single shared tracker for both platforms. Duration is measured with
+`TimeSource.Monotonic`, a monotonic clock that doesn't change when the user changes the system
+time. Calling `start()` again while a session is open, or `end()` with no session, does nothing.
 
 ```kotlin title="commonMain/SessionTracker.kt"
 package analytics
@@ -434,10 +439,10 @@ import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-/** Трекер сессий для Android и iOS. Вызывайте start() и end() из главного потока. */
+/** Session tracker for Android and iOS. Call start() and end() from the main thread. */
 @OptIn(ExperimentalUuidApi::class)
 object SessionTracker {
-    /** ID аккаунта после входа; null — пользователь не вошёл. Не email и не телефон. */
+    /** Account ID after sign-in; null if the user isn't signed in. Not an email or phone number. */
     var userId: String? = null
 
     private var sessionId: String? = null
@@ -458,7 +463,7 @@ object SessionTracker {
         sessionId = null
     }
 
-    /** Досылает очередь прошлых запусков. */
+    /** Sends the events left in the queue from previous launches. */
     fun flush() = EventQueue.flush()
 
     private fun track(name: String, sessionId: String, durationMs: Long?) {
@@ -478,11 +483,12 @@ object SessionTracker {
 }
 ```
 
-Общий код о жизненном цикле не знает: `start()` и `end()` вызывают точки входа приложений. На
-Android это `ProcessLifecycleOwner` в `Application.onCreate`, как в
-[Android-рецепте](/docs/recipes/android-kotlin#session-lifecycle). На iOS — `scenePhase` в `App` с
-`@main`, как в [iOS-рецепте](/docs/recipes/ios-swift#session-lifecycle): это API SwiftUI, и
-читается он в Swift. Kotlin-объект `SessionTracker` виден в Swift как `SessionTracker.shared`.
+The shared code knows nothing about the lifecycle: `start()` and `end()` are called by the app
+entry points. On Android that's `ProcessLifecycleOwner` in `Application.onCreate`, as in the
+[Android recipe](/docs/recipes/android-kotlin#session-lifecycle). On iOS it's `scenePhase` in the
+`@main` `App`, as in the [iOS recipe](/docs/recipes/ios-swift#session-lifecycle): it's a SwiftUI
+API, so it's read in Swift. The Kotlin object `SessionTracker` is visible in Swift as
+`SessionTracker.shared`.
 
 ```kotlin tab="Android" title="androidApp/App.kt"
 import analytics.SessionTracker
@@ -495,12 +501,12 @@ import androidx.lifecycle.ProcessLifecycleOwner
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        initAnalytics(this) // Context для SharedPreferences и filesDir
+        initAnalytics(this) // Context for SharedPreferences and filesDir
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = SessionTracker.start()
             override fun onStop(owner: LifecycleOwner) = SessionTracker.end()
         })
-        SessionTracker.flush() // досылает очередь прошлых запусков
+        SessionTracker.flush() // sends the events left in the queue from previous launches
     }
 }
 ```
@@ -514,7 +520,7 @@ struct iOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // Запуск может быть фоновым, поэтому здесь без session_start.
+        // The launch may be a background one, so no session_start here.
         SessionTracker.shared.flush()
     }
 
@@ -526,35 +532,35 @@ struct iOSApp: App {
             switch phase {
             case .active: SessionTracker.shared.start()
             case .background: SessionTracker.shared.end()
-            default: break // .inactive: шторка, системный алерт — сессия продолжается
+            default: break // .inactive: Notification Center, a system alert — the session goes on
             }
         }
     }
 }
 ```
 
-На Android не забудьте `android:name=".App"` в `<application>` манифеста и разрешение
-`android.permission.INTERNET`. В фоне у приложения мало времени: если `session_end` не успеет уйти,
-он останется в файле очереди и отправится при следующем запуске.
+On Android, don't forget `android:name=".App"` on the manifest's `<application>` and the
+`android.permission.INTERNET` permission. An app gets little time in the background: if
+`session_end` doesn't go out in time, it stays in the queue file and is sent on the next launch.
 
-## user_id после входа [#user-id]
+## user_id after sign-in [#user-id]
 
-После входа присвойте `SessionTracker.userId` идентификатор аккаунта из вашего бэкенда, после
-выхода — `null`. Анонимные события до входа припишутся этому пользователю (см.
-[Идентичность](/docs/concepts/identity)). Присваивать можно из общего кода или с любой платформы.
+After sign-in, set `SessionTracker.userId` to the account ID from your backend; after sign-out, set
+it to `null`. Anonymous events from before sign-in are attributed to that user (see
+[Identity](/docs/concepts/identity)). You can set it from shared code or from either platform.
 
 ```kotlin tab="Kotlin"
-SessionTracker.userId = account.id // "a3f9c2d1-77b4-…", не email; null после выхода
+SessionTracker.userId = account.id // "a3f9c2d1-77b4-…", not an email; null after sign-out
 ```
 
 ```swift tab="Swift"
-SessionTracker.shared.userId = account.id // nil после выхода
+SessionTracker.shared.userId = account.id // nil after sign-out
 ```
 
-## Проверка [#verify]
+## Verify [#verify]
 
-1. Запустите debug-сборки: на Android — с `android:debuggable`, на iOS — в конфигурации Debug.
-   События уйдут с `environment: "development"`.
-2. Сверните и откройте приложение на обеих платформах.
-3. На вкладке «Интеграция» появятся `session_start` и `session_end` с платформами Android и iOS — в
-   одном приложении. В отчётах включите окружение development.
+1. Run debug builds: on Android with `android:debuggable`, on iOS in the Debug configuration.
+   Events go out with `environment: "development"`.
+2. Minimize the app and open it again on both platforms.
+3. `session_start` and `session_end` show up on the Integration tab with the Android and iOS
+   platforms — in the same app. In reports, turn on the development environment.
