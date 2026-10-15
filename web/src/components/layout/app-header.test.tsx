@@ -320,3 +320,16 @@ describe("AppHeader in demo mode", () => {
     expect(screen.queryByRole("menuitem", { name: "Выйти" })).not.toBeInTheDocument();
   });
 });
+
+// Полная навигация шапки занимает ~900 px: на планшете (768–1023) она не помещается, там тоже бургер.
+describe("AppHeader on narrow screens", () => {
+  it("switches to the full navigation only from lg", async () => {
+    server.use(getListAppsMockHandler({ items: [notes, maps] }));
+    at("/portfolio");
+    renderWithClient(<AppHeader />);
+
+    expect(screen.getByRole("button", { name: "Открыть меню" })).toHaveClass("lg:hidden");
+    expect(screen.getByRole("button", { name: "Открыть меню" })).not.toHaveClass("md:hidden");
+    expect(mainNav()).toHaveClass("hidden", "lg:block");
+  });
+});
