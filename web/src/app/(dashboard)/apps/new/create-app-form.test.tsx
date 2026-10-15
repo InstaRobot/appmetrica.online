@@ -1,13 +1,17 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateAppBody } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, app as makeApp } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { mockTimezones } from "@/test/timezones";
-import { CreateAppForm } from "./create-app-form";
+import { CreateAppForm, NewAppForm, NewAppHeader } from "./create-app-form";
 
 const nav = vi.hoisted(() => ({ push: vi.fn<(href: string) => void>() }));
 vi.mock("next/navigation", () => ({
@@ -15,6 +19,17 @@ vi.mock("next/navigation", () => ({
 }));
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
+
+// Тот же QueryClient без повторов, что у renderWithClient, но с английским словарём.
+function renderInEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(ui, "en", {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const created = makeApp({ id: "0192bbbb-0000-7000-8000-000000000001", name: "Notes iOS" });
 
@@ -254,5 +269,88 @@ describe("CreateAppForm", () => {
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]?.timezone).toBe("Asia/Tokyo");
     expect(bodies[0]?.platforms).toEqual(["ios"]);
+  });
+});
+
+describe("CreateAppForm in English", () => {
+  beforeEach(mockTimezones);
+
+  it("labels the form and validates it in English", async () => {
+    const bodies = mockCreate();
+    const user = userEvent.setup();
+    renderInEnglish(<CreateAppForm defaultTimezone="" />);
+
+    const group = screen.getByRole("group", { name: /Platforms/ });
+    expect(group).toHaveAccessibleDescription(
+      "We'll create a write key for each platform. You can add platforms later in settings.",
+    );
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/portfolio");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(screen.getByRole("textbox", { name: /Name/ })).toHaveAccessibleDescription(
+      "Enter a name",
+    );
+    expect(group).toHaveAccessibleDescription("Choose at least one platform");
+    expect(screen.getByRole("combobox", { name: /Time zone/ })).toHaveAccessibleDescription(
+      "Choose a time zone",
+    );
+    expect(bodies).toEqual([]);
+  });
+
+  it("limits the name in English", async () => {
+    const user = userEvent.setup();
+    renderInEnglish(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+
+    expect(screen.getByRole("combobox", { name: /Time zone/ })).toHaveAccessibleDescription(
+      "Day boundaries in reports.",
+    );
+    const name = screen.getByRole("textbox", { name: /Name/ });
+    await user.type(name, "x".repeat(65));
+    await user.tab();
+    expect(name).toHaveAccessibleDescription("64 characters max");
+  });
+
+  it("creates the app in English", async () => {
+    let release = () => {};
+    server.use(
+      http.post(
+        "*/admin/v1/apps",
+        () =>
+          new Promise<Response>((resolve) => {
+            release = () =>
+              resolve(HttpResponse.json({ app: created, write_keys: [] }, { status: 201 }));
+          }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderInEnglish(<CreateAppForm defaultTimezone="Europe/Moscow" />);
+
+    await user.type(screen.getByRole("textbox", { name: /Name/ }), "Notes iOS");
+    await choosePlatform(user, "iOS");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("button", { name: "Creating…" })).toBeDisabled();
+    release();
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/apps/${created.id}/integration`));
+    expect(toasts.success).toHaveBeenCalledWith("App created");
+  });
+});
+
+describe("New app page in English", () => {
+  it("titles the page", () => {
+    renderWithLocale(<NewAppHeader />, "en");
+    expect(screen.getByRole("heading", { level: 1, name: "New app" })).toBeInTheDocument();
+  });
+
+  it("shows a skeleton while the settings load", () => {
+    renderInEnglish(<NewAppForm />);
+    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument();
+  });
+});
+
+describe("New app page", () => {
+  it("titles the page in Russian", () => {
+    renderWithLocale(<NewAppHeader />, "ru");
+    expect(screen.getByRole("heading", { level: 1, name: "Новое приложение" })).toBeInTheDocument();
   });
 });
