@@ -98,7 +98,8 @@ describe("LandingPage", () => {
   it("promises passkey-only sign-in and keeps the DB-IP attribution", () => {
     render(<LandingPage locale="ru" />);
 
-    expect(screen.getByText(/Вход только по passkey/)).toBeInTheDocument();
+    // Без обещаний о стране хранения: где стоит сервер, решает установка.
+    expect(screen.getByText("Вход только по passkey.")).toBeInTheDocument();
     expect(screen.queryByText(/учётной записи/)).not.toBeInTheDocument();
     const footer = screen.getByRole("contentinfo");
     expect(within(footer).getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveAttribute(
@@ -193,7 +194,7 @@ describe("LandingPage in English", () => {
     expect(preview).toHaveTextContent("12,480");
     expect(preview).toHaveTextContent("▲ +4.1%");
     expect(preview).toHaveTextContent("Daily active users");
-    expect(screen.getByText(/Passkey-only sign-in/)).toBeInTheDocument();
+    expect(screen.getByText("Passkey-only sign-in.")).toBeInTheDocument();
     // Подвал — копирайт и атрибуция DB-IP (CC BY), без названия хостинга.
     expect(screen.getByRole("contentinfo")).not.toHaveTextContent(/Hetzner|FSN1/);
   });
