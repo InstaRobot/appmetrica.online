@@ -1,11 +1,15 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ApiKey } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { apiKey, appSummary, errorBody } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { ApiKeysTab } from "./api-keys-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -163,5 +167,87 @@ describe("ApiKeysTab", () => {
       expect(toasts.error).toHaveBeenCalledWith("Ошибка сервера. Повторите через минуту."),
     );
     expect(within(dialog).getByRole("textbox", { name: /Метка/ })).toHaveValue("Скрипт");
+  });
+});
+
+function renderEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
+}
+
+describe("ApiKeysTab in English", () => {
+  it("lists keys with English headers and dates", async () => {
+    mockKeys([
+      READER,
+      apiKey({
+        label: "Script",
+        scopes: ["read", "delete"],
+        app_id: NOTES.id,
+        revoked_at: "2026-10-12T10:00:00Z",
+        last_used_at: "2026-10-12T09:30:00Z",
+      }),
+    ]);
+    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+
+    const table = await screen.findByRole("table", { name: "API keys" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Key", "Label", "Scopes", "App", "Created", "Last used", "Actions"]);
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("All");
+    expect(rows[0]).toHaveTextContent("Oct 1, 2026");
+    expect(rows[1]).toHaveTextContent("Revoked");
+    expect(rows[1]).toHaveTextContent("Oct 12, 2026, 12:30");
+    expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();
+  });
+
+  it("creates a key and shows the secret in English", async () => {
+    mockKeys([]);
+    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("heading", { name: "No API keys yet" })).toBeInTheDocument();
+    expect(
+      screen.getByText("You need a key for scripts and integrations with the Read API."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    const dialog = screen.getByRole("dialog", { name: "New API key" });
+    expect(dialog).toHaveTextContent("Authorization: Bearer <secret>");
+    expect(within(dialog).getByRole("group", { name: /Scopes/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "App" })).toHaveTextContent("All apps");
+
+    await user.click(within(dialog).getByRole("checkbox", { name: "read" }));
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+    expect(within(dialog).getByText("Enter a label")).toBeInTheDocument();
+    expect(within(dialog).getByText("Select at least one scope")).toBeInTheDocument();
+
+    const label = within(dialog).getByRole("textbox", { name: /Label/ });
+    expect(label).toHaveAttribute("placeholder", "For example, Telegram report");
+    await user.type(label, "Script");
+    await user.click(within(dialog).getByRole("checkbox", { name: "read" }));
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    expect(await within(dialog).findByRole("textbox", { name: "secret" })).toHaveValue(SECRET);
+    expect(dialog).toHaveTextContent("The secret is shown only once.");
+    await user.click(within(dialog).getByRole("button", { name: "I've saved the key" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("revokes a key in English", async () => {
+    mockKeys([READER]);
+    renderEnglish(<ApiKeysTab timezone="Europe/Moscow" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Revoke key sk_a8Kd2xQ1…" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Revoke key sk_a8Kd2xQ1…?" });
+    expect(dialog).toHaveTextContent("Read API requests with this key will start getting 401");
+    await user.click(within(dialog).getByRole("button", { name: "Revoke" }));
+
+    expect(await screen.findByText("Revoked")).toBeInTheDocument();
+    expect(toasts.success).toHaveBeenCalledWith("Key revoked");
   });
 });

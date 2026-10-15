@@ -1,10 +1,14 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import type { DeletionRequest } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { appSummary, deletionRequest, errorBody } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { DeletionsTab } from "./deletions-tab";
 
 const NOTES = appSummary({ id: "0192aaaa-0000-7000-8000-000000000047", name: "Notes iOS" });
@@ -69,5 +73,54 @@ describe("DeletionsTab", () => {
     );
     renderWithClient(<DeletionsTab timezone="Europe/Moscow" />);
     expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
+  });
+});
+
+function renderEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
+}
+
+describe("DeletionsTab in English", () => {
+  it("lists requests with English headers, types, sources and statuses", async () => {
+    mockRequests([
+      deletionRequest({
+        app_id: NOTES.id,
+        subject_type: "install",
+        subject_value: INSTALL,
+        source: "api",
+        status: "done",
+        completed_at: "2026-10-12T13:00:00Z",
+      }),
+      deletionRequest({
+        app_id: NOTES.id,
+        subject_type: "user",
+        source: "dashboard",
+        status: "pending",
+      }),
+    ]);
+    renderEnglish(<DeletionsTab timezone="Europe/Moscow" />);
+
+    expect(await screen.findByRole("heading", { name: "Deletions" })).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Deletion requests" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["App", "Type", "Value", "Source", "Status", "Created", "Completed", "Error"]);
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("Device");
+    expect(rows[0]).toHaveTextContent("Deleted");
+    expect(rows[0]).toHaveTextContent("Oct 12, 2026, 16:00");
+    expect(rows[1]).toHaveTextContent("User");
+    expect(rows[1]).toHaveTextContent("Dashboard");
+    expect(rows[1]).toHaveTextContent("Queued");
+  });
+
+  it("says in English when there were no requests", async () => {
+    mockRequests([]);
+    renderEnglish(<DeletionsTab timezone="Europe/Moscow" />);
+    expect(await screen.findByText("There have been no deletion requests")).toBeInTheDocument();
   });
 });

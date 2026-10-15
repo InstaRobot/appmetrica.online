@@ -1,11 +1,15 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Settings, TelegramTestResult } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, settings as makeSettings } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { TelegramTab } from "./telegram-tab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -169,5 +173,67 @@ describe("TelegramTab", () => {
     await user.click(await screen.findByRole("switch", { name: "Системные алерты" }));
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(await screen.findByText("Неизвестный пояс")).toBeInTheDocument();
+  });
+});
+
+function renderEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
+}
+
+describe("TelegramTab in English", () => {
+  it("labels the form, validates and saves in English", async () => {
+    const patches = mockSettings(makeSettings());
+    renderEnglish(<TelegramTab />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("heading", { name: "Telegram" })).toBeInTheDocument();
+    const chat = await screen.findByRole("textbox", { name: "Chat ID" });
+    expect(screen.getByText(/to the bot and look up your chat_id/)).toHaveTextContent(
+      "TELEGRAM_BOT_TOKEN",
+    );
+    expect(screen.getByRole("combobox", { name: /Owner time zone/ })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Daily digest" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "System alerts" })).toBeChecked();
+
+    await user.clear(chat);
+    await user.type(chat, "@channel");
+    const time = screen.getByLabelText("Digest time");
+    await user.clear(time);
+    await user.type(time, "09:07");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByText("Chat ID must be a number (negative for groups)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Use 15-minute steps")).toBeInTheDocument();
+    expect(patches).toEqual([]);
+
+    await user.clear(chat);
+    await user.type(chat, "-100200300");
+    await user.clear(time);
+    await user.type(time, "09:15");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Settings saved"));
+  });
+
+  it("explains a rejected test message in English", async () => {
+    mockSettings(makeSettings(), () =>
+      HttpResponse.json({ sent: false, error: "chat not found" } satisfies TelegramTestResult),
+    );
+    renderEnglish(<TelegramTab />);
+
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Send test message" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Telegram didn't accept the message: chat not found");
+    expect(alert).toHaveTextContent("check the Chat ID");
+  });
+
+  it("toasts an accepted test message in English", async () => {
+    mockSettings(makeSettings());
+    renderEnglish(<TelegramTab />);
+
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Send test message" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Message sent"));
   });
 });

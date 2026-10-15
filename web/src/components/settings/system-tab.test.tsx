@@ -1,10 +1,14 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import type { SystemStatus } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, systemStatus } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { SystemTab } from "./system-tab";
 
 const NOW = new Date("2026-10-13T12:00:00Z");
@@ -81,5 +85,82 @@ describe("SystemTab", () => {
     );
     renderWithClient(<SystemTab timezone="Europe/Moscow" now={NOW} />);
     expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
+  });
+});
+
+function renderEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
+}
+
+describe("SystemTab in English", () => {
+  it("describes healthy components, alerts and jobs in English", async () => {
+    mockStatus(systemStatus());
+    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+
+    expect(await screen.findByRole("heading", { name: "System" })).toBeInTheDocument();
+    const ch = await screen.findByRole("group", { name: "ClickHouse" });
+    expect(ch).toHaveTextContent("OK");
+    expect(ch).toHaveTextContent("71% free");
+    expect(ch).toHaveTextContent("1,204,551,902 events");
+    const backup = screen.getByRole("group", { name: "Backup" });
+    expect(backup).toHaveTextContent("Backup:");
+    expect(backup).toHaveTextContent("Oct 13, 2026, 03:12");
+
+    const alerts = screen.getByRole("table", { name: "Alerts" });
+    expect(
+      within(alerts)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Alert", "State", "Value"]);
+    expect(within(alerts).getByText("Normal")).toBeInTheDocument();
+    const jobs = screen.getByRole("table", { name: "Jobs" });
+    expect(
+      within(jobs)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Job", "Last run", "Status"]);
+  });
+
+  it("describes failures and empty lists in English", async () => {
+    mockStatus(
+      systemStatus({
+        clickhouse: { ok: false, disk_free_pct: 12, events_rows: null },
+        postgres: { ok: false },
+        backup: { last_backup_at: null, last_backup_name: null },
+        alerts: [],
+        jobs: [],
+      }),
+    );
+    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+
+    const ch = await screen.findByRole("group", { name: "ClickHouse" });
+    expect(ch).toHaveTextContent("Unavailable");
+    expect(ch).toHaveTextContent("12% free");
+    const backup = screen.getByRole("group", { name: "Backup" });
+    expect(backup).toHaveTextContent("no data");
+    expect(backup).toHaveTextContent("Backup is older than 26 hours");
+    expect(screen.getByText("Alerts haven't been checked yet")).toBeInTheDocument();
+    expect(screen.getByText("No runs yet")).toBeInTheDocument();
+  });
+
+  it("shows when an alert started firing in English", async () => {
+    mockStatus(
+      systemStatus({
+        alerts: [
+          {
+            key: "insert_errors",
+            firing: true,
+            first_fired_at: "2026-10-13T11:05:00Z",
+            last_notified_at: "2026-10-13T11:05:00Z",
+            last_value: "3",
+          },
+        ],
+      }),
+    );
+    renderEnglish(<SystemTab timezone="Europe/Moscow" now={NOW} />);
+
+    expect(await screen.findByText("Firing since 14:05")).toBeInTheDocument();
   });
 });

@@ -1,12 +1,15 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { type OnUrlUpdateFunction, withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeQueryClient } from "@/lib/query-client";
 import { apiKey, passkey, settings, systemStatus } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
-import { SettingsView } from "./settings-view";
+import { renderWithLocale } from "@/test/rtl";
+import { SettingsHeader, SettingsView } from "./settings-view";
 
 const TABS = ["Passkeys", "API-ключи", "Telegram", "Система", "Удаления"];
 
@@ -79,5 +82,32 @@ describe("SettingsView", () => {
       expect.objectContaining({ queryString: "?tab=system" }),
     );
     expect(await screen.findByText(/ClickHouse/)).toBeInTheDocument();
+  });
+});
+
+describe("SettingsView in English", () => {
+  it("names the page, the tab list and the tabs in English", async () => {
+    const client = makeQueryClient();
+    client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+    renderWithLocale(
+      <QueryClientProvider client={client}>
+        <SettingsHeader />
+        <SettingsView />
+      </QueryClientProvider>,
+      "en",
+      { wrapper: withNuqsTestingAdapter({ searchParams: "?tab=api-keys" }) },
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Settings sections" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Passkeys",
+      "API keys",
+      "Telegram",
+      "System",
+      "Deletions",
+    ]);
+    expect(screen.getByRole("tab", { name: "API keys" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("table", { name: "API keys" })).toBeInTheDocument();
   });
 });

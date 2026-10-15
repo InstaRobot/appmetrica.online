@@ -1,12 +1,16 @@
 import { type RegistrationResponseJSON, startRegistration } from "@simplewebauthn/browser";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Passkey } from "@/lib/api/gen/model";
+import { makeQueryClient } from "@/lib/query-client";
 import { errorBody, passkey } from "@/test/factories";
 import { server } from "@/test/msw";
 import { renderWithClient } from "@/test/render";
+import { renderWithLocale } from "@/test/rtl";
 import { PasskeysTab } from "./passkeys-tab";
 
 vi.mock("@simplewebauthn/browser", async (importOriginal) => {
@@ -200,5 +204,65 @@ describe("PasskeysTab", () => {
     );
     renderWithClient(<PasskeysTab timezone="Europe/Moscow" />);
     expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
+  });
+});
+
+function renderEnglish(ui: ReactElement) {
+  const client = makeQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  return renderWithLocale(<QueryClientProvider client={client}>{ui}</QueryClientProvider>, "en");
+}
+
+describe("PasskeysTab in English", () => {
+  it("lists passkeys with English headers, dates and actions", async () => {
+    mockPasskeys([MAC, KEY]);
+    renderEnglish(<PasskeysTab timezone="Europe/Moscow" />);
+
+    expect(await screen.findByRole("heading", { name: "Passkeys" })).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Passkeys" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Name", "Created", "Last sign-in", "Synced", "Actions"]);
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("Oct 13, 2026");
+    expect(rows[0]).toHaveTextContent("Oct 13, 2026, 09:01");
+    expect(rows[0]).toHaveTextContent("yes");
+    expect(rows[1]).toHaveTextContent("no");
+    expect(screen.getByRole("button", { name: "Rename MacBook Pro" })).toHaveTextContent("Rename");
+    expect(screen.getByRole("button", { name: "Delete YubiKey" })).toHaveTextContent("Delete");
+  });
+
+  it("asks for a device name and confirms deletion in English", async () => {
+    mockPasskeys([MAC, KEY]);
+    renderEnglish(<PasskeysTab timezone="Europe/Moscow" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Add passkey" }));
+    const add = screen.getByRole("dialog", { name: "New passkey" });
+    expect(add).toHaveTextContent("Your browser will offer to create a passkey");
+    expect(within(add).getByRole("textbox", { name: "Device name" })).toHaveAttribute(
+      "placeholder",
+      "For example, iPhone",
+    );
+    expect(within(add).getByRole("button", { name: "Create passkey" })).toBeInTheDocument();
+    await user.click(within(add).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Rename MacBook Pro" }));
+    const rename = screen.getByRole("dialog", { name: "Rename passkey" });
+    expect(rename).toHaveTextContent("The name is only shown in this list.");
+    expect(within(rename).getByRole("button", { name: "Save" })).toBeInTheDocument();
+    await user.click(within(rename).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete YubiKey" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete passkey “YubiKey”?" });
+    expect(dialog).toHaveTextContent(
+      "You won't be able to sign in with this device or key anymore.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(screen.queryByText("YubiKey")).toBeNull());
+    expect(toasts.success).toHaveBeenCalledWith("Passkey deleted");
   });
 });
