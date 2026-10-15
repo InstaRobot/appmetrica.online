@@ -30,7 +30,7 @@ export function platformOptions(
   return PLATFORMS.filter((p) => present.has(p));
 }
 
-// Переключатель платформ над отчётами (04-ux-diff.md §5.5): «Все» и платформы приложения. Radiogroup с
+// Переключатель платформ над отчётами: «Все» и платформы приложения. Radiogroup с
 // roving tabindex: стрелки, Home и End выбирают опцию сразу, как у сегментированных контролов отчётов.
 // Меньше двух платформ — переключатель не нужен.
 export function PlatformSwitcher({

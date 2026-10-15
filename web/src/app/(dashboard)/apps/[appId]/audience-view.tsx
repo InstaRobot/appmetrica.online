@@ -123,7 +123,7 @@ function AudienceReport({ app }: { app: App }) {
   const params = reportParams(state);
   const observedPlatforms = useObservedPlatforms(app.id, params);
   const platform = state.filters.platform?.[0] ?? null;
-  // «По платформам» — только при «Все» и 2+ платформах переключателя (04-ux-diff.md §5.5).
+  // «По платформам» — только при «Все» и 2+ платформах переключателя.
   const canSplit =
     platform === null && platformOptions(app.platforms, observedPlatforms, null).length > 1;
   const split = canSplit && state.split;

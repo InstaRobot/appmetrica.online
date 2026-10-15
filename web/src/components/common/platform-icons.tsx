@@ -9,7 +9,7 @@ type PlatformIconsProps = {
   className?: string;
 };
 
-// Иконки платформ приложения (04-ux-diff.md §6.1): первые `max` и «+N», все названия — в title.
+// Иконки платформ приложения: первые `max` и «+N», все названия — в title.
 // Декоративны для скринридеров: рядом всегда есть название приложения или подпись платформ.
 export function PlatformIcons({ platforms, max = 3, className }: PlatformIconsProps) {
   if (platforms.length === 0) return null;

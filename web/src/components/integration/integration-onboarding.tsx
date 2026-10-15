@@ -23,7 +23,7 @@ const ENVIRONMENTS = [Environment.production, Environment.development] as const;
 
 type IntegrationOnboardingProps = { app: App; ingestUrl: string };
 
-// Онбординг S-10 по платформам (FR-7, 04-ux-diff.md §5.4): общий эндпоинт, секция на каждую явную
+// Онбординг S-10 по платформам (FR-7): общий эндпоинт, секция на каждую явную
 // платформу приложения и ссылка «Добавить платформу» в настройки.
 export function IntegrationOnboarding({ app, ingestUrl }: IntegrationOnboardingProps) {
   const keys = useListWriteKeys(app.id);

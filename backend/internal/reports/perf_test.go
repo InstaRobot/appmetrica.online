@@ -37,8 +37,7 @@ const (
 	perfPortfolio     = time.Second
 	perfProfileLimit  = time.Second
 	perfRealtimeLimit = 300 * time.Millisecond
-	// split=platform основного приложения (iOS, Android, Web) — не дольше трёх рядов без split
-	// (05-impact-and-regression.md §4.1 мультиплатформенности).
+	// split=platform основного приложения (iOS, Android, Web) — не дольше трёх рядов без split.
 	perfSplitLimit = 3 * perfReportLimit
 	perfSplitRatio = 3.0
 )

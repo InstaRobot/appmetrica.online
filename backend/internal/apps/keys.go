@@ -14,8 +14,7 @@ const (
 	writeKeyChars  = 32
 )
 
-// platformLabels — метки write-ключей, которые Create выпускает на каждую платформу приложения
-// (PLATFORM_LABEL в 06-feature-tickets.md T-MP-002).
+// platformLabels — метки write-ключей, которые Create выпускает на каждую платформу приложения.
 var platformLabels = map[sqlc.AppPlatform]string{
 	sqlc.AppPlatformIos:     "iOS",
 	sqlc.AppPlatformAndroid: "Android",

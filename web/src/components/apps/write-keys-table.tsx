@@ -72,7 +72,7 @@ const schema = () => import("@/lib/forms/schemas").then((m) => m.writeKeySchema)
 const ANY_PLATFORM = "any";
 const ANY_PLATFORM_LABEL = "Любая платформа";
 
-// Опции платформы ключа (04-ux-diff.md §5.2): «Любая платформа», платформы приложения, остальные.
+// Опции платформы ключа: «Любая платформа», платформы приложения, остальные.
 function platformOptions(appPlatforms: Platform[]): Platform[] {
   return [...appPlatforms, ...Object.values(Platform).filter((p) => !appPlatforms.includes(p))];
 }

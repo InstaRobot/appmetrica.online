@@ -47,7 +47,7 @@ export interface MergeAppsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Диалог слияния (04-ux-diff.md §5.3): источник — любое другое приложение, включая архивные; предпросмотр
+// Диалог слияния: источник — любое другое приложение, включая архивные; предпросмотр
 // объёма переноса; подтверждение точным названием источника. Форма живёт внутри DialogContent, поэтому
 // после закрытия диалога её состояние сбрасывается.
 export function MergeAppsDialog({ target, open, onOpenChange }: MergeAppsDialogProps) {

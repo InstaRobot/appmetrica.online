@@ -12,7 +12,7 @@ type PlatformShareBarProps = {
   total: number;
 };
 
-// Доли платформ в строке портфеля (04-ux-diff.md §5.6): полоса 96×8, доли — от суммы по платформам,
+// Доли платформ в строке портфеля: полоса 96×8, доли — от суммы по платформам,
 // потому что человек на двух платформах учтён в обеих. Tooltip с абсолютами открывается и по фокусу.
 export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
   const sum = items.reduce((s, item) => s + item.active, 0);
@@ -31,7 +31,7 @@ export function PlatformShareBar({ items, total }: PlatformShareBarProps) {
           <div
             role="img"
             aria-label={label}
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: фокус открывает tooltip с абсолютами (04-ux-diff.md §12)
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: фокус открывает tooltip с абсолютами
             tabIndex={0}
             className="ml-auto flex h-2 w-24 overflow-hidden rounded-full bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >

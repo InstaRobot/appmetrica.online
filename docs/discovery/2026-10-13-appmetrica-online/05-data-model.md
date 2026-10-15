@@ -283,7 +283,7 @@ flowchart LR
 |---|---|---|---|
 | id | uuid | PK, default `uuidv7()` | `app_id` во всех таблицах ClickHouse |
 | name | text | NOT NULL, CHECK длина 1..64, UNIQUE INDEX по lower(name) | «Notes iOS» |
-| platform | app_platform | NOT NULL, CHECK `platform = platforms[1]` (`apps_platform_first_chk`) | **Устарело** (expand-фаза): всегда первая платформа из `platforms`; старые бинарники ingest читают её до перезапуска. Удаление — миграцией следующего релиза (T-MP-021, не раньше 2026-11-07) |
+| platform | app_platform | NOT NULL, CHECK `platform = platforms[1]` (`apps_platform_first_chk`) | **Устарело** (expand-фаза): всегда первая платформа из `platforms`; старые бинарники ingest читают её до перезапуска. Удаление — миграцией следующего релиза (не раньше 2026-11-07) |
 | platforms | app_platform[] | NOT NULL, CHECK `cardinality(platforms) BETWEEN 1 AND 9` (`apps_platforms_len_chk`) | Набор платформ приложения в порядке, заданном владельцем; по ключу записи на каждую платформу |
 | timezone | text | NOT NULL, CHECK длина 1..64 | IANA TZ (валидируется в Go через `time.LoadLocation`); границы суток всех отчётов |
 | status | app_status | NOT NULL, default 'active' | `archived` → ingest отвечает 403 `app_archived` |
@@ -2156,4 +2156,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-14 | 1.3 | §2.9: `invalid_app_key` исключён из batch-кодов `rejected_events` — отозванный ключ не резолвится в приложение (кэш ключей держит только действующие), как решено в OQ-033 (3) |
 | 2026-10-14 | 1.4 | §2.9: `payload_sample` batch-ошибок тоже без PII — `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` до записи (ревью MVP, OQ-070) |
 | 2026-10-14 | 1.5 | §2.9: в `payload_sample` строковые `app_key` (поле тела, путь `sendBeacon`) обрезаются до `key_prefix` — полный ключ записи иначе читался через `integration/health` ключом с read-scope (ревью MVP) |
-| 2026-10-15 | 1.6 | Мультиплатформенные приложения и слияние (миграция `00002_multi_platform.sql`): `apps.platforms app_platform[]` с `apps_platforms_len_chk`/`apps_platform_first_chk`, `apps.platform` устарела (= `platforms[1]`, удаление в contract-фазе T-MP-021); `write_keys.platform` (NULL — любая); `job_name` + `app_merge`; enum `app_merge_status`/`app_merge_step`, таблица `app_merges` (§2.4.7, ER, §3, §4), `queries/postgres/merges.sql` (§10.2) |
+| 2026-10-15 | 1.6 | Мультиплатформенные приложения и слияние (миграция `00002_multi_platform.sql`): `apps.platforms app_platform[]` с `apps_platforms_len_chk`/`apps_platform_first_chk`, `apps.platform` устарела (= `platforms[1]`, удаление в contract-фазе); `write_keys.platform` (NULL — любая); `job_name` + `app_merge`; enum `app_merge_status`/`app_merge_step`, таблица `app_merges` (§2.4.7, ER, §3, §4), `queries/postgres/merges.sql` (§10.2) |

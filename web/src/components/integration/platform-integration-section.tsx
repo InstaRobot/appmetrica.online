@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { SnippetTabs } from "./snippet-tabs";
 
 // activeWriteKeyFor — первый неотозванный ключ платформы по created_at asc, иначе первый неотозванный
-// ключ без платформы (FR-7, 04-ux-diff.md §5.4).
+// ключ без платформы (FR-7).
 export function activeWriteKeyFor(keys: WriteKey[], platform: Platform): WriteKey | undefined {
   const active = keys
     .filter((k) => k.revoked_at === null)

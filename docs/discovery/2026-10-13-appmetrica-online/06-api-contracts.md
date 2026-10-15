@@ -3423,7 +3423,7 @@ components:
 
 `info.version: 1.1.0` в обоих файлах. Все изменения — не breaking по §1.1 (новые необязательные параметры, новые поля
 ответов, новые значения enum); `App.platform`/`AppSummary.platform` помечены `deprecated: true` и удаляются в
-contract-фазе (T-MP-021, не раньше 2026-11-07).
+contract-фазе (не раньше 2026-11-07).
 
 `contracts/openapi/ingest.yaml`:
 - `EventContext.platform`: отсутствующее значение берётся из платформы ключа записи, затем из единственной платформы

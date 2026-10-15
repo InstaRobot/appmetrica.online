@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { expectNoA11yViolations } from "./helpers/a11y";
 import { appIdByName, createApp, sendSession } from "./helpers/seed";
 
-// Мультиплатформенные приложения (T-MP-020, 08-test-plan.md §6): одно приложение на iOS, Android и Web,
+// Мультиплатформенные приложения: одно приложение на iOS, Android и Web,
 // переключатель платформ над отчётами, доли платформ в портфеле и слияние приложений-дублей.
 // Нужны ingest (E2E_INGEST_URL) и worker с app_merge и MERGE_KEYS_WAIT=0 (APP_ENV=e2e): иначе шаг wait_keys
 // ждёт 17 минут. «Seed Notes» — из `make seed`. Владелец уже вошёл: storageState из global-setup.

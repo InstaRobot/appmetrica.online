@@ -6,7 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// metrics — метрики job app_merge (05-impact-and-regression.md §7.3).
+// metrics — метрики job app_merge.
 type metrics struct {
 	// copiedEvents — merge_copied_events_total: события, скопированные шагом copy.
 	copiedEvents prometheus.Counter

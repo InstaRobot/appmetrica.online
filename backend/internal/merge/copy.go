@@ -11,7 +11,7 @@ import (
 	"appmetrica.online/backend/internal/deletion"
 )
 
-// Запросы шага copy (02-data-model-diff.md §7.1). Копия партиции читает одну партицию источника по первичному
+// Запросы шага copy. Копия партиции читает одну партицию источника по первичному
 // ключу (app_id первый в ORDER BY); materialized views пересобирают install_first_seen, user_first_seen и
 // identity_links цели из вставленных строк. Повтор недокопированной партиции даёт строки с тем же ключом
 // сортировки — их схлопывает ReplacingMergeTree(received_at), отчёты считают людей через uniqExact.

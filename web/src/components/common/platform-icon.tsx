@@ -20,7 +20,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   other: "Другое",
 };
 
-// Цвет платформы на графиках (04-ux-diff.md §7): один и тот же в легенде, на полосе долей и в tooltip.
+// Цвет платформы на графиках: один и тот же в легенде, на полосе долей и в tooltip.
 export const PLATFORM_CHART_VAR: Record<Platform, string> = {
   ios: "var(--chart-1)",
   macos: "var(--chart-1)",

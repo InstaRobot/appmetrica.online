@@ -48,7 +48,7 @@ func MergeJob(r MergeRunner, lock Locker) Job {
 	}
 }
 
-// MergeFailedNotifier — алерт «Слияние упало» (05-impact-and-regression.md §7.4) в чат владельца, если алерты
+// MergeFailedNotifier — алерт «Слияние упало» в чат владельца, если алерты
 // включены и chat_id задан.
 func MergeFailedNotifier(settings SettingsReader, tg TelegramSender, logger *slog.Logger) merge.OnFailed {
 	return func(ctx context.Context, m sqlc.AppMerge, cause string) {

@@ -81,7 +81,7 @@ export const audienceSearchParams = {
   to: isoDate,
   g: parseAsStringLiteral(GRANULARITIES).withDefault("day"),
   compare: flag.withDefault(false),
-  // `split=platform` — график «По платформам» (04-ux-diff.md §5.5).
+  // `split=platform` — график «По платформам».
   split: parseAsStringLiteral(["platform"]),
   metric: parseAsStringLiteral(Object.values(TimeSeriesMetric)).withDefault("active"),
   dim: parseAsStringLiteral(Object.values(BreakdownDimension)).withDefault("app_version"),

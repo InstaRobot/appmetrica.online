@@ -311,7 +311,7 @@ func (e *Executor) failed(ctx context.Context, m sqlc.AppMerge, cause error) (Re
 	return result(m), cause
 }
 
-// logStep — событие merge.step (05-impact-and-regression.md §7.2).
+// logStep — событие merge.step.
 func (e *Executor) logStep(ctx context.Context, m sqlc.AppMerge, step sqlc.AppMergeStep, started time.Time, out outcome, attrs ...slog.Attr) {
 	level := slog.LevelInfo
 	if out == outcomeFailed {

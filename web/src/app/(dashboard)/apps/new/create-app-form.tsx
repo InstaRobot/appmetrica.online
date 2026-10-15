@@ -30,7 +30,7 @@ const messages = {
   timezone: "Выберите часовой пояс",
 };
 
-// S-04: создание приложения (FR-009) с одной или несколькими платформами (04-ux-diff.md §5.1).
+// S-04: создание приложения (FR-009) с одной или несколькими платформами.
 // Сервер создаёт ключ записи на каждую платформу; после 201 — экран интеграции со сниппетами.
 export function CreateAppForm({ defaultTimezone }: { defaultTimezone: string }) {
   const router = useRouter();

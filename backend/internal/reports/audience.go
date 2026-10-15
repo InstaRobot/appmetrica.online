@@ -425,7 +425,7 @@ func (s *Service) AudienceTimeseries(ctx context.Context, p Params, q Timeseries
 	}
 	if q.SplitByPlatform {
 		// Ряд на платформу — тот же запрос с фильтром platform=[p], поэтому он совпадает с отфильтрованным рядом
-		// при любой метрике (02-data-model-diff.md §7.3).
+		// при любой метрике.
 		if out.Splits, err = s.platformSplits(ctx, p, q, query); err != nil {
 			return Timeseries{}, err
 		}

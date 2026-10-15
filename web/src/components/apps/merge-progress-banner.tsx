@@ -21,7 +21,7 @@ import { toast } from "@/lib/toast";
 const POLL_MS = 5000;
 const RUNNING = new Set<AppMerge["status"]>(["pending", "running"]);
 
-// Слияния в приложение (03-api-diff.md §7.2): опрос каждые 5 с, пока есть pending/running. Список новыми
+// Слияния в приложение: опрос каждые 5 с, пока есть pending/running. Список новыми
 // первыми; активным считается и failed — сервер блокирует архивацию, удаление и новое слияние до повтора.
 function useAppMerges(appId: string) {
   const query = useListAppMerges(appId, {
@@ -50,7 +50,7 @@ function stepText(merge: AppMerge): string {
   return `${source}: перенесено ${formatInt(merge.copied_events)} из ${formatInt(merge.total_events)} событий`;
 }
 
-// Баннер AppShell (04-ux-diff.md §8, §11): шаг слияния текстом, «Повторить» у упавшего. Шаг move_keys
+// Баннер AppShell: шаг слияния текстом, «Повторить» у упавшего. Шаг move_keys
 // переносит ключи источника и расширяет платформы цели — приложение и его write-ключи перечитываются, как
 // только слияние прошло этот шаг. Когда отслеживаемое слияние завершилось, перечитываются данные цели
 // (приложение, отчёты, ключи) и списки приложений.

@@ -28,7 +28,7 @@ export type MetricChartSeries = {
 };
 
 type MetricChartProps = {
-  /** Итог — одна серия "total"; режим «По платформам» — серия на платформу (04-ux-diff.md §6.2). */
+  /** Итог — одна серия "total"; режим «По платформам» — серия на платформу. */
   series: MetricChartSeries[];
   granularity: Granularity;
   metric: ChartMetric;
@@ -182,7 +182,7 @@ function seriesMax(data: Datum[], key: `s${number}`): Datum | undefined {
 }
 
 // График метрики S-05 (14-ux-ui-spec.md §16.6): область текущего периода и пунктир предыдущего, в режиме
-// «По платформам» — линия на платформу с легендой (04-ux-diff.md §5.5). Для скринридеров — role="img"
+// «По платформам» — линия на платформу с легендой. Для скринридеров — role="img"
 // с кратким описанием и таблица точек по кнопке.
 export function MetricChart({
   series,
