@@ -204,24 +204,24 @@ describe("formatters by locale", () => {
   });
 
   it("formats dates with short English months", () => {
-    expect(en.formatDate("2026-10-12")).toBe("Oct 12, 2026");
-    expect(en.formatDateShort("2026-10-12")).toBe("Oct 12");
-    expect(en.formatWeekdayDate("2026-10-05")).toBe("Mon, Oct 5");
-    expect(en.formatDateRange("2026-10-06", "2026-10-12")).toBe("Oct 6–12, 2026");
-    expect(en.formatDateRange("2026-09-28", "2026-10-05")).toBe("Sep 28 – Oct 5, 2026");
-    expect(en.formatDateRange("2025-12-28", "2026-01-03")).toBe("Dec 28, 2025 – Jan 3, 2026");
-    expect(en.formatDateRange("2026-10-12", "2026-10-12")).toBe("Oct 12, 2026");
-    expect(en.formatWeekRange("2026-09-08")).toBe("Sep 8–14");
-    expect(en.formatWeekRange("2026-09-28")).toBe("Sep 28 – Oct 4");
+    expect(en.formatDate("2026-10-12")).toBe("Oct 12, 2026");
+    expect(en.formatDateShort("2026-10-12")).toBe("Oct 12");
+    expect(en.formatWeekdayDate("2026-10-05")).toBe("Mon, Oct 5");
+    expect(en.formatDateRange("2026-10-06", "2026-10-12")).toBe("Oct 6–12, 2026");
+    expect(en.formatDateRange("2026-09-28", "2026-10-05")).toBe("Sep 28 – Oct 5, 2026");
+    expect(en.formatDateRange("2025-12-28", "2026-01-03")).toBe("Dec 28, 2025 – Jan 3, 2026");
+    expect(en.formatDateRange("2026-10-12", "2026-10-12")).toBe("Oct 12, 2026");
+    expect(en.formatWeekRange("2026-09-08")).toBe("Sep 8–14");
+    expect(en.formatWeekRange("2026-09-28")).toBe("Sep 28 – Oct 4");
   });
 
   it("uses the 24-hour clock in English", () => {
     expect(en.formatTime("2026-10-12T14:32:05Z", "UTC")).toBe("14:32");
     expect(en.formatClock("2026-10-12T14:32:05Z", "UTC")).toBe("14:32:05");
-    expect(en.formatDateTime("2026-10-12T14:01:00Z", "UTC")).toBe("Oct 12, 2026, 14:01");
-    expect(en.formatBucket("2026-10-12T14:00:00Z", "hour", "UTC")).toBe("Oct 12, 14:00");
-    expect(en.formatBucket("2026-10-12T00:00:00Z", "day", "UTC")).toBe("Oct 12");
-    expect(en.formatBucket("2026-10-01T00:00:00Z", "month", "UTC")).toBe("Oct 2026");
+    expect(en.formatDateTime("2026-10-12T14:01:00Z", "UTC")).toBe("Oct 12, 2026, 14:01");
+    expect(en.formatBucket("2026-10-12T14:00:00Z", "hour", "UTC")).toBe("Oct 12, 14:00");
+    expect(en.formatBucket("2026-10-12T00:00:00Z", "day", "UTC")).toBe("Oct 12");
+    expect(en.formatBucket("2026-10-01T00:00:00Z", "month", "UTC")).toBe("Oct 2026");
   });
 
   it("returns the same cached formatters for a locale", () => {
