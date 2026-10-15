@@ -32,6 +32,18 @@ test.describe("without session", () => {
     await expectNoA11yViolations(page);
   });
 
+  // Инструкция по интеграции для ИИ-агентов и вся документация одним Markdown-файлом — по прямым ссылкам на
+  // лендинге: без входа и без языкового редиректа даже с выбранным русским (прокси пропускает *.txt).
+  for (const path of ["/llms.txt", "/llms-full.txt"]) {
+    test(`${path} is served as plain text`, async ({ request }) => {
+      const res = await request.get(path, { headers: { cookie: "am_lang=ru" }, maxRedirects: 0 });
+
+      expect(res.status()).toBe(200);
+      expect(res.headers()["content-type"]).toMatch(/^text\/plain/);
+      expect(await res.text()).toContain("https://appmetrica.online/docs/recipes/ios-swift");
+    });
+  }
+
   test("docs search works without a session", async ({ request }) => {
     const res = await request.get("/docs/search?query=session_start");
 
