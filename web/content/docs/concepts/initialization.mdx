@@ -1,48 +1,50 @@
 ---
-title: Где инициализировать метрику
-description: Точки входа и хуки жизненного цикла для session_start и session_end на iOS, Android, вебе, React Native, Flutter, Kotlin Multiplatform и в ботах.
+title: Where to initialize analytics
+description: Entry points and lifecycle hooks for session_start and session_end on iOS, Android, the web, React Native, Flutter, Kotlin Multiplatform and in bots.
 ---
 
-Аналитику создают один раз на процесс — в точке входа приложения, до первого экрана. Сессии
-привязывают к жизненному циклу всего приложения: `session_start` — когда оно выходит на передний
-план, `session_end` — когда уходит в фон. Экраны, роуты и активности о сессиях не знают.
+Create analytics once per process, at the app's entry point, before the first screen. Tie sessions to
+the lifecycle of the whole app: `session_start` when it comes to the foreground, `session_end` when it
+goes to the background. Screens, routes and activities know nothing about sessions.
 
-Примеры на этой странице вызывают `start()` и `end()` трекера сессий из рецептов
+The examples on this page call `start()` and `end()` of the session tracker from the recipes
 ([iOS](/docs/recipes/ios-swift), [Android](/docs/recipes/android-kotlin),
-[веб](/docs/recipes/web-js), [React Native](/docs/recipes/react-native),
+[web](/docs/recipes/web-js), [React Native](/docs/recipes/react-native),
 [Flutter](/docs/recipes/flutter), [Kotlin Multiplatform](/docs/recipes/kotlin-multiplatform)).
-Повторный `start()` в той же сессии и `end()` без открытой сессии ничего не делают, поэтому
-дублирующиеся колбэки жизненного цикла безопасны.
+A repeated `start()` within the same session and an `end()` with no open session do nothing, so
+duplicate lifecycle callbacks are safe.
 
-## Общие правила [#rules]
+## General rules [#rules]
 
-1. **Один трекер на процесс.** Точка входа читает или создаёт `install_id`, поднимает офлайн-очередь и
-   досылает события прошлых запусков.
-2. **Запуск — ещё не сессия.** Приложение стартует и в фоне: по push-уведомлению, фоновому обновлению,
-   задаче по расписанию. В точке входа только готовьте трекер, а `session_start` отправляйте по
-   событию «на переднем плане».
-3. **Конец сессии — уход в фон, а не «неактивно».** Шторка уведомлений, системный диалог и входящий
-   звонок сессию не прерывают (см. [Сессии](/docs/concepts/sessions#client-rules)).
-4. **Отправка — асинхронно, через очередь на диске.** Интерфейс никогда не ждёт сеть.
+1. **One tracker per process.** The entry point reads or creates the `install_id`, sets up the
+   offline queue and sends the events left over from previous launches.
+2. **A launch is not a session yet.** The app also starts in the background: from a push
+   notification, a background refresh, a scheduled task. At the entry point, only prepare the
+   tracker, and send `session_start` on the "entered the foreground" event.
+3. **A session ends when the app goes to the background, not when it becomes "inactive".** The
+   notification shade, a system dialog and an incoming call don't interrupt a session (see
+   [Sessions](/docs/concepts/sessions#client-rules)).
+4. **Send asynchronously, through an on-disk queue.** The UI never waits for the network.
 
-| Платформа | Точка входа | Начало и конец сессии |
+| Platform | Entry point | Session start and end |
 |---|---|---|
-| iOS, SwiftUI | `App` с `@main` | `scenePhase`: `.active` и `.background` |
+| iOS, SwiftUI | `App` with `@main` | `scenePhase`: `.active` and `.background` |
 | iOS, UIKit | `didFinishLaunchingWithOptions` | `sceneDidBecomeActive`, `sceneDidEnterBackground` |
-| Android | `Application.onCreate` | `ProcessLifecycleOwner`: `onStart` и `onStop` |
-| Веб | Точка входа бандла | `visibilitychange`, `pagehide` |
-| React Native | Корневой компонент | `AppState`: `active` и `background` |
-| Flutter | `main()` | `AppLifecycleState`: `resumed` и `paused`, на десктопе `hidden` |
-| Kotlin Multiplatform | Точки входа Android и iOS | Хуки Android и iOS вызывают общий трекер |
-| Бот, бэкенд | Старт процесса | Первое сообщение после паузы, 30 минут тишины |
+| Android | `Application.onCreate` | `ProcessLifecycleOwner`: `onStart` and `onStop` |
+| Web | Bundle entry point | `visibilitychange`, `pagehide` |
+| React Native | Root component | `AppState`: `active` and `background` |
+| Flutter | `main()` | `AppLifecycleState`: `resumed` and `paused`, `hidden` on desktop |
+| Kotlin Multiplatform | Android and iOS entry points | Android and iOS hooks call the shared tracker |
+| Bot, backend | Process start | First message after a pause, 30 minutes of silence |
 
 ## iOS [#ios]
 
 ### SwiftUI [#ios-swiftui]
 
-Точка входа — структура с `@main`. `scenePhase` читайте в `App`, а не во `View`: на уровне `App` это
-фаза всего приложения (`.active`, если активна хоть одна сцена), а во `View` — фаза одного окна. На
-iPad с двумя окнами трекер во `View` насчитал бы лишние сессии.
+The entry point is the struct marked `@main`. Read `scenePhase` in the `App`, not in a `View`: at the
+`App` level it's the phase of the whole app (`.active` if at least one scene is active), while in a
+`View` it's the phase of a single window. On an iPad with two windows, a tracker in a `View` would
+count extra sessions.
 
 ```swift title="NotesApp.swift"
 import SwiftUI
@@ -52,7 +54,7 @@ struct NotesApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // Один раз на процесс. Запуск может быть фоновым, поэтому здесь без session_start.
+        // Once per process. The launch may happen in the background, so no session_start here.
         Task { await OfflineQueue.shared.flush() }
     }
 
@@ -64,7 +66,7 @@ struct NotesApp: App {
             switch phase {
             case .active: SessionTracker.shared.start()
             case .background: SessionTracker.shared.end()
-            default: break // .inactive: шторка, системный алерт — сессия продолжается
+            default: break // .inactive: notification shade, system alert — the session goes on
             }
         }
     }
@@ -73,8 +75,8 @@ struct NotesApp: App {
 
 ### UIKit [#ios-uikit]
 
-`application(_:didFinishLaunchingWithOptions:)` вызывается один раз на процесс — в том числе при
-запуске в фоне. Здесь трекер готовится, а сессии ведёт `SceneDelegate`.
+`application(_:didFinishLaunchingWithOptions:)` is called once per process, including launches in
+the background. This is where the tracker gets ready, while `SceneDelegate` handles sessions.
 
 ```swift tab="AppDelegate" title="AppDelegate.swift"
 import UIKit
@@ -85,8 +87,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        _ = InstallID.current // читает install_id из Keychain или создаёт его
-        Task { await OfflineQueue.shared.flush() } // досылает очередь прошлых запусков
+        _ = InstallID.current // reads install_id from the Keychain or creates it
+        Task { await OfflineQueue.shared.flush() } // flushes the queue from previous launches
         return true
     }
 }
@@ -103,7 +105,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
-        // На iPad окон может быть несколько: сессия кончается, когда в фоне все сцены.
+        // iPad can have several windows: the session ends when all scenes are in the background.
         let foreground = UIApplication.shared.connectedScenes.contains {
             $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive
         }
@@ -112,28 +114,29 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 ```
 
-Приложению без `SceneDelegate` подходит вариант из [рецепта](/docs/recipes/ios-swift#session-lifecycle):
-подписка на `UIApplication.didBecomeActiveNotification` и `didEnterBackgroundNotification`.
+An app without a `SceneDelegate` can use the option from the
+[recipe](/docs/recipes/ios-swift#session-lifecycle): subscribing to
+`UIApplication.didBecomeActiveNotification` and `didEnterBackgroundNotification`.
 
-### Расширения и виджеты [#ios-extensions]
+### Extensions and widgets [#ios-extensions]
 
-Виджеты, Share Extension, Notification Service Extension и другие расширения работают в отдельных
-процессах, и сессий из них не отправляют:
+Widgets, Share Extensions, Notification Service Extensions and other extensions run in separate
+processes and don't send sessions:
 
-- система запускает их без пользователя — обновить таймлайн виджета или обработать push. Каждый такой
-  запуск стал бы «сессией», а установка — активным пользователем;
-- у расширения свой bundle ID, а значит свои `UserDefaults` и записи Keychain. Без общей App Group
-  или keychain access group оно создаст собственный `install_id`, и в отчётах появится второй
-  пользователь.
+- the system launches them without the user, to refresh a widget timeline or handle a push. Each such
+  launch would become a "session", and the installation an active user;
+- an extension has its own bundle ID, and therefore its own `UserDefaults` and Keychain items. Without
+  a shared App Group or keychain access group, it would create its own `install_id`, and a second user
+  would show up in reports.
 
-Если пользователь открыл приложение из виджета или уведомления, сессию начнёт само приложение.
+If the user opened the app from a widget or a notification, the app itself starts the session.
 
 ## Android [#android]
 
-Точка входа — `Application.onCreate`, сессии — по `ProcessLifecycleOwner`. Он сообщает о процессе
-целиком: `onStart` — первая активность появилась на экране, `onStop` — последняя ушла с экрана.
-`onStop` приходит с задержкой около 700 мс, поэтому поворот экрана и переход между активностями
-сессию не прерывают.
+The entry point is `Application.onCreate`, and sessions follow `ProcessLifecycleOwner`. It reports on
+the process as a whole: `onStart` means the first activity appeared on screen, `onStop` means the last
+one left the screen. `onStop` arrives with a delay of about 700 ms, so screen rotation and transitions
+between activities don't interrupt the session.
 
 ```kotlin title="App.kt"
 import android.app.Application
@@ -147,41 +150,42 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Процесс стартует и без интерфейса (push, WorkManager): здесь только подготовка.
+        // The process also starts without UI (push, WorkManager): only setup happens here.
         val queue = EventQueue(this)
         analytics = SessionTracker(this, queue)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = analytics.start()
             override fun onStop(owner: LifecycleOwner) = analytics.end()
         })
-        queue.flush() // досылает очередь прошлых запусков
+        queue.flush() // flushes the queue from previous launches
     }
 }
 ```
 
-Почему не `Activity.onCreate`:
+Why not `Activity.onCreate`:
 
-- **поворот экрана**, смена темы или языка пересоздают активность — каждый поворот открыл бы новую
-  сессию и новый трекер;
-- **несколько активностей** — переход между ними даёт `onStop` одной и `onStart` другой, и одна
-  сессия распалась бы на несколько;
-- **возврат из фона** не вызывает `onCreate`, если активность жива, — такие сессии потерялись бы.
+- **screen rotation**, a theme or language change recreate the activity: every rotation would open a
+  new session and a new tracker;
+- **multiple activities**: moving between them produces `onStop` for one and `onStart` for the other,
+  and one session would split into several;
+- **returning from the background** doesn't call `onCreate` if the activity is still alive, so such
+  sessions would be lost.
 
-Если в манифесте есть компоненты с `android:process`, `Application.onCreate` вызывается в каждом
-процессе. Инициализируйте аналитику только в главном: на API 28+ сравните
-`Application.getProcessName()` с `packageName`.
+If the manifest has components with `android:process`, `Application.onCreate` is called in every
+process. Initialize analytics only in the main one: on API 28+, compare
+`Application.getProcessName()` with `packageName`.
 
-## Веб [#web]
+## Web [#web]
 
-Модуль аналитики запускается один раз на загрузку страницы — в точке входа бандла или в корневом
-компоненте SPA, а не на каждом роуте. Переход между страницами SPA не начинает новую сессию: она
-длится, пока вкладка видна. На многостраничном сайте подключайте скрипт в общем шаблоне, а не в коде
-отдельных страниц.
+The analytics module starts once per page load: at the bundle entry point or in the SPA's root
+component, not on every route. Navigating between SPA pages doesn't start a new session: it lasts as
+long as the tab is visible. On a multi-page site, include the script in the shared template, not in
+the code of individual pages.
 
 ```js tab="JavaScript" title="main.js"
 import { start } from "./analytics.js";
 
-start(); // один раз: подписывается на visibilitychange и pagehide
+start(); // once: subscribes to visibilitychange and pagehide
 ```
 
 ```tsx tab="Next.js" title="app/layout.tsx"
@@ -190,10 +194,10 @@ import { Analytics } from "./analytics";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body>
         {children}
-        {/* Корневой layout живёт всё время работы приложения, страницы — нет. */}
+        {/* The root layout lives as long as the app runs; pages don't. */}
         <Analytics userId={null} />
       </body>
     </html>
@@ -201,27 +205,26 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 }
 ```
 
-`<Analytics />` — компонент из [рецепта](/docs/recipes/web-js#setup); `userId` передайте из своей
-сессии. Внутри `start()` сессия привязана к видимости вкладки:
+`<Analytics />` is the component from the [recipe](/docs/recipes/web-js#setup); pass `userId` from
+your own session. Inside `start()`, the session is tied to the tab's visibility:
 
 ```js title="analytics.js"
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") sessionStart();
-  else sessionEnd(); // navigator.sendBeacon: доставка переживёт закрытие вкладки
+  else sessionEnd(); // navigator.sendBeacon: delivery survives the tab closing
 });
-window.addEventListener("pagehide", sessionEnd); // закрытие вкладки, уход со страницы
+window.addEventListener("pagehide", sessionEnd); // tab closed, user navigated away
 ```
 
-`visibilitychange` со статусом `hidden` — последнее событие, которое браузер надёжно присылает и на
-телефоне, когда пользователь сворачивает браузер и больше не возвращается. `beforeunload` и `unload` на
-мобильных часто не срабатывают, а `unload` к тому же мешает кэшу страниц (bfcache). `session_end`
-уходит через `navigator.sendBeacon`: обычный `fetch` закрывающейся страницы браузер может отменить.
+`visibilitychange` with the `hidden` state is the last event the browser reliably fires, on phones
+too, when the user minimizes the browser and never comes back. `beforeunload` and `unload` often don't
+fire on mobile, and `unload` also gets in the way of the page cache (bfcache). `session_end` goes out
+via `navigator.sendBeacon`: the browser may cancel a regular `fetch` from a page that is closing.
 
 ## React Native [#react-native]
 
-Подписка на `AppState` — в корневом компоненте, который живёт всё время работы приложения.
-Состояние `inactive` бывает только на iOS (шторка, переключатель приложений, входящий звонок) — его
-пропускайте.
+Subscribe to `AppState` in the root component, which lives as long as the app runs. The `inactive`
+state exists only on iOS (the notification shade, the app switcher, an incoming call); skip it.
 
 ```tsx title="App.tsx"
 import { useEffect } from "react";
@@ -243,16 +246,17 @@ export default function App() {
 }
 ```
 
-В React Native нет ни `localStorage`, ни `sendBeacon`, поэтому `install_id` хранится в Keychain на
-iOS и в AsyncStorage на Android, очередь — в AsyncStorage, а `session_end` уходит через `fetch`: что
-не успело уйти, отправится при следующем запуске. Трекер, очередь и выбор ключа по `Platform.OS` — в
-[рецепте React Native](/docs/recipes/react-native).
+React Native has neither `localStorage` nor `sendBeacon`, so `install_id` is stored in the Keychain on
+iOS and in AsyncStorage on Android, the queue lives in AsyncStorage, and `session_end` goes out via
+`fetch`: whatever doesn't make it out is sent on the next launch. The tracker, the queue and picking
+the key by `Platform.OS` are in the [React Native recipe](/docs/recipes/react-native).
 
 ## Flutter [#flutter]
 
-Точка входа — `main()`. Наблюдатель `WidgetsBindingObserver` получает состояния приложения: `resumed`
-открывает сессию, `paused` закрывает её на iOS и Android. На десктопе `paused` не приходит, и фон
-там — `hidden`: окно свёрнуто или скрыто. `inactive` — шторка, звонок, окно без фокуса — ещё не фон.
+The entry point is `main()`. A `WidgetsBindingObserver` receives the app states: `resumed` opens a
+session, and `paused` closes it on iOS and Android. On desktop `paused` never arrives, and the
+background there is `hidden`: the window is minimized or hidden. `inactive` (the notification shade,
+a call, an unfocused window) isn't the background yet.
 
 ```dart title="main.dart"
 import 'dart:io';
@@ -266,10 +270,10 @@ final _desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  analytics.flush(); // один трекер на процесс; запуск может быть фоновым — без session_start
+  analytics.flush(); // one tracker per process; may launch in the background, no session_start
   WidgetsBinding.instance.addObserver(AnalyticsLifecycle());
   if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-    analytics.start(); // приложение уже на экране
+    analytics.start(); // the app is already on screen
   }
   runApp(const NotesApp());
 }
@@ -281,27 +285,27 @@ class AnalyticsLifecycle with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         analytics.start();
       case AppLifecycleState.paused:
-        analytics.end(); // iOS и Android
+        analytics.end(); // iOS and Android
       case AppLifecycleState.hidden when _desktop:
-        analytics.end(); // macOS, Windows, Linux: paused здесь не бывает
+        analytics.end(); // macOS, Windows, Linux: paused never happens here
       default:
-        break; // inactive — ещё не фон
+        break; // inactive is not the background yet
     }
   }
 }
 ```
 
-`analytics` — трекер из [рецепта Flutter](/docs/recipes/flutter#session-lifecycle): `duration_ms` по
-`Stopwatch` (монотонные часы), очередь в файле, отправка через `package:http`, ключ и
-`context.platform` по текущей ОС.
+`analytics` is the tracker from the [Flutter recipe](/docs/recipes/flutter#session-lifecycle):
+`duration_ms` from a `Stopwatch` (a monotonic clock), a file-backed queue, sending via `package:http`,
+and the key and `context.platform` picked by the current OS.
 
 ## Kotlin Multiplatform [#kotlin-multiplatform]
 
-Трекер, очередь и `install_id` живут в общем модуле, а точки входа остаются нативными, как в
-разделах [Android](#android) и [iOS](#ios-swiftui): `Application.onCreate` с `ProcessLifecycleOwner`
-и `App` с `@main` и `scenePhase`. Общий код о жизненном цикле не знает — платформа сама вызывает
-`SessionTracker.start()` и `end()`. Подписку не переносят в общий код: `scenePhase` — API SwiftUI,
-из Kotlin его не прочитать.
+The tracker, the queue and `install_id` live in the shared module, while the entry points stay
+native, as in the [Android](#android) and [iOS](#ios-swiftui) sections: `Application.onCreate` with
+`ProcessLifecycleOwner`, and `App` with `@main` and `scenePhase`. The shared code knows nothing about
+the lifecycle: the platform itself calls `SessionTracker.start()` and `end()`. The subscription isn't
+moved into shared code: `scenePhase` is a SwiftUI API and can't be read from Kotlin.
 
 ```kotlin tab="Android" title="App.kt"
 import analytics.SessionTracker
@@ -314,12 +318,12 @@ import androidx.lifecycle.ProcessLifecycleOwner
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        initAnalytics(this) // Context для actual-функций: SharedPreferences и filesDir
+        initAnalytics(this) // Context for the actual functions: SharedPreferences and filesDir
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = SessionTracker.start()
             override fun onStop(owner: LifecycleOwner) = SessionTracker.end()
         })
-        SessionTracker.flush() // досылает очередь прошлых запусков
+        SessionTracker.flush() // flushes the queue from previous launches
     }
 }
 ```
@@ -333,7 +337,7 @@ struct iOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        SessionTracker.shared.flush() // запуск может быть фоновым, поэтому без session_start
+        SessionTracker.shared.flush() // may launch in the background, so no session_start
     }
 
     var body: some Scene {
@@ -351,56 +355,58 @@ struct iOSApp: App {
 }
 ```
 
-`SessionTracker` — общий трекер из
-[рецепта Kotlin Multiplatform](/docs/recipes/kotlin-multiplatform#session-lifecycle): ключ и
-`context.platform` подставляют `actual`-функции каждой платформы.
+`SessionTracker` is the shared tracker from the
+[Kotlin Multiplatform recipe](/docs/recipes/kotlin-multiplatform#session-lifecycle): each platform's
+`actual` functions supply the key and `context.platform`.
 
-## Боты и бэкенды [#bots]
+## Bots and backends [#bots]
 
-У бота и бэкенда нет переднего плана. Трекер создаётся один раз при старте процесса, а сессию
-открывает первый апдейт пользователя после паузы. Каждое следующее сообщение продлевает сессию, а
-закрывает её сервер — по таймеру, когда пользователь молчит 30 минут. При остановке процесса
-открытые сессии закрываются, а очередь отправляется. Готовый трекер на Go — в рецепте
-[Боты и бэкенды](/docs/recipes/bots-and-backends#server-sessions).
+A bot or a backend has no foreground. The tracker is created once when the process starts, and a
+session is opened by the user's first update after a pause. Each subsequent message extends the
+session, and the server closes it on a timer once the user has been silent for 30 minutes. When the
+process stops, open sessions are closed and the queue is sent. A ready-made Go tracker is in the
+[Bots and backends](/docs/recipes/bots-and-backends#server-sessions) recipe.
 
-## Анти-паттерны [#anti-patterns]
+## Anti-patterns [#anti-patterns]
 
-- **Инициализация на каждом экране.** Каждый экран открывает свою сессию и заново подписывается на
-  жизненный цикл: сессий в разы больше, средняя длительность занижена, `session_end` дублируются.
-- **Отправка из виджетов и расширений.** Системные запуски без пользователя завышают активных, а
-  отдельное хранилище расширения создаёт лишние установки.
-- **Синхронная отправка в главном потоке.** Интерфейс замирает на время запроса. Android бросает
-  `NetworkOnMainThreadException`, iOS может завершить приложение, которое долго не отвечает при
-  запуске, а без сети событие теряется. Кладите событие в очередь и отправляйте в фоне.
-- **Новый `install_id` при каждом запуске.** Каждый запуск — новый пользователь: все «новые»,
-  retention около нуля, активные считаются по запускам. `install_id` создаётся один раз и хранится
-  постоянно.
-- **`session_start` в точке входа.** Фоновые запуски по push и расписанию превращаются в сессии,
-  которых пользователь не видел.
+- **Initializing on every screen.** Each screen opens its own session and subscribes to the lifecycle
+  all over again: many times more sessions, an understated average duration, duplicate `session_end`
+  events.
+- **Sending from widgets and extensions.** System launches without the user inflate active users, and
+  the extension's separate storage creates extra installations.
+- **Synchronous sending on the main thread.** The UI freezes for the duration of the request. Android
+  throws `NetworkOnMainThreadException`, iOS may terminate an app that stays unresponsive for too long
+  at launch, and without a network the event is lost. Put the event in the queue and send it in the
+  background.
+- **A new `install_id` on every launch.** Every launch is a new user: everyone is "new", retention is
+  close to zero, and active users are counted by launches. Create `install_id` once and keep it
+  permanently.
+- **`session_start` at the entry point.** Background launches from pushes and schedules turn into
+  sessions the user never saw.
 
-## install_id и user_id [#identity]
+## install_id and user_id [#identity]
 
-`install_id` создаётся при первом запуске и читается в точке входа, до первого события:
+`install_id` is created on first launch and read at the entry point, before the first event:
 
-| Платформа | Где хранить |
+| Platform | Where to store it |
 |---|---|
-| iOS | Keychain, как в [рецепте](/docs/recipes/ios-swift#install-id) |
-| Android | `SharedPreferences` с Auto Backup, как в [рецепте](/docs/recipes/android-kotlin#install-id) |
-| Веб | `localStorage` |
-| React Native | Keychain на iOS, AsyncStorage на Android, как в [рецепте](/docs/recipes/react-native#install-id) |
-| Flutter | Keychain на iOS и macOS, `shared_preferences` на остальных, как в [рецепте](/docs/recipes/flutter#install-id) |
-| Kotlin Multiplatform | `SharedPreferences` на Android; на iOS `NSUserDefaults` или Keychain, см. [рецепт](/docs/recipes/kotlin-multiplatform#install-id) |
-| Бот | Выводится из ID чата через HMAC, см. [рецепт](/docs/recipes/bots-and-backends#identity) |
+| iOS | Keychain, as in the [recipe](/docs/recipes/ios-swift#install-id) |
+| Android | `SharedPreferences` with Auto Backup, as in the [recipe](/docs/recipes/android-kotlin#install-id) |
+| Web | `localStorage` |
+| React Native | Keychain on iOS, AsyncStorage on Android, as in the [recipe](/docs/recipes/react-native#install-id) |
+| Flutter | Keychain on iOS and macOS, `shared_preferences` elsewhere, as in the [recipe](/docs/recipes/flutter#install-id) |
+| Kotlin Multiplatform | `SharedPreferences` on Android; `NSUserDefaults` or Keychain on iOS, see the [recipe](/docs/recipes/kotlin-multiplatform#install-id) |
+| Bot | Derived from the chat ID via HMAC, see the [recipe](/docs/recipes/bots-and-backends#identity) |
 
-Чем это грозит при потере и что переживает переустановку — в разделе
-[Идентичность](/docs/concepts/identity#install-id).
+What losing it costs you and what survives a reinstall is covered in
+[Identity](/docs/concepts/identity#install-id).
 
-`user_id` ставьте:
+Set `user_id`:
 
-- сразу после успешного входа — следующее событие уйдёт уже с ним;
-- при запуске, если пользователь вошёл ещё в прошлый раз, — до первого `session_start`;
-- в `nil` или `null` после выхода. `install_id` при этом не меняется.
+- right after a successful sign-in, so the next event already carries it;
+- at launch, if the user signed in during a previous run, before the first `session_start`;
+- to `nil` or `null` after sign-out. `install_id` stays the same.
 
-`user_id` — ID аккаунта из вашего бэкенда, не email и не телефон. Время события фиксируется в момент
-события, а не отправки: очередь досылает события до 7 дней (см.
-[Время и офлайн-очередь](/docs/concepts/time-and-offline)).
+`user_id` is an account ID from your backend, not an email address or a phone number. An event's time
+is captured when the event happens, not when it's sent: the queue delivers events up to 7 days late
+(see [Time and the offline queue](/docs/concepts/time-and-offline)).

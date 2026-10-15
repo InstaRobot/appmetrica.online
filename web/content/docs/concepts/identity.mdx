@@ -1,75 +1,77 @@
 ---
-title: Идентичность
-description: install_id, user_id и как из них получаются люди в отчётах.
+title: Identity
+description: install_id, user_id and how they turn into people in reports.
 ---
 
-Каждое событие несёт `install_id` — идентификатор установки — и, если пользователь вошёл,
-`user_id` — идентификатор его аккаунта. Отчёты по умолчанию считают людей, а не устройства: несколько
-установок одного аккаунта — один человек.
+Every event carries an `install_id`, the installation identifier, and, if the user is signed in, a
+`user_id`, the identifier of their account. By default, reports count people, not devices: several
+installations of one account are one person.
 
 ## install_id [#install-id]
 
-UUID, который приложение генерирует один раз при первом запуске и хранит постоянно. Любая версия UUID
-подходит, кроме нулевого `00000000-0000-0000-0000-000000000000`; рекомендуем UUIDv4 в нижнем
-регистре.
+A UUID that the app generates once on first launch and keeps permanently. Any UUID version works
+except the nil UUID `00000000-0000-0000-0000-000000000000`; we recommend a lowercase UUIDv4.
 
-| Платформа | Где хранить | Переживает переустановку |
+| Platform | Where to store it | Survives a reinstall |
 |---|---|---|
-| iOS, macOS | Keychain | Да |
-| Android | SharedPreferences с Auto Backup | Да, если включён бэкап |
-| Веб | `localStorage` | Нет: очистка данных сайта — новая установка |
-| Бот | Выводится из ID чата через HMAC | Да |
-| Бэкенд | Конфигурация или база | Да |
+| iOS, macOS | Keychain | Yes |
+| Android | SharedPreferences with Auto Backup | Yes, if backup is enabled |
+| Web | `localStorage` | No: clearing site data means a new installation |
+| Bot | Derived from the chat ID via HMAC | Yes |
+| Backend | Configuration or database | Yes |
 
-Если `install_id` теряется, пользователь выглядит новым, а retention занижается. Не генерируйте
-`install_id` заново на каждом запуске.
+If the `install_id` is lost, the user looks new and retention comes out lower than it is. Don't
+generate a new `install_id` on every launch.
 
 ## user_id [#user-id]
 
-Непрозрачный ID аккаунта из бэкенда приложения: первичный ключ, UUID, внутренний номер. Длина — от 1
-до 128 символов. Передавайте `user_id` во всех событиях, пока пользователь вошёл, и не передавайте
-после выхода.
+An opaque account ID from your app's backend: a primary key, a UUID, an internal number. Length: 1 to
+128 characters. Send `user_id` with every event while the user is signed in, and stop sending it after
+they sign out.
 
-Сервер отклоняет `user_id`, похожий на email или телефон, с кодом `user_id_looks_like_pii`. Чисто
-цифровые строки разрешены, но Telegram ID и другие публичные номера лучше хешировать на своей
-стороне — см. [Боты и бэкенды](/docs/recipes/bots-and-backends#identity).
+The server rejects a `user_id` that looks like an email address or a phone number with the code
+`user_id_looks_like_pii`. Purely numeric strings are allowed, but Telegram IDs and other public
+numbers are better hashed on your side — see
+[Bots and backends](/docs/recipes/bots-and-backends#identity).
 
-## Как считаются люди [#persons]
+## How people are counted [#persons]
 
-Склейка выполняется при построении отчёта, сырые события не переписываются:
+Merging happens when a report is built; raw events are never rewritten:
 
-1. Событие с `user_id` принадлежит человеку `u:<user_id>`.
-2. Анонимные события установки принадлежат «первому владельцу» — пользователю из самого раннего
-   события этой установки с `user_id`. Дни до входа задним числом приписываются ему.
-3. Установка, на которой никто не входил, — отдельный человек `i:<install_id>`.
+1. An event with a `user_id` belongs to the person `u:<user_id>`.
+2. Anonymous events of an installation belong to its "first owner": the user from the earliest event
+   of that installation that has a `user_id`. The days before sign-in are attributed to that user
+   retroactively.
+3. An installation where nobody ever signed in is a separate person `i:<install_id>`.
 
-Пример: установка `I1` три дня работала анонимно, на четвёртый пользователь вошёл как `A`. Все четыре
-дня — один активный человек `u:A`, а новым он стал в первый день, а не в день входа.
+Example: installation `I1` ran anonymously for three days, and on the fourth day the user signed in
+as `A`. All four days count as one active person `u:A`, who became new on the first day, not on the
+day of sign-in.
 
-Если на одном устройстве входили два аккаунта, анонимные события достаются первому из них, а события
-с явным `user_id` — своему аккаунту.
+If two accounts signed in on the same device, anonymous events go to the first of them, and events
+with an explicit `user_id` go to their own account.
 
-## Люди на нескольких платформах [#platforms]
+## People on multiple platforms [#platforms]
 
-Приложение объединяет все свои платформы, и склейка работает сквозь них: пользователь, который вошёл
-как `A` на iOS и в вебе, — один человек `u:A`. Поэтому сводные отчёты считают людей, а не сумму по
-платформам. Склеивает только `user_id`: анонимные установки на разных платформах остаются разными
-людьми, поэтому передавайте один и тот же `user_id` везде, где пользователь вошёл.
+An app unites all of its platforms, and merging works across them: a user who signed in as `A` on iOS
+and on the web is one person `u:A`. That's why aggregated reports count people rather than adding up
+platforms. Only `user_id` merges people: anonymous installations on different platforms stay
+different people, so send the same `user_id` everywhere the user is signed in.
 
-Переключатель платформ над отчётами оставляет события одной платформы. Человек, активный на iOS и в
-вебе, учтён в каждой из них, поэтому сумма по платформам может быть больше итога. Так же считаются
-доли платформ в портфеле.
+The platform switcher above the reports keeps only one platform's events. A person active on iOS and
+on the web is counted in each of them, so the sum across platforms can exceed the total. Platform
+shares in the portfolio are counted the same way.
 
-Если платформы одного продукта подключены как отдельные приложения, люди между ними не склеиваются.
-Объедините такие приложения в настройках — см. [Слияние приложений](/docs/privacy-and-gdpr#merge).
+If the platforms of one product are connected as separate apps, people aren't merged between them.
+Merge such apps in the settings — see [Merging apps](/docs/privacy-and-gdpr#merge).
 
-## persons и installs [#units]
+## persons and installs [#units]
 
-Отчёты и Read API принимают параметр `unit`:
+Reports and the Read API accept a `unit` parameter:
 
-- `persons` (по умолчанию) — люди по правилам выше;
-- `installs` — каждая установка отдельно, как в AppMetrica. Этот режим нужен для сверки цифр с
-  AppMetrica.
+- `persons` (default) — people, according to the rules above;
+- `installs` — each installation on its own, as in AppMetrica. Use this mode to reconcile numbers
+  with AppMetrica.
 
-Профиль человека открывается по `person_key` — `u:<user_id>` или `i:<install_id>`. В URL двоеточие
-допустимо, а `/` внутри `user_id` кодируется как `%2F`.
+A person's profile is opened by `person_key`: `u:<user_id>` or `i:<install_id>`. A colon is allowed
+in the URL, and a `/` inside `user_id` is encoded as `%2F`.

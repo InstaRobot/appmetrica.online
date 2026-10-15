@@ -1,62 +1,62 @@
 ---
-title: Сессии
-description: Когда отправлять session_start и session_end и как из них считаются метрики.
+title: Sessions
+description: When to send session_start and session_end, and how metrics are calculated from them.
 ---
 
-Сессия — непрерывное время, когда приложение на переднем плане. Приложение отправляет два события
-с общим `session_id`:
+A session is a continuous stretch of time while the app is in the foreground. The app sends two
+events with a shared `session_id`:
 
-- `session_start` — при выходе на передний план;
-- `session_end` — при уходе в фон, с полем `duration_ms`.
+- `session_start` — when it comes to the foreground;
+- `session_end` — when it goes to the background, with a `duration_ms` field.
 
-## Правила для клиента [#client-rules]
+## Client rules [#client-rules]
 
-1. **Новый `session_id` на каждый выход на передний план.** UUID генерируется на клиенте; оба
-   события сессии несут один и тот же `session_id` и `install_id`.
-2. **`duration_ms` считает клиент** — время на переднем плане в миллисекундах, от 0 до 86 400 000.
-   Берите монотонные часы (`systemUptime`, `SystemClock.elapsedRealtime`, `performance.now`), а не
-   разницу wall-clock: пользователь может перевести часы во время сессии.
-3. **Короткие уходы — тоже конец сессии.** Сервер не склеивает сессии по паузам. Если хотите
-   игнорировать мгновенные переключения (шторка уведомлений, системный диалог), реагируйте на «фон»,
-   а не на «неактивно», как в рецептах.
-4. **Нет переднего плана — сессия по активности.** Для ботов и бэкендов сессия — серия запросов
-   пользователя без пауз дольше 30 минут, см.
-   [Боты и бэкенды](/docs/recipes/bots-and-backends#server-sessions).
+1. **A new `session_id` every time the app comes to the foreground.** The UUID is generated on the
+   client; both events of a session carry the same `session_id` and `install_id`.
+2. **The client calculates `duration_ms`**: time in the foreground in milliseconds, from 0 to
+   86,400,000. Use a monotonic clock (`systemUptime`, `SystemClock.elapsedRealtime`,
+   `performance.now`), not a wall-clock difference: the user may change the clock during a session.
+3. **Short trips to the background end a session too.** The server doesn't stitch sessions across
+   pauses. If you want to ignore momentary switches (the notification shade, a system dialog), react
+   to "background" rather than "inactive", as the recipes do.
+4. **No foreground means activity-based sessions.** For bots and backends, a session is a series of
+   user requests with no pauses longer than 30 minutes; see
+   [Bots and backends](/docs/recipes/bots-and-backends#server-sessions).
 
-Какие события жизненного цикла начинают и заканчивают сессию на каждой платформе, — в разделе
-[Где инициализировать метрику](/docs/concepts/initialization).
+Which lifecycle events start and end a session on each platform is covered in
+[Where to initialize analytics](/docs/concepts/initialization).
 
-## Как считаются метрики [#metrics]
+## How metrics are calculated [#metrics]
 
-| Метрика | Определение |
+| Metric | Definition |
 |---|---|
-| Активные | Люди, у которых за период была хотя бы одна сессия |
-| Новые | Люди, чьё первое событие в приложении пришлось на период |
-| Сессии | Уникальные `session_id` среди `session_start` |
-| Ср. длительность | Среднее по сессиям с `session_end`; длительность сессии — максимальный `duration_ms` её `session_end` |
-| Retention D1, D7, … | Доля когорты новых, вернувшихся ровно через 1, 7, … дней после первого события |
-| Активны сейчас | Люди с `session_start` за последние 30 минут, у которых сессия ещё не завершена |
+| Active | People who had at least one session during the period |
+| New | People whose first event in the app fell within the period |
+| Sessions | Unique `session_id` values among `session_start` events |
+| Avg. duration | Average over sessions with a `session_end`; a session's duration is the maximum `duration_ms` of its `session_end` events |
+| Retention D1, D7, … | Share of a cohort of new users who came back exactly 1, 7, … days after their first event |
+| Active now | People with a `session_start` in the last 30 minutes whose session hasn't ended yet |
 
-Отсюда следствия:
+What follows from this:
 
-- **Потерянный `session_end`** не теряет сессию: она посчитана по `session_start`, но не участвует в
-  средней длительности. Если `session_end` теряются часто, средняя длительность занижена.
-- **Повторная отправка** того же события не завышает цифры: все метрики считаются по уникальным
-  идентификаторам.
-- **Два `session_end`** одной сессии (клиент досчитал длительность после возврата) — берётся
-  максимум.
-- **Сессия через полночь** засчитывает человека активным в обоих днях, а сама сессия относится ко
-  дню `session_start`.
+- **A lost `session_end`** doesn't lose the session: it is counted by `session_start` but left out of
+  the average duration. If `session_end` events get lost often, the average duration is understated.
+- **Resending** the same event doesn't inflate the numbers: every metric is calculated over unique
+  identifiers.
+- **Two `session_end` events** for one session (the client recalculated the duration after coming
+  back): the maximum is used.
+- **A session that spans midnight** counts the person as active on both days, while the session
+  itself belongs to the day of its `session_start`.
 
-Сутки в отчётах — в часовом поясе приложения, а не устройства.
+Days in reports follow the app's time zone, not the device's.
 
-## Версия и окружение [#context]
+## Version and environment [#context]
 
-`context` батча описывает устройство и сборку: `platform`, `os_name`, `os_version`, `app_version`,
-`app_build`, `device_model`, `device_type`, `locale`, `environment`. Поле `context` у события
-перекрывает контекст батча поле за полем. Это удобно, когда офлайн-очередь хранит события старой
-версии приложения: каждое событие уходит со своей версией.
+The batch `context` describes the device and the build: `platform`, `os_name`, `os_version`,
+`app_version`, `app_build`, `device_model`, `device_type`, `locale`, `environment`. An event's
+`context` field overrides the batch context field by field. This comes in handy when the offline
+queue holds events from an older app version: each event goes out with its own version.
 
-`environment` — `production` (по умолчанию) или `development`. Отчёты показывают production, а
-development включается переключателем «Окружение». Отправляйте `development` из отладочных сборок, чтобы
-тесты не портили цифры.
+`environment` is `production` (default) or `development`. Reports show production, and development
+is turned on with the **Environment** switch. Send `development` from debug builds so that tests don't
+skew the numbers.
