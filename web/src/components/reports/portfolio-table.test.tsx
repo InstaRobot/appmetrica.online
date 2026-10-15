@@ -236,6 +236,46 @@ describe("PortfolioView", () => {
     expect(onUrlUpdate.mock.lastCall?.[0].searchParams.has("sort")).toBe(false);
   });
 
+  it("sorts from the phone picker and keeps the sort in the URL", async () => {
+    mockApi([site, notes, maps]);
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const user = userEvent.setup();
+    renderView("", onUrlUpdate);
+
+    const t = await table();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Сортировка" }), "name");
+    expect(names(t)).toEqual(["Maps Android", "Notes iOS", "site.ru"]);
+    expect(onUrlUpdate.mock.lastCall?.[0].searchParams.get("sort")).toBe("name");
+
+    await user.click(screen.getByRole("button", { name: "По убыванию" }));
+    expect(names(t)).toEqual(["site.ru", "Notes iOS", "Maps Android"]);
+    expect(onUrlUpdate.mock.lastCall?.[0].searchParams.get("sort")).toBe("-name");
+  });
+
+  it("shows every app as a labelled card on phones", async () => {
+    mockApi([notes]);
+    renderView();
+
+    const t = await table();
+    expect(t).toHaveAttribute("role", "table");
+    const cells = within(rowOf(t, "Notes iOS")).getAllByRole("cell");
+    expect(cells[0]).not.toHaveAttribute("data-label");
+    expect(cells.slice(1).map((c) => c.getAttribute("data-label"))).toEqual([
+      "Платформы",
+      "Сегодня",
+      "DAU 12\u00a0окт",
+      "Δ к пн\u00a05\u00a0окт",
+      "Новые",
+      "Сессии",
+      "D1",
+      "D7",
+      "30 дней",
+    ]);
+    // Шапка таблицы на телефоне только для скринридеров: её кнопки сортировки не ловят фокус.
+    expect(within(t).getByRole("button", { name: /^DAU/ })).toHaveClass("max-md:invisible");
+    expect(within(t).getByRole("columnheader", { name: /^DAU 12\sокт/ })).toBeInTheDocument();
+  });
+
   it("opens the app from its row and links the name", async () => {
     mockApi([notes]);
     const user = userEvent.setup();
@@ -489,6 +529,49 @@ describe("PortfolioTable", () => {
     await user.click(screen.getByRole("button", { name: /^DAU/ }));
     expect(onSortChange).toHaveBeenLastCalledWith({ key: "active_date", desc: false });
   });
+
+  it("picks the sort field and direction on phones", async () => {
+    const onSortChange = vi.fn<(sort: PortfolioSort) => void>();
+    const user = userEvent.setup();
+    renderWithClient(
+      <PortfolioTable
+        rows={[notes, maps]}
+        date="2026-10-12"
+        sort={{ key: "active_date", desc: true }}
+        onSortChange={onSortChange}
+      />,
+    );
+
+    const picker = screen.getByRole("combobox", { name: "Сортировка" });
+    expect(picker).toHaveValue("active_date");
+    expect(
+      within(picker)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual([
+      "Приложение",
+      "Сегодня",
+      "DAU 12\u00a0окт",
+      "Δ к пн\u00a05\u00a0окт",
+      "Новые",
+      "Сессии",
+      "D1",
+      "D7",
+    ]);
+    // Выбор сортировки — только на телефоне; на md и шире сортируют заголовки колонок.
+    expect(picker.closest(".md\\:hidden")).not.toBeNull();
+
+    await user.selectOptions(picker, "new_date");
+    expect(onSortChange).toHaveBeenLastCalledWith({ key: "new_date", desc: true });
+    await user.selectOptions(picker, "name");
+    expect(onSortChange).toHaveBeenLastCalledWith({ key: "name", desc: false });
+
+    const direction = screen.getByRole("button", { name: "По убыванию" });
+    expect(direction).toHaveAttribute("aria-pressed", "true");
+    expect(direction).toHaveClass("size-11");
+    await user.click(direction);
+    expect(onSortChange).toHaveBeenLastCalledWith({ key: "active_date", desc: false });
+  });
 });
 
 // Английский интерфейс: подписи из словаря en, числа и даты в формате en-US.
@@ -538,6 +621,19 @@ describe("PortfolioView in English", () => {
       "D7",
       "30 days",
     ]);
+  });
+
+  it("labels the phone sort picker in English", async () => {
+    mockApi([notes, maps]);
+    renderViewInEnglish();
+
+    await screen.findByRole("table", { name: /^App portfolio for/ });
+    const picker = screen.getByRole("combobox", { name: "Sort by" });
+    expect(within(picker).getByRole("option", { name: "App" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Descending" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("formats numbers, deltas and trends in English", async () => {
