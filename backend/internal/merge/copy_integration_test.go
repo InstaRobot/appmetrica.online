@@ -3,6 +3,7 @@
 package merge_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -57,8 +58,8 @@ func TestCopyEvents_AllColumns(t *testing.T) {
 	require.Contains(t, names, "properties")
 
 	value := func(app appJSON, c column) (v string, isDefault bool) {
-		q := "SELECT toString(" + c.Name + "), toString(" + c.Name + ") = toString(defaultValueOfTypeName('" + c.Type +
-			"')) FROM events WHERE app_id = {app:UUID}"
+		q := "SELECT toString(" + c.Name + "), toString(" + c.Name + ") = toString(defaultValueOfTypeName('" +
+			strings.ReplaceAll(c.Type, "'", `\'`) + "')) FROM events WHERE app_id = {app:UUID}"
 		qctx := clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{"app": app.ID}))
 		require.NoError(t, e.CH.Conn().QueryRow(qctx, q).Scan(&v, &isDefault), c.Name)
 		return v, isDefault
