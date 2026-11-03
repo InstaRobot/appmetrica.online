@@ -83,7 +83,7 @@ func (e *portfolioEnv) newKey(t *testing.T) string {
 }
 
 func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
-	e := newPortfolioEnv(t)
+	e := newEventsEnv(t)
 	doc := loadAPIDoc(t)
 	msk := testutil.ScenarioApps[0]
 	app := "/v1/apps/" + msk.ID.String()
@@ -130,6 +130,13 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 		{app + "/audience/rolling-active?" + period, http.StatusOK},
 		{app + "/audience/breakdown?" + period + "&dimension=country", http.StatusOK},
 		{app + "/audience/breakdown?" + period + "&dimension=app_version&metric=sessions&limit=5", http.StatusOK},
+		{app + "/events?" + period, http.StatusOK},
+		{app + "/events?" + period + "&compare=none&unit=installs&platform=ios", http.StatusOK},
+		{app + "/events/purchase?" + period, http.StatusOK},
+		{app + "/events/purchase?" + period + "&granularity=week&compare=none", http.StatusOK},
+		{app + "/events/never_sent?" + period, http.StatusOK},
+		{app + "/events/note_created/breakdown?" + period + "&property=source", http.StatusOK},
+		{app + "/events/purchase/breakdown?" + period + "&property=plan&limit=2", http.StatusOK},
 		{app + "/retention?from=2026-09-14&to=2026-10-12", http.StatusOK},
 		{app + "/retention?from=2026-08-03&to=2026-10-11&cohort_granularity=week&periods=8", http.StatusOK},
 		{app + "/realtime", http.StatusOK},
@@ -148,6 +155,10 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 		{app + "/audience/summary?from=2024-01-01&to=2026-10-12", http.StatusBadRequest},
 		{app + "/audience/timeseries?from=2026-09-01&to=2026-10-12&granularity=hour", http.StatusBadRequest},
 		{app + "/audience/breakdown?" + period, http.StatusBadRequest},
+		{app + "/events/purchase/breakdown?" + period + "&property=Bad", http.StatusBadRequest},
+		{app + "/events?from=2024-01-01&to=2026-10-12", http.StatusBadRequest},
+		{app + "/events/session_start?" + period, http.StatusNotFound},
+		{"/v1/apps/" + uuid.NewString() + "/events", http.StatusNotFound},
 		{app + "/retention?from=2026-10-12&to=2026-10-01", http.StatusBadRequest},
 		{app + "/profiles", http.StatusBadRequest},
 		{app + "/profiles/" + url.PathEscape("u:nobody"), http.StatusNotFound},

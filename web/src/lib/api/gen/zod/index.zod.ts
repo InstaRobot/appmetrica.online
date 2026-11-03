@@ -7,6 +7,7 @@ export * from "./admin-system/admin-system.zod";
 export * from "./apps/apps.zod";
 export * from "./audience/audience.zod";
 export * from "./deletion/deletion.zod";
+export * from "./events/events.zod";
 export * from "./health/health.zod";
 export * from "./integration/integration.zod";
 export * from "./portfolio/portfolio.zod";

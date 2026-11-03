@@ -109,6 +109,21 @@ Authorization: Bearer {{apiKey}}
 GET {{api}}/v1/apps/{{appId}}/audience/breakdown?from={{from}}&to={{to}}&dimension=platform&metric=active&limit=50
 Authorization: Bearer {{apiKey}}
 
+### События: список
+# @name listEvents
+GET {{api}}/v1/apps/{{appId}}/events?from={{from}}&to={{to}}&compare=previous_period
+Authorization: Bearer {{apiKey}}
+
+### События: страница события
+# @name getEventReport
+GET {{api}}/v1/apps/{{appId}}/events/purchase?from={{from}}&to={{to}}&granularity=day
+Authorization: Bearer {{apiKey}}
+
+### События: разбивка по свойству
+# @name getEventBreakdown
+GET {{api}}/v1/apps/{{appId}}/events/purchase/breakdown?from={{from}}&to={{to}}&property=plan&limit=20
+Authorization: Bearer {{apiKey}}
+
 ### Retention
 # @name getRetention
 GET {{api}}/v1/apps/{{appId}}/retention?from={{from}}&to={{to}}&cohort_granularity=day&periods=30

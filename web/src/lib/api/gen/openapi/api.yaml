@@ -23,6 +23,7 @@ tags:
   - name: Portfolio
   - name: Audience
   - name: Retention
+  - name: Events
   - name: Realtime
   - name: Profiles
   - name: Integration
@@ -288,6 +289,114 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RetentionMatrix' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Events]
+      operationId: listEvents
+      x-required-scope: read
+      description: >-
+        Custom events of the period by name (session_start and session_end are not custom events and are not listed),
+        events DESC, name ASC, at most 500 names; `truncated` is true when there were more.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Compare'
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Custom events by name
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/events/{event_name}:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - $ref: '#/components/parameters/EventNamePath'
+    get:
+      tags: [Events]
+      operationId: getEventReport
+      x-required-scope: read
+      description: >-
+        One custom event: summary, series by bucket and the property keys seen in the period. A name without events
+        in the period gives zeros, not 404; a system name (session_start, session_end) gives 404 `event_not_found`.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: granularity
+          in: query
+          schema: { $ref: '#/components/schemas/Granularity' }
+        - $ref: '#/components/parameters/Compare'
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Event report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/events/{event_name}/breakdown:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - $ref: '#/components/parameters/EventNamePath'
+    get:
+      tags: [Events]
+      operationId: getEventBreakdown
+      x-required-scope: read
+      description: >-
+        Events of one custom event by the value of a property: the top `limit` values, the rest as `other` and the
+        events without the key as `missing`. A system name gives 404 `event_not_found`.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: property
+          in: query
+          required: true
+          description: Property key
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - $ref: '#/components/parameters/UnitQ'
+        - $ref: '#/components/parameters/FilterPlatform'
+        - $ref: '#/components/parameters/FilterAppVersion'
+        - $ref: '#/components/parameters/FilterOsName'
+        - $ref: '#/components/parameters/FilterCountry'
+      responses:
+        '200':
+          description: Breakdown by property value
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBreakdown' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1108,6 +1217,11 @@ components:
       name: compare
       in: query
       schema: { type: string, enum: [previous_period, none], default: previous_period }
+    EventNamePath:
+      name: event_name
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
     Split:
       name: split
       in: query
@@ -1459,6 +1573,82 @@ components:
         rows:
           type: array
           items: { $ref: '#/components/schemas/BreakdownRow' }
+    EventStat:
+      type: object
+      required: [name, events, people]
+      properties:
+        name: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        events: { type: integer, format: int64 }
+        people: { type: integer, format: int64 }
+        prev_events: { type: integer, format: int64, description: 'Only with compare=previous_period' }
+        prev_people: { type: integer, format: int64, description: 'Only with compare=previous_period' }
+    EventList:
+      type: object
+      required: [events, truncated]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/EventStat' }
+        truncated: { type: boolean, description: 'There were more names than the 500 returned' }
+    EventSummary:
+      type: object
+      required: [events, people, events_per_person]
+      properties:
+        events: { type: integer, format: int64 }
+        people: { type: integer, format: int64 }
+        events_per_person: { type: number, description: 'Two decimals; 0 without people' }
+        prev_events: { type: integer, format: int64, description: 'Only with compare=previous_period' }
+        prev_people: { type: integer, format: int64, description: 'Only with compare=previous_period' }
+        prev_events_per_person: { type: number, description: 'Only with compare=previous_period' }
+    EventPoint:
+      type: object
+      required: [bucket, events, people]
+      properties:
+        bucket: { type: string, format: date-time, description: Bucket start with the app time zone offset }
+        events: { type: integer, format: int64 }
+        people: { type: integer, format: int64 }
+    EventPropertyKey:
+      type: object
+      required: [key, events]
+      properties:
+        key: { type: string }
+        events: { type: integer, format: int64, description: Events of the period that carry the key }
+    EventReport:
+      type: object
+      required: [name, summary, timeseries, property_keys]
+      properties:
+        name: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        summary: { $ref: '#/components/schemas/EventSummary' }
+        timeseries:
+          type: array
+          items: { $ref: '#/components/schemas/EventPoint' }
+        property_keys:
+          type: array
+          description: Up to 50 keys, events DESC, key ASC
+          items: { $ref: '#/components/schemas/EventPropertyKey' }
+    EventCount:
+      type: object
+      required: [events, people]
+      properties:
+        events: { type: integer, format: int64 }
+        people: { type: integer, format: int64 }
+    EventValueCount:
+      type: object
+      required: [value, events, people]
+      properties:
+        value: { type: string, description: 'An empty string is a present key with an empty value' }
+        events: { type: integer, format: int64 }
+        people: { type: integer, format: int64 }
+    EventBreakdown:
+      type: object
+      required: [property, values, missing]
+      properties:
+        property: { type: string }
+        values:
+          type: array
+          items: { $ref: '#/components/schemas/EventValueCount' }
+        other: { $ref: '#/components/schemas/EventCount' }
+        missing: { $ref: '#/components/schemas/EventCount' }
     RetentionCohort:
       type: object
       required: [cohort_start, size, values]

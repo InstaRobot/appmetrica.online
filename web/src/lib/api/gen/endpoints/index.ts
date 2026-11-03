@@ -7,6 +7,7 @@ export * from "./admin-system/admin-system";
 export * from "./apps/apps";
 export * from "./audience/audience";
 export * from "./deletion/deletion";
+export * from "./events/events";
 export * from "./health/health";
 export * from "./integration/integration";
 export * from "./portfolio/portfolio";
