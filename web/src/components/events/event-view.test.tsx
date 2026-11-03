@@ -11,6 +11,10 @@ import { server } from "@/test/msw";
 import { renderWithLocale } from "@/test/rtl";
 import { EventView } from "./event-view";
 
+// Таблица разбивки — после двух запросов подряд (отчёт события, затем разбивка по его первому ключу)
+// и ленивой загрузки: секунды по умолчанию у findBy* на раннере CI не хватало (как в lazy-calendar.test.tsx).
+const BREAKDOWN_WAIT = { timeout: 5000 };
+
 const APP_ID = "0192aaaa-0000-7000-8000-000000000001";
 const URL_PARAMS = "period=30d&country=KZ&env=development&unit=installs";
 
@@ -171,7 +175,11 @@ describe("EventView", () => {
     mockApi({ breakdowns: { plan: THIRDS } });
     renderView(URL_PARAMS, onUrlUpdate);
 
-    const table = await screen.findByRole("table", { name: "note_created by plan" });
+    const table = await screen.findByRole(
+      "table",
+      { name: "note_created by plan" },
+      BREAKDOWN_WAIT,
+    );
     expect(within(table).getByText("pro")).toBeInTheDocument();
     expect(seen.breakdown[0]?.get("property")).toBe("plan");
     expect(seen.breakdown[0]?.get("limit")).toBe("20");
@@ -185,12 +193,16 @@ describe("EventView", () => {
     mockApi({ breakdowns: { plan: THIRDS, source: SOURCE } });
     renderView(URL_PARAMS, onUrlUpdate);
 
-    await screen.findByRole("table", { name: "note_created by plan" });
+    await screen.findByRole("table", { name: "note_created by plan" }, BREAKDOWN_WAIT);
     await user.click(await screen.findByRole("combobox", { name: "Property" }));
     await user.click(await screen.findByRole("option", { name: "source" }));
 
     expect(onUrlUpdate.mock.lastCall?.[0].queryString).toContain("property=source");
-    const table = await screen.findByRole("table", { name: "note_created by source" });
+    const table = await screen.findByRole(
+      "table",
+      { name: "note_created by source" },
+      BREAKDOWN_WAIT,
+    );
     const rows = within(table).getAllByRole("row").slice(1);
     const cells = (row: HTMLElement) =>
       within(row)
@@ -210,7 +222,11 @@ describe("EventView", () => {
     mockApi({ breakdowns: { plan: THIRDS } });
     renderView();
 
-    const table = await screen.findByRole("table", { name: "note_created by plan" });
+    const table = await screen.findByRole(
+      "table",
+      { name: "note_created by plan" },
+      BREAKDOWN_WAIT,
+    );
     const rows = within(table).getAllByRole("row").slice(1);
     const shares = rows.map((r) => percent(within(r).getAllByRole("cell")[3]));
     expect(shares).toHaveLength(3);
@@ -233,7 +249,11 @@ describe("EventView", () => {
     });
     renderView();
 
-    const table = await screen.findByRole("table", { name: "note_created by plan" });
+    const table = await screen.findByRole(
+      "table",
+      { name: "note_created by plan" },
+      BREAKDOWN_WAIT,
+    );
     expect(within(table).queryByText("Other")).not.toBeInTheDocument();
     expect(within(table).queryByText("No property")).not.toBeInTheDocument();
     expect(within(table).getByText("100%")).toBeInTheDocument();
@@ -254,7 +274,11 @@ describe("EventView", () => {
     });
     renderView();
 
-    const table = await screen.findByRole("table", { name: "note_created by plan" });
+    const table = await screen.findByRole(
+      "table",
+      { name: "note_created by plan" },
+      BREAKDOWN_WAIT,
+    );
     const placeholder = within(table).getByText("empty value");
     expect(placeholder.className).toContain("text-fg-muted");
     expect(placeholder.className).not.toContain("font-mono");
@@ -266,7 +290,7 @@ describe("EventView", () => {
     mockApi({ breakdowns: { source: SOURCE } });
     renderView(`${URL_PARAMS}&property=source&limit=50`);
 
-    await screen.findByRole("table", { name: "note_created by source" });
+    await screen.findByRole("table", { name: "note_created by source" }, BREAKDOWN_WAIT);
     expect(seen.breakdown[0]?.get("property")).toBe("source");
     expect(seen.breakdown[0]?.get("limit")).toBe("50");
   });
