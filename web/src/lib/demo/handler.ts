@@ -364,7 +364,10 @@ const ROUTES: readonly Route[] = [
     if (!PERSON_KEY.test(key)) {
       throw invalid("person_key", "personKey");
     }
-    const env = oneOf(query, "environment", ENVIRONMENTS, "production");
+    // Без environment — оба окружения, как у getProfile.
+    const env = query.has("environment")
+      ? oneOf(query, "environment", ENVIRONMENTS, "production")
+      : null;
     const limit = integer(query, "limit", 1, 200, 50);
     const before = query.get("before");
     if (before !== null && !PROFILE_EVENTS_CURSOR.test(before)) {

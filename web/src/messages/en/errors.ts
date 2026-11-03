@@ -15,6 +15,7 @@ export const errors = {
     demo_read_only: "Demo mode: changes are not available",
     app_not_found: "The app was not found or has been deleted",
     profile_not_found: "Profile not found",
+    event_not_found: "No custom event with this name",
     not_found: "The object was not found or has been deleted.",
     last_passkey: "You can't remove the last passkey — add another one first.",
     app_name_taken: "An app with this name already exists",

@@ -17,6 +17,8 @@ export const events = {
     title: "No custom events yet",
     description:
       "Events your app sends with a name of its own show up here. System events such as session_start are not listed.",
+    environmentHint:
+      "Only the selected environment is shown: pick “development” in the Environment switch to see test events.",
     action: "How to send events",
   },
   event: {
@@ -52,6 +54,7 @@ export const events = {
       share: "Share",
       other: "Other",
       missing: "No property",
+      emptyValue: "empty value",
       noProperties: "This event has no properties in the period.",
       empty: "No events with this property in the period.",
       more: "Show more",

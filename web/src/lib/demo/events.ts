@@ -89,16 +89,17 @@ function periodTotals(scope: Scope, spec: EventSpec, from: string, to: string): 
   };
 }
 
-// eventsList — имена с событиями текущего периода: events DESC, name ASC.
+// eventsList — имена с событиями текущего периода (при compare и упавшие до нуля): events DESC, name ASC.
 export function eventsList(scope: Scope, from: string, to: string, compare: boolean): EventList {
   const [pFrom, pTo] = previousPeriod(from, to);
   const events: EventStat[] = [];
   for (const spec of eventSpecs(scope)) {
     const cur = periodTotals(scope, spec, from, to);
-    if (cur.events === 0) continue;
+    const prev = compare ? periodTotals(scope, spec, pFrom, pTo) : undefined;
+    // Как в backend/internal/reports/events.go: при compare остаётся и имя, упавшее до нуля.
+    if (cur.events === 0 && !(prev && prev.events > 0)) continue;
     const stat: EventStat = { name: spec.name, events: cur.events, people: cur.people };
-    if (compare) {
-      const prev = periodTotals(scope, spec, pFrom, pTo);
+    if (prev) {
       stat.prev_events = prev.events;
       stat.prev_people = prev.people;
     }

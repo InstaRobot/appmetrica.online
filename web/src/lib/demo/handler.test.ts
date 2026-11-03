@@ -927,9 +927,7 @@ describe("demoFetch profile events", () => {
     for (const e of all.events) expect(["production", "development"]).toContain(e.environment);
     expect(prod.events.every((e) => e.environment === "production")).toBe(true);
     expect(dev.events.every((e) => e.environment === "development")).toBe(true);
-    expect(new Set(all.events.map(key))).toEqual(
-      new Set([...prod.events, ...dev.events].map(key)),
-    );
+    expect(new Set(all.events.map(key))).toEqual(new Set([...prod.events, ...dev.events].map(key)));
   });
 
   it("pages through the cursor without repeats or gaps and is deterministic", async () => {

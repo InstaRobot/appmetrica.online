@@ -757,6 +757,7 @@ function eventsOf(demo: DemoApp, s: Session, now: number): DemoProfileEvent[] {
           name: spec.name,
           session_id: s.id,
           install_id: s.install.installId,
+          environment: s.environment,
           platform: s.install.platform,
           app_version: s.version,
           properties:
@@ -770,12 +771,12 @@ function eventsOf(demo: DemoApp, s: Session, now: number): DemoProfileEvent[] {
   return out;
 }
 
-// getProfileEvents — свои события человека в окружении env, новые первыми по (время, insert_id); null — у
+// getProfileEvents — свои события человека в окружении env (null — во всех), новые первыми по (время, insert_id); null — у
 // человека нет событий в приложении (404 profile_not_found, как у getProfile).
 export function getProfileEvents(
   demo: DemoApp,
   personKey: string,
-  page: { limit: number; before: string | null; env: Environment },
+  page: { limit: number; before: string | null; env: Environment | null },
   now: number,
 ): ProfileEventPage | null {
   const person = directory(demo).byKey.get(personKey);
@@ -783,7 +784,7 @@ export function getProfileEvents(
   const sessions = sessionsOf(demo, person, now);
   if (sessions.length === 0) return null;
   const all = sessions
-    .filter((s) => s.environment === page.env)
+    .filter((s) => page.env === null || s.environment === page.env)
     .flatMap((s) => eventsOf(demo, s, now))
     .sort((a, b) => b.at - a.at || b.id.localeCompare(a.id));
   const [cursorAt, cursorId] = page.before?.split(".") ?? [];

@@ -79,10 +79,11 @@ export function EventBreakdownTable({
   if (loading && !data) return <TableSkeleton rows={6} />;
   if (!data) return null;
 
+  // Присланное пустое значение отличается от события без ключа: у него своя приглушённая подпись.
   const rows: Row[] = data.values.map((v) => ({
     key: `v:${v.value}`,
-    label: v.value,
-    value: true,
+    label: v.value === "" ? m.emptyValue : v.value,
+    value: v.value !== "",
     events: v.events,
     people: v.people,
   }));

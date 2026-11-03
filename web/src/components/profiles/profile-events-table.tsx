@@ -4,6 +4,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { usePlatformLabel } from "@/components/common/platform-icon";
 import { ErrorState } from "@/components/feedback/error-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -115,6 +116,11 @@ export function ProfileEventsTable({ appId, personKey, timezone }: ProfileEvents
               </TableCell>
               <TableCell label={t.columns.name} className="font-mono text-code break-all">
                 {e.name}
+                {e.environment === "development" ? (
+                  <Badge variant="outline" className="ml-2 align-middle font-sans text-fg-muted">
+                    {t.developmentBadge}
+                  </Badge>
+                ) : null}
               </TableCell>
               <TableCell label={t.columns.properties}>
                 <Properties properties={e.properties} />

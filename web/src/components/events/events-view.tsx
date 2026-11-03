@@ -62,7 +62,7 @@ function EventsReport({ app }: { app: App }) {
       <EmptyState
         icon={ListChecks}
         title={m.empty.title}
-        description={m.empty.description}
+        description={`${m.empty.description} ${m.empty.environmentHint}`}
         action={{
           label: m.empty.action,
           href: publicHref(locale, "/docs/concepts/events"),

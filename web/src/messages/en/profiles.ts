@@ -80,6 +80,7 @@ export const profiles = {
     },
     moreProperties: pluralForms({ one: "{count} more", other: "{count} more" }),
     lessProperties: "Collapse",
+    developmentBadge: "development",
     more: "Show more",
   },
   deleteDialog: {

@@ -85,6 +85,7 @@ export const profiles: typeof en = {
       many: "ещё {count}",
       other: "ещё {count}",
     }),
+    developmentBadge: "development",
     lessProperties: "Свернуть",
     more: "Показать ещё",
   },
