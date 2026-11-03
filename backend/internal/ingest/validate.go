@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,8 @@ type Event struct {
 	UserID string
 	// DurationMs — 0, если не передан (у session_end обязателен).
 	DurationMs int64
+	// Properties — свойства события, приведённые к строкам; nil — не переданы или пусты.
+	Properties map[string]string
 	// Context — заданные поля context события; слияние с батчем делает Enricher.Enrich.
 	Context ContextFields
 	// EventTime заполняет CorrectEventTime.
@@ -51,11 +54,12 @@ type rawEvent struct {
 	UserID     json.RawMessage `json:"user_id"`
 	DurationMs json.RawMessage `json:"duration_ms"`
 	Context    json.RawMessage `json:"context"`
+	Properties json.RawMessage `json:"properties"`
 }
 
 // ValidateEvent проверяет events[index] и возвращает либо событие, либо первое найденное отклонение.
 // Порядок проверок: объект → insert_id → name → timestamp → install_id → session_id → duration_ms → user_id
-// (длина, затем PII-guard) → context. Значения полей в текст отклонения не попадают.
+// (длина, затем PII-guard) → context → properties. Значения полей в текст отклонения не попадают.
 func ValidateEvent(index int, raw json.RawMessage) (*Event, *ingestapi.Rejection) {
 	var r rawEvent
 	if isNull(raw) || json.Unmarshal(raw, &r) != nil {
@@ -91,6 +95,9 @@ func ValidateEvent(index int, raw json.RawMessage) (*Event, *ingestapi.Rejection
 			"events["+strconv.Itoa(index)+"]."+cerr.field, cerr.message)
 	}
 	ev.Context = fields
+	if ev.Properties, rej = DecodeProperties(index, insertID, r.Properties); rej != nil {
+		return nil, rej
+	}
 	return ev, nil
 }
 
@@ -145,11 +152,15 @@ func uuidField(index int, insertID, field string, raw json.RawMessage) (uuid.UUI
 	return id, nil
 }
 
-// Системные имена — значения SystemEventName из ingest.yaml. Своих имён пока нет: отказ прежний (FR-102, Task 3).
+// Системные имена — значения SystemEventName из ingest.yaml; остальные имена с префиксом session_ зарезервированы.
 const (
 	systemEventSessionStart = "session_start"
 	systemEventSessionEnd   = "session_end"
+	reservedEventPrefix     = "session_"
 )
+
+// eventNameRe — шаблон имени события из схемы EventName ingest.yaml.
+var eventNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 func nameField(index int, insertID string, raw json.RawMessage) (ingestapi.EventName, *ingestapi.Rejection) {
 	s, present, ok := stringField(raw)
@@ -160,9 +171,12 @@ func nameField(index int, insertID string, raw json.RawMessage) (ingestapi.Event
 		return "", reject(index, insertID, ingestapi.RejectionCodeInvalidField, "name", "name должен быть строкой.")
 	case name == systemEventSessionStart || name == systemEventSessionEnd:
 		return name, nil
+	case eventNameRe.MatchString(name) && !strings.HasPrefix(name, reservedEventPrefix):
+		return name, nil
 	default:
 		return "", reject(index, insertID, ingestapi.RejectionCodeUnknownEventName, "name",
-			"Допустимые имена: session_start, session_end.")
+			"Имя должно соответствовать ^[a-z][a-z0-9_]{0,63}$ и не быть зарезервированным: префикс session_ "+
+				"допустим только у session_start и session_end.")
 	}
 }
 

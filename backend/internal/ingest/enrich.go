@@ -107,13 +107,15 @@ func NewEventRow(b *Batch, ev *Event) chstore.EventRow {
 		Region:      rc.Region,
 		City:        rc.City,
 		WriteKeyID:  b.Key.WriteKeyID,
+		Properties:  ev.Properties,
 	}
 }
 
 // PayloadSample — rejected_events.payload_sample: тело батча или JSON события, переписанные токен за
 // токеном в компактный каноничный JSON (encoding/json без HTML-экранирования). Пары с ключом "ip" на любом
 // уровне (контекст батча, события, вложенные объекты) выбрасываются целиком, строковые user_id, похожие
-// на email или телефон, заменяются на "[redacted]" (AC-1.5.2 — и при batch-ошибке, когда до проверки
+// на email или телефон, заменяются на "[redacted]", как и такие же строковые значения прямых ключей объекта
+// properties (property_looks_like_pii; числа не трогаются) (AC-1.5.2 — и при batch-ошибке, когда до проверки
 // событий дело не дошло), строковые app_key обрезаются до key_prefix: сэмпл отдаётся Read API как
 // example_payload, полный ключ записи в нём недопустим. Ключи и значения сравниваются после снятия
 // JSON-экранирования, поэтому
@@ -145,6 +147,8 @@ type sampler struct {
 	userID bool
 	// appKey — следующий токен — значение ключа app_key.
 	appKey bool
+	// props — следующий токен — значение ключа properties; объект получает sampleFrame.props.
+	props bool
 }
 
 // sampleFrame — открытый контейнер: для объекта key=true, когда ожидается ключ; n — выведено элементов или пар.
@@ -152,6 +156,8 @@ type sampleFrame struct {
 	object bool
 	key    bool
 	n      int
+	// props — объект properties: строковые значения его прямых ключей проверяются PII-guard.
+	props bool
 }
 
 func (s *sampler) run() {
@@ -196,6 +202,8 @@ func (s *sampler) emit(tok json.Token) bool {
 			s.userID = true
 		case strings.EqualFold(key, "app_key"):
 			s.appKey = true
+		case key == "properties":
+			s.props = true
 		}
 		sep := ""
 		if top.n > 0 {
@@ -217,14 +225,15 @@ func (s *sampler) emit(tok json.Token) bool {
 		if v == '}' || v == ']' {
 			return s.closeContainer(string(v))
 		}
-		s.userID, s.appKey = false, false
+		props := s.props && v == '{'
+		s.userID, s.appKey, s.props = false, false, false
 		if !s.write(sep + string(v)) {
 			return false
 		}
 		if top != nil {
 			top.n++
 		}
-		s.stack = append(s.stack, sampleFrame{object: v == '{', key: v == '{'})
+		s.stack = append(s.stack, sampleFrame{object: v == '{', key: v == '{', props: props})
 		return true
 	case string:
 		if s.userID && LooksLikePII(v) {
@@ -232,6 +241,9 @@ func (s *sampler) emit(tok json.Token) bool {
 		}
 		if s.appKey {
 			v = keyPrefix(v)
+		}
+		if top != nil && top.props && LooksLikePII(v) {
+			v = redactedUserID
 		}
 		return s.finishValue(sep + s.encodeString(v))
 	case json.Number:
@@ -245,7 +257,7 @@ func (s *sampler) emit(tok json.Token) bool {
 
 // finishValue выводит скалярное значение и переводит родителя к следующему элементу или ключу.
 func (s *sampler) finishValue(text string) bool {
-	s.userID, s.appKey = false, false
+	s.userID, s.appKey, s.props = false, false, false
 	if !s.write(text) {
 		return false
 	}

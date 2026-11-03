@@ -525,7 +525,7 @@ gzip -c batch.json | curl -sS https://i.appmetrica.online/v1/events \
 | I-11 | nil_install_id | `install_id="00000000-0000-0000-0000-000000000000"` | rejected `invalid_field`, field `events[0].install_id` | `validate_test.go::TestValidate_NilInstallID` |
 | I-12 | dup_insert_id | 2 события с одинаковым `insert_id` | 200 `accepted=1`, warning `duplicate_insert_id_in_batch` (index 1) | `validate_test.go::TestValidate_DuplicateInsertID` |
 | I-13 | end_without_duration | `session_end` без `duration_ms` | rejected `duration_required` | `validate_test.go::TestValidate_SessionEndRequiresDuration` |
-| I-14 | unknown_name | `name="purchase"` | rejected `unknown_event_name`, `retryable=false` | `validate_test.go::TestValidate_UnknownEventName` |
+| I-14 | unknown_name | `name="Purchase"` (не по шаблону `^[a-z][a-z0-9_]{0,63}$`) | rejected `unknown_event_name`, `retryable=false` | `validate_test.go::TestValidate_UnknownEventName` |
 | I-15 | missing_session_id | событие без `session_id` | rejected `missing_field`, field `events[0].session_id` | `validate_test.go::TestValidate_MissingSessionID` |
 | I-16 | gzip_body | тот же батч I-01, `Content-Encoding: gzip` | 200 `accepted=2` | `handler_test.go::TestIngest_Gzip` |
 | I-17 | bad_encoding | `Content-Encoding: br` | 400 `unsupported_content_encoding` | `handler_test.go::TestIngest_UnsupportedEncoding` |
@@ -550,6 +550,11 @@ gzip -c batch.json | curl -sS https://i.appmetrica.online/v1/events \
 | I-36 | retry_same_batch | I-01 дважды | обе 200; `uniqExact(session_id)=1` в отчёте сессий | `integration_test.go::TestIngest_RetryIsIdempotentForMetrics` |
 | I-37 | cors_preflight | `OPTIONS /v1/events` с `Origin: https://site.ru` | 204, `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Headers` содержит `X-App-Key` | `handler_test.go::TestIngest_CORSPreflight` |
 | I-38 | rejected_logged | I-07 | строка в `rejected_events` с `code=user_id_looks_like_pii`, `payload_sample` ≤ 4096 байт | `integration_test.go::TestIngest_RejectedEventsLogged` |
+| I-39 | custom_event_with_properties | `name="purchase"`, `properties={"plan":"pro","amount":12,"trial":false}` | 200 `accepted=1`; в `events` `properties={'plan':'pro','amount':'12','trial':'false'}` | `properties_test.go::TestNormalizeProperties` |
+| I-40 | reserved_session_prefix | `name="session_resume"` | rejected `unknown_event_name`, `retryable=false` | `validate_test.go::TestValidate_CustomEventNames` |
+| I-41 | property_pii | `properties.email="a@b.co"` | rejected `property_looks_like_pii`, field `events[0].properties.email`, `retryable=false`; в `payload_sample` значение `[redacted]` | `properties_test.go::TestValidateProperties_PII` |
+| I-42 | too_many_properties | `properties` из 51 ключа | rejected `invalid_field`, field `events[0].properties` | `properties_test.go::TestValidateProperties` |
+| I-43 | property_null | `properties={"plan":null}` | rejected `invalid_field`, field `events[0].properties.plan` | `properties_test.go::TestValidateProperties` |
 
 ---
 
@@ -1169,7 +1174,7 @@ HTTP polling, без WebSocket/SSE/Supabase Realtime/Ably. Обосновани�
 - **Test vectors §2** — исполняемые AC, пишутся до кода (TDD): Go-тесты через `httptest` против сгенерированного strict-server и реальных ClickHouse/Postgres в testcontainers.
 - **Contract drift**: `make gen && git diff --exit-code` в CI (`.github/workflows/ci.yml`) — сервер и клиент не могут разойтись со спекой молча.
 - **Валидация ответов в тестах**: для Read/Admin API Go-тесты прогоняют каждый ответ через `kin-openapi` (`openapi3filter.ValidateResponse`, транзитивная зависимость `oapi-codegen/nethttp-middleware` v1.2.0) — ответ, не соответствующий схеме, валит тест.
-- **Валидация запросов в рантайме**: `api` подключает `nethttp-middleware` (OapiRequestValidator) — некорректные параметры отклоняются `400 invalid_request` до хендлера. Ingest **не** использует валидатор kin-openapi на горячем пути (стоимость рефлексии): ручная валидация в `internal/ingest/validate.go`, покрытая векторами I-01…I-38.
+- **Валидация запросов в рантайме**: `api` подключает `nethttp-middleware` (OapiRequestValidator) — некорректные параметры отклоняются `400 invalid_request` до хендлера. Ingest **не** использует валидатор kin-openapi на горячем пути (стоимость рефлексии): ручная валидация в `internal/ingest/validate.go`, покрытая векторами I-01…I-43.
 - **Фронт**: Vitest 5.0.4 + MSW-хендлеры, сгенерированные orval из той же спеки (тот же контракт, что у бэкенда); Playwright 1.64.0 E2E против поднятого локально стека (`make dev`).
 - **Ручная проверка**: файл `contracts/http/requests.http` (формат VS Code REST Client / JetBrains HTTP Client) с примерами всех публичных запросов — вместо Postman/Bruno-коллекции.
 - **Нагрузочная проверка ingest** (NFR-001): `k6` сценарий `backend/perf/ingest-load.js` — 500 rps батчами по 20 событий 10 мин, порог `http_req_duration p(99) < 500`.
@@ -3638,3 +3643,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 2026-10-14 | 1.2 | 413 `payload_too_large` и для api: тело любого запроса `/v1`, `/admin/v1` ограничено 65 536 байт (`http.MaxBytesReader`, сквозное правило в `info.description` api.yaml) |
 | 2026-10-14 | 1.3 | `deleteApp` отзывает write-ключи приложения вместе с архивацией: ingest отвечает `401 invalid_app_key`; worker берёт запрос `app` не раньше чем через 16 мин (OQ-073) |
 | 2026-10-15 | 1.4 | Контракт 1.1.0 (§9.1.1, без повторного встраивания YAML): `PlatformList`, `App.platforms`/`AppSummary.platforms` (`platform` deprecated), `PortfolioRow.platforms`, `WriteKey.platform`, параметр `split=none\|platform` с `TimeSeries.splits[]`, фильтр `platform` у `getRealtime`, операции слияния `merge-preview`/`merges`/`merges/{merge_id}/retry`, `JobName` `app_merge`, `Conflict` `merge_in_progress`/`app_archived`, `WarningCode` `platform_missing`; «5 jobs» → 6 в `getSystemStatus` |
+| 2026-11-03 | 1.5 | FR-102, ingest: свои имена событий по шаблону `^[a-z][a-z0-9_]{0,63}$` (префикс `session_` зарезервирован, `unknown_event_name` теперь значит «не по шаблону или зарезервировано»), необязательное поле `properties`, код отказа `property_looks_like_pii`; векторы I-14 (`Purchase`) и I-39…I-43 |

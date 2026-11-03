@@ -181,8 +181,9 @@ coverage: ## Покрытие Go (unit + integration, -race) и гейт scripts
 	COVER_PKGS="$(COVER_PKGS)" COVER_MIN=$(COVER_MIN) bash $(ROOT)/scripts/coverage-gate.sh $(BACKEND)/coverage.out
 
 .PHONY: fuzz
-fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLooksLikePII
+fuzz: ## Fuzz-тесты Go по FUZZTIME (по умолчанию 30s): FuzzLooksLikePII, FuzzDecodeProperties
 	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzLooksLikePII$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
+	cd $(BACKEND) && go test -run '^$$' -fuzz '^FuzzDecodeProperties$$' -fuzztime $(or $(FUZZTIME),30s) ./internal/ingest/
 
 .PHONY: test-scripts
 test-scripts: ## Тесты CI-скриптов (coverage-gate, check-tdd-order, perf-compare), деплоя (deploy-plan, dokploy-deploy, geo-month) и сверки (scripts/reconcile)
