@@ -172,10 +172,10 @@ func TestRealtime_RecentCustomEvents(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	names := map[string]bool{}
 	for _, ev := range got.RecentEvents {
-		names[string(ev.Name)] = true
+		names[ev.Name] = true
 	}
 	require.Equal(t, map[string]bool{"session_start": true, "purchase": true}, names)
-	require.Equal(t, "purchase", string(got.RecentEvents[0].Name), "новее — первым")
+	require.Equal(t, "purchase", got.RecentEvents[0].Name, "новее — первым")
 }
 
 func loadLocation(t *testing.T, app testutil.ScenarioApp) *time.Location {
