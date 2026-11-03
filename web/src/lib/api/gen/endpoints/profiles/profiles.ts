@@ -34,8 +34,10 @@ import type {
   BadRequestResponse,
   ForbiddenResponse,
   GetProfileParams,
+  ListProfileEventsParams,
   NotFoundResponse,
   Profile,
+  ProfileEventPage,
   ProfileSearchResult,
   RateLimitedResponse,
   SearchProfilesParams,
@@ -778,6 +780,394 @@ export function useGetProfileSuspense<
   queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetProfileSuspenseQueryOptions(appId, personKey, params, options);
+
+  const query = useSuspenseQuery(queryOptions, queryClient) as UseSuspenseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type listProfileEventsResponse200 = {
+  data: ProfileEventPage;
+  status: 200;
+};
+
+export type listProfileEventsResponse400 = {
+  data: BadRequestResponse;
+  status: 400;
+};
+
+export type listProfileEventsResponse401 = {
+  data: UnauthenticatedResponse;
+  status: 401;
+};
+
+export type listProfileEventsResponse403 = {
+  data: ForbiddenResponse;
+  status: 403;
+};
+
+export type listProfileEventsResponse404 = {
+  data: NotFoundResponse;
+  status: 404;
+};
+
+export type listProfileEventsResponse429 = {
+  data: RateLimitedResponse;
+  status: 429;
+};
+
+export type listProfileEventsResponse503 = {
+  data: StorageUnavailableResponse;
+  status: 503;
+};
+
+export type listProfileEventsResponseSuccess = listProfileEventsResponse200 & {
+  headers: Headers;
+};
+export type listProfileEventsResponseError = (
+  | listProfileEventsResponse400
+  | listProfileEventsResponse401
+  | listProfileEventsResponse403
+  | listProfileEventsResponse404
+  | listProfileEventsResponse429
+  | listProfileEventsResponse503
+) & {
+  headers: Headers;
+};
+
+export type listProfileEventsResponse =
+  | listProfileEventsResponseSuccess
+  | listProfileEventsResponseError;
+
+export const getListProfileEventsUrl = (
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/v1/apps/${appId}/profiles/${personKey}/events?${stringifiedParams}`
+    : `/v1/apps/${appId}/profiles/${personKey}/events`;
+};
+
+/**
+ * Custom events of one person across all linked installs, newest first (system events are excluded). An unknown or deleted person gives 404 `profile_not_found`.
+ */
+export const listProfileEvents = async (
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<listProfileEventsResponse> => {
+  return apiFetch<listProfileEventsResponse>(getListProfileEventsUrl(appId, personKey, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListProfileEventsQueryKey = (
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+) => {
+  return [`/v1/apps/${appId}/profiles/${personKey}/events`, ...(params ? [params] : [])] as const;
+};
+
+export const getListProfileEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListProfileEventsQueryKey(appId, personKey, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listProfileEvents>>> = ({ signal }) =>
+    listProfileEvents(appId, personKey, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: appId !== null && appId !== undefined && personKey !== null && personKey !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListProfileEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProfileEvents>>
+>;
+export type ListProfileEventsQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | RateLimitedResponse
+  | StorageUnavailableResponse;
+
+export function useListProfileEvents<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params: undefined | ListProfileEventsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProfileEvents>>,
+          TError,
+          Awaited<ReturnType<typeof listProfileEvents>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListProfileEvents<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProfileEvents>>,
+          TError,
+          Awaited<ReturnType<typeof listProfileEvents>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListProfileEvents<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useListProfileEvents<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListProfileEventsQueryOptions(appId, personKey, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getListProfileEventsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListProfileEventsQueryKey(appId, personKey, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listProfileEvents>>> = ({ signal }) =>
+    listProfileEvents(appId, personKey, params, { signal, ...requestOptions });
+
+  return queryOptionsBuilder({
+    queryKey,
+    ...queryOptions,
+    queryFn: queryOptions?.queryFn ?? queryFn,
+  }) as UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  } & {
+    throwOnError?: ((this: never, error: TError) => boolean) & { readonly __inferenceOnly: never };
+  };
+};
+
+export type ListProfileEventsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProfileEvents>>
+>;
+export type ListProfileEventsSuspenseQueryError =
+  | BadRequestResponse
+  | UnauthenticatedResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | RateLimitedResponse
+  | StorageUnavailableResponse;
+
+export function useListProfileEventsSuspense<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params: undefined | ListProfileEventsParams,
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListProfileEventsSuspense<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListProfileEventsSuspense<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+export function useListProfileEventsSuspense<
+  TData = Awaited<ReturnType<typeof listProfileEvents>>,
+  TError =
+    | BadRequestResponse
+    | UnauthenticatedResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RateLimitedResponse
+    | StorageUnavailableResponse,
+>(
+  appId: string,
+  personKey: string,
+  params?: ListProfileEventsParams,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<Awaited<ReturnType<typeof listProfileEvents>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListProfileEventsSuspenseQueryOptions(appId, personKey, params, options);
 
   const query = useSuspenseQuery(queryOptions, queryClient) as UseSuspenseQueryResult<
     TData,

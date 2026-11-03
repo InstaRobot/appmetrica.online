@@ -111,3 +111,58 @@ export const GetProfileResponse = zod.object({
   ),
   next_before: zod.iso.datetime({ offset: true }).nullable(),
 });
+
+/**
+ * Custom events of one person across all linked installs, newest first (system events are excluded). An unknown or deleted person gives 404 `profile_not_found`.
+ */
+export const listProfileEventsPathPersonKeyRegExp = new RegExp(
+  "^(u:.{1,128}|i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+);
+
+export const ListProfileEventsParams = zod.object({
+  app_id: zod.uuid(),
+  person_key: zod
+    .string()
+    .regex(listProfileEventsPathPersonKeyRegExp)
+    .describe("u:<user_id> or i:<install_id>, URL-encoded"),
+});
+
+export const listProfileEventsQueryEnvironmentDefault = `production`;
+export const listProfileEventsQueryBeforeMax = 128;
+
+export const listProfileEventsQueryLimitDefault = 50;
+export const listProfileEventsQueryLimitMax = 200;
+
+export const ListProfileEventsQueryParams = zod.object({
+  environment: zod
+    .enum(["production", "development"])
+    .default(listProfileEventsQueryEnvironmentDefault),
+  before: zod
+    .string()
+    .min(1)
+    .max(listProfileEventsQueryBeforeMax)
+    .optional()
+    .describe("Opaque cursor: the `next_before` of the previous page"),
+  limit: zod
+    .int()
+    .min(1)
+    .max(listProfileEventsQueryLimitMax)
+    .default(listProfileEventsQueryLimitDefault),
+});
+
+export const listProfileEventsResponseEventsItemNameRegExp = new RegExp("^[a-z][a-z0-9_]{0,63}$");
+
+export const ListProfileEventsResponse = zod.object({
+  events: zod.array(
+    zod.object({
+      event_time: zod.iso.datetime({ offset: true }),
+      name: zod.string().regex(listProfileEventsResponseEventsItemNameRegExp),
+      session_id: zod.uuid(),
+      install_id: zod.uuid(),
+      platform: zod.string(),
+      app_version: zod.string(),
+      properties: zod.record(zod.string(), zod.string()),
+    }),
+  ),
+  next_before: zod.string().nullable().describe("Cursor of the next page; null on the last page"),
+});

@@ -14,11 +14,19 @@
 import type { RequestHandlerOptions } from "msw";
 import { HttpResponse, http } from "msw";
 
-import type { Profile, ProfileSearchResult } from "../../model";
+import type { Profile, ProfileEventPage, ProfileSearchResult } from "../../model";
 
-import { getGetProfileResponseMock, getSearchProfilesResponseMock } from "./profiles.faker";
+import {
+  getGetProfileResponseMock,
+  getListProfileEventsResponseMock,
+  getSearchProfilesResponseMock,
+} from "./profiles.faker";
 
-export { getGetProfileResponseMock, getSearchProfilesResponseMock } from "./profiles.faker";
+export {
+  getGetProfileResponseMock,
+  getListProfileEventsResponseMock,
+  getSearchProfilesResponseMock,
+} from "./profiles.faker";
 
 export const getSearchProfilesMockHandler = (
   overrideResponse?:
@@ -65,4 +73,32 @@ export const getGetProfileMockHandler = (
     options,
   );
 };
-export const getProfilesMock = () => [getSearchProfilesMockHandler(), getGetProfileMockHandler()];
+
+export const getListProfileEventsMockHandler = (
+  overrideResponse?:
+    | ProfileEventPage
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<ProfileEventPage> | ProfileEventPage),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    "*/v1/apps/:appId/profiles/:personKey/events",
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === "function"
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getListProfileEventsResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+export const getProfilesMock = () => [
+  getSearchProfilesMockHandler(),
+  getGetProfileMockHandler(),
+  getListProfileEventsMockHandler(),
+];

@@ -281,3 +281,137 @@ func TestProfile_EncodedSlash(t *testing.T) {
 	require.Equal(t, f.slashInstall, got.Installs[0].InstallId.String())
 	require.Len(t, got.Sessions, 1)
 }
+
+func profileEventsPath(app testutil.ScenarioApp, escapedKey, query string) string {
+	return "/v1/apps/" + app.ID.String() + "/profiles/" + escapedKey + "/events?" + query
+}
+
+// customEventRow — своё событие name установки install пользователя user в at.
+func customEventRow(app testutil.ScenarioApp, install uuid.UUID, user, name string, at time.Time, props map[string]string) chstore.EventRow {
+	r := liveSession(app, install, reports.EnvProduction, at)
+	r.UserID, r.Name, r.Properties = user, name, props
+	return r
+}
+
+// seedProfileEvents — по три своих события на каждой установке user и одно у анонимной установки; session_start
+// профиля в список не входит.
+func seedProfileEvents(t *testing.T, e *portfolioEnv) profilesFixture {
+	t.Helper()
+	f := seedProfiles(t, e)
+	msk := testutil.ScenarioApps[0]
+	var rows []chstore.EventRow
+	base := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	for i := range 3 {
+		at := base.Add(time.Duration(i) * time.Minute)
+		rows = append(rows,
+			customEventRow(msk, f.installA, f.user, "note_created", at, map[string]string{"source": "manual"}),
+			customEventRow(msk, f.installB, f.user, "purchase", at.Add(time.Second), map[string]string{"plan": "year"}),
+		)
+	}
+	rows = append(rows, customEventRow(msk, f.anonymous, "", "search_used", base, nil))
+	require.NoError(t, e.env.CH.InsertEvents(t.Context(), rows))
+	return f
+}
+
+func profileEventsHTTP(t *testing.T, e *portfolioEnv, app testutil.ScenarioApp, escapedKey, query string) gen.ProfileEventPage {
+	t.Helper()
+	rec := e.get(t, profileEventsPath(app, escapedKey, query), e.all)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var got gen.ProfileEventPage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	return got
+}
+
+// listProfileEvents: события всех установок человека новые первыми, курсор next_before ведёт на следующую
+// страницу, системные события и чужие люди не попадают, свойства — объект строк.
+func TestProfileEvents_HTTP(t *testing.T) {
+	e := newPortfolioEnv(t)
+	f := seedProfileEvents(t, e)
+	msk := testutil.ScenarioApps[0]
+	key := url.PathEscape("u:" + f.user)
+
+	// environment по умолчанию — production; у installB сессия development, но события production.
+	first := profileEventsHTTP(t, e, msk, key, "limit=4")
+	require.Len(t, first.Events, 4)
+	require.NotNil(t, first.NextBefore)
+	require.Equal(t, "purchase", first.Events[0].Name)
+	require.Equal(t, f.installB, first.Events[0].InstallId)
+	require.Equal(t, map[string]string{"plan": "year"}, first.Events[0].Properties)
+	require.Equal(t, "ios", first.Events[0].Platform)
+	require.Equal(t, "3.4.0", first.Events[0].AppVersion)
+
+	second := profileEventsHTTP(t, e, msk, key, "limit=4&before="+url.QueryEscape(*first.NextBefore))
+	require.Len(t, second.Events, 2)
+	require.Nil(t, second.NextBefore)
+	times := []time.Time{}
+	for _, ev := range append(first.Events, second.Events...) {
+		require.NotEqual(t, "session_start", ev.Name)
+		require.NotEqual(t, "search_used", ev.Name, "событие анонимной установки — другой человек")
+		require.Equal(t, time.UTC, ev.EventTime.Location())
+		times = append(times, ev.EventTime)
+	}
+	require.IsDecreasing(t, unixNanos(times))
+
+	anon := profileEventsHTTP(t, e, msk, "i%3A"+f.anonymous.String(), "")
+	require.Len(t, anon.Events, 1)
+	require.Empty(t, anon.Events[0].Properties)
+}
+
+func unixNanos(ts []time.Time) []int64 {
+	out := make([]int64, len(ts))
+	for i, t := range ts {
+		out[i] = t.UnixNano()
+	}
+	return out
+}
+
+// AC-007.2: человек, чьи события удалены (GDPR), — 404 profile_not_found, как у getProfile.
+func TestProfileEvents_DeletedPerson(t *testing.T) {
+	e := newPortfolioEnv(t)
+	f := seedProfileEvents(t, e)
+	msk := testutil.ScenarioApps[0]
+	key := url.PathEscape("u:" + f.user)
+	require.Len(t, profileEventsHTTP(t, e, msk, key, "").Events, 6)
+
+	require.NoError(t, e.env.CH.Conn().Exec(t.Context(),
+		`ALTER TABLE events DELETE WHERE app_id = ? AND (user_id = ? OR install_id IN (?, ?)) SETTINGS mutations_sync = 2`,
+		msk.ID, f.user, f.installA, f.installB))
+
+	for _, path := range []string{
+		profileEventsPath(msk, key, ""),
+		profilePath(msk, key, ""),
+	} {
+		body := errorBody(t, e.get(t, path, e.all), http.StatusNotFound)
+		require.Equal(t, "profile_not_found", body.Code, path)
+	}
+	body := errorBody(t, e.get(t, profileEventsPath(msk, url.PathEscape("u:nobody"), ""), e.all), http.StatusNotFound)
+	require.Equal(t, "profile_not_found", body.Code)
+	body = errorBody(t, e.get(t, profileEventsPath(msk, key, ""), e.restricted), http.StatusNotFound)
+	require.Equal(t, "app_not_found", body.Code)
+}
+
+// Плохой person_key, limit, before и environment — 400 invalid_request с details.field, присланное значение
+// в ответ не попадает.
+func TestProfileEvents_InvalidParams(t *testing.T) {
+	e := newPortfolioEnv(t)
+	f := seedProfileEvents(t, e)
+	msk := testutil.ScenarioApps[0]
+	key := url.PathEscape("u:" + f.user)
+
+	for _, tc := range []struct{ key, query, field string }{
+		{"x:123", "", "person_key"},
+		{key, "limit=0", "limit"},
+		{key, "limit=201", "limit"},
+		{key, "limit=abc", "limit"},
+		{key, "before=garbage-cursor", "before"},
+		{key, "before=", "before"},
+		{key, "environment=staging", "environment"},
+	} {
+		rec := e.get(t, profileEventsPath(msk, tc.key, tc.query), e.all)
+		body := errorBody(t, rec, http.StatusBadRequest)
+		require.Equal(t, "invalid_request", body.Code, "%s?%s", tc.key, tc.query)
+		require.Equal(t, tc.field, body.Details["field"], "%s?%s", tc.key, tc.query)
+		require.NotContains(t, rec.Body.String(), "garbage-cursor")
+	}
+	require.Len(t, profileEventsHTTP(t, e, msk, key, "limit=200").Events, 6)
+}

@@ -485,6 +485,42 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/StorageUnavailable' }
+  /v1/apps/{app_id}/profiles/{person_key}/events:
+    parameters:
+      - $ref: '#/components/parameters/AppId'
+      - name: person_key
+        in: path
+        required: true
+        description: u:<user_id> or i:<install_id>, URL-encoded
+        schema: { type: string, pattern: '^(u:.{1,128}|i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' }
+    get:
+      tags: [Profiles]
+      operationId: listProfileEvents
+      x-required-scope: read
+      description: >-
+        Custom events of one person across all linked installs, newest first (system events are excluded). An unknown
+        or deleted person gives 404 `profile_not_found`.
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentQ'
+        - name: before
+          in: query
+          description: 'Opaque cursor: the `next_before` of the previous page'
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: A page of the person's custom events
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileEventPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/StorageUnavailable' }
   /v1/apps/{app_id}/integration/health:
     parameters:
       - $ref: '#/components/parameters/AppId'
@@ -1762,6 +1798,33 @@ components:
         environment: { $ref: '#/components/schemas/Environment' }
         country: { type: string }
         city: { type: string }
+    ProfileEvent:
+      type: object
+      required: [event_time, name, session_id, install_id, platform, app_version, properties]
+      properties:
+        event_time: { type: string, format: date-time }
+        name:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,63}$'
+          example: note_created
+        session_id: { type: string, format: uuid }
+        install_id: { type: string, format: uuid }
+        platform: { type: string }
+        app_version: { type: string }
+        properties:
+          type: object
+          additionalProperties: { type: string }
+    ProfileEventPage:
+      type: object
+      required: [events, next_before]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/ProfileEvent' }
+        next_before:
+          type: string
+          nullable: true
+          description: Cursor of the next page; null on the last page
     Profile:
       type: object
       required: [person_key, user_id, first_seen, last_seen, installs, sessions, next_before]

@@ -144,6 +144,11 @@ Authorization: Bearer {{apiKey}}
 GET {{api}}/v1/apps/{{appId}}/profiles/i:6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21?sessions_limit=100
 Authorization: Bearer {{apiKey}}
 
+### События человека (свои события профиля, новые первыми; before — курсор из next_before)
+# @name listProfileEvents
+GET {{api}}/v1/apps/{{appId}}/profiles/i:6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21/events?limit=50
+Authorization: Bearer {{apiKey}}
+
 ### Здоровье интеграции
 # @name getIntegrationHealth
 GET {{api}}/v1/apps/{{appId}}/integration/health?hours=24

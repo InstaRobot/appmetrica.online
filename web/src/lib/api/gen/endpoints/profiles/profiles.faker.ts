@@ -11,7 +11,7 @@
  * OpenAPI spec version: 1.1.0
  */
 import { faker } from "@faker-js/faker";
-import type { Profile, ProfileSearchResult } from "../../model";
+import type { Profile, ProfileEventPage, ProfileSearchResult } from "../../model";
 import { Environment } from "../../model";
 
 export const getSearchProfilesResponseMock = (
@@ -73,6 +73,29 @@ export const getGetProfileResponseMock = (
   ),
   next_before: faker.helpers.arrayElement([
     faker.date.past().toISOString().slice(0, 19) + "Z",
+    null,
+  ]),
+  ...overrideResponse,
+});
+
+export const getListProfileEventsResponseMock = (
+  overrideResponse: Partial<Extract<ProfileEventPage, object>> = {},
+): ProfileEventPage => ({
+  events: Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(
+    () => ({
+      event_time: faker.date.past().toISOString().slice(0, 19) + "Z",
+      name: faker.helpers.fromRegExp("^[a-z][a-z0-9_]{0,63}$"),
+      session_id: faker.string.uuid(),
+      install_id: faker.string.uuid(),
+      platform: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      app_version: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      properties: {
+        [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+    }),
+  ),
+  next_before: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
   ]),
   ...overrideResponse,
