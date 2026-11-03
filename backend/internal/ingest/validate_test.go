@@ -484,7 +484,7 @@ func TestValidate_CustomEventNames(t *testing.T) {
 			raw := eventJSON(t, map[string]any{"name": name, "duration_ms": 5})
 			ev, rej := ingest.ValidateEvent(0, raw)
 			require.Nil(t, rej)
-			require.Equal(t, ingestapi.EventName(name), ev.Name)
+			require.Equal(t, name, ev.Name)
 		})
 	}
 	for _, name := range []string{"Session_Start", "1abc", strings.Repeat("a", 65), "session_resume", "session_", "Purchase", "", "a-b", "a b", "событие", "a\n"} {
