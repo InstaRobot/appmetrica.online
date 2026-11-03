@@ -87,6 +87,7 @@ export const getListProfileEventsResponseMock = (
       name: faker.helpers.fromRegExp("^[a-z][a-z0-9_]{0,63}$"),
       session_id: faker.string.uuid(),
       install_id: faker.string.uuid(),
+      environment: faker.helpers.arrayElement(Object.values(Environment)),
       platform: faker.string.alpha({ length: { min: 10, max: 20 } }),
       app_version: faker.string.alpha({ length: { min: 10, max: 20 } }),
       properties: {

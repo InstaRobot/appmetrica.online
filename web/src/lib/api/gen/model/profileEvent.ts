@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.1.0
  */
+import type { Environment } from "./environment";
 import type { ProfileEventProperties } from "./profileEventProperties";
 
 export interface ProfileEvent {
@@ -18,6 +19,7 @@ export interface ProfileEvent {
   name: string;
   session_id: string;
   install_id: string;
+  environment: Environment;
   platform: string;
   app_version: string;
   properties: ProfileEventProperties;

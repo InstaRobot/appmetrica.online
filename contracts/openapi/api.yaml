@@ -498,8 +498,9 @@ paths:
       operationId: listProfileEvents
       x-required-scope: read
       description: >-
-        Custom events of one person across all linked installs, newest first (system events are excluded). An unknown
-        or deleted person gives 404 `profile_not_found`.
+        Custom events of one person across all linked installs, newest first (system events are excluded). Without
+        `environment` both environments are returned (like getProfile), each event carries its `environment`; an
+        explicit `environment` filters. An unknown or deleted person gives 404 `profile_not_found`.
       parameters:
         - $ref: '#/components/parameters/EnvironmentQ'
         - name: before
@@ -1339,7 +1340,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
-      description: app_not_found | profile_not_found | not_found
+      description: app_not_found | profile_not_found | event_not_found | not_found
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1800,7 +1801,7 @@ components:
         city: { type: string }
     ProfileEvent:
       type: object
-      required: [event_time, name, session_id, install_id, platform, app_version, properties]
+      required: [event_time, name, session_id, install_id, environment, platform, app_version, properties]
       properties:
         event_time: { type: string, format: date-time }
         name:
@@ -1809,6 +1810,7 @@ components:
           example: note_created
         session_id: { type: string, format: uuid }
         install_id: { type: string, format: uuid }
+        environment: { $ref: '#/components/schemas/Environment' }
         platform: { type: string }
         app_version: { type: string }
         properties:

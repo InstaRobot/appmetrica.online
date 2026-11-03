@@ -13,6 +13,6 @@
 import type { Error } from "./error";
 
 /**
- * app_not_found | profile_not_found | not_found
+ * app_not_found | profile_not_found | event_not_found | not_found
  */
 export type NotFoundResponse = Error;

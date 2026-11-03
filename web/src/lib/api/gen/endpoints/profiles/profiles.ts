@@ -863,7 +863,7 @@ export const getListProfileEventsUrl = (
 };
 
 /**
- * Custom events of one person across all linked installs, newest first (system events are excluded). An unknown or deleted person gives 404 `profile_not_found`.
+ * Custom events of one person across all linked installs, newest first (system events are excluded). Without `environment` both environments are returned (like getProfile), each event carries its `environment`; an explicit `environment` filters. An unknown or deleted person gives 404 `profile_not_found`.
  */
 export const listProfileEvents = async (
   appId: string,

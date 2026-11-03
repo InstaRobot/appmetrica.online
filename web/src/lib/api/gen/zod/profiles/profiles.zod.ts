@@ -113,7 +113,7 @@ export const GetProfileResponse = zod.object({
 });
 
 /**
- * Custom events of one person across all linked installs, newest first (system events are excluded). An unknown or deleted person gives 404 `profile_not_found`.
+ * Custom events of one person across all linked installs, newest first (system events are excluded). Without `environment` both environments are returned (like getProfile), each event carries its `environment`; an explicit `environment` filters. An unknown or deleted person gives 404 `profile_not_found`.
  */
 export const listProfileEventsPathPersonKeyRegExp = new RegExp(
   "^(u:.{1,128}|i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
@@ -151,6 +151,7 @@ export const ListProfileEventsQueryParams = zod.object({
 });
 
 export const listProfileEventsResponseEventsItemNameRegExp = new RegExp("^[a-z][a-z0-9_]{0,63}$");
+export const listProfileEventsResponseEventsItemEnvironmentDefault = `production`;
 
 export const ListProfileEventsResponse = zod.object({
   events: zod.array(
@@ -159,6 +160,9 @@ export const ListProfileEventsResponse = zod.object({
       name: zod.string().regex(listProfileEventsResponseEventsItemNameRegExp),
       session_id: zod.uuid(),
       install_id: zod.uuid(),
+      environment: zod
+        .enum(["production", "development"])
+        .default(listProfileEventsResponseEventsItemEnvironmentDefault),
       platform: zod.string(),
       app_version: zod.string(),
       properties: zod.record(zod.string(), zod.string()),
