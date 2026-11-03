@@ -2,7 +2,8 @@
 // приложения «Seed iOS», «Seed Android», «Seed Site» и «Seed Notes» на iOS, Android и Web (TZ Europe/Moscow),
 // write-ключ --write-key для «Seed iOS» и события за --days дней по вчерашний день: около --daily-installs
 // новых установок в день, удержание D1≈35 %, D7≈15 %, 20 % установок с user_id, 5 % — второе устройство того
-// же user_id на той же платформе. У «Seed Notes» около 5 % людей — с одним user_id на iOS и Web.
+// же user_id на той же платформе. У «Seed Notes» около 5 % людей — с одним user_id на iOS и Web, а внутри
+// сессий — свои события note_created, search_used, note_shared, paywall_shown и purchase со свойствами.
 //
 // События пишутся в ClickHouse напрямую, минуя ingest и окно приёма 7 дней. Генератор детерминирован
 // (seed RNG + дата запуска): повторный запуск в тот же день вставляет те же строки, и ReplacingMergeTree
@@ -51,15 +52,63 @@ var retentionDecay = math.Log(retentionD1/retentionD7) / math.Log(7)
 var writeKeyRe = regexp.MustCompile(`^pk_[A-Za-z0-9]{32}$`)
 
 type appSpec struct {
-	Name      string
-	Platforms []sqlc.AppPlatform
+	Name         string
+	Platforms    []sqlc.AppPlatform
+	CustomEvents bool // шлёт свои события внутри сессий (customEventSpecs)
 }
 
 var appSpecs = []appSpec{
-	{"Seed iOS", []sqlc.AppPlatform{sqlc.AppPlatformIos}},
-	{"Seed Android", []sqlc.AppPlatform{sqlc.AppPlatformAndroid}},
-	{"Seed Site", []sqlc.AppPlatform{sqlc.AppPlatformWeb}},
-	{"Seed Notes", []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid, sqlc.AppPlatformWeb}},
+	{"Seed iOS", []sqlc.AppPlatform{sqlc.AppPlatformIos}, false},
+	{"Seed Android", []sqlc.AppPlatform{sqlc.AppPlatformAndroid}, false},
+	{"Seed Site", []sqlc.AppPlatform{sqlc.AppPlatformWeb}, false},
+	{"Seed Notes", []sqlc.AppPlatform{sqlc.AppPlatformIos, sqlc.AppPlatformAndroid, sqlc.AppPlatformWeb}, true},
+}
+
+// customEventSpec — своё событие «Seed Notes»: имена и свойства те же, что в демо-каталоге web
+// (web/src/lib/demo/catalog.ts, EVENT_CATALOG), perSession — среднее число событий на сессию.
+type customEventSpec struct {
+	name       string
+	perSession float64
+	property   string
+	values     []weightedValue
+}
+
+type weightedValue struct {
+	value  string
+	weight int
+}
+
+var customEventSpecs = []customEventSpec{
+	{"note_created", 1.6, "source", []weightedValue{{"keyboard", 30}, {"voice", 29}, {"share", 28}}},
+	{"search_used", 0.7, "results", searchResultValues()},
+	{"note_shared", 0.35, "target", []weightedValue{{"messages", 4}, {"mail", 3}, {"telegram", 2}, {"copy_link", 1}}},
+	{"paywall_shown", 0.2, "place", []weightedValue{{"onboarding", 1}, {"limit", 1}, {"settings", 1}}},
+	{"purchase", 0.03, "plan", []weightedValue{{"monthly", 5}, {"yearly", 3}, {"lifetime", 1}}},
+}
+
+// searchResultValues — число результатов «0»…«40» с убывающими весами: у свойства есть хвост «остальные».
+func searchResultValues() []weightedValue {
+	out := make([]weightedValue, 41)
+	for i := range out {
+		out[i] = weightedValue{fmt.Sprint(i), 41 - i}
+	}
+	return out
+}
+
+// pickWeighted выбирает значение по весам одним броском rng.
+func pickWeighted(rng *rand.Rand, values []weightedValue) string {
+	total := 0
+	for _, v := range values {
+		total += v.weight
+	}
+	n := rng.IntN(total)
+	for _, v := range values {
+		if n < v.weight {
+			return v.value
+		}
+		n -= v.weight
+	}
+	return values[len(values)-1].value
 }
 
 // platformWeights — доли установок мультиплатформенного приложения по платформам (накопленные).
@@ -85,6 +134,8 @@ type seedApp struct {
 	ID         uuid.UUID
 	Platforms  []string
 	WriteKeyID uuid.UUID // uuid.Nil у приложений без ключа
+	// CustomEvents — приложение шлёт свои события (customEventSpecs) внутри сессий.
+	CustomEvents bool
 }
 
 type genConfig struct {
@@ -215,7 +266,7 @@ func ensureApps(ctx context.Context, q *sqlc.Queries, opts options) ([]seedApp, 
 		for i, p := range a.Platforms {
 			platforms[i] = string(p)
 		}
-		out = append(out, seedApp{ID: a.ID, Platforms: platforms})
+		out = append(out, seedApp{ID: a.ID, Platforms: platforms, CustomEvents: spec.CustomEvents})
 	}
 	keyID, err := ensureWriteKey(ctx, q, out[0].ID, opts.WriteKey)
 	if err != nil {
@@ -386,6 +437,27 @@ func (in install) sessions(rows []chstore.EventRow, rng *rand.Rand, app seedApp,
 		rows = append(rows,
 			in.row(app, "session_start", start, end, session, 0, newUUID(rng)),
 			in.row(app, "session_end", end, end, session, durationMs, newUUID(rng)))
+		if app.CustomEvents {
+			rows = in.customEvents(rows, rng, app, start, end, session, durationMs)
+		}
+	}
+	return rows
+}
+
+// customEvents добавляет свои события сессии: для каждого имени целая часть perSession плюс событие с
+// вероятностью дробной, момент — внутри сессии, свойство — по весам. Приходят так же, как сессии, минуя ingest.
+func (in install) customEvents(rows []chstore.EventRow, rng *rand.Rand, app seedApp, start, end time.Time, session uuid.UUID, durationMs uint32) []chstore.EventRow {
+	for _, spec := range customEventSpecs {
+		n := int(spec.perSession)
+		if rng.Float64() < spec.perSession-float64(n) {
+			n++
+		}
+		for range n {
+			at := start.Add(time.Duration(rng.Int64N(int64(durationMs)+1)) * time.Millisecond)
+			row := in.row(app, spec.name, at, end, session, 0, newUUID(rng))
+			row.Properties = map[string]string{spec.property: pickWeighted(rng, spec.values)}
+			rows = append(rows, row)
+		}
 	}
 	return rows
 }
