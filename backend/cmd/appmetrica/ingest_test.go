@@ -118,7 +118,7 @@ func testBatch() string {
 	return `{"sent_at":"` + now + `","events":[` +
 		`{"insert_id":"` + uuid.NewString() + `","name":"session_start","timestamp":"` + now + `",` +
 		`"install_id":"` + uuid.NewString() + `","session_id":"` + uuid.NewString() + `"},` +
-		`{"insert_id":"` + uuid.NewString() + `","name":"purchase","timestamp":"` + now + `",` +
+		`{"insert_id":"` + uuid.NewString() + `","name":"Purchase","timestamp":"` + now + `",` +
 		`"install_id":"` + uuid.NewString() + `","session_id":"` + uuid.NewString() + `"}]}`
 }
 
