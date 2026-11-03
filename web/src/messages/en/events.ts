@@ -19,4 +19,42 @@ export const events = {
       "Events your app sends with a name of its own show up here. System events such as session_start are not listed.",
     action: "How to send events",
   },
+  event: {
+    back: "Events",
+    notFound: {
+      title: "Event not found",
+      description:
+        "This name is not a custom event of the app. System events such as session_start are not shown here.",
+      action: "Back to events",
+    },
+    totals: "Event totals",
+    kpi: {
+      events: "Events",
+      people: "People",
+      installs: "Installs",
+      perPerson: "Events per person",
+      perPersonHint: "Events divided by people",
+    },
+    chart: {
+      metric: "Chart metric",
+      events: "Events",
+      people: "People",
+      installs: "Installs",
+    },
+    breakdown: {
+      title: "Properties",
+      property: "Property",
+      table: "{event} by {property}",
+      value: "Value",
+      events: "Events",
+      people: "People",
+      installs: "Installs",
+      share: "Share",
+      other: "Other",
+      missing: "No property",
+      noProperties: "This event has no properties in the period.",
+      empty: "No events with this property in the period.",
+      more: "Show more",
+    },
+  },
 };

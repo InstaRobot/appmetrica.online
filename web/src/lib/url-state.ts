@@ -310,12 +310,33 @@ export function useRealtimeState() {
   };
 }
 
-// URL-состояние вкладки «События»: период, фильтры, окружение и unit — те же параметры, что у других вкладок,
-// поэтому переход между ними их не теряет.
+// Ключ свойства события — шаблон EventName/PropertyKey из api.yaml.
+const EVENT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+const propertyKey = createParser({
+  parse: (value: string) => (EVENT_KEY.test(value) ? value : null),
+  serialize: (value: string) => value,
+});
+
+// Число значений разбивки: целое 1–100 (getEventBreakdown.limit); по умолчанию 20 в URL не пишется.
+export const EVENT_BREAKDOWN_LIMIT = 20;
+const breakdownLimit = createParser({
+  parse: (value: string) => {
+    const n = /^\d{1,3}$/.test(value) ? Number(value) : 0;
+    return n >= 1 && n <= 100 ? n : null;
+  },
+  serialize: (value: number) => String(value),
+}).withDefault(EVENT_BREAKDOWN_LIMIT);
+
+// URL-состояние вкладки «События» и страницы события: период, фильтры, окружение и unit — те же параметры,
+// что у других вкладок, поэтому переход между ними их не теряет. Детализация графика, свойство и число
+// значений разбивки (`g`, `property`, `limit`) нужны только странице события; список их не читает.
 export const eventsSearchParams = {
   period: parseAsStringLiteral(PERIOD_PRESETS),
   from: isoDate,
   to: isoDate,
+  g: parseAsStringLiteral(GRANULARITIES).withDefault("day"),
+  property: propertyKey,
+  limit: breakdownLimit,
   ...filterParams,
   ...scopeParams,
 };
@@ -323,14 +344,23 @@ export const eventsSearchParams = {
 export type EventsSearch = inferParserType<typeof eventsSearchParams>;
 export type EventsSearchPatch = { [K in keyof EventsSearch]?: EventsSearch[K] | null };
 
-export type EventsState = Pick<AudienceState, "period" | "filters" | "env" | "unit">;
+export type EventsState = Pick<AudienceState, "period" | "filters" | "env" | "unit"> & {
+  granularity: Granularity;
+  /** Свойство из URL; null — пользователь не выбирал, страница берёт первое из property_keys. */
+  property: string | null;
+  limit: number;
+};
 
 export function resolveEventsState(search: EventsSearch, today: string): EventsState {
+  const period = resolvePeriod(search, today);
   return {
-    period: resolvePeriod(search, today),
+    period,
+    granularity: coerceGranularity(search.g, allowedGranularities(period)),
     filters: resolveFilters(search),
     env: search.env,
     unit: search.unit,
+    property: search.property,
+    limit: search.limit,
   };
 }
 

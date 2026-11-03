@@ -1,23 +1,14 @@
 "use client";
 
 import { keepPreviousData } from "@tanstack/react-query";
-import { Copy, ListChecks } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { reportQuery } from "@/components/layout/app-tabs";
-import { EnvironmentSwitch } from "@/components/reports/environment-switch";
-import { FilterBar } from "@/components/reports/filter-bar";
-import { PeriodPicker } from "@/components/reports/period-picker";
-import { PlatformSwitcher } from "@/components/reports/platform-switcher";
-import { TOUCH_BUTTON } from "@/components/reports/responsive";
-import { UnitBadge } from "@/components/reports/unit-badge";
 import { EventsSkeleton } from "@/components/skeletons/events-skeleton";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useFilterOptions } from "@/hooks/use-filter-options";
-import { useObservedPlatforms } from "@/hooks/use-observed-platforms";
 import type { ApiError } from "@/lib/api/fetcher";
 import { useGetApp } from "@/lib/api/gen/endpoints/apps/apps";
 import { useListEvents } from "@/lib/api/gen/endpoints/events/events";
@@ -27,15 +18,9 @@ import { useLocale, useMessages } from "@/lib/i18n/client";
 import { publicHref } from "@/lib/i18n/routes";
 import { todayIn } from "@/lib/period";
 import { toast } from "@/lib/toast";
-import {
-  filtersSearch,
-  periodSearch,
-  REPORT_FILTER_DIMENSIONS,
-  reportParams,
-  useEventsState,
-} from "@/lib/url-state";
-import { cn } from "@/lib/utils";
+import { reportParams, useEventsState } from "@/lib/url-state";
 import { EventsTable } from "./events-table";
+import { EventsToolbar } from "./events-toolbar";
 
 // Вкладка «События» (FR-102). Приложение (TZ) берётся из кэша AppShell.
 export function EventsView() {
@@ -52,8 +37,6 @@ function EventsReport({ app }: { app: App }) {
   const today = todayIn(app.timezone);
   const { state, update } = useEventsState(app.timezone, today);
   const params = reportParams(state);
-  const observedPlatforms = useObservedPlatforms(app.id, params);
-  const filterOptions = useFilterOptions(app.id, params, REPORT_FILTER_DIMENSIONS);
   const list = useListEvents(
     app.id,
     { ...params, compare: "previous_period" },
@@ -102,48 +85,15 @@ function EventsReport({ app }: { app: App }) {
     content = <TableSkeleton rows={6} />;
   }
 
-  // Панель отчёта, как на S-05: период и запрос — первая строка, платформа, фильтры и окружение — вторая.
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start gap-3">
-          <PeriodPicker
-            value={state.period}
-            onChange={(period) => void update(periodSearch(period))}
-            timezone={app.timezone}
-            error={rangeError}
-          />
-          <UnitBadge unit={state.unit} />
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(TOUCH_BUTTON, "md:ml-auto")}
-            onClick={() => void copyRequest()}
-          >
-            <Copy aria-hidden="true" />
-            {messages.reports.audience.copyRequest}
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <PlatformSwitcher
-            appPlatforms={app.platforms}
-            observed={observedPlatforms}
-            value={state.filters.platform?.[0] ?? null}
-            onChange={(platform) => void update({ platform: platform ? [platform] : null })}
-          />
-          <FilterBar
-            dims={REPORT_FILTER_DIMENSIONS}
-            value={state.filters}
-            onChange={(filters) => void update(filtersSearch(filters))}
-            options={filterOptions.options}
-            onOpenChange={filterOptions.onOpenChange}
-            loading={filterOptions.loading}
-          />
-          <div className="w-full md:ml-auto md:w-auto">
-            <EnvironmentSwitch value={state.env} onChange={(env) => void update({ env })} />
-          </div>
-        </div>
-      </div>
+      <EventsToolbar
+        app={app}
+        state={state}
+        update={update}
+        rangeError={rangeError}
+        onCopy={() => void copyRequest()}
+      />
       <Card className="gap-0 px-0 py-0">{content}</Card>
     </div>
   );

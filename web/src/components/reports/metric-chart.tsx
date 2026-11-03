@@ -32,6 +32,8 @@ type MetricChartProps = {
   /** TZ приложения — для подписей часов и дней. */
   timezone: string;
   height?: number;
+  /** Подписи вместо словаря метрик аудитории: график события показывает «События» и «Люди». */
+  labels?: { title: string; series: string };
 };
 
 // Значения серий лежат под ключами s0…sN: значение events.platform может совпасть с полями точки.
@@ -184,6 +186,7 @@ export function MetricChart({
   metric,
   timezone,
   height = 360,
+  labels,
 }: MetricChartProps) {
   const m = useMessages().reports.chart;
   const metrics = useMetricDefinitions();
@@ -194,7 +197,7 @@ export function MetricChart({
   const data = chartData(f, series, granularity, timezone);
   const lines: SeriesLine[] = series.map((s, i) => ({
     dataKey: `s${i}`,
-    label: split ? s.label : metrics[metric].label,
+    label: split ? s.label : (labels?.series ?? metrics[metric].label),
     color: split ? platformChartVar(s.key) : "var(--chart-1)",
   }));
 
@@ -214,7 +217,10 @@ export function MetricChart({
   const summary =
     split && hasEvents ? lines.map((l, i) => `${l.label}: ${max(i)}`).join(", ") : max(0);
   const description = [
-    fmt(split ? m.headingSplit : m.heading, { title: m.titles[metric], by: m.by[granularity] }),
+    fmt(split ? m.headingSplit : m.heading, {
+      title: labels?.title ?? m.titles[metric],
+      by: m.by[granularity],
+    }),
     range,
     summary,
   ]
