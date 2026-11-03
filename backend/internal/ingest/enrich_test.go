@@ -605,6 +605,18 @@ func TestPayloadSample_RedactsPropertyPII(t *testing.T) {
 		require.Contains(t, sample, `"a":"[redacted]"`)
 		require.Contains(t, sample, `"c":"x@y.zz"`, "вложенные объекты в свойствах всё равно отклоняются валидатором")
 	})
+	t.Run("case_variants_of_properties_key", func(t *testing.T) {
+		for _, body := range []string{
+			`{"Properties":{"email":"a@b.co"}}`,
+			`{"PROPERTIES":{"email":"a@b.co"}}`,
+			"{\"propertie\u017f\":{\"email\":\"a@b.co\"}}",
+			`{"properties":{"x":1},"PROPERTIES":{"email":"a@b.co"}}`,
+		} {
+			sample := ingest.PayloadSample([]byte(body))
+			require.NotContains(t, sample, "a@b.co", body)
+			require.Contains(t, sample, `"email":"[redacted]"`, body)
+		}
+	})
 	t.Run("properties_string_not_redacted_outside_object", func(t *testing.T) {
 		sample := ingest.PayloadSample([]byte(`{"properties":"x@y.zz","other":{"a":"x@y.zz"}}`))
 		require.Equal(t, `{"properties":"x@y.zz","other":{"a":"x@y.zz"}}`, sample) //nolint:testifylint // каноничные байты
