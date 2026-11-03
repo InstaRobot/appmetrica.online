@@ -55,21 +55,22 @@ func TestMigrateUp_BothStores(t *testing.T) {
 	require.Contains(t, stdout, "postgres: версия 00000")
 	require.Contains(t, stdout, "clickhouse: версия 00000")
 	require.Contains(t, stdout, "00003_service_tables.sql")
+	require.Contains(t, stdout, "00004_event_properties.sql")
 
 	code, stdout, stderr = runCLI(t, "migrate", "up")
 	require.Equal(t, 0, code, stderr)
 	require.Contains(t, stdout, "postgres: применено миграций: 3, версия 00003")
-	require.Contains(t, stdout, "clickhouse: применено миграций: 3, версия 00003")
+	require.Contains(t, stdout, "clickhouse: применено миграций: 4, версия 00004")
 
 	code, stdout, stderr = runCLI(t, "migrate", "up")
 	require.Equal(t, 0, code, stderr)
 	require.Contains(t, stdout, "postgres: применено миграций: 0, версия 00003")
-	require.Contains(t, stdout, "clickhouse: применено миграций: 0, версия 00003")
+	require.Contains(t, stdout, "clickhouse: применено миграций: 0, версия 00004")
 
 	code, stdout, stderr = runCLI(t, "migrate", "status")
 	require.Equal(t, 0, code, stderr)
 	require.Contains(t, stdout, "postgres: версия 00003")
-	require.Contains(t, stdout, "clickhouse: версия 00003")
+	require.Contains(t, stdout, "clickhouse: версия 00004")
 	require.NotContains(t, stdout, "ожидает")
 	require.NotContains(t, stdout+stderr, pgPassword)
 	require.NotContains(t, stdout+stderr, chMigratePassword)
@@ -89,7 +90,7 @@ func TestMigrateUp_BothStores(t *testing.T) {
 	defer func() { require.NoError(t, cp.Close()) }()
 	v, err = cp.GetDBVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), v)
+	require.Equal(t, int64(4), v)
 }
 
 func TestMigrateUp_ClickHouseAuthErrorHidesPassword(t *testing.T) {

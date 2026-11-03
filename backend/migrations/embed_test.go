@@ -44,7 +44,7 @@ func TestPostgres_EmbedsNumberedGooseFiles(t *testing.T) {
 
 func TestClickHouse_EmbedsNumberedGooseFiles(t *testing.T) {
 	bodies := readNumbered(t, migrations.ClickHouse())
-	require.Len(t, bodies, 3)
+	require.Len(t, bodies, 4)
 
 	for name, body := range bodies {
 		require.True(t, strings.HasPrefix(body, "-- +goose NO TRANSACTION\n"), "%s: ClickHouse не поддерживает транзакции DDL", name)
