@@ -206,3 +206,5 @@ is visible.
 Open the site on `localhost` (events go out with `environment: "development"`), switch to another
 tab, and come back. `session_start` and `session_end` appear on the **Integration** tab. In
 DevTools, the Network tab shows the beacon as a request of type `ping`.
+
+To track your own events (`purchase`, `note_created`), send them in the same batches, inside a session. Names, properties and limits are in [Custom events](/docs/concepts/events).

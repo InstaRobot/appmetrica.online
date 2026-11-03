@@ -1,12 +1,13 @@
 ---
 title: Quick start
-description: How to start sending session_start and session_end events without an SDK.
+description: How to start sending session_start and session_end events, and your own events, without an SDK.
 ---
 
-appmetrica.online receives system events from your apps over HTTP. There is no SDK: the app itself
+appmetrica.online receives events from your apps over HTTP. There is no SDK: the app itself
 sends `session_start` when it comes to the foreground and `session_end` when it goes to the
-background. Every report is built from these two events: active and new users, sessions and their
-duration, retention, realtime and profiles.
+background. The audience reports are built from these two system events: active and new users,
+sessions and their duration, retention, realtime and profiles. Your own events with properties, such
+as `purchase`, go in the same batches; see [Custom events](/docs/concepts/events).
 
 ## 1. Create an app [#create-app]
 
@@ -162,6 +163,7 @@ each type's share. On Apple devices, `UIDevice.current.systemName` already retur
 - [Where to initialize analytics](/docs/concepts/initialization) — entry points and lifecycle hooks.
 - [Identity](/docs/concepts/identity) — `install_id`, `user_id` and how people are counted.
 - [Sessions](/docs/concepts/sessions) — when to start and end a session.
+- [Custom events](/docs/concepts/events) — your own events, names and properties.
 - [Time and the offline queue](/docs/concepts/time-and-offline) — skewed clocks and late events
   within 7 days.
 - [Errors and retries](/docs/errors-and-retries) — response codes and what to do about each one.

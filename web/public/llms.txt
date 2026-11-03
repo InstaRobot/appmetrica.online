@@ -1,6 +1,6 @@
 # appmetrica.online
 
-> Product analytics for mobile apps, websites, desktop apps and bots without an SDK. The client app sends two events over HTTP, `session_start` when it comes to the foreground and `session_end` when it goes to the background, and gets active and new users, sessions and their duration, retention, realtime and user profiles. This file tells a coding agent how to integrate it into a client app on every supported platform.
+> Product analytics for mobile apps, websites, desktop apps and bots without an SDK. The client app sends events over HTTP: `session_start` when it comes to the foreground, `session_end` when it goes to the background and, optionally, its own events with properties. It gets active and new users, sessions and their duration, retention, realtime, user profiles and a report on custom events. This file tells a coding agent how to integrate it into a client app on every supported platform.
 
 Every recipe linked below contains complete, copy-ready code. The same documentation as plain Markdown, every page and every code sample in one file: https://appmetrica.online/llms-full.txt
 
@@ -17,15 +17,40 @@ Never put a Read API key `sk_…` into a client app: it is a secret that reads a
 
 ## What to send
 
-There is no SDK, no custom events, screens or properties. Two event names exist: `session_start` and `session_end`; any other `name` is rejected with `unknown_event_name`. Every report is built from these two events.
+There is no SDK. Two system events describe sessions: `session_start` and `session_end`; the audience, session and retention reports are built from them. Apps can also send custom events with their own names and `properties` (see "Custom events" below). A `name` that doesn't match `^[a-z][a-z0-9_]{0,63}$`, or that starts with `session_` and is not one of the two system names, is rejected with `unknown_event_name`. There are no automatic screen views: send them as custom events if you need them.
 
 - `install_id`: a UUID created on the first launch and kept forever (Keychain, SharedPreferences, `localStorage`, …). Never regenerate it on launch: every launch would become a new user.
-- `session_id`: a new UUID every time the app comes to the foreground; `session_start` and `session_end` of one session share it.
+- `session_id`: a new UUID every time the app comes to the foreground; `session_start`, `session_end` and the custom events of one session share it. It is required on every event.
 - `insert_id`: a new UUID for every event; it deduplicates retries, so resending the same event is safe.
 - `timestamp`: when the event happened, by the device clock, RFC 3339 with an offset (`Z` or `+03:00`), preferably with milliseconds. Capture it when the event happens, not when it is sent.
 - `duration_ms` (required on `session_end`): time in the foreground in milliseconds, 0 to 86,400,000, measured with a monotonic clock (`ProcessInfo.systemUptime`, `SystemClock.elapsedRealtime()`, `performance.now()`, Dart `Stopwatch`), never as a difference of wall-clock times.
 - `user_id` (optional): an opaque account ID from the app's backend, 1 to 128 characters, sent with every event while the user is signed in and omitted after sign-out. Not an email or a phone number: those are rejected with `user_id_looks_like_pii`. Hash public IDs such as Telegram IDs (HMAC-SHA256 with a secret).
+- `name`: `session_start`, `session_end` or a custom event name.
+- `properties` (optional, custom events): key-value pairs, see "Custom events".
 - `context`: device and build fields, see below. Put it in every event (or in the batch): an event that waited in the queue across an app update keeps the version it happened in.
+
+## Custom events
+
+Docs: https://appmetrica.online/docs/concepts/events
+
+A custom event is a normal event with its own `name`, sent inside a session (the same `session_id` as `session_start`), optionally with `properties`:
+
+```json
+{
+  "insert_id": "0199d6a2-0f3b-7c4d-8e5f-6a7b8c9d0e1f",
+  "name": "purchase",
+  "timestamp": "2026-10-13T09:13:20.500Z",
+  "install_id": "6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21",
+  "session_id": "0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f",
+  "properties": { "plan": "pro", "amount": 12.5, "trial": false }
+}
+```
+
+- **Names**: lowercase letters, digits and underscores, starting with a letter, up to 64 characters (`^[a-z][a-z0-9_]{0,63}$`). The `session_` prefix is reserved: only `session_start` and `session_end` exist. Anything else is rejected with `unknown_event_name`. Keep names stable and put values into properties, never into names.
+- **Properties**: at most 50 keys; a key matches the same pattern as names; a value is a string up to 256 characters, a number or a boolean. `null`, arrays and objects as values are rejected with `invalid_field` (`field` is `properties.<key>`); `"properties": null` means no properties. Values are stored as strings (numbers in the shortest decimal form, booleans as `true` or `false`); integers above 2^53 lose precision, so send them as strings.
+- **Personal data**: a string value that looks like an email address or a phone number rejects the whole event with `property_looks_like_pii`. Never put personal data into properties; send opaque IDs and categories.
+- **Reports**: custom events appear on the **Events** tab (count and people per name, a breakdown by the values of a property), on the profile page and in the Read API (`listEvents`, `getEventReport`, `getEventBreakdown`, `listProfileEvents`). System events are not part of the Events report. A person with an event of any name counts as active.
+- **Rollout order**: deploy the installation that understands custom events before the app build that sends them; an older ingest rejects them with `unknown_event_name`, and a rejected event is not retried.
 
 ## Integration checklist (every platform)
 
@@ -102,11 +127,12 @@ X-App-Key: pk_…
 | Field | Required | Rules |
 |---|---|---|
 | `insert_id` | Yes | UUID, unique per event (not the nil UUID) |
-| `name` | Yes | `session_start` or `session_end` |
+| `name` | Yes | `session_start`, `session_end` or a custom name matching `^[a-z][a-z0-9_]{0,63}$`; other names starting with `session_` are reserved |
 | `timestamp` | Yes | RFC 3339 with an offset; a time without an offset is rejected |
 | `install_id` | Yes | UUID, stable per installation; lowercase UUIDv4 recommended; not the nil UUID |
-| `session_id` | Yes | UUID shared by both events of a session |
+| `session_id` | Yes | UUID shared by the events of a session, custom events included |
 | `user_id` | No | 1 to 128 characters, opaque account ID |
+| `properties` | No | Object of up to 50 keys; keys match `^[a-z][a-z0-9_]{0,63}$`; values are strings up to 256 characters, numbers or booleans |
 | `duration_ms` | On `session_end` | Integer, 0 to 86,400,000 |
 | `context` | No | Overrides the batch `context` field by field |
 
@@ -190,8 +216,8 @@ Rejection codes in `rejected[].code`:
 | Code | Reason | Retry |
 |---|---|---|
 | `missing_field` | `insert_id`, `name`, `timestamp`, `install_id` or `session_id` is missing | No |
-| `invalid_field` | Not a UUID, the nil UUID, a time without an offset, `user_id` over 128 characters, `duration_ms` out of range, an invalid `context` value or length | No |
-| `unknown_event_name` | `name` is neither `session_start` nor `session_end` | No |
+| `invalid_field` | Not a UUID, the nil UUID, a time without an offset, `user_id` over 128 characters, `duration_ms` out of range, an invalid `context` value or length, an invalid `properties` object or value | No |
+| `unknown_event_name` | `name` doesn't match `^[a-z][a-z0-9_]{0,63}$` or is reserved (starts with `session_` and is not `session_start` or `session_end`) | No |
 | `duration_required` | `session_end` without `duration_ms` | No |
 | `event_too_old` | Older than 7 days after clock correction | No |
 | `user_id_looks_like_pii` | `user_id` looks like an email or a phone number | No |
@@ -326,7 +352,7 @@ JSON
 
 Recipe section: https://appmetrica.online/docs/read-api/overview
 
-Base URL is the installation's API (placeholder `https://api.analytics.example.com`), with `Authorization: Bearer sk_…`. The `sk_…` key is created in **Settings → API keys**, has the `read` or `delete` scope and may be bound to one app. Use it only from servers and scripts, never in client apps. It serves the portfolio, audience, retention, realtime, profiles and integration health as JSON, and data deletion requests (https://appmetrica.online/docs/privacy-and-gdpr#deletion).
+Base URL is the installation's API (placeholder `https://api.analytics.example.com`), with `Authorization: Bearer sk_…`. The `sk_…` key is created in **Settings → API keys**, has the `read` or `delete` scope and may be bound to one app. Use it only from servers and scripts, never in client apps. It serves the portfolio, audience, retention, realtime, custom events (`listEvents`, `getEventReport`, `getEventBreakdown`, `listProfileEvents`), profiles and integration health as JSON, and data deletion requests (https://appmetrica.online/docs/privacy-and-gdpr#deletion).
 
 ## Docs
 
@@ -334,6 +360,7 @@ Base URL is the installation's API (placeholder `https://api.analytics.example.c
 - [Where to initialize analytics](https://appmetrica.online/docs/concepts/initialization): entry points and lifecycle hooks on every platform.
 - [Identity](https://appmetrica.online/docs/concepts/identity): `install_id`, `user_id` and how people are counted across platforms.
 - [Sessions](https://appmetrica.online/docs/concepts/sessions#client-rules): session rules and how metrics are calculated.
+- [Custom events](https://appmetrica.online/docs/concepts/events#names): names, properties, limits and where events show up.
 - [Time and the offline queue](https://appmetrica.online/docs/concepts/time-and-offline#offline-queue): clock correction and queue requirements.
 - [Errors and retries](https://appmetrica.online/docs/errors-and-retries#retry-policy): every response and rejection code.
 - [Privacy and GDPR](https://appmetrica.online/docs/privacy-and-gdpr): what is stored, retention, deletion.

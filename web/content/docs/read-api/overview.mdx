@@ -3,8 +3,8 @@ title: "Read API: overview"
 description: The same reports as in the dashboard, for scripts and exports, with a secret sk_ key.
 ---
 
-The Read API returns the portfolio, audience, retention, realtime, profiles and integration health as
-JSON. These are the same endpoints the dashboard uses, so the numbers match the screens down to the
+The Read API returns the portfolio, audience, retention, realtime, custom events, profiles and
+integration health as JSON. These are the same endpoints the dashboard uses, so the numbers match the screens down to the
 last unit. The full list of parameters and schemas is in the
 [API reference](/docs/api-reference/read/list-apps).
 
@@ -91,14 +91,44 @@ app's time zone offset so that day boundaries match the report.
 | [`GET /v1/apps/{app_id}/audience/breakdown`](/docs/api-reference/read/get-audience-breakdown) | Breakdown by platform, OS and its version, app version, device model and type, country, city, language |
 | [`GET /v1/apps/{app_id}/retention`](/docs/api-reference/read/get-retention) | Classic retention by daily and weekly cohorts |
 | [`GET /v1/apps/{app_id}/realtime`](/docs/api-reference/read/get-realtime) | Active now and the latest events; `platform` filter |
+| [`GET /v1/apps/{app_id}/events`](/docs/api-reference/read/list-events) | Custom events of the period: events and people per name, with the previous period |
+| [`GET /v1/apps/{app_id}/events/{event_name}`](/docs/api-reference/read/get-event-report) | One event: totals, a series by hour, day, week or month, and the property keys seen in the period |
+| [`GET /v1/apps/{app_id}/events/{event_name}/breakdown`](/docs/api-reference/read/get-event-breakdown) | Breakdown of an event by the values of one property: events and people per value, plus «other» and «no property» |
 | [`GET /v1/apps/{app_id}/profiles`](/docs/api-reference/read/search-profiles) | Search for people by exact `user_id` or `install_id` |
 | [`GET /v1/apps/{app_id}/profiles/{person_key}`](/docs/api-reference/read/get-profile) | Profile and session feed |
+| [`GET /v1/apps/{app_id}/profiles/{person_key}/events`](/docs/api-reference/read/list-profile-events) | A person's custom events with properties, newest first |
 | [`GET /v1/apps/{app_id}/integration/health`](/docs/api-reference/read/get-integration-health) | First event, accepted and rejected events by hour, rejection reasons, client versions |
 | [`POST /v1/apps/{app_id}/deletion-requests`](/docs/api-reference/read/create-deletion-request) | Deleting a person's data (`delete` scope) |
 | [`GET /v1/apps/{app_id}/deletion-requests/{request_id}`](/docs/api-reference/read/get-deletion-request) | Status of a deletion request (`read` or `delete` scope) |
 
 Profile sessions are paginated with a cursor: `sessions_limit` (up to 500) and `before`, the
 `next_before` value from the previous response. All other lists are returned in full.
+
+## Custom events [#events]
+
+The events operations cover the [custom events](/docs/concepts/events) of an app. System events
+(`session_start`, `session_end`) are not part of them: asking for one of those names returns
+`404 event_not_found`, while an event that exists but has no occurrences in the period returns `200`
+with zeros.
+
+- `listEvents` returns names that have events in the period, sorted by events in descending order and
+  then by name, up to 500 names; `truncated` is `true` if there were more. `prev_events` and
+  `prev_people` are present only with `compare=previous_period`.
+- `getEventReport` takes `granularity` (`hour`, `day`, `week`, `month`) like the audience series.
+  `events_per_person` is rounded to two decimals and is `0` when nobody did the event.
+- `getEventBreakdown` requires `property`, a key matching `^[a-z][a-z0-9_]{0,63}$`, and takes `limit`
+  from 1 to 100 (20 by default). The top values come first; `other` sums the events of the remaining
+  values and counts their people without repeats, and `missing` covers events without the property.
+- `listProfileEvents` is paginated with a cursor, like profile sessions: `limit` (1 to 200, 50 by
+  default) and `before`, the `next_before` value of the previous page.
+
+```bash
+curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/events/purchase/breakdown" \
+  -H "Authorization: Bearer $AM_SK" \
+  --data-urlencode "from=2026-10-06" \
+  --data-urlencode "to=2026-10-12" \
+  --data-urlencode "property=plan"
+```
 
 ## Errors and limits [#errors]
 
@@ -112,6 +142,7 @@ Errors come in an `error` envelope with `code`, `message` and `request_id` field
 | 401 | `unauthenticated` | No key, or the key is invalid or revoked |
 | 403 | `insufficient_scope` | The key doesn't have the required scope |
 | 404 | `app_not_found` | The app doesn't exist or the key isn't bound to it |
+| 404 | `event_not_found` | The name is a system event, not a custom one |
 | 429 | `rate_limited` | More than 10 requests per second per key (short bursts up to 30); the response includes `Retry-After` |
 | 503 | `storage_unavailable` | Storage is unavailable; the response includes `Retry-After` |
 

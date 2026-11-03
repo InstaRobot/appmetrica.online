@@ -3,7 +3,8 @@ title: "Read API: обзор"
 description: Те же отчёты, что в дашборде, для скриптов и выгрузок по секретному ключу sk_.
 ---
 
-Read API отдаёт портфель, аудиторию, retention, realtime, профили и здоровье интеграции в JSON. Это
+Read API отдаёт портфель, аудиторию, retention, realtime, свои события, профили и здоровье интеграции
+в JSON. Это
 те же эндпоинты, которыми пользуется дашборд, поэтому цифры совпадают с экранами до последней
 единицы. Полный список параметров и схем — в разделе
 [API reference](/docs/api-reference/read/list-apps).
@@ -91,14 +92,43 @@ curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/summary"
 | [`GET /v1/apps/{app_id}/audience/breakdown`](/docs/api-reference/read/get-audience-breakdown) | Разбивка по платформе, ОС и её версии, версии приложения, модели и типу устройства, стране, городу, языку |
 | [`GET /v1/apps/{app_id}/retention`](/docs/api-reference/read/get-retention) | Классический retention по дневным и недельным когортам |
 | [`GET /v1/apps/{app_id}/realtime`](/docs/api-reference/read/get-realtime) | Активные сейчас и последние события; фильтр `platform` |
+| [`GET /v1/apps/{app_id}/events`](/docs/api-reference/read/list-events) | Свои события периода: события и люди по каждому имени, с прошлым периодом |
+| [`GET /v1/apps/{app_id}/events/{event_name}`](/docs/api-reference/read/get-event-report) | Одно событие: итоги, ряд по часам, дням, неделям или месяцам и ключи свойств периода |
+| [`GET /v1/apps/{app_id}/events/{event_name}/breakdown`](/docs/api-reference/read/get-event-breakdown) | Разбивка события по значениям одного свойства: события и люди по значению, строки «остальные» и «нет свойства» |
 | [`GET /v1/apps/{app_id}/profiles`](/docs/api-reference/read/search-profiles) | Поиск людей по точному `user_id` или `install_id` |
 | [`GET /v1/apps/{app_id}/profiles/{person_key}`](/docs/api-reference/read/get-profile) | Профиль и лента сессий |
+| [`GET /v1/apps/{app_id}/profiles/{person_key}/events`](/docs/api-reference/read/list-profile-events) | Свои события человека со свойствами, новые первыми |
 | [`GET /v1/apps/{app_id}/integration/health`](/docs/api-reference/read/get-integration-health) | Первое событие, принятые и отклонённые события по часам, причины отказов, версии клиентов |
 | [`POST /v1/apps/{app_id}/deletion-requests`](/docs/api-reference/read/create-deletion-request) | Удаление данных человека (scope `delete`) |
 | [`GET /v1/apps/{app_id}/deletion-requests/{request_id}`](/docs/api-reference/read/get-deletion-request) | Статус запроса на удаление (scope `read` или `delete`) |
 
 Сессии в профиле листаются курсором: `sessions_limit` (до 500) и `before` — значение `next_before`
 из предыдущего ответа. Остальные списки отдаются целиком.
+
+## Свои события [#events]
+
+Операции событий работают со [своими событиями](/docs/concepts/events) приложения. Системные события
+(`session_start`, `session_end`) в них не входят: запрос с таким именем отвечает `404 event_not_found`, а
+событие без вхождений за период — `200` с нулями.
+
+- `listEvents` отдаёт имена, у которых есть события за период, по убыванию числа событий, затем по имени,
+  не больше 500 имён; `truncated` равен `true`, если их было больше. `prev_events` и `prev_people`
+  есть только при `compare=previous_period`.
+- `getEventReport` принимает `granularity` (`hour`, `day`, `week`, `month`), как ряд аудитории.
+  `events_per_person` округляется до двух знаков и равен `0`, если событие никто не совершал.
+- `getEventBreakdown` требует `property` — ключ по шаблону `^[a-z][a-z0-9_]{0,63}$` — и принимает `limit`
+  от 1 до 100 (по умолчанию 20). Сначала идут топ-значения; `other` суммирует события остальных значений
+  и считает их людей без повторов, а `missing` описывает события без свойства.
+- `listProfileEvents` листается курсором, как сессии профиля: `limit` (от 1 до 200, по умолчанию 50) и
+  `before` — значение `next_before` предыдущей страницы.
+
+```bash
+curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/events/purchase/breakdown" \
+  -H "Authorization: Bearer $AM_SK" \
+  --data-urlencode "from=2026-10-06" \
+  --data-urlencode "to=2026-10-12" \
+  --data-urlencode "property=plan"
+```
 
 ## Ошибки и лимиты [#errors]
 
@@ -112,6 +142,7 @@ curl -sS -G "https://api.analytics.example.com/v1/apps/$APP_ID/audience/summary"
 | 401 | `unauthenticated` | Нет ключа, ключ неверный или отозван |
 | 403 | `insufficient_scope` | У ключа нет нужного scope |
 | 404 | `app_not_found` | Приложения нет или ключ к нему не привязан |
+| 404 | `event_not_found` | Имя — системное событие, а не своё |
 | 429 | `rate_limited` | Больше 10 запросов в секунду на ключ (кратковременно до 30); ответ с `Retry-After` |
 | 503 | `storage_unavailable` | Хранилище недоступно; ответ с `Retry-After` |
 

@@ -193,3 +193,5 @@ What to improve in a real service:
   queue is in the [Bots and backends](/docs/recipes/bots-and-backends#queue) recipe;
 - `time.Time` encodes to RFC 3339 with nanoseconds and an offset — the server stores time with
   millisecond precision.
+
+To track your own events (`purchase`, `note_created`), send them in the same batches, inside a session. Names, properties and limits are in [Custom events](/docs/concepts/events).

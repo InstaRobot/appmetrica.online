@@ -379,3 +379,5 @@ func newUUID() string {
 Send a single event from the terminal, as in the [curl](/docs/recipes/curl#single) recipe, and
 open the app's **Integration** tab: the event shows up within a few seconds. Rejected events are
 listed there too, with their reason codes.
+
+To track your own events (`purchase`, `note_created`), send them in the same batches, inside a session. Names, properties and limits are in [Custom events](/docs/concepts/events).

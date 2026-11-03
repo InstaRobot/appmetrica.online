@@ -205,3 +205,5 @@ export function Analytics({ userId }: { userId: string | null }) {
 Откройте сайт на `localhost` (события уйдут с `environment: "development"`), переключите вкладку и
 вернитесь. На вкладке «Интеграция» появятся `session_start` и `session_end`. В DevTools на вкладке
 Network beacon виден как запрос типа `ping`.
+
+Чтобы отслеживать свои события (`purchase`, `note_created`), отправляйте их в тех же батчах, внутри сессии. Имена, свойства и пределы — в [Своих событиях](/docs/concepts/events).

@@ -89,8 +89,8 @@ The first event is accepted, the second one is rejected:
 | Code | Reason | Retry |
 |---|---|---|
 | `missing_field` | A required field is missing: `insert_id`, `name`, `timestamp`, `install_id`, `session_id` | No |
-| `invalid_field` | A field has an invalid format: not a UUID, the nil UUID, a time without an offset, a `user_id` longer than 128 characters, `duration_ms` outside 0..86,400,000, an invalid value in `context` (`platform`, `device_type`, string length) | No |
-| `unknown_event_name` | `name` is neither `session_start` nor `session_end` | No |
+| `invalid_field` | A field has an invalid format: not a UUID, the nil UUID, a time without an offset, a `user_id` longer than 128 characters, an invalid `properties` object (more than 50 keys, a key that doesn't match the pattern, a value that is `null`, an array, an object, a string over 256 characters or a number out of range), `duration_ms` outside 0..86,400,000, an invalid value in `context` (`platform`, `device_type`, string length) | No |
+| `unknown_event_name` | `name` doesn't match `^[a-z][a-z0-9_]{0,63}$` or is reserved: a name starting with `session_` other than `session_start` and `session_end`; see [Custom events](/docs/concepts/events#names) | No |
 | `duration_required` | A `session_end` has no `duration_ms` | No |
 | `event_too_old` | After clock correction, the event is older than 7 days | No |
 | `user_id_looks_like_pii` | `user_id` looks like an email address or a phone number | No |

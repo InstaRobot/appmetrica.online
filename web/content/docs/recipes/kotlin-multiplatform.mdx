@@ -564,3 +564,5 @@ SessionTracker.shared.userId = account.id // nil after sign-out
 2. Minimize the app and open it again on both platforms.
 3. `session_start` and `session_end` show up on the Integration tab with the Android and iOS
    platforms — in the same app. In reports, turn on the development environment.
+
+To track your own events (`purchase`, `note_created`), send them in the same batches, inside a session. Names, properties and limits are in [Custom events](/docs/concepts/events).

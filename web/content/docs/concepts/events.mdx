@@ -1,0 +1,204 @@
+---
+title: Custom events
+description: How to send your own events with properties, which names are reserved and where the events show up.
+---
+
+Besides the [session events](/docs/concepts/sessions), an app can send events of its own: `purchase`,
+`note_created`, `paywall_shown`. A custom event is an ordinary event in the same batch with a name of
+your choosing and, optionally, a `properties` object. The server stores both, and they appear on the
+**Events** tab of the dashboard, on the profile page and in the Read API.
+
+Custom events happen inside a session: send them between `session_start` and `session_end` with the
+same `session_id`. `session_id` is required for every event, custom ones included.
+
+## Sending an event [#send]
+
+One batch with a session and a `purchase` event that carries three properties:
+
+```bash
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+INSTALL=$(uuidgen | tr A-Z a-z)
+SESSION=$(uuidgen | tr A-Z a-z)
+curl -sS https://i.analytics.example.com/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-App-Key: $AM_PK" \
+  --data-binary @- <<JSON
+{
+  "sent_at": "$NOW",
+  "context": { "platform": "server", "environment": "development", "ip": "none" },
+  "events": [
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_start",
+      "timestamp": "$NOW",
+      "install_id": "$INSTALL",
+      "session_id": "$SESSION"
+    },
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "purchase",
+      "timestamp": "$NOW",
+      "install_id": "$INSTALL",
+      "session_id": "$SESSION",
+      "properties": { "plan": "pro", "amount": 12.5, "trial": false }
+    },
+    {
+      "insert_id": "$(uuidgen | tr A-Z a-z)",
+      "name": "session_end",
+      "timestamp": "$NOW",
+      "install_id": "$INSTALL",
+      "session_id": "$SESSION",
+      "duration_ms": 4200
+    }
+  ]
+}
+JSON
+```
+
+The response is the same as for session events: `accepted` counts the accepted events, and rejected
+ones come with a code in `rejected`.
+
+```json
+{ "accepted": 3, "rejected": [], "warnings": [], "server_time": "2026-10-14T09:15:02.318Z" }
+```
+
+Custom events use the same fields as session events: `insert_id`, `timestamp`, `install_id`,
+`user_id` and `context`. They go through the same offline queue and the same retries; see
+[Time and the offline queue](/docs/concepts/time-and-offline) and
+[Errors and retries](/docs/errors-and-retries).
+
+## Event names [#names]
+
+A name is a string that matches `^[a-z][a-z0-9_]{0,63}$`: lowercase Latin letters, digits and
+underscores, starting with a letter, up to 64 characters. Pick names that describe an action in the
+past or present tense and keep them stable: a renamed event starts a new series in the reports.
+
+| Name | Accepted | Why |
+|---|---|---|
+| `purchase` | Yes | |
+| `note_created` | Yes | |
+| `Purchase` | No | Uppercase letters |
+| `add-to-cart` | No | A hyphen |
+| `2fa_enabled` | No | Starts with a digit |
+| `session_resume` | No | The `session_` prefix is reserved |
+
+**Reserved names.** The system events `session_start` and `session_end` describe sessions. Every other
+name that starts with `session_` is reserved, so that new system events can be added later without
+colliding with yours. A name that doesn't match the pattern or is reserved is rejected with
+[`unknown_event_name`](/docs/errors-and-retries#rejections); the rest of the batch is still accepted.
+
+The number of distinct names per app is not limited, but the **Events** tab lists the first 500 names
+of the period. Don't build names out of values (`opened_note_4821`): put the value into a property.
+
+## Properties [#properties]
+
+`properties` is an optional object of key-value pairs that describe the event.
+
+| Rule | Limit |
+|---|---|
+| Number of keys | Up to 50 |
+| Key | Matches `^[a-z][a-z0-9_]{0,63}$`, the same pattern as event names |
+| Value | A string up to 256 characters, a number or a boolean |
+| `null`, an array or an object as a value | Rejected |
+| `"properties": null` | Treated as if the field is absent |
+
+Values are stored as strings, because reports break an event down by the text of a value:
+
+| You send | Stored as |
+|---|---|
+| `"plan": "pro"` | `pro` |
+| `"amount": 12.5` | `12.5` |
+| `"amount": 12` | `12` |
+| `"amount": 0.001` | `0.001` |
+| `"trial": false` | `false` |
+
+Strings are stored as is, without trimming. Numbers are written in the shortest decimal form.
+Integers above 2^53 lose precision, because JSON numbers are read as 64-bit floating-point values;
+send such values as strings. A number outside the floating-point range, such as `1e400`, is rejected
+with `invalid_field`. Reports count events and people per value; they don't add numbers up, so
+`amount` shows up as a breakdown by value, not as a revenue total.
+
+Properties are allowed on `session_start` and `session_end` as well. They are stored, but the session
+reports don't read them.
+
+Properties are checked key by key in the order they appear in the request, and the first violation
+rejects the whole event. If a key repeats in the JSON object, the last value wins.
+
+## What not to send [#pii]
+
+Don't put personal data into properties: email addresses, phone numbers, names, addresses. A string
+value that looks like an email address or a phone number rejects the event with
+[`property_looks_like_pii`](/docs/errors-and-retries#rejections). The event is rejected as a whole
+rather than saved without the property, so that a leak shows up in your integration at once and not in
+a report months later. In the rejected-events sample on the **Integration** tab such a value is
+replaced with `[redacted]`.
+
+The check catches obvious formats only. Pass opaque IDs (`plan_id`, `order_id`) and categories
+(`source: "voice"`), and keep anything that identifies a person out of properties.
+
+```json
+{
+  "index": 1,
+  "insert_id": "0199d6c1-0000-7000-8000-000000000007",
+  "code": "property_looks_like_pii",
+  "field": "events[1].properties.email",
+  "message": "…",
+  "retryable": false
+}
+```
+
+## Rejections [#rejections]
+
+A rejected event doesn't affect the other events of the batch. Every rejection is `retryable: false`:
+resending the same event gets the same answer, so drop it and fix the client.
+
+| Code | When | `field` |
+|---|---|---|
+| `unknown_event_name` | The name doesn't match the pattern or is reserved | `events[i].name` |
+| `missing_field` | There is no `session_id` | `events[i].session_id` |
+| `invalid_field` | `properties` is not an object, has more than 50 keys, a key doesn't match the pattern, or a value is `null`, an array, an object, a string over 256 characters, a string with a U+0000 character or a number out of range | `events[i].properties` or `events[i].properties.<key>` |
+| `property_looks_like_pii` | A string value looks like an email address or a phone number | `events[i].properties.<key>` |
+
+All codes are described in [Errors and retries](/docs/errors-and-retries#rejections).
+
+## Where events show up [#reports]
+
+- **Events tab.** The list of custom events of the period with the number of events, people and the
+  change against the previous period. An event page has a chart over time, totals and a breakdown by
+  the values of a property you pick. The tab lists only names that have events in the selected
+  period.
+- **Profile.** A person's custom events under their sessions, with properties, platform and app
+  version.
+- **Realtime.** A custom event appears in the feed under its own name.
+- **Integration.** The accepted counter includes custom events, and rejections show up with their
+  codes.
+- **Read API.** [`listEvents`](/docs/api-reference/read/list-events),
+  [`getEventReport`](/docs/api-reference/read/get-event-report),
+  [`getEventBreakdown`](/docs/api-reference/read/get-event-breakdown) and
+  [`listProfileEvents`](/docs/api-reference/read/list-profile-events); see
+  [Read API: overview](/docs/read-api/overview#events).
+
+System events are not part of the **Events** tab: sessions have their own reports on the **Audience**
+tab. Asking the Read API for an event report of `session_start` or `session_end` returns
+`404 event_not_found`. An event with no occurrences in the period isn't an error: the response is `200`
+with zeros.
+
+**Effect on other metrics.** Custom events don't change the definitions of the existing metrics:
+
+- A person counts as **active** if they had an event of any name in the period. Custom events arrive
+  inside sessions, so for a client that sends both, active and new users stay the same. A person who
+  sent only custom events becomes active too.
+- **Sessions** and their duration are computed from `session_start` and `session_end` only.
+- **Retention** follows activity, like active users.
+
+Events are stored for 25 months, like session events, and
+[deleting a person's data](/docs/privacy-and-gdpr#deletion) removes their custom events with it.
+
+## Checklist [#checklist]
+
+1. Send custom events inside the session: the same `session_id` as `session_start`.
+2. Use stable `snake_case` names that are not prefixed with `session_`.
+3. Put values into properties, not into names; keep a property's type the same across releases.
+4. Don't send emails, phone numbers or other personal data.
+5. Deploy the installation that understands custom events before the app build that sends them:
+   an older ingest rejects such events with `unknown_event_name`, and they are lost.

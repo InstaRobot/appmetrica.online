@@ -89,8 +89,8 @@ JSON
 | Код | Причина | Повторять |
 |---|---|---|
 | `missing_field` | Нет обязательного поля: `insert_id`, `name`, `timestamp`, `install_id`, `session_id` | Нет |
-| `invalid_field` | Поле неверного формата: не UUID, нулевой UUID, время без смещения, `user_id` длиннее 128 символов, `duration_ms` вне 0..86 400 000, недопустимое значение в `context` (`platform`, `device_type`, длина строк) | Нет |
-| `unknown_event_name` | `name` не `session_start` и не `session_end` | Нет |
+| `invalid_field` | Поле неверного формата: не UUID, нулевой UUID, время без смещения, `user_id` длиннее 128 символов, неверный объект `properties` (больше 50 ключей, ключ не по шаблону, значение `null`, массив, объект, строка длиннее 256 символов или число вне диапазона), `duration_ms` вне 0..86 400 000, недопустимое значение в `context` (`platform`, `device_type`, длина строк) | Нет |
+| `unknown_event_name` | `name` не подходит под `^[a-z][a-z0-9_]{0,63}$` или зарезервирован: имя с префиксом `session_`, кроме `session_start` и `session_end`; см. [Свои события](/docs/concepts/events#names) | Нет |
 | `duration_required` | У `session_end` нет `duration_ms` | Нет |
 | `event_too_old` | После коррекции часов событие старше 7 дней | Нет |
 | `user_id_looks_like_pii` | `user_id` похож на email или телефон | Нет |

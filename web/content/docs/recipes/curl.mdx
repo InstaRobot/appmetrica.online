@@ -569,3 +569,5 @@ with the same parameters before the deletion finishes returns the same request:
 The status can be read with a key that has the `read` or `delete` scope. `done` means the data has
 been removed from every table; `failed` means the deletion didn't succeed after several attempts, and
 the reason is in the `error` field. Learn more in [Privacy and GDPR](/docs/privacy-and-gdpr#deletion).
+
+To track your own events (`purchase`, `note_created`), send them in the same batches, inside a session. Names, properties and limits are in [Custom events](/docs/concepts/events).

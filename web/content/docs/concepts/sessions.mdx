@@ -4,7 +4,7 @@ description: When to send session_start and session_end, and how metrics are cal
 ---
 
 A session is a continuous stretch of time while the app is in the foreground. The app sends two
-events with a shared `session_id`:
+system events with a shared `session_id`:
 
 - `session_start` — when it comes to the foreground;
 - `session_end` — when it goes to the background, with a `duration_ms` field.
@@ -23,6 +23,9 @@ events with a shared `session_id`:
    user requests with no pauses longer than 30 minutes; see
    [Bots and backends](/docs/recipes/bots-and-backends#server-sessions).
 
+Custom events such as `purchase` are sent between these two, with the same `session_id`; see
+[Custom events](/docs/concepts/events).
+
 Which lifecycle events start and end a session on each platform is covered in
 [Where to initialize analytics](/docs/concepts/initialization).
 
@@ -30,7 +33,7 @@ Which lifecycle events start and end a session on each platform is covered in
 
 | Metric | Definition |
 |---|---|
-| Active | People who had at least one session during the period |
+| Active | People who had at least one event of any name during the period, custom events included |
 | New | People whose first event in the app fell within the period |
 | Sessions | Unique `session_id` values among `session_start` events |
 | Avg. duration | Average over sessions with a `session_end`; a session's duration is the maximum `duration_ms` of its `session_end` events |
