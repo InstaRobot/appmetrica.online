@@ -91,7 +91,7 @@ func TestRunAPI_MigrateOnStart(t *testing.T) {
 	defer func() { require.NoError(t, cp.Close()) }()
 	v, err = cp.GetDBVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), v)
+	require.Equal(t, int64(4), v)
 
 	// Повторный старт на актуальной схеме — no-op.
 	out, stop = startAPI(t)
