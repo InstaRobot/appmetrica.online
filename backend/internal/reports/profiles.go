@@ -437,6 +437,13 @@ func (s *Service) ProfileEvents(ctx context.Context, appID uuid.UUID, q ProfileE
 	return out, nil
 }
 
+// Границы времени курсора — диапазон DateTime64(3) ClickHouse (1900-01-01…2299-12-31): время вне него не
+// форматируется в параметр запроса, и такой курсор — 400, а не ошибка хранилища.
+var (
+	minCursorMillis = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	maxCursorMillis = time.Date(2299, 12, 31, 23, 59, 59, 999_000_000, time.UTC).UnixMilli()
+)
+
 // Курсор событий профиля — base64url «<unix_ms>.<insert_id>»: время события с точностью до миллисекунды и
 // insert_id последнего события страницы.
 func encodeProfileEventsCursor(at time.Time, id uuid.UUID) string {
@@ -453,7 +460,7 @@ func decodeProfileEventsCursor(cursor string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil, ErrInvalidCursor
 	}
 	millis, err := strconv.ParseInt(ms, 10, 64)
-	if err != nil || millis < 0 {
+	if err != nil || millis < minCursorMillis || millis > maxCursorMillis {
 		return time.Time{}, uuid.Nil, ErrInvalidCursor
 	}
 	parsed, err := uuid.Parse(id)
