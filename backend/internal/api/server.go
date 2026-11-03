@@ -153,6 +153,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 		reader("GET /v1/apps/{app_id}/realtime", w.GetRealtime)
 		reader("GET /v1/apps/{app_id}/profiles", w.SearchProfiles)
 		reader("GET /v1/apps/{app_id}/profiles/{person_key}", w.GetProfile)
+		reader("GET /v1/apps/{app_id}/profiles/{person_key}/events", w.ListProfileEvents)
 		reader("GET /v1/apps/{app_id}/integration/health", w.GetIntegrationHealth)
 	}
 	if s.deletion != nil {

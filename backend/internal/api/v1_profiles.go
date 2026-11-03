@@ -136,6 +136,74 @@ func (s *Server) GetProfile(ctx context.Context, req gen.GetProfileRequestObject
 	return out, nil
 }
 
+// ListProfileEvents — свои события человека всех его установок, новые первыми, с курсором before (FR-102);
+// время — UTC, системные события не входят.
+func (s *Server) ListProfileEvents(ctx context.Context, req gen.ListProfileEventsRequestObject) (gen.ListProfileEventsResponseObject, error) {
+	_, ok, err := s.appLocation(ctx, req.AppId)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return gen.ListProfileEvents404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
+	}
+	q := reports.ProfileEventsQuery{PersonKey: req.PersonKey}
+	env, perr := parseEnvironment(req.Params.Environment)
+	if perr == nil {
+		q.Environment = env
+		if l := req.Params.Limit; l != nil {
+			if *l < 1 || *l > reports.MaxProfileEventsLimit {
+				perr = invalidParam("limit", "limit — целое от 1 до 200.")
+			}
+			q.Limit = *l
+		}
+	}
+	if perr == nil && req.Params.Before != nil {
+		if *req.Params.Before == "" {
+			perr = invalidParam("before", "before — курсор next_before предыдущей страницы.")
+		}
+		q.Before = *req.Params.Before
+	}
+	if perr != nil {
+		return gen.ListProfileEvents400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
+	}
+
+	page, err := s.reports.ProfileEvents(ctx, req.AppId, q)
+	switch {
+	case errors.Is(err, identity.ErrInvalidPersonKey):
+		perr := invalidParam("person_key", "person_key — u:<user_id> или i:<install_id>.")
+		return gen.ListProfileEvents400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
+	case errors.Is(err, reports.ErrInvalidCursor):
+		perr := invalidParam("before", "before — курсор next_before предыдущей страницы.")
+		return gen.ListProfileEvents400JSONResponse{BadRequestJSONResponse: perr.response(ctx)}, nil
+	case errors.Is(err, reports.ErrProfileNotFound):
+		return gen.ListProfileEvents404JSONResponse{
+			NotFoundJSONResponse: gen.NotFoundJSONResponse(apiError(ctx, "profile_not_found", msgProfileNotFound, nil)),
+		}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	out := gen.ListProfileEvents200JSONResponse{
+		Events:     make([]gen.ProfileEvent, 0, len(page.Events)),
+		NextBefore: nullable.NewNullNullable[string](),
+	}
+	if page.NextBefore != "" {
+		out.NextBefore = nullable.NewNullableWithValue(page.NextBefore)
+	}
+	for _, e := range page.Events {
+		out.Events = append(out.Events, gen.ProfileEvent{
+			EventTime:  e.EventTime.UTC(),
+			Name:       e.Name,
+			SessionId:  e.SessionID,
+			InstallId:  e.InstallID,
+			Platform:   e.Platform,
+			AppVersion: e.AppVersion,
+			Properties: e.Properties,
+		})
+	}
+	return out, nil
+}
+
 // profileUserID — user_id профиля u:<user_id>; у анонимной установки — null.
 func profileUserID(key identity.PersonKey) nullable.Nullable[string] {
 	if !key.IsUser() {
