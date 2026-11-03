@@ -8,6 +8,7 @@ import { getAdminSystemMock } from "@/lib/api/gen/endpoints/admin-system/admin-s
 import { getAppsMock } from "@/lib/api/gen/endpoints/apps/apps.msw";
 import { getAudienceMock } from "@/lib/api/gen/endpoints/audience/audience.msw";
 import { getDeletionMock } from "@/lib/api/gen/endpoints/deletion/deletion.msw";
+import { getEventsMock } from "@/lib/api/gen/endpoints/events/events.msw";
 import { getHealthMock } from "@/lib/api/gen/endpoints/health/health.msw";
 import { getIntegrationMock } from "@/lib/api/gen/endpoints/integration/integration.msw";
 import { getPortfolioMock } from "@/lib/api/gen/endpoints/portfolio/portfolio.msw";
@@ -27,6 +28,7 @@ export const defaultHandlers = [
   ...getAppsMock(),
   ...getAudienceMock(),
   ...getDeletionMock(),
+  ...getEventsMock(),
   ...getHealthMock(),
   ...getIntegrationMock(),
   ...getPortfolioMock(),

@@ -23,6 +23,12 @@ export const demoData = {
     personKey: "person_key: expected u:<user_id> or i:<install_id>.",
     before: "before: expected an RFC 3339 date-time.",
     mergeSelf: "You can't merge an app with itself.",
+    eventName:
+      "event_name: lowercase Latin letters, digits and _, starting with a letter, up to 64 characters.",
+    eventNotFound:
+      "This event is not part of the Events report: session_start and session_end are shown by the audience reports.",
+    propertyKey:
+      "property: lowercase Latin letters, digits and _, starting with a letter, up to 64 characters.",
   },
   // Метки write-ключей, как при создании приложения (PLATFORM_LABELS в components/common/platform-icon.tsx).
   writeKeyLabels: {

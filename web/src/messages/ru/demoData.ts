@@ -23,6 +23,10 @@ export const demoData: typeof en = {
     personKey: "person_key: ожидается u:<user_id> или i:<install_id>.",
     before: "before: ожидается дата-время RFC 3339.",
     mergeSelf: "Нельзя объединить приложение с самим собой.",
+    eventName: "event_name: строчные латинские буквы, цифры и «_», первая — буква, до 64 символов.",
+    eventNotFound:
+      "Событие не входит в отчёт «События»: session_start и session_end показывают отчёты аудитории.",
+    propertyKey: "property: строчные латинские буквы, цифры и «_», первая — буква, до 64 символов.",
   },
   writeKeyLabels: {
     ios: "iOS",

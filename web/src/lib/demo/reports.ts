@@ -56,7 +56,7 @@ function changePct(cur: number | null, base: number | null, digits: number): num
   return Math.round(((cur - base) / base) * 100 * k) / k;
 }
 
-function previousPeriod(from: string, to: string): [string, string] {
+export function previousPeriod(from: string, to: string): [string, string] {
   const len = rangeDays(from, to);
   return [addDays(from, -len), addDays(from, -1)];
 }
@@ -173,11 +173,11 @@ function pick(stats: PeriodStats, metric: TimeSeriesMetric): number | null {
   }
 }
 
-type Bucket = { start: string; from: string; to: string };
+export type Bucket = { start: string; from: string; to: string };
 
 // buckets — корзины week (ISO, с понедельника) и month (календарные) от корзины from до корзины to,
 // значения обрезаются по from…to.
-function buckets(from: string, to: string, granularity: "day" | "week" | "month"): Bucket[] {
+export function buckets(from: string, to: string, granularity: "day" | "week" | "month"): Bucket[] {
   const out: Bucket[] = [];
   if (granularity === "day") {
     for (const d of eachDay(from, to)) out.push({ start: d, from: d, to: d });

@@ -27,6 +27,7 @@ import {
   writeKeys,
 } from "./admin";
 import { DEMO_APPS } from "./apps";
+import { EVENT_NAME, eventBreakdown, eventReport, eventsList, SYSTEM_EVENT_NAMES } from "./events";
 import { integrationHealth, realtime } from "./live";
 import { type DemoApp, demoApp, type FilterDim, type Filters, makeScope } from "./model";
 import { getProfile, searchProfiles } from "./profiles";
@@ -217,6 +218,15 @@ function compareOf(q: Query): boolean {
   return oneOf(q, "compare", ["previous_period", "none"] as const, "previous_period") !== "none";
 }
 
+// eventNameOf — имя события пути: по шаблону EventName; системное имя — 404 event_not_found.
+function eventNameOf(name: string | undefined): string {
+  if (name === undefined || !EVENT_NAME.test(name)) throw invalid("event_name", "eventName");
+  if (SYSTEM_EVENT_NAMES.includes(name)) {
+    throw new DemoError(404, "event_not_found", "eventNotFound");
+  }
+  return name;
+}
+
 function requireApp(id: string | undefined): DemoApp {
   if (!id || !UUID.test(id)) throw invalid("app_id", "uuid", { name: "app_id" });
   const app = demoApp(id.toLowerCase());
@@ -284,6 +294,32 @@ const ROUTES: readonly Route[] = [
     const metric = oneOf(query, "metric", BREAKDOWN_METRICS, "active");
     const limit = integer(query, "limit", 1, 200, 50);
     return json(breakdown(scope, from, to, dimension, metric, limit));
+  }),
+  route("/v1/apps/:app_id/events", ({ params, query, now }) => {
+    const app = requireApp(params.app_id);
+    const scope = reportScope(app, query, now);
+    const { from, to } = period(query);
+    return json(eventsList(scope, from, to, compareOf(query)));
+  }),
+  route("/v1/apps/:app_id/events/:event_name", ({ params, query, now }) => {
+    const app = requireApp(params.app_id);
+    const scope = reportScope(app, query, now);
+    const granularity = oneOf(query, "granularity", GRANULARITIES, "day");
+    const { from, to } = period(query, granularity);
+    const compare = compareOf(query);
+    const name = eventNameOf(params.event_name);
+    return json(eventReport(scope, name, from, to, granularity, compare));
+  }),
+  route("/v1/apps/:app_id/events/:event_name/breakdown", ({ params, query, now }) => {
+    const app = requireApp(params.app_id);
+    const scope = reportScope(app, query, now);
+    const { from, to } = period(query);
+    const property = query.get("property");
+    if (property === null) throw invalid("property", "required", { name: "property" });
+    if (!EVENT_NAME.test(property)) throw invalid("property", "propertyKey");
+    const limit = integer(query, "limit", 1, 100, 20);
+    const name = eventNameOf(params.event_name);
+    return json(eventBreakdown(scope, name, property, from, to, limit));
   }),
   route("/v1/apps/:app_id/retention", ({ params, query, now }) => {
     const app = requireApp(params.app_id);
