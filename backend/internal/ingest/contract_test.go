@@ -12,6 +12,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/stretchr/testify/require"
+
+	"appmetrica.online/backend/internal/gen/ingestapi"
 )
 
 var ingestSpecPath = filepath.Join("..", "..", "..", "contracts", "openapi", "ingest.yaml")
@@ -86,4 +88,30 @@ func TestIngestResponses_InternalErrorMatchesSpec(t *testing.T) {
 	requireError(t, rec, http.StatusInternalServerError, "internal_error")
 	rec.Header().Set("Access-Control-Allow-Origin", "*") // harness без CORS
 	requireMatchesSpec(t, doc, http.MethodPost, rec)
+}
+
+// Спека FR-102 §1: имя события — строка по шаблону, системные имена описывает SystemEventName, у события
+// есть необязательные properties (до 50 ключей), новый код отказа property_looks_like_pii.
+func TestContract_EventSchemaAllowsCustomNames(t *testing.T) {
+	swagger, err := ingestapi.GetSwagger()
+	require.NoError(t, err)
+	schemas := swagger.Components.Schemas
+
+	name := schemas["EventName"].Value
+	require.True(t, name.Type.Is("string"))
+	require.Equal(t, "^[a-z][a-z0-9_]{0,63}$", name.Pattern)
+	require.Empty(t, name.Enum, "EventName больше не перечисление")
+
+	system := schemas["SystemEventName"]
+	require.NotNil(t, system, "SystemEventName")
+	require.Equal(t, []any{"session_start", "session_end"}, system.Value.Enum)
+
+	props := schemas["Event"].Value.Properties["properties"]
+	require.NotNil(t, props, "Event.properties")
+	require.True(t, props.Value.Type.Is("object"))
+	require.NotNil(t, props.Value.MaxProps)
+	require.EqualValues(t, 50, *props.Value.MaxProps)
+	require.NotContains(t, schemas["Event"].Value.Required, "properties")
+
+	require.Contains(t, schemas["RejectionCode"].Value.Enum, "property_looks_like_pii")
 }

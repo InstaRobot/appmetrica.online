@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { getMessages } from "@/messages";
 import { rejectionCode } from "./rejection-codes";
 
-// Семь RejectionCode из contracts/openapi/ingest.yaml и batch-коды ingest (14-ux-ui-spec.md §14.3).
+// Восемь RejectionCode из contracts/openapi/ingest.yaml и batch-коды ingest (14-ux-ui-spec.md §14.3).
 const EVENT_CODES = [
   "missing_field",
   "invalid_field",
   "unknown_event_name",
   "event_too_old",
   "user_id_looks_like_pii",
+  "property_looks_like_pii",
   "duration_required",
   "install_rate_limited",
 ];
