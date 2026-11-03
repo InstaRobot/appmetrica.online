@@ -23,19 +23,30 @@ var peopleMetrics = map[string]bool{
 	"dau": true, "wau": true, "mau": true,
 	"active_now": true, "active_today": true, "active_date": true, "active_same_day_prev_week": true,
 	"new_date": true, "sessions_date": true, "sessions_started": true, "persons": true,
+	"people": true, "prev_people": true,
 }
+
+// eventMetrics — псевдонимы колонок с числом событий отчёта «События» (FR-102, feature spec §4). Узкое исключение
+// по прецеденту integration_health.go (OQ-042): событие считается только uniqExact(insert_id) — до слияния частей
+// ReplacingMergeTree повтор батча виден несколькими строками с тем же insert_id, а count() посчитал бы каждую.
+// Любой другой подсчёт под этими псевдонимами (count, uniq, uniqExact другой колонки) — нарушение; свёртка уже
+// посчитанных чисел (sum событий непересекающихся значений свойства) строк не считает и разрешена. Под псевдонимами
+// людей uniqExact(insert_id), наоборот, запрещён: он считает события, а не людей.
+var eventMetrics = map[string]bool{"events": true, "prev_events": true}
 
 var (
 	reAlias = regexp.MustCompile(`(?i)\bAS\s+([a-z_][a-z0-9_]*)`)
 	// reCounting — агрегаты, считающие строки или приближённо уникальные: count, countIf, uniq, uniqCombined…
 	// uniqExact* проверяется отдельно и разрешён.
 	reCounting = regexp.MustCompile(`(?i)\b(count[a-z0-9]*|uniq[a-z0-9]*)\s*\(`)
+	// reInsertIDCount — uniqExact/uniqExactIf, чей первый аргумент — insert_id (с псевдонимом таблицы или без).
+	reInsertIDCount = regexp.MustCompile(`(?i)^uniqexact(if)?\s*\(\s*([a-z_][a-z0-9_]*\.)?insert_id\b`)
 	// reCountEvents — count() в одном фрагменте с чтением сырой таблицы events.
 	reCountEvents = regexp.MustCompile(`(?is)\bcount(if)?\s*\(.*\bFROM\s+events\b|\bFROM\s+events\b.*\bcount(if)?\s*\(`)
 )
 
 // AC-027.6: в отчётных SQL нет count() (и приближённых uniq) в выражениях людей и сессий — только uniqExact,
-// и нет count() по сырой events.
+// и нет count() по сырой events; события отчёта «События» — только uniqExact(insert_id) (eventMetrics).
 func TestSQL_NoCountForPeople(t *testing.T) {
 	literals := reportSQLLiterals(t)
 	var sql int
@@ -75,6 +86,20 @@ func TestLintReportSQL(t *testing.T) {
 		{"lowercase_count", `select count(*) as persons from cohort`, true},
 		{"count_raw_events", `SELECT count() AS accepted FROM events WHERE app_id = {app_id:UUID}`, true},
 		{"countif_raw_events", `SELECT countIf(name = 'session_end') AS ends FROM events AS e`, true},
+
+		// Отчёт «События» (eventMetrics): событие — uniqExact(insert_id), люди — uniqExact(person_key).
+		{"events_uniq_exact_insert_id", `SELECT uniqExact(e.insert_id) AS events FROM events AS e`, false},
+		{"prev_events_uniq_exact_if", `SELECT uniqExactIf(insert_id, e.event_time < {split_utc:DateTime64(3)}) AS prev_events FROM events AS e`, false},
+		{"events_sum_of_counted", `SELECT kind, sum(value_events) AS events FROM ranked GROUP BY kind`, false},
+		{"events_column", `SELECT v.events AS events, p.people AS people FROM v CROSS JOIN p`, false},
+		{"people_uniq_exact", `SELECT uniqExactIf(person_key, cur) AS people, uniqExactMerge(st) AS prev_people FROM people`, false},
+
+		{"events_count", `SELECT count() AS events FROM ev`, true},
+		{"events_uniq_approx", `SELECT uniq(e.insert_id) AS events FROM ev`, true},
+		{"events_other_column", `SELECT uniqExact(e.session_id) AS events FROM ev`, true},
+		{"events_insert_id_prefix", `SELECT uniqExact(e.insert_id_copy) AS prev_events FROM ev`, true},
+		{"people_countif", `SELECT countIf(cur) AS people FROM people`, true},
+		{"people_of_insert_id", `SELECT uniqExact(e.insert_id) AS people FROM ev`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := lintReportSQL(tc.sql)
@@ -92,13 +117,22 @@ func lintReportSQL(sql string) []string {
 	var out []string
 	for _, m := range reAlias.FindAllStringSubmatchIndex(sql, -1) {
 		alias := strings.ToLower(sql[m[2]:m[3]])
-		if !peopleMetrics[alias] {
+		people, events := peopleMetrics[alias], eventMetrics[alias]
+		if !people && !events {
 			continue
 		}
 		expr := selectItemBefore(sql, m[0])
-		for _, c := range reCounting.FindAllStringSubmatch(expr, -1) {
-			if !strings.HasPrefix(strings.ToLower(c[1]), "uniqexact") {
-				out = append(out, alias+": "+c[1]+"() вместо uniqExact в «"+strings.TrimSpace(expr)+"»")
+		item := "«" + strings.TrimSpace(expr) + "»"
+		for _, c := range reCounting.FindAllStringSubmatchIndex(expr, -1) {
+			fn := expr[c[2]:c[3]]
+			insertID := reInsertIDCount.MatchString(expr[c[2]:])
+			switch {
+			case events && !insertID:
+				out = append(out, alias+": "+fn+"() — событие считается только uniqExact(insert_id) в "+item)
+			case people && !strings.HasPrefix(strings.ToLower(fn), "uniqexact"):
+				out = append(out, alias+": "+fn+"() вместо uniqExact в "+item)
+			case people && insertID:
+				out = append(out, alias+": uniqExact(insert_id) считает события, а не людей, в "+item)
 			}
 		}
 	}
