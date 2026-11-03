@@ -152,6 +152,19 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 			event(otherApp, i1, user, at.Add(7*time.Hour)),  // тот же U в другом приложении
 		)
 	}
+	// Свои события со свойствами (FR-102): события U на I1, I2 и общем устройстве уходят вместе с ним, событие u2 на I3 остаётся.
+	custom := func(appID, install uuid.UUID, user string, at time.Time) chstore.EventRow {
+		r := event(appID, install, user, at)
+		r.Name, r.Properties = "purchase", map[string]string{"plan": "year", "contact": "value"}
+		return r
+	}
+	rows = append(rows,
+		custom(appID, i1, user, day.Add(8*time.Hour)),
+		custom(appID, i2, user, day.Add(9*time.Hour)),
+		custom(appID, shared, user, day.Add(10*time.Hour)),
+		custom(appID, i3, "u2", day.Add(11*time.Hour)),
+		custom(otherApp, i1, user, day.Add(12*time.Hour)),
+	)
 	require.NoError(t, h.env.CH.InsertEvents(ctx, rows))
 	require.NoError(t, h.env.CH.InsertRejected(ctx, []chstore.RejectedRow{
 		rejected(appID, `{"install_id":"`+i1.String()+`","name":"session_start"}`),
@@ -184,8 +197,13 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 	require.Zero(t, count(t, h.env, "identity_links", mine, p))
 	require.Zero(t, count(t, h.env, "user_first_seen", "app_id = {app:UUID} AND hex(user_id) = {user_hex:String}", p))
 
+	// Свои события U со свойствами стёрты настоящей очисткой, свое событие u2 осталось.
+	require.Zero(t, count(t, h.env, "events", "app_id = {app:UUID} AND name = 'purchase' AND (hex(user_id) = {user_hex:String} OR install_id IN ({i1:UUID}, {i2:UUID}))", p))
+	require.Zero(t, count(t, h.env, "events", "app_id = {app:UUID} AND name = 'purchase' AND install_id = {shared:UUID}", p))
+	require.Equal(t, uint64(1), count(t, h.env, "events", "app_id = {app:UUID} AND name = 'purchase' AND properties['plan'] = 'year'", p))
+
 	// u2 и общее устройство (его первый владелец — u2) на месте; из общего устройства ушли только события U.
-	require.Equal(t, uint64(6), count(t, h.env, "events", "app_id = {app:UUID} AND install_id = {i3:UUID}", p))
+	require.Equal(t, uint64(7), count(t, h.env, "events", "app_id = {app:UUID} AND install_id = {i3:UUID}", p))
 	require.Equal(t, uint64(3), count(t, h.env, "events", "app_id = {app:UUID} AND install_id = {shared:UUID}", p))
 	require.Equal(t, uint64(2), count(t, h.env, "install_first_seen", "app_id = {app:UUID} AND install_id IN ({i3:UUID}, {shared:UUID})", p))
 	require.Equal(t, uint64(2), count(t, h.env, "identity_links", "app_id = {app:UUID} AND install_id IN ({i3:UUID}, {shared:UUID})", p))
@@ -196,7 +214,7 @@ func TestDeletion_UserRemovesAllLinkedData(t *testing.T) {
 	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {app:UUID} AND position(payload_sample, '\"u2\"') > 0", p))
 
 	// Другое приложение не тронуто.
-	require.Equal(t, uint64(3), count(t, h.env, "events", "app_id = {other:UUID}", p))
+	require.Equal(t, uint64(4), count(t, h.env, "events", "app_id = {other:UUID}", p))
 	require.Equal(t, uint64(1), count(t, h.env, "user_first_seen", "app_id = {other:UUID}", p))
 	require.Equal(t, uint64(1), count(t, h.env, "rejected_events", "app_id = {other:UUID}", p))
 
