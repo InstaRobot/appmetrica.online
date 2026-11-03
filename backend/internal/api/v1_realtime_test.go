@@ -5,6 +5,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -149,6 +150,32 @@ func TestGetRealtime_HTTP(t *testing.T) {
 		require.Equal(t, "environment", body.Details["field"])
 		require.NotContains(t, rec.Body.String(), "staging")
 	})
+}
+
+// Свои события попадают в ленту рядом с системными, ответ валиден по api.yaml.
+func TestRealtime_RecentCustomEvents(t *testing.T) {
+	e := newPortfolioEnv(t)
+	msk := testutil.ScenarioApps[0]
+	now := time.Date(2026, 10, 13, 5, 0, 0, 0, time.UTC) // часы newPortfolioEnv
+	install := uuid.New()
+	start := liveSession(msk, install, reports.EnvProduction, now.Add(-4*time.Minute))
+	purchase := liveSession(msk, install, reports.EnvProduction, now.Add(-2*time.Minute))
+	purchase.Name = "purchase"
+	require.NoError(t, e.env.CH.InsertEvents(t.Context(), []chstore.EventRow{start, purchase}))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, realtimePath(msk, ""), nil)
+	rec := e.get(t, realtimePath(msk, ""), e.all)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "getRealtime", validateResponse(t, loadAPIDoc(t), req, rec))
+
+	var got gen.Realtime
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	names := map[string]bool{}
+	for _, ev := range got.RecentEvents {
+		names[string(ev.Name)] = true
+	}
+	require.Equal(t, map[string]bool{"session_start": true, "purchase": true}, names)
+	require.Equal(t, "purchase", string(got.RecentEvents[0].Name), "новее — первым")
 }
 
 func loadLocation(t *testing.T, app testutil.ScenarioApp) *time.Location {

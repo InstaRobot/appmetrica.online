@@ -105,6 +105,20 @@ describe("EventFeed", () => {
     expect(longPerson).toHaveTextContent("i:5d…0004");
   });
 
+  it("shows a custom event name as-is next to a system one", () => {
+    render(
+      <EventFeed
+        appId={APP_ID}
+        timezone="Europe/Moscow"
+        events={[event(2, { name: "purchase" }), event(1)]}
+      />,
+    );
+    const [first, second] = bodyRows() as [HTMLElement, HTMLElement];
+    const custom = within(first).getByText("purchase");
+    expect(custom).toHaveClass("font-mono");
+    expect(second).toHaveTextContent("session_start");
+  });
+
   it("shows a dash for unknown country and only the country without a city", () => {
     render(
       <EventFeed

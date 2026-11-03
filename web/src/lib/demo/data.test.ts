@@ -571,6 +571,18 @@ describe("demo realtime", () => {
     expect(new Set(r.recent_events.map((e) => e.insert_id)).size).toBe(50);
   });
 
+  it("mixes custom Notes events into the feed deterministically", async () => {
+    const r = await get<Realtime>(`/v1/apps/${NOTES}/realtime`);
+    const names = new Set(r.recent_events.map((e) => e.name));
+    expect(names.has("session_start")).toBe(true);
+    const custom = [...names].filter((n) => !n.startsWith("session_"));
+    expect(custom.length).toBeGreaterThanOrEqual(2);
+    const allowed = ["note_created", "note_shared", "search_used", "paywall_shown", "purchase"];
+    for (const n of custom) expect(allowed).toContain(n);
+    const again = await get<Realtime>(`/v1/apps/${NOTES}/realtime`);
+    expect(again.recent_events).toEqual(r.recent_events);
+  });
+
   it("is quiet for development and empty for the archived app", async () => {
     const dev = await get<Realtime>(`/v1/apps/${NOTES}/realtime?environment=development`);
     expect(dev.active_now).toBeLessThan(10);
