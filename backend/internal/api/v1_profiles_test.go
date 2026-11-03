@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -390,6 +391,9 @@ func TestProfileEvents_DeletedPerson(t *testing.T) {
 	require.Equal(t, "app_not_found", body.Code)
 }
 
+// hugeCursor — well-formed cursor (base64url "<ms>.<uuid>") with a timestamp far beyond DateTime64.
+var hugeCursor = base64.RawURLEncoding.EncodeToString([]byte("9223372036854775807.1de20000-0000-4000-8000-000000000042"))
+
 // Плохой person_key, limit, before и environment — 400 invalid_request с details.field, присланное значение
 // в ответ не попадает.
 func TestProfileEvents_InvalidParams(t *testing.T) {
@@ -405,6 +409,7 @@ func TestProfileEvents_InvalidParams(t *testing.T) {
 		{key, "limit=abc", "limit"},
 		{key, "before=garbage-cursor", "before"},
 		{key, "before=", "before"},
+		{key, "before=" + url.QueryEscape(hugeCursor), "before"},
 		{key, "environment=staging", "environment"},
 	} {
 		rec := e.get(t, profileEventsPath(msk, tc.key, tc.query), e.all)

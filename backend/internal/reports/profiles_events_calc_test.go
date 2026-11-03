@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -18,7 +19,10 @@ func TestProfileEventsCursor_RoundTrip(t *testing.T) {
 	require.True(t, at.Equal(gotAt))
 	require.Equal(t, id, gotID)
 
-	for _, bad := range []string{"", "garbage", "!!!", encodeProfileEventsCursor(at, id) + "x"} {
+	huge := encodeProfileEventsCursor(time.UnixMilli(math.MaxInt64).UTC(), id)
+	early := encodeProfileEventsCursor(time.Date(1800, 1, 1, 0, 0, 0, 0, time.UTC), id)
+	late := encodeProfileEventsCursor(time.Date(2400, 1, 1, 0, 0, 0, 0, time.UTC), id)
+	for _, bad := range []string{"", "garbage", "!!!", encodeProfileEventsCursor(at, id) + "x", huge, early, late} {
 		_, _, err := decodeProfileEventsCursor(bad)
 		require.ErrorIs(t, err, ErrInvalidCursor, "%q", bad)
 	}
