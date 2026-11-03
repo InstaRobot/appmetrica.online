@@ -113,7 +113,6 @@ export * from "./readyStatusStatus";
 export * from "./realtime";
 export * from "./realtimeMinute";
 export * from "./recentEvent";
-export * from "./recentEventName";
 export * from "./renamePasskeyBody";
 export * from "./retentionCohort";
 export * from "./retentionMatrix";

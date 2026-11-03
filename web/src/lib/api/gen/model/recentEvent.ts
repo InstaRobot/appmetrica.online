@@ -11,14 +11,17 @@
  * OpenAPI spec version: 1.1.0
  */
 import type { Environment } from "./environment";
-import type { RecentEventName } from "./recentEventName";
 
 export interface RecentEvent {
   /** Stable key of the feed row (React key, highlighting of new rows) */
   insert_id: string;
   event_time: string;
   received_at: string;
-  name: RecentEventName;
+  /**
+   * System name (session_start, session_end) or a custom event name; same pattern as EventName in ingest.yaml
+   * @pattern ^[a-z][a-z0-9_]{0,63}$
+   */
+  name: string;
   environment: Environment;
   platform: string;
   app_version: string;

@@ -1494,7 +1494,11 @@ components:
         insert_id: { type: string, format: uuid, description: 'Stable key of the feed row (React key, highlighting of new rows)' }
         event_time: { type: string, format: date-time }
         received_at: { type: string, format: date-time }
-        name: { type: string, enum: [session_start, session_end] }
+        name:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,63}$'
+          description: 'System name (session_start, session_end) or a custom event name; same pattern as EventName in ingest.yaml'
+          example: purchase
         environment: { $ref: '#/components/schemas/Environment' }
         platform: { type: string }
         app_version: { type: string }

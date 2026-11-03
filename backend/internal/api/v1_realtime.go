@@ -45,7 +45,7 @@ func (s *Server) GetRealtime(ctx context.Context, req gen.GetRealtimeRequestObje
 			InsertId:    e.InsertID,
 			EventTime:   e.EventTime.UTC(),
 			ReceivedAt:  e.ReceivedAt.UTC(),
-			Name:        gen.RecentEventName(e.Name),
+			Name:        e.Name,
 			Environment: gen.Environment(e.Environment),
 			Platform:    e.Platform,
 			AppVersion:  e.AppVersion,

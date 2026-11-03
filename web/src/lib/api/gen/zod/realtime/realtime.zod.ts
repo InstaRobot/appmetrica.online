@@ -33,6 +33,7 @@ export const GetRealtimeQueryParams = zod.object({
 export const getRealtimeResponsePerMinuteMin = 30;
 export const getRealtimeResponsePerMinuteMax = 30;
 
+export const getRealtimeResponseRecentEventsItemNameRegExp = new RegExp("^[a-z][a-z0-9_]{0,63}$");
 export const getRealtimeResponseRecentEventsItemEnvironmentDefault = `production`;
 export const getRealtimeResponseRecentEventsMax = 50;
 
@@ -55,7 +56,12 @@ export const GetRealtimeResponse = zod.object({
           .describe("Stable key of the feed row (React key, highlighting of new rows)"),
         event_time: zod.iso.datetime({ offset: true }),
         received_at: zod.iso.datetime({ offset: true }),
-        name: zod.enum(["session_start", "session_end"]),
+        name: zod
+          .string()
+          .regex(getRealtimeResponseRecentEventsItemNameRegExp)
+          .describe(
+            "System name (session_start, session_end) or a custom event name; same pattern as EventName in ingest.yaml",
+          ),
         environment: zod
           .enum(["production", "development"])
           .default(getRealtimeResponseRecentEventsItemEnvironmentDefault),

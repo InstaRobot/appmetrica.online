@@ -29,7 +29,7 @@ export const getGetRealtimeResponseMock = (
       insert_id: faker.string.uuid(),
       event_time: faker.date.past().toISOString().slice(0, 19) + "Z",
       received_at: faker.date.past().toISOString().slice(0, 19) + "Z",
-      name: faker.helpers.arrayElement(["session_start", "session_end"] as const),
+      name: faker.helpers.fromRegExp("^[a-z][a-z0-9_]{0,63}$"),
       environment: faker.helpers.arrayElement(Object.values(Environment)),
       platform: faker.string.alpha({ length: { min: 10, max: 20 } }),
       app_version: faker.string.alpha({ length: { min: 10, max: 20 } }),

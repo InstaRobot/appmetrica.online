@@ -85,7 +85,7 @@ func TestGetRealtime_HTTP(t *testing.T) {
 		require.Equal(t, int64(2), got.ActiveNow)
 		require.Equal(t, rows[1].InsertID, got.RecentEvents[0].InsertId)
 		ev := got.RecentEvents[0]
-		require.Equal(t, gen.RecentEventNameSessionStart, ev.Name)
+		require.Equal(t, "session_start", ev.Name)
 		require.Equal(t, gen.EnvironmentProduction, ev.Environment)
 		require.Equal(t, "ios", ev.Platform)
 		require.Equal(t, "3.4.0", ev.AppVersion)

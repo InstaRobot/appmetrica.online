@@ -10,6 +10,7 @@ import type {
   Realtime,
   RecentEvent,
 } from "@/lib/api/gen/model";
+import { DEMO_APP_IDS } from "./apps";
 import type { RejectBurst } from "./catalog";
 import {
   type DemoApp,
@@ -29,6 +30,34 @@ import { formatZoned, HOUR_MS, isoUtc, localTime, MINUTE_MS } from "./time";
 const REALTIME_MINUTES = 30;
 const RECENT_LIMIT = 50;
 const RECENT_LOOKBACK_MINUTES = 360;
+
+// Свои события Notes (имена совпадают с каталогом демо): доля ленты и веса. Выбор — отдельным
+// хэшем от (app, env, minute, j), чтобы не сдвигать остальные розыгрыши строки.
+const NOTES_CUSTOM_SHARE = 0.4;
+const NOTES_CUSTOM_EVENTS: readonly (readonly [name: string, weight: number])[] = [
+  ["note_created", 5],
+  ["note_shared", 2],
+  ["search_used", 3],
+  ["paywall_shown", 1.5],
+  ["purchase", 0.5],
+];
+
+function customName(appId: string, env: Environment, minute: number, j: number): string | null {
+  if (
+    appId !== DEMO_APP_IDS.notes ||
+    rand(appId, env, "rt-custom", minute, j) >= NOTES_CUSTOM_SHARE
+  ) {
+    return null;
+  }
+  const total = NOTES_CUSTOM_EVENTS.reduce((s, [, w]) => s + w, 0);
+  const x = rand(appId, env, "rt-custom-name", minute, j) * total;
+  let acc = 0;
+  for (const [name, w] of NOTES_CUSTOM_EVENTS) {
+    acc += w;
+    if (x < acc) return name;
+  }
+  return NOTES_CUSTOM_EVENTS[0]?.[0] ?? null;
+}
 
 // isLive — приложение принимает события сегодня: уже создано и не в архиве.
 function isLive(demo: DemoApp, today: string): boolean {
@@ -62,7 +91,8 @@ function recentEvents(
       const received = minute * MINUTE_MS + Math.floor(r() * MINUTE_MS);
       const lag = 120 + Math.floor(r() * 1500);
       const late = r() < 0.04 ? Math.floor(r() * 3 * HOUR_MS) : 0;
-      const name = r() < 0.5 ? "session_start" : "session_end";
+      const system = r() < 0.5 ? "session_start" : "session_end";
+      const name = customName(id, env, minute, j) ?? system;
       const fromCurated = r() < 0.1;
       const personDraw = r();
       const installDraw = r();
