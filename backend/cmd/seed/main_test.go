@@ -269,3 +269,71 @@ func TestRun_ExitCodes(t *testing.T) {
 		"без POSTGRES_URL — ошибка выполнения")
 	require.Contains(t, stderr.String(), "POSTGRES_URL")
 }
+
+// «Seed Notes» шлёт свои события внутри сессий: те же имена и свойства, что в демо-каталоге web
+// (web/src/lib/demo/catalog.ts), чтобы вкладка «События» и E2E видели одно и то же.
+func TestGenerateApp_CustomEvents(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Days, cfg.DailyInstalls = 10, 60
+	notes := seedApp{
+		ID:           uuid.MustParse("0199e0a0-0000-7000-8000-000000000004"),
+		Platforms:    []string{"ios", "android", "web"},
+		CustomEvents: true,
+	}
+	rows := generateApp(cfg, 3, notes)
+	require.Equal(t, rows, generateApp(cfg, 3, notes), "генератор детерминирован")
+
+	wantProp := map[string]string{
+		"note_created": "source", "note_shared": "target", "search_used": "results",
+		"paywall_shown": "place", "purchase": "plan",
+	}
+	sessions := map[uuid.UUID][2]time.Time{}
+	for _, r := range rows {
+		switch r.Name {
+		case "session_start":
+			s := sessions[r.SessionID]
+			s[0] = r.EventTime
+			sessions[r.SessionID] = s
+		case "session_end":
+			s := sessions[r.SessionID]
+			s[1] = r.EventTime
+			sessions[r.SessionID] = s
+		}
+	}
+	counts := map[string]int{}
+	insertIDs := map[uuid.UUID]bool{}
+	for _, r := range rows {
+		if r.Name == "session_start" || r.Name == "session_end" {
+			require.Empty(t, r.Properties)
+			continue
+		}
+		key, ok := wantProp[r.Name]
+		require.True(t, ok, "неизвестное событие %q", r.Name)
+		counts[r.Name]++
+		require.False(t, insertIDs[r.InsertID], "insert_id уникален")
+		insertIDs[r.InsertID] = true
+		require.Len(t, r.Properties, 1)
+		require.NotEmpty(t, r.Properties[key], "%s: свойство %s", r.Name, key)
+		span, inSession := sessions[r.SessionID]
+		require.True(t, inSession, "событие внутри сессии")
+		require.False(t, r.EventTime.Before(span[0]) || r.EventTime.After(span[1]), "%s вне сессии", r.Name)
+		require.Equal(t, r.EventTime.UTC().Truncate(24*time.Hour), r.EventDate)
+		require.Equal(t, "production", r.Environment)
+	}
+	for name := range wantProp {
+		require.Positive(t, counts[name], "есть события %s", name)
+	}
+	require.Greater(t, counts["note_created"], counts["purchase"], "note_created частое, purchase редкое")
+
+	plain := notes
+	plain.CustomEvents = false
+	for _, r := range generateApp(cfg, 3, plain) {
+		require.Contains(t, []string{"session_start", "session_end"}, r.Name, "без CustomEvents — только сессии")
+	}
+}
+
+func TestAppSpecs_OnlyNotesHasCustomEvents(t *testing.T) {
+	for _, spec := range appSpecs {
+		require.Equal(t, spec.Name == "Seed Notes", spec.CustomEvents, spec.Name)
+	}
+}
