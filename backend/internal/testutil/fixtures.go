@@ -46,6 +46,8 @@ type fixtureEvent struct {
 	Region      string    `json:"region"`
 	City        string    `json:"city"`
 	WriteKeyID  uuid.UUID `json:"write_key_id"`
+	// Properties необязательны: старые фикстуры без поля читаются как раньше.
+	Properties map[string]string `json:"properties,omitempty"`
 }
 
 // fixtureNamespace — пространство имён детерминированных insert_id (UUID v5 от "<source>:<строка>").
@@ -135,6 +137,7 @@ func parseEvent(b []byte) (chstore.EventRow, error) {
 		Region:      e.Region,
 		City:        e.City,
 		WriteKeyID:  e.WriteKeyID,
+		Properties:  e.Properties,
 	}, nil
 }
 
@@ -169,6 +172,7 @@ func WriteNDJSON(w io.Writer, rows []chstore.EventRow) error {
 			Region:      r.Region,
 			City:        r.City,
 			WriteKeyID:  r.WriteKeyID,
+			Properties:  r.Properties,
 		}); err != nil {
 			return fmt.Errorf("testutil: NDJSON: %w", err)
 		}

@@ -35,10 +35,10 @@ ORDER BY partition`
 	qCopyPartition = `
 INSERT INTO events (app_id, event_date, event_time, client_time, sent_at, received_at, insert_id, name,
                     install_id, user_id, session_id, duration_ms, environment, platform, os_name, os_version,
-                    app_version, app_build, device_model, device_type, locale, country, region, city, write_key_id)
+                    app_version, app_build, device_model, device_type, locale, country, region, city, write_key_id, properties)
 SELECT {target:UUID}, event_date, event_time, client_time, sent_at, received_at, insert_id, name,
        install_id, user_id, session_id, duration_ms, environment, platform, os_name, os_version,
-       app_version, app_build, device_model, device_type, locale, country, region, city, write_key_id
+       app_version, app_build, device_model, device_type, locale, country, region, city, write_key_id, properties
 FROM events
 WHERE app_id = {source:UUID} AND toYYYYMM(event_date) = {partition:UInt32}
 SETTINGS async_insert = 0, max_memory_usage = 2000000000, max_insert_threads = 2,

@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// EventRow — одна строка appmetrica.events. Порядок полей = порядок колонок DDL 00001_init.sql.
+// EventRow — одна строка appmetrica.events. Порядок полей = порядок колонок DDL 00001_init.sql, затем добавленные миграциями (properties — 00004).
 type EventRow struct {
 	AppID       uuid.UUID `ch:"app_id"`
 	EventDate   time.Time `ch:"event_date"`  // UTC-дата event_time
@@ -33,6 +33,8 @@ type EventRow struct {
 	Region      string    `ch:"region"`
 	City        string    `ch:"city"`
 	WriteKeyID  uuid.UUID `ch:"write_key_id"`
+	// Properties — свойства события (миграция 00004), значения уже приведены к строкам; nil пишется как {}.
+	Properties map[string]string `ch:"properties"`
 }
 
 // RejectedRow — одна строка appmetrica.rejected_events.
