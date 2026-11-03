@@ -716,7 +716,7 @@ func TestIngestHandler_StorageUnavailable(t *testing.T) {
 	t.Run("all events rejected — no insert", func(t *testing.T) {
 		h := newPipelineHarness(t)
 		h.writer.fail(errStorageDown)
-		res := decodeResult(t, h.postBody(t, oneEvent(t, map[string]any{"name": "purchase"})))
+		res := decodeResult(t, h.postBody(t, oneEvent(t, map[string]any{"name": "Purchase"})))
 		require.Zero(t, res.Accepted)
 		require.Zero(t, h.writer.insertCalls(), "пустой батч в ClickHouse не отправляется")
 		require.Len(t, h.sink.logged(), 1)

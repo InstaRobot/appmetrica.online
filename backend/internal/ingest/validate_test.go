@@ -143,7 +143,7 @@ func TestValidateEvent(t *testing.T) {
 		},
 		{
 			// I-14.
-			name: "unknown_name", raw: eventJSON(t, map[string]any{"name": "purchase"}),
+			name: "unknown_name", raw: eventJSON(t, map[string]any{"name": "Purchase"}),
 			wantCode: ingestapi.RejectionCodeUnknownEventName, wantField: "events[0].name", wantInsertID: validInsertID,
 		},
 		{
@@ -474,5 +474,39 @@ func TestValidateContext(t *testing.T) {
 			_, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"context": map[string]any{"platform": p}}))
 			require.Nil(t, rej, p)
 		}
+	})
+}
+
+// AC-003.1: свои имена по шаблону, зарезервирован префикс session_ кроме двух системных имён.
+func TestValidate_CustomEventNames(t *testing.T) {
+	for _, name := range []string{"purchase", "a", "x_1_y", strings.Repeat("a", 64), "session", "sessions_x", "session_start", "session_end"} {
+		t.Run("accepted_"+name[:min(len(name), 12)], func(t *testing.T) {
+			raw := eventJSON(t, map[string]any{"name": name, "duration_ms": 5})
+			ev, rej := ingest.ValidateEvent(0, raw)
+			require.Nil(t, rej)
+			require.Equal(t, ingestapi.EventName(name), ev.Name)
+		})
+	}
+	for _, name := range []string{"Session_Start", "1abc", strings.Repeat("a", 65), "session_resume", "session_", "Purchase", "", "a-b", "a b", "событие", "a\n"} {
+		t.Run("rejected_"+name[:min(len(name), 12)], func(t *testing.T) {
+			ev, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"name": name}))
+			require.Nil(t, ev)
+			require.NotNil(t, rej)
+			require.Equal(t, ingestapi.RejectionCodeUnknownEventName, rej.Code)
+			require.Equal(t, "events[0].name", rej.Field)
+			require.False(t, rej.Retryable)
+			require.Contains(t, rej.Message, "^[a-z][a-z0-9_]{0,63}$")
+			require.Contains(t, rej.Message, "session_")
+		})
+	}
+	t.Run("custom_event_does_not_need_duration", func(t *testing.T) {
+		ev, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"name": "purchase"}))
+		require.Nil(t, rej)
+		require.Zero(t, ev.DurationMs)
+	})
+	t.Run("custom_event_keeps_duration", func(t *testing.T) {
+		ev, rej := ingest.ValidateEvent(0, eventJSON(t, map[string]any{"name": "purchase", "duration_ms": 77}))
+		require.Nil(t, rej)
+		require.EqualValues(t, 77, ev.DurationMs)
 	})
 }

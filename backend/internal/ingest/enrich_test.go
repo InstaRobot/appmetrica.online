@@ -122,7 +122,7 @@ func postEvents(t *testing.T, h http.Handler, body, remoteAddr, forwardedFor str
 
 // batchI01WithRejected — I-01 плюс третье событие с неизвестным именем (уходит в rejected и payload_sample).
 func batchI01WithRejected() string {
-	bad := `{"insert_id":"0199d6a4-0000-7000-8000-000000000003","name":"purchase","timestamp":"2026-10-13T09:15:00Z",` +
+	bad := `{"insert_id":"0199d6a4-0000-7000-8000-000000000003","name":"Purchase","timestamp":"2026-10-13T09:15:00Z",` +
 		`"install_id":"6f1c2a9e-3b7d-4c55-8a2e-0d9b1f7e4c21","session_id":"0199d6a1-7b90-7e3c-8d11-5a6b7c8d9e0f"}`
 	return strings.Replace(batchI01, "\n  ]\n}", ",\n    "+bad+"\n  ]\n}", 1)
 }
@@ -579,5 +579,34 @@ func TestPayloadSample(t *testing.T) {
 			require.NotContains(t, sample, "81.2.69", body)
 			require.True(t, strings.HasPrefix(sample, `{"`), sample)
 		}
+	})
+}
+
+// AC-003.5: PII-похожие строковые значения свойств в сэмпле маскируются, остальное как есть.
+func TestPayloadSample_RedactsPropertyPII(t *testing.T) {
+	raw := eventJSON(t, map[string]any{"name": "purchase", "properties": map[string]any{
+		"contact": "user@example.com", "phone": "+381641234567", "plan": "pro", "amount": 381641234567, "ok": true,
+	}})
+	sample := ingest.PayloadSample(raw)
+	var got struct {
+		Properties map[string]any `json:"properties"`
+		UserID     string         `json:"user_id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(sample), &got))
+	require.Equal(t, map[string]any{
+		"contact": "[redacted]", "phone": "[redacted]", "plan": "pro", "amount": float64(381641234567), "ok": true,
+	}, got.Properties)
+	require.NotContains(t, sample, "user@example.com")
+	require.NotContains(t, sample, "+381641234567")
+
+	t.Run("nested_properties_key_in_batch", func(t *testing.T) {
+		body := `{"events":[{"properties":{"a":"x@y.zz","b":{"c":"x@y.zz"}},"name":"n"}]}`
+		sample := ingest.PayloadSample([]byte(body))
+		require.Contains(t, sample, `"a":"[redacted]"`)
+		require.Contains(t, sample, `"c":"x@y.zz"`, "вложенные объекты в свойствах всё равно отклоняются валидатором")
+	})
+	t.Run("properties_string_not_redacted_outside_object", func(t *testing.T) {
+		sample := ingest.PayloadSample([]byte(`{"properties":"x@y.zz","other":{"a":"x@y.zz"}}`))
+		require.Equal(t, `{"properties":"x@y.zz","other":{"a":"x@y.zz"}}`, sample) //nolint:testifylint // каноничные байты
 	})
 }

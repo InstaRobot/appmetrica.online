@@ -224,3 +224,19 @@ func TestIngest_RejectedEventsLogged(t *testing.T) {
 	require.NotContains(t, r.PayloadSample, londonIP)
 	require.Zero(t, l.count(t, "SELECT count() FROM events WHERE app_id = ?"))
 }
+
+// AC-003.6: своё событие со свойствами проходит HTTP-хендлер и лежит в events строкой.
+func TestIngest_CustomEventWithProperties(t *testing.T) {
+	l := newLiveIngest(t, nil)
+	res := decodeResult(t, l.post(t, oneEvent(t, map[string]any{
+		"name": "purchase", "properties": map[string]any{"plan": 12},
+	}), ""))
+	require.Equal(t, 1, res.Accepted)
+	require.Empty(t, res.Rejected)
+
+	var rows []chstore.EventRow
+	require.NoError(t, l.env.CH.Conn().Select(t.Context(), &rows, "SELECT * FROM events WHERE app_id = ?", l.appID))
+	require.Len(t, rows, 1)
+	require.Equal(t, "purchase", rows[0].Name)
+	require.Equal(t, map[string]string{"plan": "12"}, rows[0].Properties)
+}

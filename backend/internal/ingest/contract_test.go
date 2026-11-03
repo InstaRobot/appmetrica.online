@@ -58,12 +58,12 @@ func requireMatchesSpec(t *testing.T, doc *openapi3.T, method string, rec *httpt
 	require.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
 }
 
-// TestIngestResponses_MatchOpenAPI — все векторы I-01…I-38 через собранный конвейер: каждый ответ
+// TestIngestResponses_MatchOpenAPI — все векторы I-01…I-43 через собранный конвейер: каждый ответ
 // совпадает с ожидаемым и валиден против ingest.yaml (AC-014.6).
 func TestIngestResponses_MatchOpenAPI(t *testing.T) {
 	doc := ingestSpec(t)
 	vectors := ingestVectors()
-	require.Len(t, vectors, 38, "векторы I-01…I-38 из 06-api-contracts.md §2.4.1")
+	require.Len(t, vectors, 43, "векторы I-01…I-43 из 06-api-contracts.md §2.4.1")
 	for _, v := range vectors {
 		t.Run(v.id, func(t *testing.T) {
 			_, recs := runVector(t, v)

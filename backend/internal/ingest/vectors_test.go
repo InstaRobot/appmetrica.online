@@ -255,7 +255,7 @@ func requireNoRows(t *testing.T, h *pipelineHarness, _ []*httptest.ResponseRecor
 	require.Empty(t, h.writer.written(), "в CH ничего не записано")
 }
 
-// ingestVectors — все векторы I-01…I-38 при received_at = 2026-10-13T09:15:02Z, ключ testKey активен,
+// ingestVectors — все векторы I-01…I-43 при received_at = 2026-10-13T09:15:02Z, ключ testKey активен,
 // приложение appA с platform ios.
 func ingestVectors() []ingestVector {
 	return []ingestVector{
@@ -373,7 +373,7 @@ func ingestVectors() []ingestVector {
 		},
 		{
 			id:       "I-14 unknown_name",
-			requests: jsonRequest(func(t *testing.T) []byte { return oneEvent(t, map[string]any{"name": "purchase"}) }),
+			requests: jsonRequest(func(t *testing.T) []byte { return oneEvent(t, map[string]any{"name": "Purchase"}) }),
 			status:   http.StatusOK, accepted: 0,
 			rejected: []rejectionWant{{0, ingestapi.RejectionCodeUnknownEventName, "events[0].name", false}},
 		},
@@ -534,7 +534,7 @@ func ingestVectors() []ingestVector {
 			id: "I-32 geo_from_ip",
 			requests: jsonRequest(func(t *testing.T) []byte {
 				rejectedWithIP := eventJSON(t, map[string]any{
-					"insert_id": numberedInsertID(2), "name": "purchase",
+					"insert_id": numberedInsertID(2), "name": "Purchase",
 					"context": map[string]any{"ip": londonIP},
 				})
 				return batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"ip": londonIP}, eventJSON(t, nil), rejectedWithIP)
@@ -630,6 +630,60 @@ func ingestVectors() []ingestVector {
 				require.Contains(t, r.PayloadSample, `"user_id":"[redacted]"`)
 				require.NotContains(t, r.PayloadSample, "ivan@example.com")
 			},
+		},
+		{
+			id: "I-39 custom_event_with_properties",
+			requests: jsonRequest(func(t *testing.T) []byte {
+				return oneEvent(t, map[string]any{"name": "purchase", "properties": map[string]any{"plan": "pro", "amount": 12, "trial": false}})
+			}),
+			status: http.StatusOK, accepted: 1,
+			check: func(t *testing.T, h *pipelineHarness, _ []*httptest.ResponseRecorder) {
+				r := requireOneRow(t, h)
+				require.Equal(t, "purchase", r.Name)
+				require.Equal(t, map[string]string{"plan": "pro", "amount": "12", "trial": "false"}, r.Properties)
+			},
+		},
+		{
+			id:       "I-40 reserved_session_prefix",
+			requests: jsonRequest(func(t *testing.T) []byte { return oneEvent(t, map[string]any{"name": "session_resume"}) }),
+			status:   http.StatusOK, accepted: 0,
+			rejected: []rejectionWant{{0, ingestapi.RejectionCodeUnknownEventName, "events[0].name", false}},
+		},
+		{
+			id: "I-41 property_pii",
+			requests: jsonRequest(func(t *testing.T) []byte {
+				return oneEvent(t, map[string]any{"name": "purchase", "properties": map[string]any{"plan": "pro", "email": "a@b.co"}})
+			}),
+			status: http.StatusOK, accepted: 0,
+			rejected: []rejectionWant{{0, ingestapi.RejectionCodePropertyLooksLikePii, "events[0].properties.email", false}},
+			check: func(t *testing.T, h *pipelineHarness, _ []*httptest.ResponseRecorder) {
+				logged := h.sink.logged()
+				require.Len(t, logged, 1)
+				require.Equal(t, "property_looks_like_pii", logged[0].Code)
+				require.Contains(t, logged[0].PayloadSample, `"email":"[redacted]"`)
+				require.Contains(t, logged[0].PayloadSample, `"plan":"pro"`)
+				require.NotContains(t, logged[0].PayloadSample, "a@b.co")
+			},
+		},
+		{
+			id: "I-42 too_many_properties",
+			requests: jsonRequest(func(t *testing.T) []byte {
+				props := map[string]any{}
+				for i := range 51 {
+					props[fmt.Sprintf("k%d", i)] = i
+				}
+				return oneEvent(t, map[string]any{"name": "purchase", "properties": props})
+			}),
+			status: http.StatusOK, accepted: 0,
+			rejected: []rejectionWant{{0, ingestapi.RejectionCodeInvalidField, "events[0].properties", false}},
+		},
+		{
+			id: "I-43 property_null",
+			requests: jsonRequest(func(t *testing.T) []byte {
+				return oneEvent(t, map[string]any{"name": "purchase", "properties": map[string]any{"plan": nil}})
+			}),
+			status: http.StatusOK, accepted: 0,
+			rejected: []rejectionWant{{0, ingestapi.RejectionCodeInvalidField, "events[0].properties.plan", false}},
 		},
 	}
 }

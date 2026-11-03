@@ -46,8 +46,8 @@ func TestPipeline_Metrics(t *testing.T) {
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0), "timestamp": "2026-10-13T09:40:02Z"}),
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "user_id": "ivan@example.com"}),
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "name": "purchase"}),
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(3), "name": "pageview"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "name": "Purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(3), "name": "page-view"}),
 	)
 	res := decodeResult(t, h.postBody(t, body))
 	require.Equal(t, 1, res.Accepted)
@@ -71,9 +71,9 @@ func TestPipeline_RejectedLogDropped(t *testing.T) {
 	h := newPipelineHarness(t)
 	h.sink.capacity = 1
 	body := batchBody(t, "2026-10-13T09:15:02.000Z", nil,
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0), "name": "purchase"}),
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": "purchase"}),
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "name": "purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0), "name": "Purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": "Purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2), "name": "Purchase"}),
 	)
 	res := decodeResult(t, h.postBody(t, body))
 	require.Len(t, res.Rejected, 3, "переполнение буфера не влияет на ответ")
@@ -85,7 +85,7 @@ func TestPipeline_RejectedRows(t *testing.T) {
 	t.Run("event fields are best effort", func(t *testing.T) {
 		h := newPipelineHarness(t)
 		body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"app_version": "3.4.0", "ip": londonIP},
-			eventJSON(t, map[string]any{"name": "purchase", "context": map[string]any{"platform": "android", "ip": londonIP}}),
+			eventJSON(t, map[string]any{"name": "Purchase", "context": map[string]any{"platform": "android", "ip": londonIP}}),
 			[]byte(`"not an object"`),
 			eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": strings.Repeat("x", 200)}),
 		)
@@ -94,12 +94,12 @@ func TestPipeline_RejectedRows(t *testing.T) {
 		logged := h.sink.logged()
 		require.Len(t, logged, 3)
 
-		require.Equal(t, "purchase", logged[0].EventName)
+		require.Equal(t, "Purchase", logged[0].EventName)
 		require.Equal(t, "3.4.0", logged[0].AppVersion)
 		require.Equal(t, "android", logged[0].Platform)
 		require.Equal(t, "events[0].name", logged[0].Field)
 		require.NotContains(t, logged[0].PayloadSample, londonIP)
-		require.Contains(t, logged[0].PayloadSample, `"name":"purchase"`)
+		require.Contains(t, logged[0].PayloadSample, `"name":"Purchase"`)
 
 		require.Empty(t, logged[1].EventName)
 		require.Equal(t, "ios", logged[1].Platform, "платформа по умолчанию — единственная платформа приложения")
@@ -372,7 +372,7 @@ func TestPipeline_PlatformMissing(t *testing.T) {
 
 	body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"app_version": "3.4.0"},
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(0)}),
-		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": "purchase"}),
+		eventJSON(t, map[string]any{"insert_id": numberedInsertID(1), "name": "Purchase"}),
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(2)}),
 		eventJSON(t, map[string]any{"insert_id": numberedInsertID(3), "context": map[string]any{"platform": "web"}}),
 	)
