@@ -149,10 +149,16 @@ for (const path of [
 }
 
 // Страница свободных событий открывается и без нарушений axe и на английском: в списке выше браузер русский.
-test("docs page /docs/concepts/events passes axe in English", async ({ page }) => {
-  await page.goto("/docs/concepts/events");
-  await expect(page.getByRole("heading", { level: 1, name: "Custom events" })).toBeVisible();
-  await expectNoA11yViolations(page);
+// Английский браузер без cookie am_lang, иначе proxy уводит русский браузер прогона на /ru/docs/… (как в
+// i18n.spec.ts).
+test.describe("English docs", () => {
+  test.use({ locale: "en-US", storageState: { cookies: [], origins: [] } });
+
+  test("docs page /docs/concepts/events passes axe in English", async ({ page }) => {
+    await page.goto("/docs/concepts/events");
+    await expect(page.getByRole("heading", { level: 1, name: "Custom events" })).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
 });
 
 // Рецепт «Go и curl» разделён на «curl» и «Go»: старый адрес навсегда ведёт на рецепты curl.
