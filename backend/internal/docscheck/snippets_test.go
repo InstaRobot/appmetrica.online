@@ -72,7 +72,7 @@ func TestDocsGoSnippets_Vet(t *testing.T) {
 // и accepted > 0.
 func TestDocsCurlSnippets_Accepted(t *testing.T) {
 	snips := ingestCurlSnippets(docSnippets(t))
-	require.Subset(t, filesOf(snips), []string{"index.mdx", "recipes/curl.mdx"})
+	require.Subset(t, filesOf(snips), []string{"index.mdx", "recipes/curl.mdx", "concepts/events.mdx"})
 	requireTools(t, "bash", "curl", "uuidgen", "gzip", "date", "jq")
 
 	target := startIngest(t)

@@ -129,6 +129,7 @@ for (const path of [
   "/docs/concepts/identity",
   "/docs/concepts/sessions",
   "/docs/concepts/time-and-offline",
+  "/docs/concepts/events",
   "/docs/recipes/curl",
   "/docs/recipes/android-kotlin",
   "/docs/recipes/react-native",
@@ -146,6 +147,13 @@ for (const path of [
     await expectNoA11yViolations(page);
   });
 }
+
+// Страница свободных событий открывается и без нарушений axe и на английском: в списке выше браузер русский.
+test("docs page /docs/concepts/events passes axe in English", async ({ page }) => {
+  await page.goto("/docs/concepts/events");
+  await expect(page.getByRole("heading", { level: 1, name: "Custom events" })).toBeVisible();
+  await expectNoA11yViolations(page);
+});
 
 // Рецепт «Go и curl» разделён на «curl» и «Go»: старый адрес навсегда ведёт на рецепты curl.
 test("old go-and-curl recipe redirects to curl", async ({ page }) => {

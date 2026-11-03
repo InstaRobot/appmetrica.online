@@ -68,6 +68,20 @@ describe("messages", () => {
     }
   });
 
+  // unknown_event_name теперь значит «имя не по шаблону или зарезервировано»: свои имена принимаются (FR-102).
+  it("does not claim that only the two system event names are accepted", () => {
+    const texts = [
+      en.integration.rejectionCodes.unknown_event_name.hint,
+      ru.integration.rejectionCodes.unknown_event_name.hint,
+      en.demoData.rejections.unknown_event_name,
+      ru.demoData.rejections.unknown_event_name,
+    ];
+    for (const text of texts) {
+      expect(text).toMatch(/\^\[a-z\]\[a-z0-9_\]\{0,63\}\$|session_/);
+      expect(text).not.toMatch(/only|только|Allowed names|Допустимые имена/i);
+    }
+  });
+
   it("returns the dictionary of the requested locale", () => {
     expect(getMessages("en")).toBe(en);
     expect(getMessages("ru")).toBe(ru);

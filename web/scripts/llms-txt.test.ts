@@ -104,6 +104,14 @@ describe("llms.txt", () => {
     for (const value of values) expect(llms).toContain(`\`${value}\``);
   });
 
+  it("describes custom events instead of denying them", () => {
+    expect(llms).not.toMatch(/no custom events/i);
+    expect(llms).toContain(`${SITE}/docs/concepts/events`);
+    for (const word of ["properties", "property_looks_like_pii", "^[a-z][a-z0-9_]{0,63}$"]) {
+      expect(llms).toContain(word);
+    }
+  });
+
   it("states the batch limit of the contract", () => {
     const maxItems = contract.match(
       /events:\n\s+type: array\n\s+minItems: 1\n\s+maxItems: (\d+)/,
