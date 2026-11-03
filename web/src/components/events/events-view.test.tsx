@@ -105,19 +105,34 @@ describe("EventsView", () => {
     mockApi(THREE);
     renderView();
 
-    const [first, second, third] = within(
-      await screen.findByRole("table", { name: "Custom events" }),
-    )
-      .getAllByRole("row")
-      .slice(1);
-    expect(first?.textContent).toContain("9,000");
-    expect(first?.textContent).toContain("1,500");
-    expect(first?.textContent).toContain("+20%");
-    expect(first?.textContent).toContain("6");
-    expect(second?.textContent).toContain("−20%");
-    expect(second?.textContent).toContain("4");
+    const table = await screen.findByRole("table", { name: "Custom events" });
+    const cells = (row: HTMLElement) =>
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent);
+    const rows = within(table).getAllByRole("row").slice(1);
+    // Колонки: имя, события, люди, изменение, на человека.
+    expect(cells(rows[0] as HTMLElement)).toEqual(["note_created", "9,000", "1,500", "+20%", "6"]);
+    expect(cells(rows[1] as HTMLElement)).toEqual(["search_used", "2,400", "600", "−20%", "4"]);
     // Без событий в прошлом периоде сравнивать не с чем.
-    expect(third?.textContent).toContain("—");
+    expect(cells(rows[2] as HTMLElement)).toEqual(["purchase", "40", "40", "—", "1"]);
+  });
+
+  it("renders a row without people and without a previous period as 0 and a dash", async () => {
+    mockApi({
+      truncated: false,
+      events: [{ name: "ghost_event", events: 5, people: 0, prev_events: 0, prev_people: 0 }],
+    });
+    renderView();
+
+    const table = await screen.findByRole("table", { name: "Custom events" });
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent),
+    ).toEqual(["ghost_event", "5", "0", "—", "0"]);
+    expect(row.textContent).not.toMatch(/NaN|Infinity/);
   });
 
   it("monospaces the event name and does not translate it", async () => {
