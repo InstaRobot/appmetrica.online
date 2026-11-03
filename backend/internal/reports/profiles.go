@@ -174,9 +174,10 @@ LIMIT {limit:UInt32}`
 // исключающая граница {before_time}/{before_id} по тому же кортежу порядка. {limit} — на одно больше страницы.
 var qProfileEvents = `WITH ` + profileLinksCTE + `
 SELECT e.event_time AS event_time, e.insert_id AS insert_id, e.name AS name, e.session_id AS session_id,
-       e.install_id AS install_id, e.platform AS platform, e.app_version AS app_version, e.properties AS properties` +
+       e.install_id AS install_id, e.environment AS environment, e.platform AS platform, e.app_version AS app_version,
+       e.properties AS properties` +
 	profileEventsFrom + `
-  AND e.environment = {env:String}` + customEventsWhere + `
+  AND ({env:String} = '' OR e.environment = {env:String})` + customEventsWhere + `
   AND ({has_before:UInt8} = 0 OR (e.event_time, e.insert_id) < ({before_time:DateTime64(3)}, {before_id:UUID}))
 ORDER BY e.event_time DESC, e.insert_id DESC
 LIMIT 1 BY e.insert_id
@@ -352,7 +353,7 @@ func ceilMillis(t time.Time) time.Time {
 	return c
 }
 
-// ProfileEventsQuery — страница своих событий человека: Environment "" — production, Limit 0 —
+// ProfileEventsQuery — страница своих событий человека: Environment "" — все окружения (как у Profile), Limit 0 —
 // DefaultProfileEventsLimit, Before — непрозрачный курсор NextBefore предыдущей страницы ("" — первая).
 type ProfileEventsQuery struct {
 	PersonKey   string
@@ -363,14 +364,15 @@ type ProfileEventsQuery struct {
 
 // ProfileEvent — своё событие человека; Properties — всегда объект (пустой у события без свойств).
 type ProfileEvent struct {
-	EventTime  time.Time         `ch:"event_time"`
-	InsertID   uuid.UUID         `ch:"insert_id"`
-	Name       string            `ch:"name"`
-	SessionID  uuid.UUID         `ch:"session_id"`
-	InstallID  uuid.UUID         `ch:"install_id"`
-	Platform   string            `ch:"platform"`
-	AppVersion string            `ch:"app_version"`
-	Properties map[string]string `ch:"properties"`
+	EventTime   time.Time         `ch:"event_time"`
+	InsertID    uuid.UUID         `ch:"insert_id"`
+	Name        string            `ch:"name"`
+	SessionID   uuid.UUID         `ch:"session_id"`
+	InstallID   uuid.UUID         `ch:"install_id"`
+	Environment string            `ch:"environment"`
+	Platform    string            `ch:"platform"`
+	AppVersion  string            `ch:"app_version"`
+	Properties  map[string]string `ch:"properties"`
 }
 
 // ProfileEventPage — страница событий; NextBefore пуст на последней.
@@ -394,10 +396,7 @@ func (s *Service) ProfileEvents(ctx context.Context, appID uuid.UUID, q ProfileE
 	if limit < 1 || limit > MaxProfileEventsLimit {
 		return ProfileEventPage{}, fmt.Errorf("reports: profile events limit %d: %w", limit, ErrUnsupported)
 	}
-	env := q.Environment
-	if env == "" {
-		env = EnvProduction
-	}
+	env := q.Environment // "" — все окружения
 	var beforeTime time.Time
 	var beforeID uuid.UUID
 	if q.Before != "" {

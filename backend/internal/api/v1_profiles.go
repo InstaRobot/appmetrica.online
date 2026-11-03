@@ -147,9 +147,14 @@ func (s *Server) ListProfileEvents(ctx context.Context, req gen.ListProfileEvent
 		return gen.ListProfileEvents404JSONResponse{NotFoundJSONResponse: appNotFound(ctx)}, nil
 	}
 	q := reports.ProfileEventsQuery{PersonKey: req.PersonKey}
-	env, perr := parseEnvironment(req.Params.Environment)
+	var perr *paramError
+	if req.Params.Environment != nil { // без environment — все окружения, как у getProfile
+		if !req.Params.Environment.Valid() {
+			perr = invalidParam("environment", "environment: допустимо production или development.")
+		}
+		q.Environment = string(*req.Params.Environment)
+	}
 	if perr == nil {
-		q.Environment = env
 		if l := req.Params.Limit; l != nil {
 			if *l < 1 || *l > reports.MaxProfileEventsLimit {
 				perr = invalidParam("limit", "limit — целое от 1 до 200.")
@@ -192,13 +197,14 @@ func (s *Server) ListProfileEvents(ctx context.Context, req gen.ListProfileEvent
 	}
 	for _, e := range page.Events {
 		out.Events = append(out.Events, gen.ProfileEvent{
-			EventTime:  e.EventTime.UTC(),
-			Name:       e.Name,
-			SessionId:  e.SessionID,
-			InstallId:  e.InstallID,
-			Platform:   e.Platform,
-			AppVersion: e.AppVersion,
-			Properties: e.Properties,
+			EventTime:   e.EventTime.UTC(),
+			Name:        e.Name,
+			SessionId:   e.SessionID,
+			InstallId:   e.InstallID,
+			Environment: gen.Environment(e.Environment),
+			Platform:    e.Platform,
+			AppVersion:  e.AppVersion,
+			Properties:  e.Properties,
 		})
 	}
 	return out, nil
