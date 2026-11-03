@@ -21,7 +21,7 @@
 | Язык фронтенда | TypeScript (strict) | 6.0.3 | TypeScript 7.0.2 (нативный компилятор) |
 | Runtime фронтенда | Node.js LTS | 24.21.0 | Node.js 26.11.1 (LTS с 2026-10-28), Bun |
 | Package manager (web) | pnpm | 12.11.2 | npm, bun |
-| Frontend framework | Next.js (App Router) | 16.4.0 + React 19.3.0 | Vite SPA, встроенный в Go; Go + htmx |
+| Frontend framework | Next.js (App Router) | 16.4.3 + React 19.3.0 | Vite SPA, встроенный в Go; Go + htmx |
 | UI библиотека | shadcn/ui (база Radix) | CLI 4.21.4, `radix-ui` 1.8.1 | Base UI (новый дефолт shadcn), MUI, Mantine |
 | CSS | Tailwind CSS | 4.3.3 | CSS Modules |
 | Графики | Recharts (через shadcn `chart`) | 3.10.1 | Apache ECharts 6.1.0, visx 4.0.0 |
@@ -95,9 +95,9 @@ Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/s
 
 ---
 
-### 3. Frontend framework — Next.js 16.4.0 + React 19.3.0
+### 3. Frontend framework — Next.js 16.4.3 + React 19.3.0
 
-**Выбрано**: Next.js 16.4.0 (2026-10-06), App Router, `output: 'standalone'`, React 19.3.0. TypeScript 6.0.3 strict.
+**Выбрано**: Next.js 16.4.3 (2026-10-23; было 16.4.0 от 2026-10-06, обновлено 2026-11-04 из-за GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr и GHSA-p3m5-59mp-jv5r — исправлены с 16.4.1), App Router, `output: 'standalone'`, React 19.3.0. TypeScript 6.0.3 strict.
 
 **Rationale**:
 - Выбор владельца (интервью, вопрос «Фронтенд»): отдельный сервис, а не SPA внутри Go.
@@ -392,7 +392,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
     "fumadocs-openapi": "12.4.2",
     "fumadocs-ui": "16.17.2",
     "lucide-react": "1.56.0",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "nuqs": "2.10.2",
     "radix-ui": "1.8.1",
     "react": "19.3.0",
@@ -536,3 +536,4 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 | 2026-10-13 | 1.3 | T-012: `github.com/maxmind/mmdbwriter` 1.2.0 — генерация тестовой mmdb `backend/testdata/geo/test-city.mmdb` (только тестовая инфраструктура `internal/testutil`) |
 | 2026-10-14 | 1.4 | T-044: web devDependency `@lhci/cli` 0.15.1 (версия из тикета) — Lighthouse CI для бюджетов LCP/CLS/TBT портфеля; альтернатива — `lighthouse` CLI напрямую, но тогда ассерты и повторы прогонов пришлось бы писать самим. `tsx` не добавлен: `web/scripts/check-bundle-size.ts` запускается Node 24 (`node scripts/check-bundle-size.ts`, встроенное снятие типов) |
 | 2026-10-14 | 1.5 | Ревью MVP: в список внесены уже используемые web-зависимости `server-only` 0.0.1 (гарантия, что `lib/docs/session.ts` не попадёт в клиентский бандл; альтернатива — соглашение без проверки), `@testing-library/dom` 10.4.2 (peer `@testing-library/react` под pnpm) и `@vitest/coverage-v8` 5.0.4 (`pnpm test:coverage` в CI; альтернатива — istanbul-провайдер, медленнее); список ключевых метрик §19 приведён к именам в коде |
+| 2026-11-04 | 1.6 | Безопасность: `next` 16.4.0 → 16.4.3 (GHSA-2464-fhr4-w9xw и GHSA-673q-mjm6-r5xr — критичные RCE, GHSA-p3m5-59mp-jv5r — DoS; исправлены с 16.4.1, 16.4.3 выбран как последний релиз старше недели). `undici` закреплён ≥ 7.30.1 через `overrides` в `web/pnpm-workspace.yaml` (транзитивно от `fumadocs-openapi` → `@scalar/json-magic`; GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx); снять override, когда цепочка придёт к исправленной версии сама. `pnpm audit --prod --audit-level high` снова чистый |

@@ -59,3 +59,8 @@ minimumReleaseAgeExclude:
 # авторизации и ответа API reference (combobox без имени нарушает WCAG 4.1.2, axe button-name).
 patchedDependencies:
   fumadocs-openapi@12.4.2: patches/fumadocs-openapi@12.4.2.patch
+# undici 7 ниже 7.30.1 (через fumadocs-openapi → @scalar/json-magic) — DoS, отравление кэша и обход
+# проверки TLS (GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx). Снять, когда цепочка
+# зависимостей сама придёт к исправленной версии.
+overrides:
+  'undici@<7.30.1': 7.30.1
