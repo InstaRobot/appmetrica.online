@@ -2,7 +2,7 @@
 # Образ appmetrica-backend: один бинарник для ролей ingest | api | worker | migrate | admin.
 # Сборка (CI): docker build --build-arg GEO_MONTH=2026-10 --build-arg VERSION=<git sha> -t ghcr.io/<owner>/appmetrica-backend:<sha> backend
 
-ARG GO_IMAGE=golang:1.27.2-alpine
+ARG GO_IMAGE=golang:1.27.3-alpine
 
 FROM ${GO_IMAGE} AS build
 WORKDIR /src

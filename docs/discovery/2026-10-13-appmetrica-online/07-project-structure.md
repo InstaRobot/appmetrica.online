@@ -476,11 +476,11 @@ web/content/docs/                              # пользовательска�
 | `docker-compose.dev.yml` | ClickHouse 26.8.25.14 + Postgres 18.6 для разработки, интеграционных и E2E-тестов |
 | `lefthook.yml` | pre-commit (fmt, lint, Biome), commit-msg (Conventional Commits), pre-push (тесты) |
 | `.editorconfig` | Отступы: tab для Go и Makefile, 2 пробела для остального |
-| `backend/go.mod` | Go 1.27, toolchain go1.27.2, tool oapi-codegen v2.8.0 |
+| `backend/go.mod` | Go 1.27, toolchain go1.27.3, tool oapi-codegen v2.8.0 |
 | `backend/.golangci.yml` | golangci-lint v2.14.0, forbidigo (`RemoteAddr`, `fmt.Print*`, `time.Now`), gofumpt + goimports |
 | `backend/sqlc.yaml` | sqlc v2-конфиг, pgx/v5, `google/uuid`, указатели для NULL |
 | `backend/oapi-ingest.cfg.yaml`, `backend/oapi-api.cfg.yaml` | Настройки генерации Go из OpenAPI |
-| `backend/Dockerfile` | Образ `appmetrica-backend`: golang:1.27.2-alpine → distroless/static-debian12:nonroot, DB-IP по `GEO_MONTH` |
+| `backend/Dockerfile` | Образ `appmetrica-backend`: golang:1.27.3-alpine → distroless/static-debian12:nonroot, DB-IP по `GEO_MONTH` |
 | `scripts/reconcile/go.mod` | Отдельный модуль скрипта сверки; линтуется конфигом `backend/.golangci.yml` |
 | `renovate.json` | Еженедельные PR обновлений, точные версии, автомерж patch после зелёного CI |
 | `web/Dockerfile` | Образ `appmetrica-web`: Next.js standalone |

@@ -17,7 +17,7 @@
 
 | Слой | Выбор | Версия | Alternative considered |
 |---|---|---|---|
-| Язык бэкенда | Go | 1.27.2 | TypeScript (Node/Bun + Hono), Rust |
+| Язык бэкенда | Go | 1.27.3 | TypeScript (Node/Bun + Hono), Rust |
 | Язык фронтенда | TypeScript (strict) | 6.0.3 | TypeScript 7.0.2 (нативный компилятор) |
 | Runtime фронтенда | Node.js LTS | 24.21.0 | Node.js 26.11.1 (LTS с 2026-10-28), Bun |
 | Package manager (web) | pnpm | 12.11.2 | npm, bun |
@@ -60,10 +60,10 @@
 
 ## Детально по каждому решению
 
-### 1. Язык бэкенда — Go 1.27.2
+### 1. Язык бэкенда — Go 1.27.3
 
-**Выбрано**: Go 1.27.2 (релиз 2026-10-08, содержит security-фиксы `net/http` и `crypto/tls`). В `backend/go.mod`: `go 1.27` + `toolchain go1.27.2`.
-Build-образ `golang:1.27.2-alpine`, runtime-образ `gcr.io/distroless/static-debian12:nonroot`, `CGO_ENABLED=0`.
+**Выбрано**: Go 1.27.3 (было 1.27.2 от 2026-10-08; обновлено 2026-11-04 из-за GO-2026-6809 в `crypto/x509`, его govulncheck находит через вход по passkey). В `backend/go.mod`: `go 1.27` + `toolchain go1.27.3`.
+Build-образ `golang:1.27.3-alpine`, runtime-образ `gcr.io/distroless/static-debian12:nonroot`, `CGO_ENABLED=0`.
 
 **Rationale**:
 - Владелец уверенно пишет и деплоит Go — может ревьюить код и чинить инциденты сам.
@@ -340,7 +340,7 @@ module appmetrica.online/backend
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.49.0
@@ -440,7 +440,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 | Образ | Тег | Где используется |
 |---|---|---|
-| `golang` | `1.27.2-alpine` | build-стадия `backend/Dockerfile` |
+| `golang` | `1.27.3-alpine` | build-стадия `backend/Dockerfile` |
 | `gcr.io/distroless/static-debian12` | `nonroot` | runtime ingest / api / worker |
 | `node` | `24.21.0-alpine` | build и runtime `web/Dockerfile` |
 | `clickhouse/clickhouse-server` | `26.8.25.14` (+ `@sha256` при первом деплое) | compose `clickhouse-stack` |
@@ -537,3 +537,4 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 | 2026-10-14 | 1.4 | T-044: web devDependency `@lhci/cli` 0.15.1 (версия из тикета) — Lighthouse CI для бюджетов LCP/CLS/TBT портфеля; альтернатива — `lighthouse` CLI напрямую, но тогда ассерты и повторы прогонов пришлось бы писать самим. `tsx` не добавлен: `web/scripts/check-bundle-size.ts` запускается Node 24 (`node scripts/check-bundle-size.ts`, встроенное снятие типов) |
 | 2026-10-14 | 1.5 | Ревью MVP: в список внесены уже используемые web-зависимости `server-only` 0.0.1 (гарантия, что `lib/docs/session.ts` не попадёт в клиентский бандл; альтернатива — соглашение без проверки), `@testing-library/dom` 10.4.2 (peer `@testing-library/react` под pnpm) и `@vitest/coverage-v8` 5.0.4 (`pnpm test:coverage` в CI; альтернатива — istanbul-провайдер, медленнее); список ключевых метрик §19 приведён к именам в коде |
 | 2026-11-04 | 1.6 | Безопасность: `next` 16.4.0 → 16.4.3 (GHSA-2464-fhr4-w9xw и GHSA-673q-mjm6-r5xr — критичные RCE, GHSA-p3m5-59mp-jv5r — DoS; исправлены с 16.4.1, 16.4.3 выбран как последний релиз старше недели). `undici` закреплён ≥ 7.30.1 через `overrides` в `web/pnpm-workspace.yaml` (транзитивно от `fumadocs-openapi` → `@scalar/json-magic`; GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx); снять override, когда цепочка придёт к исправленной версии сама. `pnpm audit --prod --audit-level high` снова чистый |
+| 2026-11-04 | 1.7 | Безопасность: Go 1.27.2 → 1.27.3 (`toolchain` в `backend/go.mod` и `scripts/reconcile/go.mod`, build-образ `golang:1.27.3-alpine`) — GO-2026-6809 в `crypto/x509`, который CI-шаг govulncheck находит через `auth.Service.validateLogin` → `webauthn.ValidatePasskeyLogin` → `x509.Certificate.Verify` |

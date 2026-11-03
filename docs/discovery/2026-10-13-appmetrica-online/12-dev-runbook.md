@@ -15,7 +15,7 @@
 ### 0.1. Installed tools
 ```bash
 # Проверка версий (требуемые минимумы)
-go version             # go1.27.x (go.mod: go 1.27, toolchain go1.27.2 — нужный toolchain скачается автоматически)
+go version             # go1.27.x (go.mod: go 1.27, toolchain go1.27.3 — нужный toolchain скачается автоматически)
 node --version         # v24.21.0 (Node 24 LTS «Krypton»; Node 25+ не поддерживается engines)
 pnpm --version         # 12.11.2 (через corepack, см. ниже)
 docker --version       # 27+ (Docker Desktop / OrbStack / Colima) — локальные ClickHouse и Postgres, testcontainers
@@ -27,7 +27,7 @@ jq --version           # 1.7+ (скрипты деплоя и отладка API
 tailscale version      # 1.8x+ (доступ к панели Dokploy и SSH сервера)
 ```
 
-Установка на macOS (Homebrew). Go-toolchain точной версии 1.27.2 скачается автоматически при первом `go build` благодаря
+Установка на macOS (Homebrew). Go-toolchain точной версии 1.27.3 скачается автоматически при первом `go build` благодаря
 директиве `toolchain` в `backend/go.mod`; Node фиксируется на 24.21.0, pnpm — через corepack (в Node 24 он ещё встроен):
 ```bash
 brew install go node@24 git gh golangci-lint lefthook jq tailscale
@@ -537,7 +537,7 @@ passkey (телефон + ноутбук) в S-12 → Passkeys; удалить �
 | Все события `rejected` с `event_too_old` | В `timestamp` нет смещения часового пояса или неверный `sent_at`: формат строго RFC 3339 с `Z`/`+03:00`; окно — 7 дней от времени приёма |
 | Passkey на localhost: `SecurityError` / «RP ID is not a registrable domain suffix» | `WEBAUTHN_RP_ID=localhost`, `WEBAUTHN_RP_ORIGINS=http://localhost:3000`, открывать `localhost`, а не `127.0.0.1` |
 | Safari не сохраняет сессию на localhost | Safari не принимает `Secure` cookie по http: держи `APP_ENV=development` или используй Chrome |
-| `go: unknown command "oapi-codegen"` / `go tool` не находит | `cd backend && go mod download`; требуется Go ≥ 1.24 (tool-директивы), проект — go1.27.2 |
+| `go: unknown command "oapi-codegen"` / `go tool` не находит | `cd backend && go mod download`; требуется Go ≥ 1.24 (tool-директивы), проект — go1.27.3 |
 | `make gen-sqlc`: `permission denied` на `internal/pgstore/sqlc` | Контейнер sqlc запускается с `-u $(id -u):$(id -g)`; удали каталог, созданный ранее от root: `sudo rm -rf backend/internal/pgstore/sqlc` |
 | `pnpm install`: `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` | pnpm 12 не ставит версии моложе 24 часов. Подожди сутки после релиза или выбери предыдущую версию; политику не отключать |
 | `pnpm install`: `ERR_PNPM_IGNORED_BUILDS` | Новая зависимость со скриптом сборки: проверь пакет и добавь `<name>: true` в `allowBuilds` (`web/pnpm-workspace.yaml`) |

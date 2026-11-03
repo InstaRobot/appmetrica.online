@@ -71,7 +71,7 @@
 
 | Компонент | Unit | Integration | Component | E2E | A11y | Visual | Perf |
 |---|---|---|---|---|---|---|---|
-| `backend/` (Go 1.27.2) | `testing` + testify v1.12.1, fuzz (`go test -fuzz`) | `testing` + testcontainers-go v0.44.0 (`modules/clickhouse`, `modules/postgres`) — вместо dockertest | — | — | — | — | k6 v2.3.0 (ingest), Go-перф-тест с тегом `perf` (отчёты) |
+| `backend/` (Go 1.27.3) | `testing` + testify v1.12.1, fuzz (`go test -fuzz`) | `testing` + testcontainers-go v0.44.0 (`modules/clickhouse`, `modules/postgres`) — вместо dockertest | — | — | — | — | k6 v2.3.0 (ingest), Go-перф-тест с тегом `perf` (отчёты) |
 | `web/` (Next.js 16.4.0) | Vitest 5.0.4 | Vitest + MSW 3.0.3 (моки, сгенерированные orval 8.42.0) | Vitest + Testing Library + jsdom | Playwright 1.64.0 против docker compose стека | @axe-core/playwright 4.13.0 | Playwright `toHaveScreenshot` (`# Deviation` от Chromatic/Percy: solo, без внешнего сервиса) | Lighthouse CI (@lhci/cli 0.15.1) |
 
 ### 3.2 Версии (из context7, замени placeholders)

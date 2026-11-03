@@ -477,7 +477,7 @@ updated, store backups outside the server, and rotate `sk_` Read API keys you no
 
 ## Development
 
-Requirements: Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker; `golangci-lint` 2.14 for `make check`, `jq` for perf
+Requirements: Go 1.27.3, Node 24.21.0, pnpm 12.11.2, Docker; `golangci-lint` 2.14 for `make check`, `jq` for perf
 and deploy scripts.
 
 ```bash

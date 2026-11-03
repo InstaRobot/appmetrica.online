@@ -475,7 +475,7 @@ docker compose down -v     # остановить и УДАЛИТЬ все то�
 
 ## Разработка
 
-Нужны Go 1.27.2, Node 24.21.0, pnpm 12.11.2, Docker; для `make check` — `golangci-lint` 2.14, для перф-тестов и
+Нужны Go 1.27.3, Node 24.21.0, pnpm 12.11.2, Docker; для `make check` — `golangci-lint` 2.14, для перф-тестов и
 скриптов деплоя — `jq`.
 
 ```bash

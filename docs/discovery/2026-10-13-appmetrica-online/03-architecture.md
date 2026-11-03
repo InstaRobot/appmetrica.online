@@ -145,7 +145,7 @@ flowchart TB
 > В этой системе «API» — два Go-процесса одного бинарника, Server Actions Next.js не используются.
 
 **appmetrica-ingest** (`appmetrica ingest`, :8081, хост `i.appmetrica.online`)
-- **Tech**: Go 1.27.2, stdlib `net/http`, типы из `internal/gen/ingestapi` (oapi-codegen 2.8.0), горячий хендлер `POST /v1/events` написан вручную, clickhouse-go 2.49.0, geoip2-golang 2.5.0, x/time/rate 0.16.0.
+- **Tech**: Go 1.27.3, stdlib `net/http`, типы из `internal/gen/ingestapi` (oapi-codegen 2.8.0), горячий хендлер `POST /v1/events` написан вручную, clickhouse-go 2.49.0, geoip2-golang 2.5.0, x/time/rate 0.16.0.
 - **Responsibility**: аутентификация по `pk_`, валидация батча, коррекция времени, PII-guard, гео, rate limiting, запись в `appmetrica.events`, запись отказов в `appmetrica.rejected_events`, ответ `IngestResult`.
 - **Key decisions**:
   - Ответ 200 только после подтверждения async insert ClickHouse (ADR-004).
@@ -154,7 +154,7 @@ flowchart TB
   - IP клиента используется только для гео-lookup и отбрасывается (ADR-006).
 
 **appmetrica-api** (`appmetrica api`, :8080, хост `api.appmetrica.online` + внутренний для web)
-- **Tech**: Go 1.27.2, oapi-codegen strict server (`internal/gen/api`), pgx 5.11.0 + sqlc 1.31.1, clickhouse-go 2.49.0 (пользователь `appmetrica_ro`), go-webauthn 0.18.2, goose 3.29.0.
+- **Tech**: Go 1.27.3, oapi-codegen strict server (`internal/gen/api`), pgx 5.11.0 + sqlc 1.31.1, clickhouse-go 2.49.0 (пользователь `appmetrica_ro`), go-webauthn 0.18.2, goose 3.29.0.
 - **Responsibility**: публичный Read API `/v1/*` (Bearer `sk_` или cookie), административный `/admin/v1/*` (только cookie + `X-Requested-With: appmetrica-web` на изменяющих запросах), passkey-аутентификация, управление приложениями и ключами, приём запросов на удаление, статус системы.
 - **Key decisions**:
   - При старте выполняет `migrate up` для Postgres и ClickHouse (`MIGRATE_ON_START=true`); миграции только expand/contract.
