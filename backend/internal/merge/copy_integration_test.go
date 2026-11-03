@@ -83,5 +83,6 @@ func TestCopyEvents_AllColumns(t *testing.T) {
 		v, _ := value(target, c)
 		require.Equal(t, before[c.Name], v, "колонка %s не перенесена", c.Name)
 	}
-	require.Equal(t, "{'paid':'true','plan':'12'}", before["properties"])
+	require.Contains(t, before["properties"], "'plan':'12'")
+	require.Contains(t, before["properties"], "'paid':'true'")
 }

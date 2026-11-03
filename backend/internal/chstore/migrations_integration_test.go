@@ -116,5 +116,7 @@ func TestMigration00004EventProperties(t *testing.T) {
 	_, err = p.DownTo(ctx, 3)
 	require.NoError(t, err)
 	require.NotContains(t, columns(), "properties")
-	require.Equal(t, uint64(1), countEvents(t, conn, appID), "строки на месте после down")
+	var n uint64
+	require.NoError(t, conn.QueryRow(ctx, "SELECT count() FROM events WHERE app_id = ?", appID).Scan(&n))
+	require.Equal(t, uint64(1), n, "строки на месте после down")
 }
