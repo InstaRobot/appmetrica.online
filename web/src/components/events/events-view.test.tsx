@@ -153,6 +153,14 @@ describe("EventsView", () => {
     expect(link).toHaveAttribute("href", "/docs/concepts/events");
   });
 
+  it("tells in the empty state that the Environment switch separates test events", async () => {
+    mockApi({ events: [], truncated: false });
+    renderView();
+
+    expect(await screen.findByText(/Only the selected environment is shown/)).toBeInTheDocument();
+    expect(screen.getByText(/pick “development”/)).toBeInTheDocument();
+  });
+
   it("tells when the list was cut at the server limit", async () => {
     mockApi({ ...THREE, truncated: true });
     renderView();

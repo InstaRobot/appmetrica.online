@@ -239,6 +239,29 @@ describe("EventView", () => {
     expect(within(table).getByText("100%")).toBeInTheDocument();
   });
 
+  it("labels a present-but-empty value with a muted placeholder, distinct from the missing row", async () => {
+    mockApi({
+      breakdowns: {
+        plan: {
+          property: "plan",
+          values: [
+            { value: "pro", events: 6, people: 3 },
+            { value: "", events: 3, people: 2 },
+          ],
+          missing: { events: 1, people: 1 },
+        },
+      },
+    });
+    renderView();
+
+    const table = await screen.findByRole("table", { name: "note_created by plan" });
+    const placeholder = within(table).getByText("empty value");
+    expect(placeholder.className).toContain("text-fg-muted");
+    expect(placeholder.className).not.toContain("font-mono");
+    expect(within(table).getByText("No property")).toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(4);
+  });
+
   it("takes the property and the limit from the URL", async () => {
     mockApi({ breakdowns: { source: SOURCE } });
     renderView(`${URL_PARAMS}&property=source&limit=50`);

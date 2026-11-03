@@ -47,6 +47,42 @@ describe("ProfileEventsTable", () => {
     expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
   });
 
+  it("marks development events with a badge and leaves production events unmarked", async () => {
+    server.use(
+      http.get(EVENTS_URL, () =>
+        HttpResponse.json({
+          events: [
+            profileEvent({ name: "debug_event", environment: "development" }),
+            profileEvent({ name: "purchase", environment: "production" }),
+          ],
+          next_before: null,
+        }),
+      ),
+    );
+    renderTable({ locale: "en" });
+
+    const rows = await screen.findAllByRole("row");
+    const debug = rows.find((r) => within(r).queryByText("debug_event"));
+    const purchase = rows.find((r) => within(r).queryByText("purchase"));
+    expect(within(debug as HTMLElement).getByText("development")).toBeInTheDocument();
+    expect(within(purchase as HTMLElement).queryByText("development")).not.toBeInTheDocument();
+    expect(within(purchase as HTMLElement).queryByText("production")).not.toBeInTheDocument();
+  });
+
+  it("does not send the environment parameter, so both environments are listed", async () => {
+    const urls: URL[] = [];
+    server.use(
+      http.get(EVENTS_URL, ({ request }) => {
+        urls.push(new URL(request.url));
+        return HttpResponse.json({ events: [profileEvent()], next_before: null });
+      }),
+    );
+    renderTable({ locale: "en" });
+
+    await screen.findByText("level_complete");
+    expect(urls[0]?.searchParams.has("environment")).toBe(false);
+  });
+
   it("shows three properties and reveals the rest on «2 more»", async () => {
     server.use(
       http.get(EVENTS_URL, () =>

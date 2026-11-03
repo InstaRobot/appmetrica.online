@@ -867,12 +867,32 @@ describe("demoFetch language", () => {
   });
 });
 
+describe("demoFetch events list", () => {
+  it("keeps names that fell to zero when compare is on and drops them otherwise", async () => {
+    // Период после «сегодня» пуст, а предыдущий (08…14.10) полон событий.
+    const url = (extra: string) => `/v1/apps/${NOTES}/events?from=2026-10-15&to=2026-10-21${extra}`;
+    const compared = await demoFetch(url("&compare=previous_period"), undefined, NOW);
+    const withPrev = (await compared.json()) as {
+      events: { name: string; events: number; people: number; prev_events?: number }[];
+    };
+    expect(withPrev.events.length).toBeGreaterThan(0);
+    for (const e of withPrev.events) {
+      expect(e.events).toBe(0);
+      expect(e.people).toBe(0);
+      expect(e.prev_events ?? 0).toBeGreaterThan(0);
+    }
+    const plain = await demoFetch(url("&compare=none"), undefined, NOW);
+    expect(((await plain.json()) as { events: unknown[] }).events).toEqual([]);
+  });
+});
+
 describe("demoFetch profile events", () => {
   type Ev = {
     event_time: string;
     name: string;
     session_id: string;
     install_id: string;
+    environment: string;
     properties: Record<string, string>;
   };
   type Page = { events: Ev[]; next_before: string | null };
@@ -897,6 +917,19 @@ describe("demoFetch profile events", () => {
     for (const e of all.events) {
       expect(Object.values(e.properties).every((v) => typeof v === "string")).toBe(true);
     }
+  });
+
+  it("covers both environments by default, carries the environment and filters on request", async () => {
+    const key = (e: Ev) => `${e.event_time}|${e.session_id}|${e.name}`;
+    const all = await page("limit=200");
+    const prod = await page("limit=200&environment=production");
+    const dev = await page("limit=200&environment=development");
+    for (const e of all.events) expect(["production", "development"]).toContain(e.environment);
+    expect(prod.events.every((e) => e.environment === "production")).toBe(true);
+    expect(dev.events.every((e) => e.environment === "development")).toBe(true);
+    expect(new Set(all.events.map(key))).toEqual(
+      new Set([...prod.events, ...dev.events].map(key)),
+    );
   });
 
   it("pages through the cursor without repeats or gaps and is deterministic", async () => {

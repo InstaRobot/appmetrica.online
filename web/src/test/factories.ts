@@ -141,6 +141,7 @@ export function profileEvent(overrides: Partial<ProfileEvent> = {}): ProfileEven
     name: "level_complete",
     session_id: faker.string.uuid(),
     install_id: "5d8e2c1a-0b3f-4e5f-9a7b-0c1d2e3f4e5f",
+    environment: "production",
     platform: "ios",
     app_version: "2.1.1",
     properties: {},
