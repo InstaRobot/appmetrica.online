@@ -8,6 +8,7 @@ NDJSON-фикстуры событий для тестов backend: одна с�
 |---|---|
 | `smoke.ndjson` | Дымовая фикстура харнесса (T-006): одно приложение, две установки, 4 события |
 | `scenario.ndjson` | Сценарий golden-тестов отчётов (T-026): портфель, аудитория, retention, Read API, close_day |
+| `custom_events.ndjson` | Свои события FR-102 (T-CE-005) в сессиях установок `scenario.ndjson`: отчёт «События»; загружается вместе со сценарием |
 | `portfolio.golden.json` | Портфель сценария на 2026-10-12 для unit=persons и unit=installs, сейчас 2026-10-13 12:00 UTC (T-028, `reports.TestPortfolio_Golden`) |
 | `audience.golden.json` | Аудитория сценария за 2026-10-01…2026-10-12 по приложениям: summary (persons с compare, installs), ряды day по 4 метрикам с compare, week/month active, rolling-active, разбивки по 9 измерениям (T-029, `reports.TestAudience_Golden`) |
 | `retention.golden.json` | Retention сценария по дневным когортам 2026-09-28…2026-10-12, periods=30, для unit=persons и unit=installs, сейчас 2026-11-03 12:00 UTC (T-030, `reports.TestRetention_DayGolden`) |
@@ -138,3 +139,45 @@ DAU, новые и D1 по дням для `environment=production`, `unit=perso
 | 2026-10-31 | 7 | 0 | — | 5 | 0 | — | 5 | 0 | — |
 | 2026-11-01 | 10 | 0 | — | 8 | 0 | — | 7 | 0 | — |
 | 2026-11-02 | 6 | 0 | — | 7 | 0 | — | 4 | 0 | — |
+
+## custom_events.ndjson
+
+Свои события отчёта «События» (FR-102, T-CE-005) поверх установок сценария. Файл сгенерирован и руками не
+редактируется; генератор детерминирован (`TestCustomEvents_Deterministic`). `scenario.ndjson` при этом не меняется
+(feature spec §3, Р-9): тесты загружают оба файла, а инвариант сценария по-прежнему требует только системные имена.
+
+```bash
+cd backend
+go run ./testdata/gen -mode custom-events -seed 42          # перезаписать testdata/fixtures/custom_events.ndjson
+go run ./testdata/gen -mode custom-events -seed 42 -stats   # таблица ниже
+```
+
+Логика — `internal/testutil/custom_events.go` (`testutil.GenerateCustomEvents`): строит сценарий того же seed и
+кладёт в каждую сессию приложений msk и nyc 0–4 своих события из отдельного потока PCG. Событие лежит внутри
+сессии (между `session_start` и `session_end`, у сессии без `session_end` — в первую минуту) и повторяет контекст
+её `session_start`: установку, `user_id`, `environment`, платформу, версию, устройство, гео и задержку доставки
+(досыл msk 03 приходит через 6 дней). Поэтому склейка, first_seen и active/new сценария не сдвигаются.
+Проверяется `TestCustomEvents_InsideScenarioSessions` и `TestCustomEvents_Sujet`:
+
+- msk («Заметки iOS», ios): `note_created {source}`, `search_used {results}`, `note_shared {target}`,
+  `paywall_shown {place}`, `purchase {plan}`; nyc («Трекер Android», android): `search_used`, `paywall_shown`,
+  `purchase`; tyo своих событий не шлёт;
+- у `note_created` 25 значений `source` с убывающими весами (при `limit=20` есть строка «остальные»), каждое
+  десятое событие — без `source` (строка «нет свойства»);
+- `plan` — у четырёх из пяти `purchase`, `results` — целое 0…40 строкой;
+- повторы `insert_id`: события повторённого батча msk 05 дошли трижды, ещё ≈ 4 % событий — дважды (строки
+  отличаются только `received_at`);
+- события development-установок, обе версии приложения у каждого из двух приложений.
+
+Строк — с повторами, событий — уникальных `insert_id`; события со свойством — с ключом из колонки «Свойство».
+
+| Приложение | Событие | Строк | Событий | Свойство | Событий со свойством | Значений |
+|---|---|---:|---:|---|---:|---:|
+| msk | note_created | 291 | 279 | source | 252 | 25 |
+| msk | search_used | 120 | 116 | results | 116 | 37 |
+| msk | note_shared | 86 | 82 | target | 82 | 4 |
+| msk | paywall_shown | 81 | 77 | place | 77 | 3 |
+| msk | purchase | 41 | 40 | plan | 32 | 3 |
+| nyc | search_used | 243 | 227 | results | 227 | 41 |
+| nyc | paywall_shown | 112 | 108 | place | 108 | 3 |
+| nyc | purchase | 66 | 64 | plan | 52 | 3 |

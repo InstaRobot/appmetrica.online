@@ -3,6 +3,8 @@
 //	go run ./testdata/gen geo                  # testdata/geo/test-city.mmdb из testutil.GeoNetworks
 //	go run ./testdata/gen -seed 42             # testdata/fixtures/scenario.ndjson — сценарий golden-тестов отчётов
 //	go run ./testdata/gen -seed 42 -stats      # таблица ожидаемых DAU/новых/D1 для testdata/fixtures/README.md
+//	go run ./testdata/gen -mode custom-events -seed 42         # testdata/fixtures/custom_events.ndjson — свои события в сессиях сценария
+//	go run ./testdata/gen -mode custom-events -seed 42 -stats  # таблица своих событий для testdata/fixtures/README.md
 //	go run ./testdata/gen -mode perf -stats    # объём перф-синтетики 100k DAU × 90 дней (T-035)
 //	go run ./testdata/gen -mode perf -dau 1000 -days 30 -out /tmp/perf.ndjson
 //
@@ -27,6 +29,7 @@ import (
 
 const usage = `usage: go run ./testdata/gen geo
        go run ./testdata/gen [-seed N] [-out FILE] [-stats]
+       go run ./testdata/gen -mode custom-events [-seed N] [-out FILE] [-stats]
        go run ./testdata/gen -mode perf [-seed N] [-dau N] [-days N] (-out FILE|- | -stats)`
 
 func main() {
@@ -45,9 +48,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	perfDefaults := testutil.DefaultPerfConfig()
 	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	mode := fs.String("mode", "scenario", "scenario — фикстура golden-тестов, perf — синтетика перф-теста")
+	mode := fs.String("mode", "scenario",
+		"scenario — фикстура golden-тестов, custom-events — свои события в сессиях сценария, perf — синтетика перф-теста")
 	seed := fs.Uint64("seed", testutil.ScenarioSeed, "seed")
-	out := fs.String("out", testutil.ScenarioPath(), "куда записать NDJSON (perf: обязателен, \"-\" — stdout)")
+	out := fs.String("out", testutil.ScenarioPath(),
+		"куда записать NDJSON (custom-events: по умолчанию custom_events.ndjson; perf: обязателен, \"-\" — stdout)")
 	stats := fs.Bool("stats", false, "напечатать сводку вместо записи файла")
 	dau := fs.Int("dau", perfDefaults.DAU, "perf: DAU основного приложения")
 	days := fs.Int("days", perfDefaults.Days, "perf: дней в окне")
@@ -70,7 +75,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		cfg := perfDefaults
 		cfg.Seed, cfg.DAU, cfg.Days = *seed, *dau, *days
 		return runPerf(cfg, *out, slices.Contains(set, "out"), *stats, stdout, stderr)
-	case "scenario":
+	case "scenario", "custom-events":
 		if slices.Contains(set, "dau") || slices.Contains(set, "days") {
 			fmt.Fprintln(stderr, "-dau и -days — только для -mode perf")
 			fmt.Fprintln(stderr, usage)
@@ -82,6 +87,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	if *mode == "custom-events" {
+		return runCustomEvents(*seed, *out, slices.Contains(set, "out"), *stats, stdout, stderr)
+	}
 	if *stats {
 		table, err := testutil.ScenarioStatsTable(testutil.GenerateScenario(*seed))
 		if err == nil {
@@ -94,6 +102,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return report(stderr, err)
 	}
 	return report(stderr, writeFile(*out, buf.Bytes()))
+}
+
+// runCustomEvents печатает таблицу README (-stats) или пишет свои события в out (по умолчанию
+// testdata/fixtures/custom_events.ndjson).
+func runCustomEvents(seed uint64, out string, outSet, stats bool, stdout, stderr io.Writer) int {
+	if stats {
+		_, err := io.WriteString(stdout, testutil.CustomEventsStatsTable(testutil.GenerateCustomEvents(seed)))
+		return report(stderr, err)
+	}
+	if !outSet {
+		out = testutil.CustomEventsPath()
+	}
+	var buf bytes.Buffer
+	if err := testutil.WriteCustomEvents(&buf, seed); err != nil {
+		return report(stderr, err)
+	}
+	return report(stderr, writeFile(out, buf.Bytes()))
 }
 
 // runPerf печатает сводку (-stats) или пишет синтетику потоком в файл out ("-" — stdout).
