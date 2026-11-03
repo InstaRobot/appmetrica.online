@@ -225,7 +225,9 @@ func (s *sampler) emit(tok json.Token) bool {
 		if v == '}' || v == ']' {
 			return s.closeContainer(string(v))
 		}
-		props := s.props && v == '{'
+		// Вложенные объекты и массивы наследуют контекст properties: валидатор такие формы
+		// отклоняет, и сэмпл отклонённого события живёт 7 дней.
+		props := s.props || (top != nil && top.props)
 		s.userID, s.appKey, s.props = false, false, false
 		if !s.write(sep + string(v)) {
 			return false
@@ -242,7 +244,7 @@ func (s *sampler) emit(tok json.Token) bool {
 		if s.appKey {
 			v = keyPrefix(v)
 		}
-		if top != nil && top.props && LooksLikePII(v) {
+		if (s.props || (top != nil && top.props)) && LooksLikePII(v) {
 			v = redactedUserID
 		}
 		return s.finishValue(sep + s.encodeString(v))
