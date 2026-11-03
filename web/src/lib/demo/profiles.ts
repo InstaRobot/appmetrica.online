@@ -4,6 +4,8 @@
 import type {
   Environment,
   Profile,
+  ProfileEvent,
+  ProfileEventPage,
   ProfileInstall,
   ProfileSearchResult,
   ProfileSession,
@@ -12,6 +14,7 @@ import type {
 import { addDays, todayIn } from "@/lib/period";
 import { DEMO_APP_IDS } from "./apps";
 import type { SegmentModel } from "./catalog";
+import { EVENT_CATALOG } from "./events";
 import { type DemoApp, type InstallAttrs, releaseVersions, sampleAttrs, segmentOf } from "./model";
 import { hexFrom, pickWeighted, rand, seeded, uuidFrom, type Weighted } from "./random";
 import { eachDay, HOUR_MS, isoUtc, maxDay, minDay, zonedMidnight } from "./time";
@@ -720,5 +723,81 @@ export function getProfile(
       }),
     ),
     next_before: pageSessions.length === page.limit && lastOfPage ? isoUtc(lastOfPage.start) : null,
+  };
+}
+
+// --- события человека ---
+
+type DemoProfileEvent = { at: number; id: string; event: ProfileEvent };
+
+// Курсор страницы событий — «<мс>.<insert_id>» последнего события страницы (в API он непрозрачен).
+export const PROFILE_EVENTS_CURSOR =
+  /^\d{1,15}\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// eventsOf — свои события сессии: по каталогу EVENT_CATALOG приложения, число и время событий, значение
+// свойства выводятся из (приложение, сессия, имя), поэтому один и тот же человек отдаёт один и тот же список.
+function eventsOf(demo: DemoApp, s: Session, now: number): DemoProfileEvent[] {
+  const appId = demo.app.id;
+  const end = Math.min(now, s.end ?? s.start + 5 * 60_000);
+  const out: DemoProfileEvent[] = [];
+  for (const spec of EVENT_CATALOG[appId] ?? []) {
+    const r = seeded(appId, s.id, spec.name, "pev");
+    const whole = Math.floor(spec.perSession);
+    const count = whole + (r() < spec.perSession - whole ? 1 : 0);
+    for (let k = 0; k < count; k++) {
+      const timeDraw = r();
+      const valueDraw = r();
+      const missingDraw = r();
+      const at = s.start + Math.floor(timeDraw * Math.max(0, end - s.start));
+      const id = uuidFrom(appId, s.id, spec.name, k, "pev");
+      out.push({
+        at,
+        id,
+        event: {
+          event_time: isoUtc(at),
+          name: spec.name,
+          session_id: s.id,
+          install_id: s.install.installId,
+          platform: s.install.platform,
+          app_version: s.version,
+          properties:
+            missingDraw < spec.property.missing
+              ? {}
+              : { [spec.property.key]: pickWeighted(spec.property.values, valueDraw) },
+        },
+      });
+    }
+  }
+  return out;
+}
+
+// getProfileEvents — свои события человека в окружении env, новые первыми по (время, insert_id); null — у
+// человека нет событий в приложении (404 profile_not_found, как у getProfile).
+export function getProfileEvents(
+  demo: DemoApp,
+  personKey: string,
+  page: { limit: number; before: string | null; env: Environment },
+  now: number,
+): ProfileEventPage | null {
+  const person = directory(demo).byKey.get(personKey);
+  if (!person) return null;
+  const sessions = sessionsOf(demo, person, now);
+  if (sessions.length === 0) return null;
+  const all = sessions
+    .filter((s) => s.environment === page.env)
+    .flatMap((s) => eventsOf(demo, s, now))
+    .sort((a, b) => b.at - a.at || b.id.localeCompare(a.id));
+  const [cursorAt, cursorId] = page.before?.split(".") ?? [];
+  const after =
+    cursorAt === undefined || cursorId === undefined
+      ? all
+      : all.filter(
+          (e) => e.at < Number(cursorAt) || (e.at === Number(cursorAt) && e.id < cursorId),
+        );
+  const shown = after.slice(0, page.limit);
+  const last = shown.at(-1);
+  return {
+    events: shown.map((e) => e.event),
+    next_before: after.length > page.limit && last ? `${last.at}.${last.id}` : null,
   };
 }

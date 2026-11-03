@@ -30,7 +30,7 @@ import { DEMO_APPS } from "./apps";
 import { EVENT_NAME, eventBreakdown, eventReport, eventsList, SYSTEM_EVENT_NAMES } from "./events";
 import { integrationHealth, realtime } from "./live";
 import { type DemoApp, demoApp, type FilterDim, type Filters, makeScope } from "./model";
-import { getProfile, searchProfiles } from "./profiles";
+import { getProfile, getProfileEvents, PROFILE_EVENTS_CURSOR, searchProfiles } from "./profiles";
 import {
   audienceSummary,
   breakdown,
@@ -357,6 +357,22 @@ const ROUTES: readonly Route[] = [
     const profile = getProfile(app, key, { limit, before }, now);
     if (!profile) throw new DemoError(404, "profile_not_found", "profileNotFound");
     return json(profile);
+  }),
+  route("/v1/apps/:app_id/profiles/:person_key/events", ({ params, query, now }) => {
+    const app = requireApp(params.app_id);
+    const key = params.person_key ?? "";
+    if (!PERSON_KEY.test(key)) {
+      throw invalid("person_key", "personKey");
+    }
+    const env = oneOf(query, "environment", ENVIRONMENTS, "production");
+    const limit = integer(query, "limit", 1, 200, 50);
+    const before = query.get("before");
+    if (before !== null && !PROFILE_EVENTS_CURSOR.test(before)) {
+      throw invalid("before", "before");
+    }
+    const events = getProfileEvents(app, key, { limit, before, env }, now);
+    if (!events) throw new DemoError(404, "profile_not_found", "profileNotFound");
+    return json(events);
   }),
   route("/v1/apps/:app_id/integration/health", ({ params, query, now, texts }) => {
     const app = requireApp(params.app_id);
