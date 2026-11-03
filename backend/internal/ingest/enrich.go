@@ -202,7 +202,7 @@ func (s *sampler) emit(tok json.Token) bool {
 			s.userID = true
 		case strings.EqualFold(key, "app_key"):
 			s.appKey = true
-		case key == "properties":
+		case strings.EqualFold(key, "properties"):
 			s.props = true
 		}
 		sep := ""
