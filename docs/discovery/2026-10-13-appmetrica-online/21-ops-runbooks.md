@@ -210,8 +210,9 @@ ClickHouse, а продукт держит один сервер с данным
 ### 5.4. Rollback trigger
 Любая проверка из 5.3 падает дольше 10 минут → откат образа в Dokploy (Deployments → Rollback).
 **Миграции**: если новая миграция уже применена, откатывается только код (схема совместима по правилу expand/contract),
-а исправление идёт новой миграцией. Ручной `goose down` на проде запрещён. Исключение — релиз FR-102 с колонкой
-`events.properties`: образ до него с этой колонкой не пишет события, порядок отката — в 5.7.
+а исправление идёт новой миграцией. Ручной `goose down` на проде запрещён. Исключение — только релиз FR-102 с колонкой
+`events.properties`: образ до него с этой колонкой не пишет события, а `migrate down` в бинарнике нет, поэтому 5.7
+описывает ручную процедуру (остановка ingest и worker, `DROP COLUMN`, удаление строки версии 4 из `goose_db_version`).
 
 ### 5.5. Первичный провижининг сервера (выполняется один раз, неделя 2 — E9a)
 
@@ -301,11 +302,28 @@ ClickHouse, а продукт держит один сервер с данным
 
 **Проверка после выката.** Тестовый батч в приложение `smoke` из 5.3 с третьим событием `purchase` и `properties` (`{"plan":"pro"}`) принят, `accepted = 3`; в ClickHouse `SELECT name, properties FROM events WHERE app_id = '<smoke>' ORDER BY received_at DESC LIMIT 1` возвращает `purchase` и `{'plan':'pro'}`; вкладка «События» приложения `smoke` (окружение development) показывает `purchase`.
 
-**Откат релиза.** Нынешний код пишет в `events` с явным списком колонок и колонкой `properties`, а образ до FR-102 готовит `INSERT INTO events` без списка и падает с `missing destination name "properties"` на таблице с лишней колонкой (проверено T-CE-002, ClickHouse 26.8.25.14). Поэтому правило 5.4 («откатывается только код») для этого релиза не работает, порядок такой:
-1. Остановить клиентские сборки со своими событиями или принять, что их события потеряются.
-2. Выполнить `appmetrica migrate` ClickHouse вниз до версии 3 (`DROP COLUMN properties`; **свойства всех событий теряются**, имена и сами события остаются). Бэкап ClickHouse не старше 26 часов обязателен.
-3. Откатить образы в Dokploy (Deployments → Rollback) на версию до FR-102.
-4. Проверить 5.3.
+**Откат релиза.** Нынешний код пишет в `events` с явным списком колонок и колонкой `properties`, а образ до FR-102 готовит `INSERT INTO events` без списка и падает с `missing destination name "properties"` на таблице с лишней колонкой (проверено T-CE-002, ClickHouse 26.8.25.14). Поэтому правило 5.4 («откатывается только код») для этого релиза не работает. Команды `migrate down` в `appmetrica` нет (`migrate` принимает только `up` и `status`), и она не добавляется: **5.7 — задокументированное исключение из запрета ручного `goose down` из 5.4, только для релиза FR-102**: откат образа не вернёт схему, а исправление новой миграцией оставило бы ingest без записи на время подготовки релиза. Процедура ручная, окно простоя ingest неизбежно; клиенты держат события в офлайн-очереди до 7 дней и отправят их после возобновления приёма (свои события клиентов, которые уже перешли на новую сборку, после отката образа будут отклонены как `unknown_event_name`, см. шаг 6).
+
+0. Свежий бэкап ClickHouse не старше 26 часов (S-12 «Система»), иначе создать вручную (7.8, п. 2).
+1. В Dokploy остановить (Stop) `appmetrica-ingest` и `appmetrica-worker`: пока колонки нет, новый образ не может писать события, а слияние приложений в worker копирует колонку `properties` по явному списку. `appmetrica-api` и `appmetrica-web` остаются (читают через явные списки колонок).
+2. От пользователя `appmetrica_admin` (DDL есть только у него; пароль — `CLICKHOUSE_ADMIN_PASSWORD`) снять колонку; **свойства всех событий теряются**, сами события остаются:
+   ```bash
+   CH=$(docker ps -qf label=com.docker.compose.service=clickhouse)
+   docker exec "$CH" clickhouse-client --user appmetrica_admin --password "$CLICKHOUSE_ADMIN_PASSWORD" --database appmetrica \
+     --query "ALTER TABLE events DROP COLUMN IF EXISTS properties"
+   ```
+3. Там же убрать запись версии 4 из таблицы версий goose (`goose_db_version`, колонки `version_id`, `is_applied`, `tstamp`; бинарник пишет туда версии ClickHouse-миграций, `appmetrica migrate status` читает её же). Без этого шага повторная выкатка FR-102 сочла бы 00004 применённой и не вернула колонку:
+   ```bash
+   docker exec "$CH" clickhouse-client --user appmetrica_admin --password "$CLICKHOUSE_ADMIN_PASSWORD" --database appmetrica \
+     --query "ALTER TABLE goose_db_version DELETE WHERE version_id = 4 SETTINGS mutations_sync = 2"
+   docker exec "$CH" clickhouse-client --user appmetrica_admin --password "$CLICKHOUSE_ADMIN_PASSWORD" --database appmetrica \
+     --query "SELECT max(version_id) FROM goose_db_version WHERE is_applied = 1"   # ожидается 3
+   ```
+4. Откатить образы `appmetrica-api`, `appmetrica-ingest`, `appmetrica-worker`, `appmetrica-web` на версию до FR-102 (Deployments → Rollback). `appmetrica-api` при старте выполняет `migrate up` (`MIGRATE_ON_START=true`): на базе версии 3 это no-op без ошибок.
+5. Запустить (Start) `appmetrica-ingest` и `appmetrica-worker`; проверить 5.3.
+6. Сообщить владельцам клиентских сборок со своими событиями: до повторной выкатки FR-102 эти события отклоняются как `unknown_event_name` и теряются.
+
+Шаги 2–3 и запуск предыдущей версии `appmetrica migrate` на версии 3 проверены integration-тестом `backend/internal/chstore/rollback_procedure_integration_test.go` (testcontainers, ClickHouse 26.8.25.14); остановка и запуск приложений в Dokploy — только по описанию.
 
 Образы начиная с FR-102 пишут с явным списком колонок, поэтому следующая добавленная колонка этот порядок уже не потребует.
 
@@ -697,4 +715,4 @@ SELECT started_at, finished_at, status, details FROM job_runs WHERE job = 'app_m
 
 | Date | Version | Changes |
 |---|---|---|
-| 2026-11-03 | 1.x | §5.7: порядок выкатки и откат релиза FR-102 (миграция ClickHouse 00004: откат — сначала `appmetrica migrate` вниз до 3, затем прежний образ; appmetrica.online раньше клиентских сборок со своими событиями); §5.4 — исключение из правила «откатывается только код» |
+| 2026-11-03 | 1.x | §5.7: порядок выкатки и откат релиза FR-102 (миграция ClickHouse 00004; откат — ручная процедура: остановить ingest и worker, `DROP COLUMN properties`, удалить версию 4 из `goose_db_version`, затем прежний образ; appmetrica.online раньше клиентских сборок со своими событиями); §5.4 — исключение из запрета ручного `goose down`. Исправление: в первой редакции откат ссылался на несуществующую `appmetrica migrate down` |
