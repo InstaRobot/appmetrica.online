@@ -28,6 +28,10 @@ function mockApi(onProfile: ProfileHandler) {
       HttpResponse.json(makeApp({ id: APP_ID, timezone: "Europe/Moscow" })),
     ),
     http.get(`*/v1/apps/${APP_ID}/profiles/:personKey`, onProfile),
+    // Раздел «События» грузится отдельным запросом; здесь он пуст, чтобы не мешать кнопкам сессий.
+    http.get(`*/v1/apps/${APP_ID}/profiles/:personKey/events`, () =>
+      HttpResponse.json({ events: [], next_before: null }),
+    ),
     http.get("*/admin/v1/deletion-requests", () => HttpResponse.json({ items: [] })),
   );
 }

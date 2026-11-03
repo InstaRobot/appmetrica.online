@@ -1,3 +1,5 @@
+import { pluralForms } from "@/lib/i18n/format-message";
+
 // Профили людей: поиск S-08, карточка S-09 и удаление данных по GDPR (FR-016, FR-019).
 export const profiles = {
   title: "Profiles",
@@ -63,6 +65,21 @@ export const profiles = {
       install: "Install",
     },
     noEnd: "— (no session_end)",
+    more: "Show more",
+  },
+  events: {
+    title: "Events",
+    caption: "Custom events",
+    empty: "No custom events",
+    columns: {
+      time: "Time",
+      name: "Event",
+      properties: "Properties",
+      platform: "Platform",
+      version: "Version",
+    },
+    moreProperties: pluralForms({ one: "{count} more", other: "{count} more" }),
+    lessProperties: "Collapse",
     more: "Show more",
   },
   deleteDialog: {

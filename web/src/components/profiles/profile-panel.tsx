@@ -22,6 +22,7 @@ import { toast } from "@/lib/toast";
 import { InstallsTable } from "./installs-table";
 import { isDeletionActive, ProfileCard } from "./profile-card";
 import { ProfileDeleteDialog } from "./profile-delete-dialog";
+import { ProfileEventsTable } from "./profile-events-table";
 import { SessionsTable } from "./sessions-table";
 
 // Сессий на страницу (sessions_limit), опрос статуса удаления и пауза перед возвратом к поиску (S-09).
@@ -180,6 +181,10 @@ function ProfileView({ app, personKey }: { app: App; personKey: PersonKey }) {
           loadingMore={profile.isFetchingNextPage}
           onLoadMore={() => void profile.fetchNextPage()}
         />
+      </Card>
+      <Card className="gap-4 px-6">
+        <h3 className="text-heading-3">{m.events.title}</h3>
+        <ProfileEventsTable appId={app.id} personKey={encoded} timezone={app.timezone} />
       </Card>
       <ProfileDeleteDialog
         appId={app.id}

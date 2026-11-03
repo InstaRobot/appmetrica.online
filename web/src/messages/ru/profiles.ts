@@ -1,3 +1,5 @@
+import { pluralForms } from "@/lib/i18n/format-message";
+
 import type { profiles as en } from "../en/profiles";
 
 export const profiles: typeof en = {
@@ -64,6 +66,26 @@ export const profiles: typeof en = {
       install: "Install",
     },
     noEnd: "— (нет session_end)",
+    more: "Показать ещё",
+  },
+  events: {
+    title: "События",
+    caption: "Собственные события",
+    empty: "Своих событий нет",
+    columns: {
+      time: "Время",
+      name: "Событие",
+      properties: "Свойства",
+      platform: "Платформа",
+      version: "Версия",
+    },
+    moreProperties: pluralForms({
+      one: "ещё {count}",
+      few: "ещё {count}",
+      many: "ещё {count}",
+      other: "ещё {count}",
+    }),
+    lessProperties: "Свернуть",
     more: "Показать ещё",
   },
   deleteDialog: {
