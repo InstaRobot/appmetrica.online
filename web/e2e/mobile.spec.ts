@@ -66,7 +66,15 @@ test.describe("dashboard on a phone", () => {
   });
 
   test("every app section fits the screen", async ({ page }) => {
-    for (const tab of ["", "/retention", "/realtime", "/profiles", "/integration", "/settings"]) {
+    for (const tab of [
+      "",
+      "/retention",
+      "/events",
+      "/realtime",
+      "/profiles",
+      "/integration",
+      "/settings",
+    ]) {
       await page.goto(`/apps/${APP}${tab}`);
       await expect(page.getByRole("navigation", { name: "Разделы приложения" })).toBeVisible();
       await expectNoHorizontalScroll(page);

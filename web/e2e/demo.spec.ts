@@ -44,7 +44,7 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoA11yViolations(page);
 
     const appId = "0199d5f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f";
-    for (const path of ["", "/retention", "/realtime", "/integration", "/settings"]) {
+    for (const path of ["", "/retention", "/events", "/realtime", "/integration", "/settings"]) {
       await page.goto(`/apps/${appId}${path}`);
       await expect(page.getByRole("navigation", { name: "Разделы приложения" })).toBeVisible();
       await expect(page.getByRole("status").or(page.getByRole("main"))).not.toHaveCount(0);
