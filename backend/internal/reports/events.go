@@ -47,8 +47,10 @@ var (
 //     считает людей значения; unit=installs считает установки;
 //   - compare читает оба периода одним проходом, граница — {split_utc} (как qAudiencePeople).
 var (
-	// qEventsList — имена своих событий с событиями текущего периода, events DESC, name ASC; {limit} — на одно
-	// больше EventsListMax, чтобы узнать об обрезке. Люди — по парам (имя, текущий период) строк people.
+	// qEventsList — имена своих событий, events DESC, name ASC; {limit} — на одно
+	// больше EventsListMax, чтобы узнать об обрезке. Имя без событий текущего периода остаётся при compare, если оно
+	// было в предыдущем (prev_events > 0, события 0); без compare предыдущий период не читается.
+	// Люди — по парам (имя, текущий период) строк people.
 	qEventsList = `WITH ` + identity.LinksCTE + `, ` + peopleWhereCTE(customEventsWhere,
 		uniqValues("(e.name, e.event_time >= {split_utc:DateTime64(3)})", "names")) + `,
 by_people AS (
@@ -69,7 +71,7 @@ by_events AS (
 SELECT v.name AS name, v.events AS events, p.people AS people, v.prev_events AS prev_events, p.prev_people AS prev_people
 FROM by_events AS v
 INNER JOIN by_people AS p ON p.name = v.name
-WHERE v.events > 0
+WHERE v.events > 0 OR v.prev_events > 0
 ORDER BY events DESC, name ASC
 LIMIT {limit:UInt32}`
 
@@ -242,7 +244,7 @@ type EventCount struct {
 }
 
 // EventsList — свои события периода p по именам; compare — и за предыдущий период той же длины. Имена без событий
-// в текущем периоде в список не попадают.
+// в текущем периоде попадают в список только при compare и только если были в предыдущем.
 func (s *Service) EventsList(ctx context.Context, p Params, compare bool) (EventList, error) {
 	defer s.track(ReportEventsList)()
 	scan, extra := compareScan(p, compare)
