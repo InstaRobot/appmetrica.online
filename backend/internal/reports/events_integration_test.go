@@ -216,6 +216,45 @@ type eventsSnapshot struct {
 	Breakdown map[string]EventBreakdown `json:"breakdown"`
 }
 
+// Имя, у которого в текущем периоде событий нет, а в предыдущем были, при compare остаётся в списке с нулём
+// событий и людей (Δ −100%); без compare такое имя в список не входит.
+func TestEventsList_CompareKeepsNamesThatFellToZero(t *testing.T) {
+	rows := concat(
+		visit(t, 1, "U", "2026-10-10T09:00:00Z", time.Minute),
+		[]chstore.EventRow{
+			profileEvent(t, 1, "U", "2026-10-02T10:00:00Z", "old_only", nil),
+			profileEvent(t, 1, "U", "2026-10-02T11:00:00Z", "old_only", nil),
+			profileEvent(t, 1, "U", "2026-10-02T12:00:00Z", "both", nil),
+			profileEvent(t, 1, "U", "2026-10-12T10:00:00Z", "both", nil),
+			profileEvent(t, 2, "V", "2026-10-12T11:00:00Z", "new_only", nil),
+		},
+	)
+	svc := newService(startWith(t, rows))
+	p := period(t, identity.Persons, "2026-10-08", "2026-10-14") // предыдущие 7 дней — 10-01…10-07
+
+	plain := eventsList(t, svc, p, false)
+	names := []string{}
+	for _, st := range plain.Events {
+		names = append(names, st.Name)
+	}
+	require.Equal(t, []string{"both", "new_only"}, names)
+
+	cmpList := eventsList(t, svc, p, true)
+	byName := map[string]EventStat{}
+	for _, st := range cmpList.Events {
+		byName[st.Name] = st
+	}
+	require.Len(t, byName, 3)
+	gone := byName["old_only"]
+	require.Zero(t, gone.Events)
+	require.Zero(t, gone.People)
+	require.NotNil(t, gone.PrevEvents)
+	require.EqualValues(t, 2, *gone.PrevEvents)
+	require.EqualValues(t, 1, *gone.PrevPeople)
+	require.EqualValues(t, 1, byName["new_only"].Events)
+	require.EqualValues(t, 0, *byName["new_only"].PrevEvents)
+}
+
 // AC-005.1: список за 30 дней — имена по убыванию событий, системных нет, повторы insert_id посчитаны один раз,
 // prev-поля только при compare; совпадает с эталонной моделью и вместе со страницами событий и разбивками —
 // с events.golden.json.
