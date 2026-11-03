@@ -47,6 +47,14 @@ func newLiveIngest(t *testing.T, writer func(env *testutil.Env) ingest.EventWrit
 // newLiveIngestApp — как newLiveIngest, но с заданным набором платформ приложения; ключ testKey без платформы.
 func newLiveIngestApp(t *testing.T, platforms []sqlc.AppPlatform, writer func(env *testutil.Env) ingest.EventWriter) *liveIngest {
 	t.Helper()
+	return newLiveIngestAt(t, platforms, writer, receivedAt)
+}
+
+// newLiveIngestAt — как newLiveIngestApp, но с часами приёма at. Нужен тестам rejected_events: у таблицы
+// TTL received_at + 7 дней, и строка с фиксированной датой векторов исчезает, как только эта дата
+// уходит в прошлое дальше недели.
+func newLiveIngestAt(t *testing.T, platforms []sqlc.AppPlatform, writer func(env *testutil.Env) ingest.EventWriter, at time.Time) *liveIngest {
+	t.Helper()
 	ctx := t.Context()
 	env := testutil.Start(t)
 	q := env.PG.Queries()
@@ -62,7 +70,7 @@ func newLiveIngestApp(t *testing.T, platforms []sqlc.AppPlatform, writer func(en
 	reg := prometheus.NewRegistry()
 	metrics, err := ingest.NewMetrics(reg)
 	require.NoError(t, err)
-	clk := clock.NewFixed(receivedAt)
+	clk := clock.NewFixed(at)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cache := ingest.NewKeyCache(ingest.KeyCacheConfig{Store: q, Clock: clk, Logger: logger, Metrics: metrics})
 	require.NoError(t, cache.Refresh(ctx))
@@ -204,7 +212,9 @@ func TestIngest_ClickHouseDown(t *testing.T) {
 
 // TestIngest_RejectedEventsLogged — I-38: отказ PII попадает в rejected_events без user_id и IP.
 func TestIngest_RejectedEventsLogged(t *testing.T) {
-	l := newLiveIngest(t, nil)
+	// Приём «сейчас», а не в день векторов: иначе TTL rejected_events (7 дней) стирает строку до SELECT.
+	// Отказ PII случается до коррекции времени, поэтому старые timestamp и sent_at батча ему не мешают.
+	l := newLiveIngestAt(t, []sqlc.AppPlatform{sqlc.AppPlatformIos}, nil, clock.System{}.Now().UTC().Truncate(time.Millisecond))
 	body := batchBody(t, "2026-10-13T09:15:02.000Z", map[string]any{"ip": londonIP, "app_version": "3.4.0"},
 		eventJSON(t, map[string]any{"user_id": "ivan@example.com"}))
 	res := decodeResult(t, l.post(t, body, ""))

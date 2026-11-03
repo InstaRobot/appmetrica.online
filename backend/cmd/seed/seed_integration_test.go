@@ -32,19 +32,24 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 	args := []string{"--apps", "4", "--days", "3", "--daily-installs", "40", "--write-key", key}
 	clk := clock.NewFixed(testToday.Add(9 * time.Hour))
 
-	countEvents := func() (rows, sessions uint64) {
+	// rows — только системные события сессий: свои события Seed Notes (FR-102) лежат внутри тех же
+	// сессий и считаются отдельно, в custom.
+	countEvents := func() (rows, sessions, custom uint64) {
 		t.Helper()
-		require.NoError(t, env.CH.Conn().QueryRow(ctx,
-			"SELECT count(), uniqExact(session_id) FROM events FINAL").Scan(&rows, &sessions))
-		return rows, sessions
+		require.NoError(t, env.CH.Conn().QueryRow(ctx, `
+			SELECT countIf(name IN ('session_start', 'session_end')), uniqExact(session_id),
+			       countIf(name NOT IN ('session_start', 'session_end'))
+			FROM events FINAL`).Scan(&rows, &sessions, &custom))
+		return rows, sessions, custom
 	}
 
 	var stdout, stderr bytes.Buffer
 	require.Equal(t, 0, run(ctx, args, &stdout, &stderr, clk), stderr.String())
 	require.Contains(t, stdout.String(), "Seed iOS")
-	rows, sessions := countEvents()
+	rows, sessions, custom := countEvents()
 	require.Positive(t, rows)
 	require.Equal(t, rows, 2*sessions, "у каждой сессии start и end")
+	require.Positive(t, custom, "Seed Notes шлёт свои события")
 
 	apps, err := env.PG.Queries().ListApps(ctx, true)
 	require.NoError(t, err)
@@ -86,9 +91,10 @@ func TestSeed_CreatesAppsKeyAndEventsIdempotently(t *testing.T) {
 
 	stdout.Reset()
 	require.Equal(t, 0, run(ctx, args, &stdout, &stderr, clk), "повторный запуск: %s", stderr.String())
-	again, againSessions := countEvents()
+	again, againSessions, againCustom := countEvents()
 	require.Equal(t, rows, again, "повторный запуск не дублирует события")
 	require.Equal(t, sessions, againSessions)
+	require.Equal(t, custom, againCustom, "повторный запуск не дублирует свои события")
 	apps, err = env.PG.Queries().ListApps(ctx, true)
 	require.NoError(t, err)
 	require.Len(t, apps, 4, "приложения не дублируются")
