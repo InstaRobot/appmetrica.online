@@ -294,6 +294,28 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.GetProfileResponse,
       })),
     ],
+    listProfileEvents: [
+      {
+        url: endpoints.getListProfileEventsUrl(NOTES, encodeURIComponent(p.personKey)),
+        schema: schemas.ListProfileEventsResponse,
+      },
+      ...DEMO_PROFILES.map((profile) => ({
+        url: endpoints.getListProfileEventsUrl(
+          profile.appId,
+          encodeURIComponent(profile.personKey),
+          {
+            limit: 20,
+          },
+        ),
+        schema: schemas.ListProfileEventsResponse,
+      })),
+      {
+        url: endpoints.getListProfileEventsUrl(NOTES, encodeURIComponent(p.personKey), {
+          environment: "development",
+        }),
+        schema: schemas.ListProfileEventsResponse,
+      },
+    ],
     getIntegrationHealth: DEMO_APPS.map((app) => ({
       url: endpoints.getGetIntegrationHealthUrl(app.id),
       schema: schemas.GetIntegrationHealthResponse,
@@ -638,6 +660,16 @@ describe("demoFetch read-only and errors", () => {
     expect((await errorOf(res)).code).toBe("profile_not_found");
   });
 
+  it("answers 404 profile_not_found for the events of an unknown person", async () => {
+    const res = await demoFetch(
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent("u:nobody-at-all")}/events`,
+      undefined,
+      NOW,
+    );
+    expect(res.status).toBe(404);
+    expect((await errorOf(res)).code).toBe("profile_not_found");
+  });
+
   it("answers 404 not_found for an unknown deletion request", async () => {
     const res = await demoFetch(
       `/v1/apps/${NOTES}/deletion-requests/0199d6d0-0000-7000-8000-000000000000`,
@@ -741,6 +773,24 @@ describe("demoFetch read-only and errors", () => {
       "invalid_request",
       { field: "sessions_limit" },
     ],
+    [
+      "bad profile events limit",
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent(notesProfile.personKey)}/events?limit=201`,
+      "invalid_request",
+      { field: "limit" },
+    ],
+    [
+      "bad profile events cursor",
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent(notesProfile.personKey)}/events?before=garbage`,
+      "invalid_request",
+      { field: "before" },
+    ],
+    [
+      "bad profile events person key",
+      `/v1/apps/${NOTES}/profiles/${encodeURIComponent("x:123")}/events`,
+      "invalid_request",
+      { field: "person_key" },
+    ],
     ["bad app id", "/v1/apps/not-a-uuid", "invalid_request", { field: "app_id" }],
   ])("answers 400 for %s", async (_name, url, code, details) => {
     const res = await demoFetch(url, undefined, NOW);
@@ -814,5 +864,57 @@ describe("demoFetch language", () => {
     document.documentElement.lang = "";
 
     expect(await messageOf("/v1/unknown")).toBe("Not found");
+  });
+});
+
+describe("demoFetch profile events", () => {
+  type Ev = {
+    event_time: string;
+    name: string;
+    session_id: string;
+    install_id: string;
+    properties: Record<string, string>;
+  };
+  type Page = { events: Ev[]; next_before: string | null };
+  const path = `/v1/apps/${NOTES}/profiles/${encodeURIComponent(notesProfile?.personKey ?? "")}/events`;
+  const page = async (query: string): Promise<Page> => {
+    const res = await demoFetch(`${path}?${query}`, undefined, NOW);
+    expect(res.status).toBe(200);
+    return (await res.json()) as Page;
+  };
+
+  it("lists only custom events of the Notes catalog, newest first, with their property", async () => {
+    const all = await page("limit=200");
+    expect(all.events.length).toBeGreaterThan(0);
+    const names = new Set(all.events.map((e) => e.name));
+    for (const name of names) {
+      expect(["note_created", "note_shared", "search_used", "paywall_shown", "purchase"]).toContain(
+        name,
+      );
+    }
+    const times = all.events.map((e) => Date.parse(e.event_time));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    for (const e of all.events) {
+      expect(Object.values(e.properties).every((v) => typeof v === "string")).toBe(true);
+    }
+  });
+
+  it("pages through the cursor without repeats or gaps and is deterministic", async () => {
+    const all = await page("limit=200");
+    const seen: Ev[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 1000; i++) {
+      const next: Page = await page(
+        `limit=7${cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`,
+      );
+      seen.push(...next.events);
+      cursor = next.next_before;
+      if (cursor === null) break;
+    }
+    expect(cursor).toBeNull();
+    const key = (e: Ev) => `${e.event_time}|${e.session_id}|${e.name}`;
+    expect(new Set(seen.map(key)).size).toBe(seen.length);
+    expect(seen.slice(0, all.events.length).map(key)).toEqual(all.events.map(key));
+    expect(await page("limit=200")).toEqual(all);
   });
 });
