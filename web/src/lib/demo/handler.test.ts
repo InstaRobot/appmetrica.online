@@ -194,6 +194,73 @@ async function contractCases(): Promise<Record<string, Case[]>> {
         schema: schemas.GetRetentionResponse,
       },
     ],
+    listEvents: [
+      { url: endpoints.getListEventsUrl(NOTES, MONTH), schema: schemas.ListEventsResponse },
+      {
+        url: endpoints.getListEventsUrl(NOTES, {
+          ...MONTH,
+          compare: "none",
+          unit: "installs",
+          platform: ["ios"],
+          environment: "development",
+        }),
+        schema: schemas.ListEventsResponse,
+      },
+      { url: endpoints.getListEventsUrl(SITE, MONTH), schema: schemas.ListEventsResponse },
+      { url: endpoints.getListEventsUrl(BOT, MONTH), schema: schemas.ListEventsResponse },
+    ],
+    getEventReport: [
+      {
+        url: endpoints.getGetEventReportUrl(NOTES, "note_created", MONTH),
+        schema: schemas.GetEventReportResponse,
+      },
+      {
+        url: endpoints.getGetEventReportUrl(NOTES, "purchase", {
+          from: "2026-07-01",
+          to: "2026-10-14",
+          granularity: "week",
+          compare: "none",
+          country: ["RU"],
+        }),
+        schema: schemas.GetEventReportResponse,
+      },
+      {
+        url: endpoints.getGetEventReportUrl(NOTES, "search_used", {
+          from: "2026-10-12",
+          to: "2026-10-14",
+          granularity: "hour",
+        }),
+        schema: schemas.GetEventReportResponse,
+      },
+      {
+        url: endpoints.getGetEventReportUrl(NOTES, "never_sent", MONTH),
+        schema: schemas.GetEventReportResponse,
+      },
+    ],
+    getEventBreakdown: [
+      {
+        url: endpoints.getGetEventBreakdownUrl(NOTES, "note_created", {
+          ...MONTH,
+          property: "source",
+        }),
+        schema: schemas.GetEventBreakdownResponse,
+      },
+      {
+        url: endpoints.getGetEventBreakdownUrl(NOTES, "purchase", {
+          ...MONTH,
+          property: "plan",
+          limit: 2,
+        }),
+        schema: schemas.GetEventBreakdownResponse,
+      },
+      {
+        url: endpoints.getGetEventBreakdownUrl(NOTES, "purchase", {
+          ...MONTH,
+          property: "no_such_key",
+        }),
+        schema: schemas.GetEventBreakdownResponse,
+      },
+    ],
     getRealtime: [
       { url: endpoints.getGetRealtimeUrl(NOTES), schema: schemas.GetRealtimeResponse },
       {
@@ -346,6 +413,86 @@ describe("demoFetch contract", () => {
   it("reports authenticated owner without setup", async () => {
     const res = await demoFetch("/admin/v1/auth/state", undefined, NOW);
     expect(await res.json()).toEqual({ authenticated: true, setup_required: false });
+  });
+});
+
+describe("demoFetch events", () => {
+  type Count = { events: number; people: number };
+  type Body = {
+    events: ({ name: string } & Count)[];
+    truncated: boolean;
+    summary: Count & { events_per_person: number };
+    values: Count[];
+    other?: Count;
+    missing: Count;
+    error: { code: string; details: { field: string } };
+  };
+  const get = async (url: string) => {
+    const res = await demoFetch(url, undefined, NOW);
+    return { status: res.status, body: (await res.json()) as Body };
+  };
+  const base = `/v1/apps/${NOTES}/events`;
+  const q = `from=${MONTH.from}&to=${MONTH.to}`;
+
+  it("lists only custom events sorted by events, with prev_* only under compare", async () => {
+    const { body } = await get(`${base}?${q}`);
+    const names = body.events.map((e) => e.name);
+    expect(names.toSorted()).toEqual(
+      ["note_created", "note_shared", "paywall_shown", "purchase", "search_used"].toSorted(),
+    );
+    const counts = body.events.map((e) => e.events);
+    expect(counts).toEqual(counts.toSorted((a, b) => b - a));
+    expect(body.truncated).toBe(false);
+    expect(body.events[0]).toHaveProperty("prev_events");
+    const none = await get(`${base}?${q}&compare=none`);
+    expect(JSON.stringify(none.body)).not.toContain("prev_");
+  });
+
+  it("sums property values, other and missing to the events of the event", async () => {
+    const report = await get(`${base}/note_created?${q}`);
+    const total = report.body.summary.events;
+    expect(total).toBeGreaterThan(0);
+    for (const [name, key] of [
+      ["note_created", "source"],
+      ["purchase", "plan"],
+      ["search_used", "results"],
+    ] as const) {
+      const all = (await get(`${base}/${name}?${q}`)).body.summary.events;
+      const { body } = await get(`${base}/${name}/breakdown?${q}&property=${key}`);
+      const sum =
+        body.values.reduce((s, v) => s + v.events, 0) +
+        (body.other?.events ?? 0) +
+        body.missing.events;
+      expect(sum, name).toBe(all);
+    }
+  });
+
+  it("answers with zeros for a name without events and 404 for system names", async () => {
+    const { status, body } = await get(`${base}/never_sent?${q}`);
+    expect(status).toBe(200);
+    expect(body.summary).toMatchObject({ events: 0, people: 0, events_per_person: 0 });
+    for (const name of ["session_start", "session_end"]) {
+      for (const url of [`${base}/${name}?${q}`, `${base}/${name}/breakdown?${q}&property=x`]) {
+        const res = await get(url);
+        expect(res.status, url).toBe(404);
+        expect(res.body.error.code).toBe("event_not_found");
+      }
+    }
+  });
+
+  it("rejects bad property, limit and event name", async () => {
+    for (const [url, field] of [
+      [`${base}/purchase/breakdown?${q}&property=Bad`, "property"],
+      [`${base}/purchase/breakdown?${q}`, "property"],
+      [`${base}/purchase/breakdown?${q}&property=plan&limit=0`, "limit"],
+      [`${base}/purchase/breakdown?${q}&property=plan&limit=101`, "limit"],
+      [`${base}/Purchase?${q}`, "event_name"],
+    ] as const) {
+      const { status, body } = await get(url);
+      expect(status, url).toBe(400);
+      expect(body.error.code).toBe("invalid_request");
+      expect(body.error.details.field).toBe(field);
+    }
   });
 });
 
