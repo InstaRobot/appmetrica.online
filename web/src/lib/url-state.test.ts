@@ -349,4 +349,35 @@ describe("events url-state", () => {
     expect(onUrlUpdate.mock.lastCall?.[0].options.history).toBe("push");
     expect(result.current.state.env).toBe("development");
   });
+  it("reads the event page state: granularity, property and limit", () => {
+    const state = resolveEventsState(load("?period=30d&g=week&property=source&limit=50"), TODAY);
+    expect(state.granularity).toBe("week");
+    expect(state.property).toBe("source");
+    expect(state.limit).toBe(50);
+  });
+
+  it("defaults to daily buckets, no property and 20 values", () => {
+    const state = resolveEventsState(load(""), TODAY);
+    expect(state.granularity).toBe("day");
+    expect(state.property).toBeNull();
+    expect(state.limit).toBe(20);
+  });
+
+  it("replaces a granularity the period does not allow and ignores a bad property or limit", () => {
+    const hour = resolveEventsState(load("?period=30d&g=hour"), TODAY);
+    expect(hour.granularity).not.toBe("hour");
+    for (const bad of ["limit=0", "limit=101", "limit=abc", "limit=2.5"]) {
+      expect(resolveEventsState(load(`?${bad}`), TODAY).limit).toBe(20);
+    }
+    expect(resolveEventsState(load("?property=Not%20Valid"), TODAY).property).toBeNull();
+  });
+
+  it("does not write the default limit into the URL", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const { result } = renderHook(() => useEventsState("Europe/Moscow", TODAY), {
+      wrapper: withNuqsTestingAdapter({ searchParams: "", hasMemory: true, onUrlUpdate }),
+    });
+    await act(() => result.current.update({ property: "plan", limit: 20 }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?property=plan");
+  });
 });

@@ -5,6 +5,7 @@ import type {
   AudienceSummary,
   Breakdown,
   DeletionRequestList,
+  EventBreakdown,
   EventList,
   EventReport,
   IntegrationHealth,
@@ -1049,6 +1050,41 @@ describe("demo events catalog", () => {
     const search = await daily(NOTES, "search_used", "2026-09-26", "2026-10-13");
     // 26.09–03.10 — до релиза 3.5.0, 06–13.10 — после.
     expect(mean(search.slice(10))).toBeGreaterThan(1.3 * mean(search.slice(0, 8)));
+  });
+
+  // AC-009.3
+  it("splits note_created by source so that values, other and missing add up to the event", async () => {
+    const params = { from: "2026-09-14", to: "2026-10-13", granularity: "day", compare: "none" };
+    const report = await get<EventReport>(`/v1/apps/${NOTES}/events/note_created?${query(params)}`);
+    expect(report.property_keys.map((k) => k.key)).toContain("source");
+    for (const limit of [1, 2, 20]) {
+      const b = await get<EventBreakdown>(
+        `/v1/apps/${NOTES}/events/note_created/breakdown?${query({ ...params, property: "source", limit: String(limit) })}`,
+      );
+      const sum =
+        b.values.reduce((s, v) => s + v.events, 0) + (b.other?.events ?? 0) + b.missing.events;
+      expect(sum).toBe(report.summary.events);
+      expect(b.values.length).toBeLessThanOrEqual(limit);
+      expect(b.values[0]?.value).toBe("keyboard");
+    }
+    const top = await get<EventBreakdown>(
+      `/v1/apps/${NOTES}/events/note_created/breakdown?${query({ ...params, property: "source", limit: "1" })}`,
+    );
+    expect(top.other?.events).toBeGreaterThan(0);
+    const again = await get<EventBreakdown>(
+      `/v1/apps/${NOTES}/events/note_created/breakdown?${query({ ...params, property: "source", limit: "1" })}`,
+    );
+    expect(again).toEqual(top);
+  });
+
+  it("puts every event into missing for a property the event does not have", async () => {
+    const params = { from: "2026-09-14", to: "2026-10-13", granularity: "day", compare: "none" };
+    const report = await get<EventReport>(`/v1/apps/${NOTES}/events/note_created?${query(params)}`);
+    const b = await get<EventBreakdown>(
+      `/v1/apps/${NOTES}/events/note_created/breakdown?${query({ ...params, property: "plan" })}`,
+    );
+    expect(b.values).toEqual([]);
+    expect(b.missing.events).toBe(report.summary.events);
   });
 
   it("keeps the realtime feed on the catalog names", async () => {
