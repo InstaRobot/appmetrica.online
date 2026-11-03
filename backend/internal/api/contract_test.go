@@ -158,7 +158,7 @@ func TestReadAPI_ResponsesMatchOpenAPI(t *testing.T) {
 		{app + "/events/purchase/breakdown?" + period + "&property=Bad", http.StatusBadRequest},
 		{app + "/events?from=2024-01-01&to=2026-10-12", http.StatusBadRequest},
 		{app + "/events/session_start?" + period, http.StatusNotFound},
-		{"/v1/apps/" + uuid.NewString() + "/events", http.StatusNotFound},
+		{"/v1/apps/" + uuid.NewString() + "/events?" + period, http.StatusNotFound},
 		{app + "/retention?from=2026-10-12&to=2026-10-01", http.StatusBadRequest},
 		{app + "/profiles", http.StatusBadRequest},
 		{app + "/profiles/" + url.PathEscape("u:nobody"), http.StatusNotFound},

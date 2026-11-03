@@ -75,7 +75,7 @@
 | 400 | Невалидный запрос: `invalid_json`, `invalid_batch`, `unsupported_content_encoding`, `invalid_request`, `range_too_large` |
 | 401 | Нет или неверная аутентификация: `missing_app_key`, `invalid_app_key`, `unauthenticated` |
 | 403 | Аутентифицирован, но нельзя: `app_archived` (ingest), `insufficient_scope`, `csrf_check_failed` |
-| 404 | Не найдено или нет доступа по `app_id` ключа: `app_not_found`, `profile_not_found`, `not_found` |
+| 404 | Не найдено или нет доступа по `app_id` ключа: `app_not_found`, `profile_not_found`, `event_not_found`, `not_found` |
 | 409 | Конфликт: `last_passkey`, `app_name_taken`, `confirm_name_mismatch`, `deletion_pending`, `merge_in_progress`, `app_archived` |
 | 410 | Ссылка установки passkey истекла или использована: `setup_token_expired` |
 | 413 | Тело больше лимита: `payload_too_large` (ingest > 1 048 576 байт после распаковки; api > 65 536 байт) |
@@ -3615,6 +3615,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 403 | `csrf_check_failed` | Запрос отклонён защитой. | API: cookie-мутация без `X-Requested-With` |
 | 404 | `app_not_found` | Приложение не найдено. | API: нет приложения или оно вне `app_id` ключа |
 | 404 | `profile_not_found` | Профиль не найден. | API: у `person_key` нет событий |
+| 404 | `event_not_found` | Событие не входит в отчёт «События». | API: `getEventReport`, `getEventBreakdown` с системным именем (`session_start`, `session_end`) |
 | 404 | `not_found` | Не найдено. | API: ceremony, passkey, ключ, deletion request, setup-токен |
 | 409 | `last_passkey` | Нельзя удалить последний passkey. | Admin: удаление единственного passkey |
 | 409 | `app_name_taken` | Приложение с таким именем уже есть. | Admin: дубль `lower(name)` |
@@ -3644,3 +3645,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 2026-10-14 | 1.3 | `deleteApp` отзывает write-ключи приложения вместе с архивацией: ingest отвечает `401 invalid_app_key`; worker берёт запрос `app` не раньше чем через 16 мин (OQ-073) |
 | 2026-10-15 | 1.4 | Контракт 1.1.0 (§9.1.1, без повторного встраивания YAML): `PlatformList`, `App.platforms`/`AppSummary.platforms` (`platform` deprecated), `PortfolioRow.platforms`, `WriteKey.platform`, параметр `split=none\|platform` с `TimeSeries.splits[]`, фильтр `platform` у `getRealtime`, операции слияния `merge-preview`/`merges`/`merges/{merge_id}/retry`, `JobName` `app_merge`, `Conflict` `merge_in_progress`/`app_archived`, `WarningCode` `platform_missing`; «5 jobs» → 6 в `getSystemStatus` |
 | 2026-11-03 | 1.5 | FR-102, ingest: свои имена событий по шаблону `^[a-z][a-z0-9_]{0,63}$` (префикс `session_` зарезервирован, `unknown_event_name` теперь значит «не по шаблону или зарезервировано»), необязательное поле `properties`, код отказа `property_looks_like_pii`; векторы I-14 (`Purchase`) и I-39…I-43 |
+| 2026-11-03 | 1.6 | FR-102, Read API: тег `Events`, операции `listEvents`, `getEventReport`, `getEventBreakdown` (`GET /v1/apps/{app_id}/events[/{event_name}[/breakdown]]`), схемы `EventList`, `EventReport`, `EventBreakdown`; код ошибки `event_not_found` (404, системное имя события) |
