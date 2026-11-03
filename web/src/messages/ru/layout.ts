@@ -38,6 +38,7 @@ export const layout: typeof en = {
     label: "Разделы приложения",
     audience: "Аудитория",
     retention: "Retention",
+    events: "События",
     realtime: "Realtime",
     profiles: "Профили",
     integration: "Интеграция",

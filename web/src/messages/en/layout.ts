@@ -37,6 +37,7 @@ export const layout = {
     label: "App sections",
     audience: "Audience",
     retention: "Retention",
+    events: "Events",
     realtime: "Realtime",
     profiles: "Profiles",
     integration: "Integration",

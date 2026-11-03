@@ -45,3 +45,19 @@ export function audienceCurl(
   const path = `/v1/apps/${encodeURIComponent(appId)}/audience/${report}?${reportQuery(state, report)}`;
   return buildCurl(path, baseUrl);
 }
+
+// Список событий (listEvents): период, сравнение с прошлым периодом, фильтры, окружение и unit.
+export function eventsCurl(
+  appId: string,
+  state: Pick<AudienceState, "period" | "filters" | "env" | "unit">,
+  baseUrl?: string,
+): string {
+  const q = new URLSearchParams({ from: state.period.from, to: state.period.to });
+  q.set("compare", "previous_period");
+  for (const [key, values] of Object.entries(state.filters)) {
+    for (const value of values) q.append(key, value);
+  }
+  q.set("environment", state.env);
+  q.set("unit", state.unit);
+  return buildCurl(`/v1/apps/${encodeURIComponent(appId)}/events?${q}`, baseUrl);
+}

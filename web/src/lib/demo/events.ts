@@ -1,8 +1,8 @@
 // Отчёт «События» демо-режима в форме ответов Read API (api.yaml: listEvents, getEventReport,
 // getEventBreakdown) поверх model.ts. События считаются по дням из сессий приложения: дневное число
 // событий — сессии × события на сессию × шум по ключу (app, env, name, day); недели, месяцы и часы
-// режут те же дни, поэтому сумма ряда равна сводке. Каталог — EVENT_CATALOG: новое событие или свойство
-// добавляется туда, а не в код расчёта.
+// режут те же дни, поэтому сумма ряда равна сводке. Каталог — EVENT_CATALOG (catalog.ts): новое событие или
+// свойство добавляется туда, а не в код расчёта.
 import type {
   EventBreakdown,
   EventCount,
@@ -14,9 +14,9 @@ import type {
   Granularity,
 } from "@/lib/api/gen/model";
 import { addDays } from "@/lib/period";
-import { DEMO_APP_IDS } from "./apps";
+import { EVENT_CATALOG, type EventSpec } from "./catalog";
 import { dayStats, hourSessions, hourStats, periodStats, type Scope } from "./model";
-import { jitter, roundRandom, splitTotal, type Weighted } from "./random";
+import { jitter, roundRandom, splitTotal } from "./random";
 import { buckets, previousPeriod } from "./reports";
 import { eachDay, formatZoned, HOUR_MS, localTime, zonedMidnight } from "./time";
 
@@ -27,154 +27,36 @@ export const SYSTEM_EVENT_NAMES: readonly string[] = ["session_start", "session_
 export const EVENT_PROPERTY_KEYS_MAX = 50;
 export const EVENT_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
-type PropertySpec = {
-  key: string;
-  values: Weighted<string>;
-  // Доля событий без ключа (0 — ключ есть всегда).
-  missing: number;
-};
-
-type EventSpec = {
-  name: string;
-  perSession: number; // событий на сессию
-  reach: number; // доля активных людей периода, сделавших событие
-  property: PropertySpec;
-};
-
-// results: число 0…40 строкой, веса убывают — у значений есть хвост «остальные» при limit=20.
-const SEARCH_RESULTS: Weighted<string> = Array.from({ length: 41 }, (_, i) => [String(i), 41 - i]);
-
-const NOTE_SOURCES = [
-  "keyboard",
-  "voice",
-  "share",
-  "widget",
-  "shortcut",
-  "camera",
-  "clipboard",
-  "template",
-  "import",
-  "email",
-  "web_clipper",
-  "watch",
-  "siri",
-  "scan",
-  "drag_drop",
-  "dictation",
-  "files",
-  "messages",
-  "safari",
-  "spotlight",
-  "notification",
-  "handoff",
-  "quick_note",
-  "lock_screen",
-  "api",
-];
-
-// События демо-приложений (имена — как в ленте realtime, live.ts).
-export const EVENT_CATALOG: Readonly<Record<string, readonly EventSpec[]>> = {
-  [DEMO_APP_IDS.notes]: [
-    {
-      name: "note_created",
-      perSession: 1.6,
-      reach: 0.62,
-      property: {
-        key: "source",
-        values: NOTE_SOURCES.map((v, i): [string, number] => [v, 30 - i]),
-        missing: 0.05,
-      },
-    },
-    {
-      name: "search_used",
-      perSession: 0.7,
-      reach: 0.34,
-      property: { key: "results", values: SEARCH_RESULTS, missing: 0 },
-    },
-    {
-      name: "note_shared",
-      perSession: 0.35,
-      reach: 0.18,
-      property: {
-        key: "target",
-        values: [
-          ["messages", 4],
-          ["mail", 3],
-          ["telegram", 2],
-          ["copy_link", 1],
-        ],
-        missing: 0,
-      },
-    },
-    {
-      name: "paywall_shown",
-      perSession: 0.2,
-      reach: 0.14,
-      property: {
-        key: "place",
-        values: [
-          ["onboarding", 1],
-          ["limit", 1],
-          ["settings", 1],
-        ],
-        missing: 0,
-      },
-    },
-    {
-      name: "purchase",
-      perSession: 0.03,
-      reach: 0.025,
-      property: {
-        key: "plan",
-        values: [
-          ["monthly", 5],
-          ["yearly", 3],
-          ["lifetime", 1],
-        ],
-        missing: 0.1,
-      },
-    },
-  ],
-  [DEMO_APP_IDS.site]: [
-    {
-      name: "docs_opened",
-      perSession: 0.9,
-      reach: 0.4,
-      property: {
-        key: "section",
-        values: [
-          ["quickstart", 5],
-          ["api", 3],
-          ["integration", 2],
-        ],
-        missing: 0.03,
-      },
-    },
-    {
-      name: "signup_clicked",
-      perSession: 0.08,
-      reach: 0.06,
-      property: {
-        key: "plan",
-        values: [
-          ["free", 4],
-          ["team", 1],
-        ],
-        missing: 0,
-      },
-    },
-  ],
-};
-
 export function eventSpecs(scope: Scope): readonly EventSpec[] {
   return EVENT_CATALOG[scope.demo.app.id] ?? [];
+}
+
+// storyLift — множитель сюжетов каталога в этот день: кампания приложения (только production, как у аудитории)
+// и релиз события.
+function storyLift(scope: Scope, spec: EventSpec, day: string): number {
+  let lift = 1;
+  const { campaignLift, releaseLift } = spec;
+  if (
+    campaignLift !== undefined &&
+    scope.env === "production" &&
+    scope.demo.model.campaigns.some((c) => day >= c.from && day < addDays(c.from, c.days))
+  ) {
+    lift *= campaignLift;
+  }
+  if (releaseLift && day >= releaseLift.from && day < addDays(releaseLift.from, releaseLift.days)) {
+    lift *= releaseLift.factor;
+  }
+  return lift;
 }
 
 // dayEvents — события имени за день.
 function dayEvents(scope: Scope, spec: EventSpec, day: string): number {
   const sessions = dayStats(scope, day).sessions;
   const expected =
-    sessions * spec.perSession * jitter(0.3, scope.demo.app.id, scope.env, spec.name, day, "ev");
+    sessions *
+    spec.perSession *
+    storyLift(scope, spec, day) *
+    jitter(0.3, scope.demo.app.id, scope.env, spec.name, day, "ev");
   return roundRandom(expected, scope.demo.app.id, scope.env, spec.name, day, "ev");
 }
 

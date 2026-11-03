@@ -67,6 +67,7 @@ describe("AppHeader", () => {
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Аудитория",
       "Retention",
+      "События",
       "Realtime",
       "Профили",
       "Интеграция",

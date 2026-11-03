@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ListChecks,
   type LucideIcon,
   PlugZap,
   Radio,
@@ -17,13 +18,21 @@ import { useMessages } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import type { Messages } from "@/messages";
 
-export type AppTab = "" | "retention" | "realtime" | "profiles" | "integration" | "settings";
+export type AppTab =
+  | ""
+  | "retention"
+  | "events"
+  | "realtime"
+  | "profiles"
+  | "integration"
+  | "settings";
 
 type TabLabel = Exclude<keyof Messages["layout"]["appTabs"], "label">;
 
 const TABS: { tab: AppTab; label: TabLabel; icon: LucideIcon }[] = [
   { tab: "", label: "audience", icon: Users },
   { tab: "retention", label: "retention", icon: Repeat },
+  { tab: "events", label: "events", icon: ListChecks },
   { tab: "realtime", label: "realtime", icon: Radio },
   { tab: "profiles", label: "profiles", icon: UserSearch },
   { tab: "integration", label: "integration", icon: PlugZap },

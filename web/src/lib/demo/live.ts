@@ -11,7 +11,7 @@ import type {
   RecentEvent,
 } from "@/lib/api/gen/model";
 import { DEMO_APP_IDS } from "./apps";
-import type { RejectBurst } from "./catalog";
+import { EVENT_CATALOG, type RejectBurst } from "./catalog";
 import {
   type DemoApp,
   dayStats,
@@ -31,16 +31,12 @@ const REALTIME_MINUTES = 30;
 const RECENT_LIMIT = 50;
 const RECENT_LOOKBACK_MINUTES = 360;
 
-// Свои события Notes (имена совпадают с каталогом демо): доля ленты и веса. Выбор — отдельным
-// хэшем от (app, env, minute, j), чтобы не сдвигать остальные розыгрыши строки.
+// Свои события Notes: имена и веса — из каталога демо (EVENT_CATALOG, perSession), доля ленты — ниже. Выбор —
+// отдельным хэшем от (app, env, minute, j), чтобы не сдвигать остальные розыгрыши строки.
 const NOTES_CUSTOM_SHARE = 0.4;
-const NOTES_CUSTOM_EVENTS: readonly (readonly [name: string, weight: number])[] = [
-  ["note_created", 5],
-  ["note_shared", 2],
-  ["search_used", 3],
-  ["paywall_shown", 1.5],
-  ["purchase", 0.5],
-];
+const NOTES_CUSTOM_EVENTS: readonly (readonly [name: string, weight: number])[] = (
+  EVENT_CATALOG[DEMO_APP_IDS.notes] ?? []
+).map((spec) => [spec.name, spec.perSession]);
 
 function customName(appId: string, env: Environment, minute: number, j: number): string | null {
   if (

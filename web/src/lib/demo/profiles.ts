@@ -13,8 +13,7 @@ import type {
 } from "@/lib/api/gen/model";
 import { addDays, todayIn } from "@/lib/period";
 import { DEMO_APP_IDS } from "./apps";
-import type { SegmentModel } from "./catalog";
-import { EVENT_CATALOG } from "./events";
+import { EVENT_CATALOG, type SegmentModel } from "./catalog";
 import { type DemoApp, type InstallAttrs, releaseVersions, sampleAttrs, segmentOf } from "./model";
 import { hexFrom, pickWeighted, rand, seeded, uuidFrom, type Weighted } from "./random";
 import { eachDay, HOUR_MS, isoUtc, maxDay, minDay, zonedMidnight } from "./time";

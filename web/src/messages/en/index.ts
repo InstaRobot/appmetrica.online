@@ -7,6 +7,7 @@ import { demo } from "./demo";
 import { demoData } from "./demoData";
 import { docs } from "./docs";
 import { errors } from "./errors";
+import { events } from "./events";
 import { integration } from "./integration";
 import { landing } from "./landing";
 import { layout } from "./layout";
@@ -34,6 +35,7 @@ export const en = {
   apps,
   integration,
   errors,
+  events,
   settings,
   profiles,
   demoData,

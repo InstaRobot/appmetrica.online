@@ -820,3 +820,150 @@ export const APP_MODELS: Readonly<Record<string, AppModel>> = {
   [DEMO_APP_IDS.bot]: BOT,
   [DEMO_APP_IDS.oldGame]: OLD_GAME,
 };
+
+export type PropertySpec = {
+  key: string;
+  values: Weighted<string>;
+  // Доля событий без ключа (0 — ключ есть всегда).
+  missing: number;
+};
+
+export type EventSpec = {
+  name: string;
+  perSession: number; // событий на сессию
+  reach: number; // доля активных людей периода, сделавших событие
+  property: PropertySpec;
+  // Сюжет кампании: во время кампаний приложения (AppModel.campaigns) событий на сессию в factor раз больше.
+  campaignLift?: number;
+  // Сюжет релиза: days дней с from событий на сессию в factor раз больше (новая функция версии).
+  releaseLift?: { from: string; days: number; factor: number };
+};
+
+// results: число 0…40 строкой, веса убывают — у значений есть хвост «остальные» при limit=20.
+const SEARCH_RESULTS: Weighted<string> = Array.from({ length: 41 }, (_, i) => [String(i), 41 - i]);
+
+const NOTE_SOURCES = [
+  "keyboard",
+  "voice",
+  "share",
+  "widget",
+  "shortcut",
+  "camera",
+  "clipboard",
+  "template",
+  "import",
+  "email",
+  "web_clipper",
+  "watch",
+  "siri",
+  "scan",
+  "drag_drop",
+  "dictation",
+  "files",
+  "messages",
+  "safari",
+  "spotlight",
+  "notification",
+  "handoff",
+  "quick_note",
+  "lock_screen",
+  "api",
+];
+
+// События демо-приложений: единственный источник имён и весов для отчётов «События», профилей и ленты
+// realtime (live.ts берёт доли из perSession). Новое событие или свойство добавляется сюда.
+export const EVENT_CATALOG: Readonly<Record<string, readonly EventSpec[]>> = {
+  [DEMO_APP_IDS.notes]: [
+    {
+      name: "note_created",
+      perSession: 1.6,
+      campaignLift: 1.8,
+      reach: 0.62,
+      property: {
+        key: "source",
+        values: NOTE_SOURCES.map((v, i): [string, number] => [v, 30 - i]),
+        missing: 0.05,
+      },
+    },
+    {
+      name: "search_used",
+      perSession: 0.7,
+      // Релиз 3.5.0 (NOTES_RELEASES) принёс новый поиск: две недели им пользуются заметно чаще.
+      releaseLift: { from: "2026-10-06", days: 14, factor: 1.6 },
+      reach: 0.34,
+      property: { key: "results", values: SEARCH_RESULTS, missing: 0 },
+    },
+    {
+      name: "note_shared",
+      perSession: 0.35,
+      reach: 0.18,
+      property: {
+        key: "target",
+        values: [
+          ["messages", 4],
+          ["mail", 3],
+          ["telegram", 2],
+          ["copy_link", 1],
+        ],
+        missing: 0,
+      },
+    },
+    {
+      name: "paywall_shown",
+      perSession: 0.2,
+      reach: 0.14,
+      property: {
+        key: "place",
+        values: [
+          ["onboarding", 1],
+          ["limit", 1],
+          ["settings", 1],
+        ],
+        missing: 0,
+      },
+    },
+    {
+      name: "purchase",
+      perSession: 0.03,
+      reach: 0.025,
+      property: {
+        key: "plan",
+        values: [
+          ["monthly", 5],
+          ["yearly", 3],
+          ["lifetime", 1],
+        ],
+        missing: 0.1,
+      },
+    },
+  ],
+  [DEMO_APP_IDS.site]: [
+    {
+      name: "docs_opened",
+      perSession: 0.9,
+      reach: 0.4,
+      property: {
+        key: "section",
+        values: [
+          ["quickstart", 5],
+          ["api", 3],
+          ["integration", 2],
+        ],
+        missing: 0.03,
+      },
+    },
+    {
+      name: "signup_clicked",
+      perSession: 0.08,
+      reach: 0.06,
+      property: {
+        key: "plan",
+        values: [
+          ["free", 4],
+          ["team", 1],
+        ],
+        missing: 0,
+      },
+    },
+  ],
+};

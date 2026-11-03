@@ -121,6 +121,7 @@ function make(locale: Locale) {
     maximumSignificantDigits: 2,
   });
   const deltaFormat = new Intl.NumberFormat(t.intl, { maximumFractionDigits: 1 });
+  const decimalFormat = new Intl.NumberFormat(t.intl, { maximumFractionDigits: 2 });
   const timeFormats = new Map<string, Intl.DateTimeFormat>();
 
   // Время «14:32» или «14:32:05» в timeZone; неизвестная зона — UTC.
@@ -170,6 +171,11 @@ function make(locale: Locale) {
   return {
     formatInt(value: number | null | undefined): string {
       return isNumber(value) ? normalizeSpaces(intFormat.format(value)) : DASH;
+    },
+
+    // Отношение с двумя знаками после запятой: «2,5» / «2.5» (событий на человека).
+    formatDecimal(value: number | null | undefined): string {
+      return isNumber(value) ? normalizeSpaces(decimalFormat.format(value)) : DASH;
     },
 
     // Доля 0..1 → «38,1 %» / «38.1%».

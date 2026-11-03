@@ -116,7 +116,10 @@ export type ReportParams = {
   unit: Unit;
 } & Filters;
 
-function resolvePeriod(search: AudienceSearch, today: string): PeriodValue {
+function resolvePeriod(
+  search: Pick<AudienceSearch, "period" | "from" | "to">,
+  today: string,
+): PeriodValue {
   const { period, from, to } = search;
   if (period && period !== "custom") return presetPeriod(period, today);
   // Без пресета даты задают произвольный период; неполный или перевёрнутый — «7 дней».
@@ -304,5 +307,38 @@ export function useRealtimeState() {
     setPlatform: (platform: Platform | null) =>
       setSearch({ platform: platform ? [platform] : null }),
     setEnv: (env: Environment) => setSearch({ env }),
+  };
+}
+
+// URL-состояние вкладки «События»: период, фильтры, окружение и unit — те же параметры, что у других вкладок,
+// поэтому переход между ними их не теряет.
+export const eventsSearchParams = {
+  period: parseAsStringLiteral(PERIOD_PRESETS),
+  from: isoDate,
+  to: isoDate,
+  ...filterParams,
+  ...scopeParams,
+};
+
+export type EventsSearch = inferParserType<typeof eventsSearchParams>;
+export type EventsSearchPatch = { [K in keyof EventsSearch]?: EventsSearch[K] | null };
+
+export type EventsState = Pick<AudienceState, "period" | "filters" | "env" | "unit">;
+
+export function resolveEventsState(search: EventsSearch, today: string): EventsState {
+  return {
+    period: resolvePeriod(search, today),
+    filters: resolveFilters(search),
+    env: search.env,
+    unit: search.unit,
+  };
+}
+
+// useEventsState читает состояние вкладки из URL; каждое изменение — новая запись истории.
+export function useEventsState(timezone: string, today: string = todayIn(timezone)) {
+  const [search, setSearch] = useQueryStates(eventsSearchParams, { history: "push" });
+  return {
+    state: resolveEventsState(search, today),
+    update: (patch: EventsSearchPatch) => setSearch(patch),
   };
 }
