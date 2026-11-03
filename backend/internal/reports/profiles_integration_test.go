@@ -81,8 +81,8 @@ func TestProfileEvents_Pagination(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, first.SessionID)
 }
 
-// События всех установок человека; анонимная установка — свой человек i:<id>; environment фильтрует события,
-// по умолчанию production; limit по умолчанию 50.
+// События всех установок человека; анонимная установка — свой человек i:<id>; без environment — все окружения
+// (как у Profile), явный environment фильтрует; limit по умолчанию 50.
 func TestProfileEvents_InstallsAndEnvironment(t *testing.T) {
 	rows := concat(
 		visit(t, 1, "", "2026-10-01T09:00:00Z", time.Minute),
@@ -96,13 +96,21 @@ func TestProfileEvents_InstallsAndEnvironment(t *testing.T) {
 	svc := newService(startWith(t, rows))
 
 	page := profileEvents(t, svc, ProfileEventsQuery{PersonKey: "u:U"})
+	require.Len(t, page.Events, 3, "без environment — production и development")
+	require.Equal(t, "c", page.Events[0].Name)
+	require.Equal(t, EnvDevelopment, page.Events[0].Environment)
+	require.Equal(t, "b", page.Events[1].Name)
+	require.Equal(t, EnvProduction, page.Events[1].Environment)
+	require.Equal(t, install(2), page.Events[1].InstallID)
+	require.Equal(t, map[string]string{"k": "v"}, page.Events[1].Properties)
+	require.Equal(t, "a", page.Events[2].Name)
+	require.NotNil(t, page.Events[2].Properties, "без свойств — пустой объект")
+	require.Empty(t, page.NextBefore)
+
+	page = profileEvents(t, svc, ProfileEventsQuery{PersonKey: "u:U", Environment: EnvProduction})
 	require.Len(t, page.Events, 2)
 	require.Equal(t, "b", page.Events[0].Name)
-	require.Equal(t, install(2), page.Events[0].InstallID)
-	require.Equal(t, map[string]string{"k": "v"}, page.Events[0].Properties)
 	require.Equal(t, "a", page.Events[1].Name)
-	require.NotNil(t, page.Events[1].Properties, "без свойств — пустой объект")
-	require.Empty(t, page.NextBefore)
 
 	page = profileEvents(t, svc, ProfileEventsQuery{PersonKey: "u:U", Environment: EnvDevelopment})
 	require.Len(t, page.Events, 1)

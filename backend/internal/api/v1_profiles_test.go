@@ -323,6 +323,30 @@ func profileEventsHTTP(t *testing.T, e *portfolioEnv, app testutil.ScenarioApp, 
 	return got
 }
 
+// listProfileEvents без environment отдаёт события всех окружений с полем environment (как getProfile), явный
+// environment фильтрует.
+func TestProfileEvents_HTTPEnvironment(t *testing.T) {
+	e := newPortfolioEnv(t)
+	f := seedProfileEvents(t, e)
+	msk := testutil.ScenarioApps[0]
+	key := url.PathEscape("u:" + f.user)
+	devRow := liveSession(msk, f.installA, reports.EnvDevelopment, time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC))
+	devRow.UserID, devRow.Name = f.user, "debug_event"
+	require.NoError(t, e.env.CH.InsertEvents(t.Context(), []chstore.EventRow{devRow}))
+
+	all := profileEventsHTTP(t, e, msk, key, "limit=200")
+	require.Len(t, all.Events, 7)
+	require.Equal(t, "debug_event", all.Events[0].Name)
+	require.Equal(t, gen.EnvironmentDevelopment, all.Events[0].Environment)
+	require.Equal(t, gen.EnvironmentProduction, all.Events[1].Environment)
+
+	prod := profileEventsHTTP(t, e, msk, key, "limit=200&environment=production")
+	require.Len(t, prod.Events, 6)
+	dev := profileEventsHTTP(t, e, msk, key, "limit=200&environment=development")
+	require.Len(t, dev.Events, 1)
+	require.Equal(t, "debug_event", dev.Events[0].Name)
+}
+
 // listProfileEvents: события всех установок человека новые первыми, курсор next_before ведёт на следующую
 // страницу, системные события и чужие люди не попадают, свойства — объект строк.
 func TestProfileEvents_HTTP(t *testing.T) {
@@ -331,7 +355,7 @@ func TestProfileEvents_HTTP(t *testing.T) {
 	msk := testutil.ScenarioApps[0]
 	key := url.PathEscape("u:" + f.user)
 
-	// environment по умолчанию — production; у installB сессия development, но события production.
+	// Без environment — все окружения; здесь все события production.
 	first := profileEventsHTTP(t, e, msk, key, "limit=4")
 	require.Len(t, first.Events, 4)
 	require.True(t, first.NextBefore.IsSpecified() && !first.NextBefore.IsNull())
@@ -340,6 +364,7 @@ func TestProfileEvents_HTTP(t *testing.T) {
 	require.Equal(t, map[string]string{"plan": "year"}, first.Events[0].Properties)
 	require.Equal(t, "ios", first.Events[0].Platform)
 	require.Equal(t, "3.4.0", first.Events[0].AppVersion)
+	require.Equal(t, gen.EnvironmentProduction, first.Events[0].Environment)
 
 	second := profileEventsHTTP(t, e, msk, key, "limit=4&before="+url.QueryEscape(first.NextBefore.MustGet()))
 	require.Len(t, second.Events, 2)
