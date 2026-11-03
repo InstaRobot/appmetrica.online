@@ -99,6 +99,10 @@ export const integration: typeof en = {
       description: "user_id похож на email или телефон",
       hint: "Передавайте непрозрачный внутренний ID (UUID из вашего бэкенда); Telegram ID — через HMAC",
     },
+    property_looks_like_pii: {
+      description: "Свойство события похоже на email или телефон",
+      hint: "Не передавайте персональные данные в свойствах: отправляйте непрозрачный ID или не отправляйте свойство",
+    },
     duration_required: {
       description: "У session_end нет duration_ms",
       hint: "Передавайте длительность сессии в миллисекундах",

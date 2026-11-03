@@ -145,14 +145,20 @@ func uuidField(index int, insertID, field string, raw json.RawMessage) (uuid.UUI
 	return id, nil
 }
 
+// Системные имена — значения SystemEventName из ingest.yaml. Своих имён пока нет: отказ прежний (FR-102, Task 3).
+const (
+	systemEventSessionStart = "session_start"
+	systemEventSessionEnd   = "session_end"
+)
+
 func nameField(index int, insertID string, raw json.RawMessage) (ingestapi.EventName, *ingestapi.Rejection) {
 	s, present, ok := stringField(raw)
-	switch name := ingestapi.EventName(s); {
+	switch name := s; {
 	case !present:
 		return "", missingField(index, insertID, "name")
 	case !ok:
 		return "", reject(index, insertID, ingestapi.RejectionCodeInvalidField, "name", "name должен быть строкой.")
-	case name == ingestapi.EventNameSessionStart || name == ingestapi.EventNameSessionEnd:
+	case name == systemEventSessionStart || name == systemEventSessionEnd:
 		return name, nil
 	default:
 		return "", reject(index, insertID, ingestapi.RejectionCodeUnknownEventName, "name",
@@ -181,7 +187,7 @@ func timestampField(index int, insertID string, raw json.RawMessage) (time.Time,
 // durationField: целое 0..86 400 000, обязательно для session_end.
 func durationField(index int, insertID string, name ingestapi.EventName, raw json.RawMessage) (int64, *ingestapi.Rejection) {
 	if isNull(raw) {
-		if name == ingestapi.EventNameSessionEnd {
+		if name == systemEventSessionEnd {
 			return 0, reject(index, insertID, ingestapi.RejectionCodeDurationRequired, "duration_ms",
 				"Для session_end обязательно поле duration_ms (0..86400000).")
 		}

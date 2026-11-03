@@ -91,14 +91,18 @@ describe("llms.txt", () => {
     expect(llms).not.toContain("i.appmetrica.online");
   });
 
-  it.each(["Platform", "DeviceType", "Environment", "SystemEventName", "RejectionCode", "WarningCode"])(
-    "lists every %s value of the ingest contract",
-    (schema) => {
-      const values = contractEnum(schema);
-      expect(values.length).toBeGreaterThan(1);
-      for (const value of values) expect(llms).toContain(`\`${value}\``);
-    },
-  );
+  it.each([
+    "Platform",
+    "DeviceType",
+    "Environment",
+    "SystemEventName",
+    "RejectionCode",
+    "WarningCode",
+  ])("lists every %s value of the ingest contract", (schema) => {
+    const values = contractEnum(schema);
+    expect(values.length).toBeGreaterThan(1);
+    for (const value of values) expect(llms).toContain(`\`${value}\``);
+  });
 
   it("states the batch limit of the contract", () => {
     const maxItems = contract.match(

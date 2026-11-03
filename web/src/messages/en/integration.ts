@@ -100,6 +100,10 @@ export const integration = {
       description: "user_id looks like an email or a phone number",
       hint: "Send an opaque internal ID (a UUID from your backend); pass a Telegram ID through HMAC",
     },
+    property_looks_like_pii: {
+      description: "An event property looks like an email or a phone number",
+      hint: "Do not send personal data in properties; send an opaque ID or leave the property out",
+    },
     duration_required: {
       description: "session_end has no duration_ms",
       hint: "Send the session duration in milliseconds",

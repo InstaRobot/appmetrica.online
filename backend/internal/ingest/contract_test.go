@@ -93,9 +93,7 @@ func TestIngestResponses_InternalErrorMatchesSpec(t *testing.T) {
 // Спека FR-102 §1: имя события — строка по шаблону, системные имена описывает SystemEventName, у события
 // есть необязательные properties (до 50 ключей), новый код отказа property_looks_like_pii.
 func TestContract_EventSchemaAllowsCustomNames(t *testing.T) {
-	swagger, err := ingestapi.GetSwagger()
-	require.NoError(t, err)
-	schemas := swagger.Components.Schemas
+	schemas := ingestSpec(t).Components.Schemas
 
 	name := schemas["EventName"].Value
 	require.True(t, name.Type.Is("string"))
@@ -114,4 +112,6 @@ func TestContract_EventSchemaAllowsCustomNames(t *testing.T) {
 	require.NotContains(t, schemas["Event"].Value.Required, "properties")
 
 	require.Contains(t, schemas["RejectionCode"].Value.Enum, "property_looks_like_pii")
+	require.Equal(t, ingestapi.RejectionCodePropertyLooksLikePii, ingestapi.RejectionCode("property_looks_like_pii"))
+	_ = ingestapi.Event{}.Properties // поле есть и необязательное (указатель)
 }

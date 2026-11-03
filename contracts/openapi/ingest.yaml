@@ -211,6 +211,15 @@ components:
       enum: [production, development]
     EventName:
       type: string
+      pattern: '^[a-z][a-z0-9_]{0,63}$'
+      description: |
+        Event name: a system name (see SystemEventName) or a custom one. Lowercase letters, digits and
+        underscores, starting with a letter, up to 64 characters. Any name starting with `session_`
+        other than the two system names is reserved and rejected with `unknown_event_name`.
+      example: purchase
+    SystemEventName:
+      type: string
+      description: System events that describe sessions.
       enum: [session_start, session_end]
     EventContext:
       type: object
@@ -269,6 +278,18 @@ components:
           minimum: 0
           maximum: 86400000
           description: Required for session_end; time spent in the foreground
+        properties:
+          type: object
+          maxProperties: 50
+          description: >-
+            Event properties. Keys match ^[a-z][a-z0-9_]{0,63}$; values are a string (up to 256 characters),
+            a number or a boolean. Stored as strings; numbers in shortest decimal form, booleans as
+            "true"/"false".
+          additionalProperties:
+            oneOf:
+              - { type: string, maxLength: 256 }
+              - { type: number }
+              - { type: boolean }
         context: { $ref: '#/components/schemas/EventContext' }
     EventBatch:
       type: object
@@ -297,6 +318,7 @@ components:
         - unknown_event_name
         - event_too_old
         - user_id_looks_like_pii
+        - property_looks_like_pii
         - duration_required
         - install_rate_limited
     WarningCode:
@@ -424,7 +446,7 @@ components:
         rejected:
           - { index: 1, insert_id: null, code: missing_field, field: 'events[1].insert_id', message: 'Field insert_id is required.', retryable: false }
           - { index: 2, insert_id: 0199d6c1-0000-7000-8000-000000000002, code: invalid_field, field: 'events[2].install_id', message: 'install_id must be a UUID other than the nil UUID.', retryable: false }
-          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'Allowed names: session_start, session_end.', retryable: false }
+          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'The name must match ^[a-z][a-z0-9_]{0,63}$ and must not be reserved.', retryable: false }
           - { index: 4, insert_id: 0199d6c1-0000-7000-8000-000000000004, code: event_too_old, field: 'events[4].timestamp', message: 'Event is older than 7 days after clock correction.', retryable: false }
           - { index: 5, insert_id: 0199d6c1-0000-7000-8000-000000000005, code: user_id_looks_like_pii, field: 'events[5].user_id', message: 'user_id looks like an email or a phone number. Send an opaque ID.', retryable: false }
           - { index: 6, insert_id: 0199d6c1-0000-7000-8000-000000000006, code: duration_required, field: 'events[6].duration_ms', message: 'session_end requires duration_ms (0..86400000).', retryable: false }

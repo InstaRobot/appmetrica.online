@@ -89,7 +89,7 @@ func NewEventRow(b *Batch, ev *Event) chstore.EventRow {
 		SentAt:      b.SentAt,
 		ReceivedAt:  b.ReceivedAt,
 		InsertID:    ev.InsertID,
-		Name:        string(ev.Name),
+		Name:        ev.Name,
 		InstallID:   ev.InstallID,
 		UserID:      ev.UserID,
 		SessionID:   ev.SessionID,

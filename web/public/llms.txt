@@ -195,6 +195,7 @@ Rejection codes in `rejected[].code`:
 | `duration_required` | `session_end` without `duration_ms` | No |
 | `event_too_old` | Older than 7 days after clock correction | No |
 | `user_id_looks_like_pii` | `user_id` looks like an email or a phone number | No |
+| `property_looks_like_pii` | A string property value looks like an email or a phone number | No |
 | `install_rate_limited` | More than 1,000 events at once or 100 per minute from one installation | Yes, after 60 s |
 
 Warning codes in `warnings[].code` (the event is accepted):

@@ -94,6 +94,7 @@ The first event is accepted, the second one is rejected:
 | `duration_required` | A `session_end` has no `duration_ms` | No |
 | `event_too_old` | After clock correction, the event is older than 7 days | No |
 | `user_id_looks_like_pii` | `user_id` looks like an email address or a phone number | No |
+| `property_looks_like_pii` | A string property value looks like an email address or a phone number | No |
 | `install_rate_limited` | More than 1,000 events at once or 100 per minute from this installation | Yes, after 60 s |
 
 Rejected events are shown on the **Integration** tab, with their code and app version, for 7 days
