@@ -1,6 +1,6 @@
 import { createLoader } from "nuqs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { audienceCurl, buildCurl, READ_API_URL, readApiBaseUrl } from "./copy-as-curl";
+import { audienceCurl, buildCurl, eventsCurl, READ_API_URL, readApiBaseUrl } from "./copy-as-curl";
 import { audienceSearchParams, resolveAudienceState } from "./url-state";
 
 const loadAudienceSearch = createLoader(audienceSearchParams);
@@ -43,6 +43,12 @@ describe("copy-as-curl", () => {
     );
     expect(audienceCurl(APP, state("?dim=country&bmetric=new"), "breakdown")).toBe(
       `curl ${AUTH} "https://api.appmetrica.online/v1/apps/${APP}/audience/breakdown?from=2026-10-07&to=2026-10-13&dimension=country&metric=new&environment=production&unit=persons"`,
+    );
+  });
+
+  it("builds curl for the events list with the comparison and the report scope", () => {
+    expect(eventsCurl(APP, state("?period=30d&country=KZ&env=development&unit=installs"))).toBe(
+      `curl ${AUTH} "https://api.appmetrica.online/v1/apps/${APP}/events?from=2026-09-14&to=2026-10-13&compare=previous_period&country=KZ&environment=development&unit=installs"`,
     );
   });
 
