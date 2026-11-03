@@ -418,7 +418,7 @@ flowchart LR
 
 ### 2.7. ClickHouse: `events`
 
-**Описание**: одна строка = одно принятое системное событие (`session_start` / `session_end`). Источник истины для всех отчётов.
+**Описание**: одна строка = одно принятое событие: системное (`session_start` / `session_end`) или своё (FR-102). Источник истины для всех отчётов.
 **Engine**: `ReplacingMergeTree(received_at)`, `PARTITION BY toYYYYMM(event_date)`, `ORDER BY (app_id, event_date, install_id, insert_id)`, `TTL event_date + INTERVAL 25 MONTH DELETE`.
 
 | Колонка | Тип | Источник | Описание |
@@ -430,7 +430,7 @@ flowchart LR
 | sent_at | DateTime64(3,'UTC') | `sent_at` батча | |
 | received_at | DateTime64(3,'UTC') | часы сервера | Версия для ReplacingMergeTree; realtime-лента |
 | insert_id | UUID | клиент | Ключ идемпотентности |
-| name | LowCardinality(String) | клиент | `session_start` или `session_end` |
+| name | LowCardinality(String) | клиент | Системное (`session_start`, `session_end`) или своё событие (FR-102): `^[a-z][a-z0-9_]{0,63}$`, префикс `session_` зарезервирован |
 | install_id | UUID | клиент | Установка (псевдонимный ID) |
 | user_id | String | клиент | '' если не передан; ≤ 128 символов, PII-guard |
 | session_id | UUID | клиент | Сессия |
@@ -444,6 +444,9 @@ flowchart LR
 | country | LowCardinality(String) | DB-IP по IP | ISO-3166-1 alpha-2 или '' |
 | region, city | String | DB-IP по IP | '' если не определено; **IP не сохраняется** |
 | write_key_id | UUID | кэш ключей | Каким `pk_` принято |
+| properties | Map(LowCardinality(String), String) | клиент | Свойства события (FR-102), миграция `00004_event_properties.sql`, последняя колонка; значения строками: числа — кратчайшая десятичная форма (`strconv.FormatFloat(v, 'f', -1, 64)`), boolean — `true`/`false`; пустая карта, если свойств нет. Skip-индексов нет: отчёты фильтруют по `app_id`, `event_date`, `name` |
+
+**Определения метрик не меняются** (FR-102): **active** — человек с хотя бы одним событием *любого* имени за период (`eventsFilter` без фильтра по имени); **new** — `first_seen` из `install_first_seen` / `user_first_seen` (materialized views читают любые события); **sessions** и длительность — только по `session_start` / `session_end` (фильтр по имени явный); **retention** — по активности, как active. Отчёты своих событий (`reports/events.go`) считают события как `uniqExact(insert_id)` (ReplacingMergeTree схлопывает дубли не сразу), людей — через `identity.LinksCTE`; агрегатов в `daily_stats` для них нет.
 
 Skip-индексы: `idx_user_id`, `idx_session_id`, `idx_install_id` — `bloom_filter(0.01) GRANULARITY 4`, для поиска профилей и удаления по всему диапазону дат.
 
@@ -1506,6 +1509,21 @@ DROP TABLE IF EXISTS rejected_events;
 -- +goose StatementEnd
 ```
 
+`backend/migrations/clickhouse/00004_event_properties.sql` (FR-102, свои события):
+```sql
+-- +goose NO TRANSACTION
+-- +goose Up
+-- +goose StatementBegin
+ALTER TABLE events ADD COLUMN IF NOT EXISTS properties Map(LowCardinality(String), String);
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+ALTER TABLE events DROP COLUMN IF EXISTS properties;
+-- +goose StatementEnd
+```
+Колонка добавляется последней и только в метаданные (без мутации). `InsertEvents` пишет с явным списком колонок, а `merge/copy.go` копирует колонку в INSERT и SELECT; integration-тест сверяет `system.columns` с обоими списками. **Откат релиза**: старый `INSERT INTO events` без явного списка колонок не пишет в таблицу с колонкой `properties` (`missing destination name "properties"`, проверено в T-CE-002 на ClickHouse 26.8.25.14), поэтому откат — сначала `appmetrica migrate` ClickHouse вниз до `00003` (свойства теряются), затем образ предыдущей версии; порядок — в [21-ops-runbooks.md](./21-ops-runbooks.md) §5.7.
+
 `deploy/clickhouse/users.d/appmetrica.xml` . Пользователь `appmetrica_admin` создаётся самим образом ClickHouse через env контейнера `CLICKHOUSE_USER=appmetrica_admin` / `CLICKHOUSE_PASSWORD=${CLICKHOUSE_ADMIN_PASSWORD}` и используется только для DDL-миграций goose (`CLICKHOUSE_MIGRATE_USER` / `CLICKHOUSE_MIGRATE_PASSWORD` в api) и для clickhouse-backup (`CLICKHOUSE_USERNAME`). Пароли `appmetrica_rw` / `appmetrica_ro` берутся из env контейнера ClickHouse `CLICKHOUSE_RW_PASSWORD` / `CLICKHOUSE_RO_PASSWORD`; в Go-сервисы они приходят как `CLICKHOUSE_PASSWORD`:
 ```xml
 <!--
@@ -1596,7 +1614,7 @@ type EventRow struct {
 	SentAt      time.Time `ch:"sent_at"`
 	ReceivedAt  time.Time `ch:"received_at"`
 	InsertID    uuid.UUID `ch:"insert_id"`
-	Name        string    `ch:"name"` // "session_start" | "session_end"
+	Name        string    `ch:"name"` // системное или своё событие (FR-102)
 	InstallID   uuid.UUID `ch:"install_id"`
 	UserID      string    `ch:"user_id"` // "" если отсутствует
 	SessionID   uuid.UUID `ch:"session_id"`
@@ -1614,6 +1632,7 @@ type EventRow struct {
 	Region      string    `ch:"region"`
 	City        string    `ch:"city"`
 	WriteKeyID  uuid.UUID `ch:"write_key_id"`
+	Properties  map[string]string `ch:"properties"` // FR-102, миграция 00004; nil пишется как пустая карта
 }
 
 // RejectedRow — одна строка appmetrica.rejected_events.
@@ -2157,3 +2176,4 @@ UPDATE settings SET owner_timezone = 'Europe/Moscow' WHERE singleton;
 | 2026-10-14 | 1.4 | §2.9: `payload_sample` batch-ошибок тоже без PII — `user_id`, похожие на email или телефон, заменяются на `"[redacted]"` до записи (ревью MVP, OQ-070) |
 | 2026-10-14 | 1.5 | §2.9: в `payload_sample` строковые `app_key` (поле тела, путь `sendBeacon`) обрезаются до `key_prefix` — полный ключ записи иначе читался через `integration/health` ключом с read-scope (ревью MVP) |
 | 2026-10-15 | 1.6 | Мультиплатформенные приложения и слияние (миграция `00002_multi_platform.sql`): `apps.platforms app_platform[]` с `apps_platforms_len_chk`/`apps_platform_first_chk`, `apps.platform` устарела (= `platforms[1]`, удаление в contract-фазе); `write_keys.platform` (NULL — любая); `job_name` + `app_merge`; enum `app_merge_status`/`app_merge_step`, таблица `app_merges` (§2.4.7, ER, §3, §4), `queries/postgres/merges.sql` (§10.2) |
+| 2026-11-03 | 1.x | FR-102: §2.7 — колонка `events.properties` (`Map(LowCardinality(String), String)`, миграция `00004_event_properties.sql`), `name` — системное или своё событие, active — человек с событием любого имени; §10 — миграция 00004 и порядок отката, `EventRow.Properties` |

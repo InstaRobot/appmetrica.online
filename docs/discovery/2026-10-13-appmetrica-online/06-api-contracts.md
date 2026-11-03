@@ -6,7 +6,7 @@
 > фронтенд / мобильный клиент мог начать интеграцию до готовности backend.
 >
 > В системе два публичных контракта и один внутренний:
-> - **Ingestion API** (`https://i.appmetrica.online`, файл `contracts/openapi/ingest.yaml`) — приём системных событий `session_start` / `session_end` от приложений **без SDK**, аутентификация публичным write-ключом `pk_…`.
+> - **Ingestion API** (`https://i.appmetrica.online`, файл `contracts/openapi/ingest.yaml`) — приём системных событий сессий `session_start` / `session_end` и своих событий с `properties` (FR-102) от приложений **без SDK**, аутентификация публичным write-ключом `pk_…`.
 > - **Read API** (`https://api.appmetrica.online/v1`, файл `contracts/openapi/api.yaml`, теги без `x-internal`) — отчёты, профили, здоровье интеграции, GDPR-удаление; аутентификация секретным ключом `sk_…` (Bearer) или cookie-сессией дашборда.
 > - **Admin API** (`/admin/v1/*` в том же `api.yaml`, все операции помечены `x-internal: true`) — только для дашборда `appmetrica.online`: passkey-вход, приложения, ключи, настройки, статус системы. В публичную документацию (Fumadocs, S-13) не попадает.
 >
@@ -436,7 +436,7 @@ Response `201` (`CreateAppResult`): приложение + первый write-к
 3. Ключ: заголовок или `app_key`; отсутствует → `401 missing_app_key`; не найден в кэше или отозван → `401 invalid_app_key`; приложение `archived` → `403 app_archived`.
 4. Батч-валидация: `sent_at` обязателен и парсится, `events` — массив 1..500 → иначе `400 invalid_batch` с `details.field`.
 5. Rate limit приложения на `len(events)` → `429 app_rate_limited`.
-6. Для каждого события (индекс сохраняется): слияние контекста (событие перекрывает батч поле за полем, нет `platform` → `apps.platform`, нет `environment` → `production`); валидация полей → `missing_field` / `invalid_field` / `unknown_event_name` / `duration_required`; PII-guard `user_id` → `user_id_looks_like_pii`; коррекция времени `event_time = received_at + (timestamp − sent_at)`; будущее (> received_at + 10 мин) → `event_time = received_at` + warning `timestamp_in_future_clamped`; прошлое (< received_at − 168 ч) → `event_too_old`; дубль `insert_id` в батче → warning `duplicate_insert_id_in_batch`, событие пропускается без rejection; rate limit `install_id` → `install_rate_limited`.
+6. Для каждого события (индекс сохраняется): слияние контекста (событие перекрывает батч поле за полем, нет `platform` → `apps.platform`, нет `environment` → `production`); валидация полей → `missing_field` / `invalid_field` / `unknown_event_name` / `duration_required`; проверка `properties` по ключам в порядке документа (первое нарушение отклоняет событие) → `invalid_field` / `property_looks_like_pii`; PII-guard `user_id` → `user_id_looks_like_pii`; коррекция времени `event_time = received_at + (timestamp − sent_at)`; будущее (> received_at + 10 мин) → `event_time = received_at` + warning `timestamp_in_future_clamped`; прошлое (< received_at − 168 ч) → `event_too_old`; дубль `insert_id` в батче → warning `duplicate_insert_id_in_batch`, событие пропускается без rejection; rate limit `install_id` → `install_rate_limited`.
 7. Гео: IP — `context.ip` (если задан и не `"none"`), иначе адрес клиента (`X-Forwarded-For` от Traefik, последний доверенный хоп); `"none"` — гео не определяется. Невалидный `context.ip` → warning `geo_ip_invalid`, гео пустое. IP после lookup отбрасывается: не пишется в ClickHouse, логи и `payload_sample`.
 8. Вставка принятых событий в `events` через clickhouse-go async insert **с ожиданием подтверждения**; ошибка или таймаут 5 с → весь запрос `503 storage_unavailable` + `Retry-After: 5` (клиент повторит весь батч — безопасно благодаря `insert_id`).
 9. Отклонённые события и batch-ошибки известных приложений → `rejected_events` (best effort, ошибка вставки только логируется).
@@ -463,7 +463,9 @@ Response `201` (`CreateAppResult`): приложение + первый write-к
 
 **Семантика полей и ограничения** — полностью в YAML §9.1 (`EventBatch`, `EventContext`, `Event`). Ключевое:
 - `install_id` — UUID, сгенерированный приложением один раз (iOS — Keychain, переживает переустановку; Android — SharedPreferences + Auto Backup; Web — `localStorage`; боты — стабильный UUID на чат).
-- `session_id` — UUID, генерируется при выходе на передний план; один `session_id` у `session_start` и `session_end`.
+- `session_id` — UUID, генерируется при выходе на передний план; один `session_id` у `session_start`, `session_end` и своих событий сессии. Обязателен для каждого события, включая свои (OQ-081).
+- `name` — системное `session_start` / `session_end` или своё по шаблону `^[a-z][a-z0-9_]{0,63}$`; префикс `session_` зарезервирован. Нарушение — `unknown_event_name`.
+- `properties` — необязательный объект: до 50 ключей (шаблон имени), значения — строка до 256 символов (рун, без U+0000), число или boolean; хранятся строками (число — `FormatFloat('f', -1, 64)`, boolean — `true`/`false`). `null`, массив, объект, число вне float64 (`1e400`) → `invalid_field`, `field=properties.<ключ>`; `"properties": null` — как отсутствие поля; PII-подобная строка → `property_looks_like_pii`.
 - `user_id` — непрозрачный ID из бэкенда приложения (1..128). Email и телефоны отклоняются, символ U+0000 — тоже (`invalid_field`: Postgres не хранит его в `deletion_requests.subject_value`, такой ID нельзя было бы удалить по FR-019); чисто цифровые строки разрешены (Telegram ID рекомендуется передавать как HMAC-SHA256 на стороне бота).
 - `duration_ms` — время на переднем плане, измеренное клиентом; обязателен для `session_end`, игнорируется у `session_start`.
 - `context.ip` — только для server-to-server источников (бот передаёт IP пользователя, если знает), иначе не заполнять.
@@ -1094,6 +1096,19 @@ curl -sS "https://api.appmetrica.online/v1/apps/$APP/deletion-requests/0199d6d0-
 | telegram_test_fail | Telegram отвечает 400 | 200 `sent=false`, `error` заполнен | `backend/internal/api/admin_settings_test.go::TestTelegramTest_ExternalErrorIs200` |
 | status_ch_down | ClickHouse недоступен | 200, `clickhouse.ok=false`, `disk_free_pct=null` | `backend/internal/api/admin_system_test.go::TestSystemStatus_ClickHouseDown` |
 
+#### 2.4.11. Events: свои события (FR-102)
+
+Экран «События» (вкладка дашборда), страница события, раздел «События» профиля. Тег `Events`, `x-required-scope: read`, ответы 400/401/403/404/429/503 через общие `$ref`; параметры периода, окружения, единицы и фильтров — общие (`parseCommonParams`: период ≤ 366 дней, `hour` ≤ 7 дней). Системные имена в отчёт не входят: запрос с `session_start` / `session_end` в пути → `404 event_not_found`; отсутствие событий за период → `200` с нулями.
+
+| Операция | Путь | Ответ |
+|---|---|---|
+| `listEvents` | `GET /v1/apps/{app_id}/events` | `EventList { events: EventStat[], truncated }`, `EventStat { name, events, people, prev_events?, prev_people? }`; только имена с событиями за период, `events` desc, `name` asc, до 500 имён (`truncated`); `prev_*` — только при `compare=previous_period` |
+| `getEventReport` | `GET /v1/apps/{app_id}/events/{event_name}` (+ `granularity`) | `EventReport { name, summary, timeseries, property_keys }`; `summary`: `events`, `people`, `events_per_person` (округление до 2 знаков, 0 без людей) + `prev_*`; `timeseries`: `{bucket, events, people}[]`; `property_keys`: `{key, events}[]` (до 50) |
+| `getEventBreakdown` | `GET /v1/apps/{app_id}/events/{event_name}/breakdown` (+ `property` обязателен, шаблон ключа; `limit` 1–100, по умолчанию 20) | `EventBreakdown { property, values: {value, events, people}[], other?: {events, people}, missing: {events, people} }`; `other.events` — сумма, `other.people` — объединение людей; `property` не по шаблону → 400 `invalid_request`, `details.field=property` |
+| `listProfileEvents` | `GET /v1/apps/{app_id}/profiles/{person_key}/events` (`before`, `limit` 1–200, по умолчанию 50) | `ProfileEventPage { events: ProfileEvent[], next_before }`; свои события человека, новые первыми, курсор по `(event_time, insert_id)` |
+
+`event_name` в пути проверяется шаблоном `EventName`. `RecentEvent.name` (realtime) — строка по шаблону вместо enum: новые значения в ответах не breaking (§ «Версионирование»). Каждая операция имеет запрос `# @name <operationId>` в `contracts/http/requests.http`. Тесты: `backend/internal/api/contract_test.go`, `backend/internal/reports/events_integration_test.go`.
+
 ---
 
 ### 2.5. Billing
@@ -1415,6 +1430,10 @@ components:
       enum: [production, development]
     EventName:
       type: string
+      pattern: '^[a-z][a-z0-9_]{0,63}$'
+      description: Системное или своё событие; префикс `session_` зарезервирован, кроме двух системных имён (FR-102)
+    SystemEventName:
+      type: string
       enum: [session_start, session_end]
     EventContext:
       type: object
@@ -1460,7 +1479,7 @@ components:
         session_id:
           type: string
           format: uuid
-          description: Общий для session_start и session_end одной сессии
+          description: Общий для session_start, session_end и своих событий одной сессии
         user_id:
           type: string
           minLength: 1
@@ -1472,6 +1491,15 @@ components:
           minimum: 0
           maximum: 86400000
           description: Обязателен для session_end; время на переднем плане
+        properties:
+          type: object
+          maxProperties: 50
+          description: Ключи по шаблону ^[a-z][a-z0-9_]{0,63}$ (проверяет код); значения — строка ≤ 256 символов, число или boolean. Хранятся строками.
+          additionalProperties:
+            oneOf:
+              - { type: string, maxLength: 256 }
+              - { type: number }
+              - { type: boolean }
         context: { $ref: '#/components/schemas/EventContext' }
     EventBatch:
       type: object
@@ -1500,6 +1528,7 @@ components:
         - unknown_event_name
         - event_too_old
         - user_id_looks_like_pii
+        - property_looks_like_pii
         - duration_required
         - install_rate_limited
     WarningCode:
@@ -1626,7 +1655,7 @@ components:
         rejected:
           - { index: 1, insert_id: null, code: missing_field, field: 'events[1].insert_id', message: 'Поле insert_id обязательно.', retryable: false }
           - { index: 2, insert_id: 0199d6c1-0000-7000-8000-000000000002, code: invalid_field, field: 'events[2].install_id', message: 'install_id должен быть UUID и не nil-UUID.', retryable: false }
-          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'Допустимые имена: session_start, session_end.', retryable: false }
+          - { index: 3, insert_id: 0199d6c1-0000-7000-8000-000000000003, code: unknown_event_name, field: 'events[3].name', message: 'Имя должно подходить под ^[a-z][a-z0-9_]{0,63}$ и не быть зарезервированным.', retryable: false }
           - { index: 4, insert_id: 0199d6c1-0000-7000-8000-000000000004, code: event_too_old, field: 'events[4].timestamp', message: 'Событие старше 7 дней после коррекции часов.', retryable: false }
           - { index: 5, insert_id: 0199d6c1-0000-7000-8000-000000000005, code: user_id_looks_like_pii, field: 'events[5].user_id', message: 'user_id похож на email или телефон. Передавайте непрозрачный ID.', retryable: false }
           - { index: 6, insert_id: 0199d6c1-0000-7000-8000-000000000006, code: duration_required, field: 'events[6].duration_ms', message: 'Для session_end обязательно поле duration_ms (0..86400000).', retryable: false }
@@ -3007,7 +3036,7 @@ components:
         insert_id: { type: string, format: uuid, description: 'Стабильный ключ строки ленты (React key, подсветка новых строк)' }
         event_time: { type: string, format: date-time }
         received_at: { type: string, format: date-time }
-        name: { type: string, enum: [session_start, session_end] }
+        name: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'Системное или своё имя события (FR-102)' }
         environment: { $ref: '#/components/schemas/Environment' }
         platform: { type: string }
         app_version: { type: string }
@@ -3630,7 +3659,7 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 429 | `rate_limited` | Слишком часто. Попробуйте позже. | API: лимит ключа/сессии/входа |
 | 500 | `internal_error` | Что-то пошло не так. | Необработанная ошибка (паника перехвачена Recoverer) |
 | 503 | `storage_unavailable` | Хранилище временно недоступно. | ClickHouse/Postgres не отвечает или таймаут |
-| 200* | `missing_field`, `invalid_field`, `unknown_event_name`, `event_too_old`, `user_id_looks_like_pii`, `duration_required`, `install_rate_limited` | — (только в `rejected[]`) | Ingest: отклонение отдельного события |
+| 200* | `missing_field`, `invalid_field`, `unknown_event_name`, `event_too_old`, `user_id_looks_like_pii`, `property_looks_like_pii`, `duration_required`, `install_rate_limited` | — (только в `rejected[]`) | Ingest: отклонение отдельного события |
 | 200* | `timestamp_in_future_clamped`, `duplicate_insert_id_in_batch`, `geo_ip_invalid`, `platform_missing` | — (только в `warnings[]`) | Ingest: событие принято с поправкой (`platform_missing` — записано как `other`) |
 
 ---
@@ -3646,3 +3675,4 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
 | 2026-10-15 | 1.4 | Контракт 1.1.0 (§9.1.1, без повторного встраивания YAML): `PlatformList`, `App.platforms`/`AppSummary.platforms` (`platform` deprecated), `PortfolioRow.platforms`, `WriteKey.platform`, параметр `split=none\|platform` с `TimeSeries.splits[]`, фильтр `platform` у `getRealtime`, операции слияния `merge-preview`/`merges`/`merges/{merge_id}/retry`, `JobName` `app_merge`, `Conflict` `merge_in_progress`/`app_archived`, `WarningCode` `platform_missing`; «5 jobs» → 6 в `getSystemStatus` |
 | 2026-11-03 | 1.5 | FR-102, ingest: свои имена событий по шаблону `^[a-z][a-z0-9_]{0,63}$` (префикс `session_` зарезервирован, `unknown_event_name` теперь значит «не по шаблону или зарезервировано»), необязательное поле `properties`, код отказа `property_looks_like_pii`; векторы I-14 (`Purchase`) и I-39…I-43 |
 | 2026-11-03 | 1.6 | FR-102, Read API: тег `Events`, операции `listEvents`, `getEventReport`, `getEventBreakdown` (`GET /v1/apps/{app_id}/events[/{event_name}[/breakdown]]`), схемы `EventList`, `EventReport`, `EventBreakdown`; код ошибки `event_not_found` (404, системное имя события) |
+| 2026-11-03 | 1.7 | FR-102, документ догнан до контракта: §2.4.1 — `properties`, шаблон `name`, `session_id` обязателен у каждого события; §2.4.11 — `listEvents`, `getEventReport`, `getEventBreakdown`, `listProfileEvents`; встроенный YAML §9.1 — `EventName`/`SystemEventName`, `Event.properties`, `property_looks_like_pii`; `RecentEvent.name` — строка по шаблону |
