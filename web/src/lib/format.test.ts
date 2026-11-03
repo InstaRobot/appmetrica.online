@@ -10,6 +10,7 @@ const {
   formatDateRange,
   formatDateShort,
   formatDateTime,
+  formatDecimal,
   formatDelta,
   formatDuration,
   formatInt,
@@ -90,6 +91,15 @@ describe("format", () => {
     [null, "—"],
   ])("formats delta %s with an explicit sign", (value, want) => {
     expect(formatDelta(value)).toBe(want);
+  });
+
+  it("formats a ratio with up to two decimals", () => {
+    expect(formatDecimal(2)).toBe("2");
+    expect(formatDecimal(2.5)).toBe("2,5");
+    expect(formatDecimal(3.14159)).toBe("3,14");
+    expect(formatDecimal(0)).toBe("0");
+    expect(formatDecimal(null)).toBe("—");
+    expect(createFormatters("en").formatDecimal(1234.567)).toBe("1,234.57");
   });
 
   it("formats report dates with short russian months", () => {

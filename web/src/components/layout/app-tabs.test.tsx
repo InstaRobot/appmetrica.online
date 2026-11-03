@@ -31,6 +31,29 @@ describe("AppTabs", () => {
     expect(tab("Профили")).toHaveAttribute("href", `/apps/${APP_ID}/profiles?platform=ios`);
   });
 
+  it("keeps the period, filters, environment and unit when going from Audience to Events", () => {
+    nav.search = "period=30d&country=KZ&app_version=3.5.0&env=development&unit=installs&metric=new";
+    render(<AppTabs appId={APP_ID} />);
+
+    const href = tab("События").getAttribute("href") ?? "";
+    expect(href.startsWith(`/apps/${APP_ID}/events?`)).toBe(true);
+    const kept = new URLSearchParams(href.split("?")[1]);
+    expect(Object.fromEntries(kept)).toEqual({
+      period: "30d",
+      country: "KZ",
+      app_version: "3.5.0",
+      env: "development",
+      unit: "installs",
+    });
+  });
+
+  it("marks Events active on the page of one event", () => {
+    nav.pathname = `/apps/${APP_ID}/events/note_created`;
+    render(<AppTabs appId={APP_ID} />);
+
+    expect(tab("События")).toHaveAttribute("aria-current", "page");
+  });
+
   it("names the tabs in English", () => {
     renderWithLocale(<AppTabs appId={APP_ID} />, "en");
 
@@ -40,6 +63,7 @@ describe("AppTabs", () => {
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Audience",
       "Retention",
+      "Events",
       "Realtime",
       "Profiles",
       "Integration",

@@ -5,13 +5,16 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type AudienceState,
   audienceSearchParams,
+  eventsSearchParams,
   periodSearch,
   reportParams,
   resolveAudienceState,
+  resolveEventsState,
   resolveRetentionState,
   retentionParams,
   retentionSearchParams,
   useAudienceState,
+  useEventsState,
   useRealtimeState,
   useRetentionState,
 } from "./url-state";
@@ -303,5 +306,47 @@ describe("realtime url-state", () => {
       wrapper: withNuqsTestingAdapter({ searchParams: "?env=staging" }),
     });
     expect(result.current.env).toBe("production");
+  });
+});
+
+describe("events url-state", () => {
+  const load = createLoader(eventsSearchParams);
+
+  it("defaults to the last 7 days in production without filters", () => {
+    const state = resolveEventsState(load(""), TODAY);
+    expect(state.period).toEqual({ preset: "7d", from: "2026-10-07", to: "2026-10-13" });
+    expect(state.filters).toEqual({});
+    expect(reportParams(state)).toEqual({
+      from: "2026-10-07",
+      to: "2026-10-13",
+      environment: "production",
+      unit: "persons",
+    });
+  });
+
+  it("reads the period, filters, environment and unit shared with the other tabs", () => {
+    const state = resolveEventsState(
+      load("?period=30d&country=KZ&app_version=3.5.0&env=development&unit=installs&metric=new"),
+      TODAY,
+    );
+    expect(state.period.preset).toBe("30d");
+    expect(state.filters).toEqual({ country: ["KZ"], app_version: ["3.5.0"] });
+    expect(state.env).toBe("development");
+    expect(state.unit).toBe("installs");
+  });
+
+  it("writes every change as a new history entry", async () => {
+    const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
+    const { result } = renderHook(() => useEventsState("Europe/Moscow", TODAY), {
+      wrapper: withNuqsTestingAdapter({
+        searchParams: "?platform=ios",
+        hasMemory: true,
+        onUrlUpdate,
+      }),
+    });
+    await act(() => result.current.update({ env: "development" }));
+    expect(onUrlUpdate.mock.lastCall?.[0].queryString).toBe("?platform=ios&env=development");
+    expect(onUrlUpdate.mock.lastCall?.[0].options.history).toBe("push");
+    expect(result.current.state.env).toBe("development");
   });
 });

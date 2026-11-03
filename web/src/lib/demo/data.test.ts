@@ -5,6 +5,8 @@ import type {
   AudienceSummary,
   Breakdown,
   DeletionRequestList,
+  EventList,
+  EventReport,
   IntegrationHealth,
   Portfolio,
   Profile,
@@ -17,6 +19,7 @@ import type {
 } from "@/lib/api/gen/model";
 import { addDays } from "@/lib/period";
 import { DEMO_APP_IDS, DEMO_APPS } from "./apps";
+import { EVENT_CATALOG } from "./catalog";
 import { demoFetch } from "./handler";
 import { DEMO_PROFILES, demoProfileExamples } from "./profiles";
 
@@ -998,5 +1001,62 @@ describe("demo texts in English", () => {
     expect(buggy.reasons.find((r) => r.code === "invalid_field")?.example_message).toBe(
       "context.app_version must be a string.",
     );
+  });
+});
+
+describe("demo events catalog", () => {
+  const list = (id: string, from: string, to: string, extra = {}) =>
+    get<EventList>(
+      `/v1/apps/${id}/events?${query({ from, to, compare: "previous_period", ...extra })}`,
+    );
+  const daily = async (id: string, name: string, from: string, to: string) => {
+    const r = await get<EventReport>(
+      `/v1/apps/${id}/events/${name}?${query({ from, to, granularity: "day", compare: "none" })}`,
+    );
+    return r.timeseries.map((p) => p.events);
+  };
+  const mean = (xs: readonly number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+
+  it("lists the five Notes catalog events, most frequent first", async () => {
+    const r = await list(NOTES, "2026-09-14", "2026-10-13");
+    expect(r.events.map((e) => e.name).toSorted()).toEqual([
+      "note_created",
+      "note_shared",
+      "paywall_shown",
+      "purchase",
+      "search_used",
+    ]);
+    const counts = r.events.map((e) => e.events);
+    expect(counts).toEqual([...counts].sort((a, b) => b - a));
+    for (const e of r.events) {
+      expect(e.people).toBeGreaterThan(0);
+      expect(e.people).toBeLessThanOrEqual(e.events);
+      expect(e.prev_events).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives the second demo app two or three events of its own", async () => {
+    const r = await list(SITE, "2026-09-14", "2026-10-13");
+    expect(r.events.length).toBeGreaterThanOrEqual(2);
+    expect(r.events.length).toBeLessThanOrEqual(3);
+    expect(r.events.map((e) => e.name)).not.toContain("note_created");
+  });
+
+  it("shows the May campaign in note_created and the 3.5.0 release in search_used", async () => {
+    const created = await daily(NOTES, "note_created", "2026-05-08", "2026-05-24");
+    // 8–17 мая — фон, 20–24 мая — кампания Android RU.
+    expect(mean(created.slice(12))).toBeGreaterThan(1.4 * mean(created.slice(0, 10)));
+    const search = await daily(NOTES, "search_used", "2026-09-26", "2026-10-13");
+    // 26.09–03.10 — до релиза 3.5.0, 06–13.10 — после.
+    expect(mean(search.slice(10))).toBeGreaterThan(1.3 * mean(search.slice(0, 8)));
+  });
+
+  it("keeps the realtime feed on the catalog names", async () => {
+    const names = new Set((EVENT_CATALOG[NOTES] ?? []).map((s) => s.name));
+    expect(names.size).toBe(5);
+    const r = await get<Realtime>(`/v1/apps/${NOTES}/realtime`);
+    const custom = r.recent_events.map((e) => e.name).filter((n) => !n.startsWith("session_"));
+    expect(custom.length).toBeGreaterThan(0);
+    for (const n of custom) expect(names.has(n)).toBe(true);
   });
 });
