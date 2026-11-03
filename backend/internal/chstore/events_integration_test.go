@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"appmetrica.online/backend/internal/chstore"
+	"appmetrica.online/backend/internal/clock"
 	"appmetrica.online/backend/internal/testutil"
 )
 
@@ -117,14 +118,17 @@ func TestInsertRejected_RoundTrip(t *testing.T) {
 	ctx := t.Context()
 	rw := openStore(t, rwUser, rwPassword)
 
+	// rejected_events живёт 7 дней (TTL received_at + 7 DAY): фиксированная дата в прошлом
+	// удалилась бы ClickHouse, поэтому момент отказа считается от текущего времени.
+	received := clock.System{}.Now().Truncate(time.Millisecond)
 	appID := uuid.New()
 	rows := []chstore.RejectedRow{
 		{
-			ReceivedAt: base, AppID: appID, KeyPrefix: "pk_live_abc", Code: "user_id_looks_like_pii",
+			ReceivedAt: received, AppID: appID, KeyPrefix: "pk_live_abc", Code: "user_id_looks_like_pii",
 			Field: "events[1].user_id", Message: "user_id похож на email или телефон", EventName: "session_start",
 			AppVersion: "1.0.0", Platform: "ios", PayloadSample: `{"name":"session_start"}`,
 		},
-		{ReceivedAt: base.Add(time.Second), AppID: appID, Code: "invalid_json", Message: "тело не является JSON"},
+		{ReceivedAt: received.Add(time.Second), AppID: appID, Code: "invalid_json", Message: "тело не является JSON"},
 	}
 	require.NoError(t, rw.InsertRejected(ctx, rows))
 

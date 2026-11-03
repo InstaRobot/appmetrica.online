@@ -91,9 +91,11 @@ func event(appID, install uuid.UUID, user string, at time.Time) chstore.EventRow
 	}
 }
 
+// rejected — отказ, принятый час назад по реальному времени: rejected_events живёт 7 дней
+// (TTL received_at + 7 DAY), и строка с фиксированной датой в прошлом исчезла бы сама.
 func rejected(appID uuid.UUID, payload string) chstore.RejectedRow {
 	return chstore.RejectedRow{
-		ReceivedAt: now.Add(-time.Hour), AppID: appID, KeyPrefix: "pk_test", Code: "invalid_event",
+		ReceivedAt: clock.System{}.Now().Add(-time.Hour), AppID: appID, KeyPrefix: "pk_test", Code: "invalid_event",
 		Field: "events[0].timestamp", Message: "bad", EventName: "session_start", Platform: "ios", PayloadSample: payload,
 	}
 }
