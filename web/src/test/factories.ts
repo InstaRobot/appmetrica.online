@@ -10,6 +10,7 @@ import type {
   Passkey,
   PortfolioRow,
   Profile,
+  ProfileEvent,
   ProfileInstall,
   ProfileSession,
   ProfileSummary,
@@ -130,6 +131,19 @@ export function profileSession(overrides: Partial<ProfileSession> = {}): Profile
     environment: "production",
     country: "RU",
     city: "Москва",
+    ...overrides,
+  };
+}
+
+export function profileEvent(overrides: Partial<ProfileEvent> = {}): ProfileEvent {
+  return {
+    event_time: "2026-10-12T11:03:00Z",
+    name: "level_complete",
+    session_id: faker.string.uuid(),
+    install_id: "5d8e2c1a-0b3f-4e5f-9a7b-0c1d2e3f4e5f",
+    platform: "ios",
+    app_version: "2.1.1",
+    properties: {},
     ...overrides,
   };
 }
