@@ -88,8 +88,8 @@ export const integration: typeof en = {
       hint: "UUID — 36 символов; время — RFC 3339 с часовым поясом, например 2026-10-13T09:00:00Z",
     },
     unknown_event_name: {
-      description: "Неизвестное имя события",
-      hint: "Сейчас принимаются только session_start и session_end",
+      description: "Недопустимое или зарезервированное имя события",
+      hint: "Используйте строчные буквы, цифры и _ (^[a-z][a-z0-9_]{0,63}$); имена с префиксом session_ зарезервированы",
     },
     event_too_old: {
       description: "Событие старше 7 дней",

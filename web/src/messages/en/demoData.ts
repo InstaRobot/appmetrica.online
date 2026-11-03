@@ -57,7 +57,8 @@ export const demoData = {
     missing_field: "The session_id field is required.",
     install_rate_limited: "Too many events from this device. Try again later.",
     user_id_looks_like_pii: "user_id looks like an email or phone number. Send an opaque ID.",
-    unknown_event_name: "Allowed names: session_start, session_end.",
+    unknown_event_name:
+      "The name must match ^[a-z][a-z0-9_]{0,63}$ and must not be reserved (session_ prefix).",
     app_archived: "The app is archived, event intake has stopped.",
     app_version_not_string: "context.app_version must be a string.",
   },

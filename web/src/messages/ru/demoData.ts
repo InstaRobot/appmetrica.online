@@ -53,7 +53,8 @@ export const demoData: typeof en = {
     missing_field: "Поле session_id обязательно.",
     install_rate_limited: "Слишком много событий с этого устройства. Повторите позже.",
     user_id_looks_like_pii: "user_id похож на email или телефон. Передавайте непрозрачный ID.",
-    unknown_event_name: "Допустимые имена: session_start, session_end.",
+    unknown_event_name:
+      "Имя должно подходить под ^[a-z][a-z0-9_]{0,63}$ и не быть зарезервированным (префикс session_).",
     app_archived: "Приложение в архиве, приём событий остановлен.",
     app_version_not_string: "context.app_version должен быть строкой.",
   },

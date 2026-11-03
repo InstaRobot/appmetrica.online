@@ -89,8 +89,8 @@ export const integration = {
       hint: "A UUID is 36 characters; time is RFC 3339 with a time zone, e.g. 2026-10-13T09:00:00Z",
     },
     unknown_event_name: {
-      description: "Unknown event name",
-      hint: "Only session_start and session_end are accepted for now",
+      description: "Invalid or reserved event name",
+      hint: "Use lowercase letters, digits and _ (^[a-z][a-z0-9_]{0,63}$); names starting with session_ are reserved",
     },
     event_too_old: {
       description: "Event older than 7 days",
