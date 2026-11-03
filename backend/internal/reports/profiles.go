@@ -2,10 +2,12 @@ package reports
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -21,10 +23,16 @@ const (
 	MaxProfileResults    = 20
 	DefaultSessionsLimit = 100
 	MaxSessionsLimit     = 500
+
+	DefaultProfileEventsLimit = 50
+	MaxProfileEventsLimit     = 200
 )
 
 // ErrProfileNotFound — у person_key нет ни одного события в приложении (404 profile_not_found).
 var ErrProfileNotFound = errors.New("reports: профиль не найден")
+
+// ErrInvalidCursor — курсор before событий профиля не разобран (400 invalid_request, details.field=before).
+var ErrInvalidCursor = errors.New("reports: неверный курсор")
 
 // MatchedBy — по какому идентификатору найден профиль.
 type MatchedBy string
@@ -160,6 +168,19 @@ HAVING {has_before:UInt8} = 0 OR started_at < {before:DateTime64(3)}
 ORDER BY started_at DESC, session_id DESC
 LIMIT {limit:UInt32}`
 )
+
+// qProfileEvents — свои события человека (системные имена не входят), новые первыми по (event_time, insert_id):
+// LIMIT 1 BY insert_id оставляет одну строку повтора батча до слияния частей ReplacingMergeTree; курсор —
+// исключающая граница {before_time}/{before_id} по тому же кортежу порядка. {limit} — на одно больше страницы.
+var qProfileEvents = `WITH ` + profileLinksCTE + `
+SELECT e.event_time AS event_time, e.insert_id AS insert_id, e.name AS name, e.session_id AS session_id,
+       e.install_id AS install_id, e.platform AS platform, e.app_version AS app_version, e.properties AS properties` +
+	profileEventsFrom + `
+  AND e.environment = {env:String}` + customEventsWhere + `
+  AND ({has_before:UInt8} = 0 OR (e.event_time, e.insert_id) < ({before_time:DateTime64(3)}, {before_id:UUID}))
+ORDER BY e.event_time DESC, e.insert_id DESC
+LIMIT 1 BY e.insert_id
+LIMIT {limit:UInt32}`
 
 // SearchProfiles ищет профили приложения appID по точному q: если q — UUID, установка q находится как профиль
 // её человека (matched_by=install_id); q как user_id — профиль u:<q> (matched_by=user_id). Без совпадений —
@@ -329,4 +350,115 @@ func ceilMillis(t time.Time) time.Time {
 		c = c.Add(time.Millisecond)
 	}
 	return c
+}
+
+// ProfileEventsQuery — страница своих событий человека: Environment "" — production, Limit 0 —
+// DefaultProfileEventsLimit, Before — непрозрачный курсор NextBefore предыдущей страницы ("" — первая).
+type ProfileEventsQuery struct {
+	PersonKey   string
+	Environment string
+	Limit       int
+	Before      string
+}
+
+// ProfileEvent — своё событие человека; Properties — всегда объект (пустой у события без свойств).
+type ProfileEvent struct {
+	EventTime  time.Time         `ch:"event_time"`
+	InsertID   uuid.UUID         `ch:"insert_id"`
+	Name       string            `ch:"name"`
+	SessionID  uuid.UUID         `ch:"session_id"`
+	InstallID  uuid.UUID         `ch:"install_id"`
+	Platform   string            `ch:"platform"`
+	AppVersion string            `ch:"app_version"`
+	Properties map[string]string `ch:"properties"`
+}
+
+// ProfileEventPage — страница событий; NextBefore пуст на последней.
+type ProfileEventPage struct {
+	Events     []ProfileEvent
+	NextBefore string
+}
+
+// ProfileEvents — свои события человека всех его установок, новые первыми. Ошибки: identity.ErrInvalidPersonKey,
+// ErrUnsupported (limit вне 1..MaxProfileEventsLimit), ErrInvalidCursor, ErrProfileNotFound (нет событий человека
+// в любом environment — как у Profile).
+func (s *Service) ProfileEvents(ctx context.Context, appID uuid.UUID, q ProfileEventsQuery) (ProfileEventPage, error) {
+	key, err := identity.ParsePersonKey(q.PersonKey)
+	if err != nil {
+		return ProfileEventPage{}, fmt.Errorf("reports: profile events: %w", err)
+	}
+	limit := q.Limit
+	if limit == 0 {
+		limit = DefaultProfileEventsLimit
+	}
+	if limit < 1 || limit > MaxProfileEventsLimit {
+		return ProfileEventPage{}, fmt.Errorf("reports: profile events limit %d: %w", limit, ErrUnsupported)
+	}
+	env := q.Environment
+	if env == "" {
+		env = EnvProduction
+	}
+	var beforeTime time.Time
+	var beforeID uuid.UUID
+	if q.Before != "" {
+		if beforeTime, beforeID, err = decodeProfileEventsCursor(q.Before); err != nil {
+			return ProfileEventPage{}, err
+		}
+	}
+	p, ok, err := s.person(ctx, appID, key)
+	if err != nil {
+		return ProfileEventPage{}, err
+	}
+	if !ok {
+		return ProfileEventPage{}, ErrProfileNotFound
+	}
+
+	params := personParameters(appID, key, p.installs)
+	params["env"] = env
+	params["has_before"], params["before_time"], params["before_id"] = "0", time.Unix(0, 0).UTC().Format(paramDateTime), uuid.Nil.String()
+	if q.Before != "" {
+		params["has_before"], params["before_time"], params["before_id"] = "1", beforeTime.Format(paramDateTime), beforeID.String()
+	}
+	params["limit"] = strconv.Itoa(limit + 1) // лишняя строка — признак следующей страницы
+	out := ProfileEventPage{Events: []ProfileEvent{}}
+	if err := s.conn.Select(profileContext(ctx, params), &out.Events, qProfileEvents); err != nil {
+		return ProfileEventPage{}, fmt.Errorf("reports: profile events: %w", err)
+	}
+	if len(out.Events) > limit {
+		out.Events = out.Events[:limit]
+		last := out.Events[limit-1]
+		out.NextBefore = encodeProfileEventsCursor(last.EventTime, last.InsertID)
+	}
+	for i := range out.Events {
+		if out.Events[i].Properties == nil {
+			out.Events[i].Properties = map[string]string{}
+		}
+	}
+	return out, nil
+}
+
+// Курсор событий профиля — base64url «<unix_ms>.<insert_id>»: время события с точностью до миллисекунды и
+// insert_id последнего события страницы.
+func encodeProfileEventsCursor(at time.Time, id uuid.UUID) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(at.UnixMilli(), 10) + "." + id.String()))
+}
+
+func decodeProfileEventsCursor(cursor string) (time.Time, uuid.UUID, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidCursor
+	}
+	ms, id, ok := strings.Cut(string(raw), ".")
+	if !ok {
+		return time.Time{}, uuid.Nil, ErrInvalidCursor
+	}
+	millis, err := strconv.ParseInt(ms, 10, 64)
+	if err != nil || millis < 0 {
+		return time.Time{}, uuid.Nil, ErrInvalidCursor
+	}
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return time.Time{}, uuid.Nil, ErrInvalidCursor
+	}
+	return time.UnixMilli(millis).UTC(), parsed, nil
 }
