@@ -81,12 +81,16 @@ func aggList(aggs []agg, f func(agg) string) string {
 // анонимным установкам (identity.AnonLinksJoin); при unit=installs все события сворачиваются по install_id.
 // Человек может занимать несколько строк — свои события и анонимные события его установок, поэтому
 // потребители считают uniqExact(person_key) или сворачивают строки по person_key. Требует identity.LinksCTE.
-func peopleCTE(aggs ...agg) string {
+func peopleCTE(aggs ...agg) string { return peopleWhereCTE("", aggs...) }
+
+// peopleWhereCTE — peopleCTE по событиям eventsFilter, удовлетворяющим ещё и where (`AND …` по events AS e,
+// только константы и параметры): отчёт «События» сворачивает людей одного имени или только своих событий.
+func peopleWhereCTE(where string, aggs ...agg) string {
 	evs := aggList(aggs, func(a agg) string { return a.expr })
 	return `people AS (
     SELECT ` + identity.UserPersonKeyExpr + ` AS person_key, ` + evs + `
     FROM events AS e
-    WHERE ` + eventsFilter + `
+    WHERE ` + eventsFilter + where + `
       AND {unit:String} = 'persons' AND e.user_id != ''
     GROUP BY e.user_id
     UNION ALL
@@ -94,7 +98,7 @@ func peopleCTE(aggs ...agg) string {
     FROM (
         SELECT e.install_id AS install_id, ` + evs + `
         FROM events AS e
-        WHERE ` + eventsFilter + `
+        WHERE ` + eventsFilter + where + `
           AND ({unit:String} = 'installs' OR e.user_id = '')
         GROUP BY e.install_id
     ) AS a

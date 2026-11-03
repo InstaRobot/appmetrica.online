@@ -13,6 +13,7 @@ NDJSON-фикстуры событий для тестов backend: одна с�
 | `audience.golden.json` | Аудитория сценария за 2026-10-01…2026-10-12 по приложениям: summary (persons с compare, installs), ряды day по 4 метрикам с compare, week/month active, rolling-active, разбивки по 9 измерениям (T-029, `reports.TestAudience_Golden`) |
 | `retention.golden.json` | Retention сценария по дневным когортам 2026-09-28…2026-10-12, periods=30, для unit=persons и unit=installs, сейчас 2026-11-03 12:00 UTC (T-030, `reports.TestRetention_DayGolden`) |
 | `retention_week.golden.json` | Retention сценария по ISO-неделям 2026-10-01…2026-11-02 (когорты с понедельников 09-28…11-02), periods=12, для unit=persons и unit=installs, сейчас 2026-11-03 12:00 UTC (T-030, `reports.TestRetention_WeekGolden`) |
+| `events.golden.json` | Отчёт «События» на `scenario.ndjson` + `custom_events.ndjson` за 2026-10-04…2026-11-02 (compare — 09-04…10-03): список msk, nyc, tyo; страницы purchase msk и nyc по дням, note_created msk по неделям; разбивки note_created msk по source (limit 20) и purchase msk и nyc по plan (T-CE-005, `reports.TestEventsList_Golden`) |
 
 ## scenario.ndjson
 

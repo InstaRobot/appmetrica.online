@@ -18,6 +18,9 @@ const (
 	ReportProfileSearch      = "profile_search"
 	ReportProfile            = "profile"
 	ReportIntegrationHealth  = "integration_health"
+	ReportEventsList         = "events_list"
+	ReportEventReport        = "event_report"
+	ReportEventBreakdown     = "event_breakdown"
 )
 
 // QueryObserver получает время, которое ClickHouse отвечал на отчёт report: от первого запроса вызова до

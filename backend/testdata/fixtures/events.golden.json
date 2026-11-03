@@ -1,0 +1,626 @@
+{
+  "breakdown": {
+    "msk/note_created/source": {
+      "missing": {
+        "events": 22,
+        "people": 11
+      },
+      "other": {
+        "events": 13,
+        "people": 9
+      },
+      "property": "source",
+      "values": [
+        {
+          "events": 18,
+          "people": 9,
+          "value": "share"
+        },
+        {
+          "events": 15,
+          "people": 9,
+          "value": "shortcut"
+        },
+        {
+          "events": 14,
+          "people": 9,
+          "value": "keyboard"
+        },
+        {
+          "events": 12,
+          "people": 7,
+          "value": "import"
+        },
+        {
+          "events": 12,
+          "people": 7,
+          "value": "voice"
+        },
+        {
+          "events": 11,
+          "people": 6,
+          "value": "web_clipper"
+        },
+        {
+          "events": 10,
+          "people": 5,
+          "value": "camera"
+        },
+        {
+          "events": 10,
+          "people": 7,
+          "value": "watch"
+        },
+        {
+          "events": 10,
+          "people": 6,
+          "value": "widget"
+        },
+        {
+          "events": 9,
+          "people": 9,
+          "value": "clipboard"
+        },
+        {
+          "events": 8,
+          "people": 7,
+          "value": "drag_drop"
+        },
+        {
+          "events": 8,
+          "people": 5,
+          "value": "template"
+        },
+        {
+          "events": 7,
+          "people": 6,
+          "value": "email"
+        },
+        {
+          "events": 6,
+          "people": 5,
+          "value": "dictation"
+        },
+        {
+          "events": 6,
+          "people": 4,
+          "value": "notification"
+        },
+        {
+          "events": 5,
+          "people": 4,
+          "value": "lock_screen"
+        },
+        {
+          "events": 5,
+          "people": 5,
+          "value": "scan"
+        },
+        {
+          "events": 5,
+          "people": 4,
+          "value": "siri"
+        },
+        {
+          "events": 5,
+          "people": 5,
+          "value": "spotlight"
+        },
+        {
+          "events": 4,
+          "people": 3,
+          "value": "messages"
+        }
+      ]
+    },
+    "msk/purchase/plan": {
+      "missing": {
+        "events": 7,
+        "people": 6
+      },
+      "property": "plan",
+      "values": [
+        {
+          "events": 12,
+          "people": 7,
+          "value": "monthly"
+        },
+        {
+          "events": 11,
+          "people": 7,
+          "value": "yearly"
+        },
+        {
+          "events": 4,
+          "people": 4,
+          "value": "lifetime"
+        }
+      ]
+    },
+    "nyc/purchase/plan": {
+      "missing": {
+        "events": 12,
+        "people": 8
+      },
+      "property": "plan",
+      "values": [
+        {
+          "events": 29,
+          "people": 10,
+          "value": "monthly"
+        },
+        {
+          "events": 12,
+          "people": 8,
+          "value": "yearly"
+        },
+        {
+          "events": 2,
+          "people": 2,
+          "value": "lifetime"
+        }
+      ]
+    }
+  },
+  "list": {
+    "msk": {
+      "events": [
+        {
+          "events": 215,
+          "name": "note_created",
+          "people": 16,
+          "prev_events": 11,
+          "prev_people": 4
+        },
+        {
+          "events": 87,
+          "name": "search_used",
+          "people": 14,
+          "prev_events": 3,
+          "prev_people": 3
+        },
+        {
+          "events": 70,
+          "name": "note_shared",
+          "people": 13,
+          "prev_events": 3,
+          "prev_people": 2
+        },
+        {
+          "events": 56,
+          "name": "paywall_shown",
+          "people": 14,
+          "prev_events": 3,
+          "prev_people": 2
+        },
+        {
+          "events": 34,
+          "name": "purchase",
+          "people": 12,
+          "prev_events": 2,
+          "prev_people": 1
+        }
+      ],
+      "truncated": false
+    },
+    "nyc": {
+      "events": [
+        {
+          "events": 192,
+          "name": "search_used",
+          "people": 11,
+          "prev_events": 14,
+          "prev_people": 3
+        },
+        {
+          "events": 94,
+          "name": "paywall_shown",
+          "people": 11,
+          "prev_events": 5,
+          "prev_people": 3
+        },
+        {
+          "events": 55,
+          "name": "purchase",
+          "people": 10,
+          "prev_events": 5,
+          "prev_people": 2
+        }
+      ],
+      "truncated": false
+    },
+    "tyo": {
+      "events": [],
+      "truncated": false
+    }
+  },
+  "report": {
+    "msk/note_created/week": {
+      "name": "note_created",
+      "property_keys": [
+        {
+          "events": 193,
+          "key": "source"
+        }
+      ],
+      "summary": {
+        "events": 215,
+        "events_per_person": 13.44,
+        "people": 16,
+        "prev_events": 11,
+        "prev_events_per_person": 2.75,
+        "prev_people": 4
+      },
+      "timeseries": [
+        {
+          "bucket": "2026-09-28T00:00:00+03:00",
+          "events": 5,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-05T00:00:00+03:00",
+          "events": 43,
+          "people": 7
+        },
+        {
+          "bucket": "2026-10-12T00:00:00+03:00",
+          "events": 62,
+          "people": 12
+        },
+        {
+          "bucket": "2026-10-19T00:00:00+03:00",
+          "events": 42,
+          "people": 12
+        },
+        {
+          "bucket": "2026-10-26T00:00:00+03:00",
+          "events": 53,
+          "people": 12
+        },
+        {
+          "bucket": "2026-11-02T00:00:00+03:00",
+          "events": 10,
+          "people": 5
+        }
+      ]
+    },
+    "msk/purchase/day": {
+      "name": "purchase",
+      "property_keys": [
+        {
+          "events": 27,
+          "key": "plan"
+        }
+      ],
+      "summary": {
+        "events": 34,
+        "events_per_person": 2.83,
+        "people": 12,
+        "prev_events": 2,
+        "prev_events_per_person": 2,
+        "prev_people": 1
+      },
+      "timeseries": [
+        {
+          "bucket": "2026-10-04T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-05T00:00:00+03:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-06T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-07T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-08T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-09T00:00:00+03:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-10T00:00:00+03:00",
+          "events": 2,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-11T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-12T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-13T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-14T00:00:00+03:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-15T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-16T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-17T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-18T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-19T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-20T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-21T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-22T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-23T00:00:00+03:00",
+          "events": 4,
+          "people": 4
+        },
+        {
+          "bucket": "2026-10-24T00:00:00+03:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-25T00:00:00+03:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-26T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-27T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-28T00:00:00+03:00",
+          "events": 4,
+          "people": 3
+        },
+        {
+          "bucket": "2026-10-29T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-30T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-31T00:00:00+03:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-11-01T00:00:00+03:00",
+          "events": 4,
+          "people": 4
+        },
+        {
+          "bucket": "2026-11-02T00:00:00+03:00",
+          "events": 1,
+          "people": 1
+        }
+      ]
+    },
+    "nyc/purchase/day": {
+      "name": "purchase",
+      "property_keys": [
+        {
+          "events": 43,
+          "key": "plan"
+        }
+      ],
+      "summary": {
+        "events": 55,
+        "events_per_person": 5.5,
+        "people": 10,
+        "prev_events": 5,
+        "prev_events_per_person": 2.5,
+        "prev_people": 2
+      },
+      "timeseries": [
+        {
+          "bucket": "2026-10-04T00:00:00-04:00",
+          "events": 2,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-05T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-06T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-07T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-08T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-09T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-10T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-11T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-12T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-13T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-14T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-15T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-16T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-17T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-18T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-19T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-20T00:00:00-04:00",
+          "events": 6,
+          "people": 4
+        },
+        {
+          "bucket": "2026-10-21T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-22T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-23T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-24T00:00:00-04:00",
+          "events": 4,
+          "people": 3
+        },
+        {
+          "bucket": "2026-10-25T00:00:00-04:00",
+          "events": 1,
+          "people": 1
+        },
+        {
+          "bucket": "2026-10-26T00:00:00-04:00",
+          "events": 3,
+          "people": 3
+        },
+        {
+          "bucket": "2026-10-27T00:00:00-04:00",
+          "events": 3,
+          "people": 3
+        },
+        {
+          "bucket": "2026-10-28T00:00:00-04:00",
+          "events": 0,
+          "people": 0
+        },
+        {
+          "bucket": "2026-10-29T00:00:00-04:00",
+          "events": 3,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-30T00:00:00-04:00",
+          "events": 2,
+          "people": 2
+        },
+        {
+          "bucket": "2026-10-31T00:00:00-04:00",
+          "events": 4,
+          "people": 4
+        },
+        {
+          "bucket": "2026-11-01T00:00:00-04:00",
+          "events": 8,
+          "people": 5
+        },
+        {
+          "bucket": "2026-11-02T00:00:00-05:00",
+          "events": 1,
+          "people": 1
+        }
+      ]
+    }
+  }
+}
