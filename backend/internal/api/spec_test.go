@@ -30,7 +30,7 @@ var wantAPIOperationIDs = []string{
 	"getAudienceSummary", "getAudienceTimeseries", "getRollingActive", "getAudienceBreakdown",
 	"getRetention", "getRealtime",
 	"listEvents", "getEventReport", "getEventBreakdown",
-	"searchProfiles", "getProfile",
+	"searchProfiles", "getProfile", "listProfileEvents",
 	"getIntegrationHealth",
 	"createDeletionRequest", "getDeletionRequest",
 	// Admin API /admin/v1.
@@ -143,7 +143,7 @@ func TestSpecs_LoadAndValidate(t *testing.T) {
 func TestSpecs_OperationIDs(t *testing.T) {
 	ops := operations(loadSpec(t, apiSpecPath))
 
-	require.Len(t, ops, 50)
+	require.Len(t, ops, 51)
 	require.Empty(t, duplicateIDs(ops), "operationId должны быть непустыми и уникальными")
 	require.ElementsMatch(t, wantAPIOperationIDs, operationIDs(ops))
 	require.Empty(t, internalViolations(ops), "x-internal: true ровно у путей %s", adminPrefix)

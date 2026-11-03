@@ -333,16 +333,16 @@ func TestProfileEvents_HTTP(t *testing.T) {
 	// environment по умолчанию — production; у installB сессия development, но события production.
 	first := profileEventsHTTP(t, e, msk, key, "limit=4")
 	require.Len(t, first.Events, 4)
-	require.NotNil(t, first.NextBefore)
+	require.True(t, first.NextBefore.IsSpecified() && !first.NextBefore.IsNull())
 	require.Equal(t, "purchase", first.Events[0].Name)
 	require.Equal(t, f.installB, first.Events[0].InstallId)
 	require.Equal(t, map[string]string{"plan": "year"}, first.Events[0].Properties)
 	require.Equal(t, "ios", first.Events[0].Platform)
 	require.Equal(t, "3.4.0", first.Events[0].AppVersion)
 
-	second := profileEventsHTTP(t, e, msk, key, "limit=4&before="+url.QueryEscape(*first.NextBefore))
+	second := profileEventsHTTP(t, e, msk, key, "limit=4&before="+url.QueryEscape(first.NextBefore.MustGet()))
 	require.Len(t, second.Events, 2)
-	require.Nil(t, second.NextBefore)
+	require.True(t, second.NextBefore.IsNull(), "последняя страница — next_before null")
 	times := []time.Time{}
 	for _, ev := range append(first.Events, second.Events...) {
 		require.NotEqual(t, "session_start", ev.Name)
