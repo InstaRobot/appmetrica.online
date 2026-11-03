@@ -58,10 +58,13 @@ for (const theme of ["light", "dark"] as const) {
     const totals = page.getByRole("region", { name: "Итоги события" });
     await expect(totals.getByText(/\d/).first()).toBeVisible();
 
-    // Разбивка: выбираем свойство явно — оно попадает в URL, таблица строится по нему.
-    await page.getByRole("combobox", { name: "Свойство" }).click();
+    // Разбивка: у события одно свойство, оно выбрано по умолчанию (в URL попадает лишь смена выбора);
+    // открываем список, убеждаемся, что свойство в нём, и выбираем его — таблица строится по нему.
+    const property = page.getByRole("combobox", { name: "Свойство" });
+    await expect(property).toHaveText("source");
+    await property.click();
     await page.getByRole("option", { name: "source" }).click();
-    await expect(page).toHaveURL(/[?&]property=source/);
+    await expect(property).toHaveText("source");
     const breakdown = page.getByRole("table", { name: "note_created по свойству source" });
     await expect(breakdown).toBeVisible();
     for (const value of ["keyboard", "voice", "share"]) {
