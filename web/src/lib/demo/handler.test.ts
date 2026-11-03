@@ -934,15 +934,21 @@ describe("demoFetch profile events", () => {
     const all = await page("limit=200");
     const seen: Ev[] = [];
     let cursor: string | null = null;
+    let pages = 0;
+    // Каждая страница заново строит события человека, поэтому страница — 50, а не
+    // единицы: с limit=7 тест на CI с покрытием выходил за 5 с. Границ страниц
+    // при этом всё равно несколько.
     for (let i = 0; i < 1000; i++) {
       const next: Page = await page(
-        `limit=7${cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`,
+        `limit=50${cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`,
       );
+      pages += 1;
       seen.push(...next.events);
       cursor = next.next_before;
       if (cursor === null) break;
     }
     expect(cursor).toBeNull();
+    expect(pages).toBeGreaterThanOrEqual(3);
     const key = (e: Ev) => `${e.event_time}|${e.session_id}|${e.name}`;
     expect(new Set(seen.map(key)).size).toBe(seen.length);
     expect(seen.slice(0, all.events.length).map(key)).toEqual(all.events.map(key));
