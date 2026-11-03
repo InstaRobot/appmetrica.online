@@ -1,7 +1,7 @@
 import type { Messages } from "@/messages";
 
 // Тексты кодов отказов ingest для RejectionReasonsTable S-10 (14-ux-ui-spec.md §14.3) живут в словаре
-// integration.rejectionCodes: семь RejectionCode событий и batch-коды. Предупреждения сервер не хранит,
+// integration.rejectionCodes: восемь RejectionCode событий и batch-коды. Предупреждения сервер не хранит,
 // поэтому их там нет.
 
 export type RejectionCodeTexts = Messages["integration"]["rejectionCodes"];

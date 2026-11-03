@@ -165,10 +165,13 @@ All codes are described in [Errors and retries](/docs/errors-and-retries#rejecti
 
 - **Events tab.** The list of custom events of the period with the number of events, people and the
   change against the previous period. An event page has a chart over time, totals and a breakdown by
-  the values of a property you pick. The tab lists only names that have events in the selected
-  period.
+  the values of a property you pick. The tab lists names that have events in the selected period; with
+  the comparison on, it also keeps names that had events in the previous period and have none now
+  (shown as 0, −100%). The tab follows the **Environment** switch: production by default,
+  development when you switch to it.
 - **Profile.** A person's custom events under their sessions, with properties, platform and app
-  version.
+  version. Unlike the tab, the profile shows events of both environments, and development ones carry
+  a "development" badge.
 - **Realtime.** A custom event appears in the feed under its own name.
 - **Integration.** The accepted counter includes custom events, and rejections show up with their
   codes.

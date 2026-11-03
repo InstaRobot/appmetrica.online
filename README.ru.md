@@ -433,6 +433,8 @@ git pull
 docker compose up -d --build --wait     # миграции применяет api автоматически
 ```
 
+Откат ниже релиза со своими событиями (миграция ClickHouse 00004) — не просто возврат образа: нужна ручная процедура из [docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md) §5.7.
+
 **Обновление гео-базы** (раз в месяц): поставьте в `GEO_MONTH` текущий месяц (`date +%Y-%m`) и выполните
 `docker compose up -d --build --wait`.
 

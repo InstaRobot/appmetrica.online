@@ -17,7 +17,7 @@ Never put a Read API key `sk_…` into a client app: it is a secret that reads a
 
 ## What to send
 
-There is no SDK. Two system events describe sessions: `session_start` and `session_end`; the audience, session and retention reports are built from them. Apps can also send custom events with their own names and `properties` (see "Custom events" below). A `name` that doesn't match `^[a-z][a-z0-9_]{0,63}$`, or that starts with `session_` and is not one of the two system names, is rejected with `unknown_event_name`. There are no automatic screen views: send them as custom events if you need them.
+There is no SDK. Two system events describe sessions: `session_start` and `session_end`; sessions, their duration and retention are built from them. Custom events count toward active people and show up in realtime, on profiles and on the Events tab. Apps can also send custom events with their own names and `properties` (see "Custom events" below). A `name` that doesn't match `^[a-z][a-z0-9_]{0,63}$`, or that starts with `session_` and is not one of the two system names, is rejected with `unknown_event_name`. There are no automatic screen views: send them as custom events if you need them.
 
 - `install_id`: a UUID created on the first launch and kept forever (Keychain, SharedPreferences, `localStorage`, …). Never regenerate it on launch: every launch would become a new user.
 - `session_id`: a new UUID every time the app comes to the foreground; `session_start`, `session_end` and the custom events of one session share it. It is required on every event.

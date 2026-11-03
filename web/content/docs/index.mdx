@@ -5,9 +5,10 @@ description: How to start sending session_start and session_end events, and your
 
 appmetrica.online receives events from your apps over HTTP. There is no SDK: the app itself
 sends `session_start` when it comes to the foreground and `session_end` when it goes to the
-background. The audience reports are built from these two system events: active and new users,
-sessions and their duration, retention, realtime and profiles. Your own events with properties, such
-as `purchase`, go in the same batches; see [Custom events](/docs/concepts/events).
+background. Sessions, their duration and retention are built from these two system events. Your own
+events with properties, such as `purchase`, go in the same batches: a person who sends them counts as
+active, and they show up in realtime, on profiles and on the **Events** tab; see
+[Custom events](/docs/concepts/events).
 
 ## 1. Create an app [#create-app]
 

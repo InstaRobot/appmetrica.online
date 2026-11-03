@@ -435,6 +435,8 @@ git pull
 docker compose up -d --build --wait     # migrations are applied automatically by api
 ```
 
+Rolling back past the custom events release (ClickHouse migration 00004) is not just an image rollback: it needs the manual procedure in [docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md](docs/discovery/2026-10-13-appmetrica-online/21-ops-runbooks.md) §5.7.
+
 **Refresh the geo database** (monthly): set `GEO_MONTH` to the current month (`date +%Y-%m`) and run
 `docker compose up -d --build --wait`.
 
