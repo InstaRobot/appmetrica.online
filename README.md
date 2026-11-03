@@ -6,17 +6,22 @@
 on a synthetic dataset, no sign-up needed.
 
 Open-source, self-hosted analytics for mobile apps, websites, bots and backends — **without an SDK**.
-Your apps send `session_start` / `session_end` events with a plain HTTP request; you get a portfolio of all
+Your apps send `session_start` / `session_end` events (and, if you want, events of their own) with a plain HTTP request; you get a portfolio of all
 apps, audience (DAU/WAU/MAU, new users, sessions, duration, breakdowns), classic retention cohorts, realtime,
 user profiles and a Read API. Users are counted as people, not devices (`install_id` + optional `user_id`).
 
 - **No SDK.** One documented endpoint: `POST https://<ingest-domain>/v1/events`, batches of up to 500 events,
   idempotent by `insert_id`, offline queues up to 7 days. Recipes for Swift, Kotlin, JavaScript, React Native,
   Flutter, Kotlin Multiplatform, Go, curl and bots are in the public [documentation](https://appmetrica.online/docs).
+- **Custom events.** Besides sessions, an app can send events with its own names (`purchase`, `note_created`)
+  and up to 50 `properties` of strings, numbers and booleans. The **Events** tab shows how many events and people
+  each name has and breaks an event down by the values of a property; the same data is in the Read API and on
+  profiles. The `session_` prefix is reserved, and property values that look like an e-mail or a phone number are
+  rejected. See [Custom events](https://appmetrica.online/docs/concepts/events).
 - **One app, many platforms.** An app can ship on iOS, Android, the web and more: each platform gets its own write
   key, reports count people across platforms with a platform switcher on top, and duplicate apps can be merged.
 - **Privacy by design.** The client IP is used only in memory for a country/city lookup and is never stored —
-  not in the databases, not in logs. `user_id` values that look like an e-mail or phone number are rejected.
+  not in the databases, not in logs. `user_id` and property values that look like an e-mail or phone number are rejected.
   GDPR deletion by API or from the dashboard.
 - **Passkey-only sign-in.** No passwords to leak; the first passkey is registered with a one-time link from the CLI.
 - **English and Russian.** The dashboard, the landing page and the docs speak both languages: English at `/`,
